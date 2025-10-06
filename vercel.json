@@ -1,0 +1,11 @@
+{
+  "functions": {
+    "apps/api/*.py": { "runtime": "python3.12" }
+  },
+  "routes": [
+    { "src": "^/api/finishline/.*", "dest": "/apps/api/api_main.py" },
+    { "src": "^/$", "dest": "/apps/web/index.html" },
+    { "src": "^/index.html$", "dest": "/apps/web/index.html" },
+    { "src": "/(.*)", "dest": "/apps/web/$1" }
+  ]
+}

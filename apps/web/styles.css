@@ -1,0 +1,420 @@
+/* NovaSpark Branding - Dark Theme with Purple-Blue Gradients */
+
+:root {
+  --bg-dark: #0a0014;
+  --bg-darker: #050008;
+  --accent-purple: #8b5cf6;
+  --accent-blue: #38bdf8;
+  --accent-pink: #ec4899;
+  --text-light: #f8f9fa;
+  --text-muted: #a1a1aa;
+  --card-bg: #1a1124;
+  --card-border: #2d1b4e;
+  --glow-purple: 0 0 10px #8b5cf6, 0 0 20px #7c3aed, 0 0 30px #6d28d9;
+  --glow-blue: 0 0 10px #38bdf8, 0 0 20px #0ea5e9, 0 0 30px #0284c7;
+  --font-main: 'Poppins', sans-serif;
+  --border-radius: 12px;
+  --transition: all 0.3s ease;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-main);
+  background: radial-gradient(circle at top, #0f0020, #000);
+  color: var(--text-light);
+  min-height: 100vh;
+  line-height: 1.6;
+}
+
+.container {
+  width: 90%;
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+}
+
+/* Header Styles */
+header {
+  text-align: center;
+  margin-bottom: 3rem;
+  padding: 2rem 0;
+}
+
+h1 {
+  font-size: 3rem;
+  font-weight: 700;
+  color: var(--accent-purple);
+  text-shadow: var(--glow-purple);
+  margin-bottom: 0.5rem;
+  background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+h2 {
+  font-size: 1.5rem;
+  font-weight: 500;
+  color: var(--accent-blue);
+  text-shadow: var(--glow-blue);
+  margin-bottom: 0.5rem;
+}
+
+.subtitle {
+  color: var(--text-muted);
+  font-size: 1rem;
+  font-weight: 300;
+}
+
+h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--accent-purple);
+  margin-bottom: 1rem;
+  text-shadow: 0 0 5px rgba(139, 92, 246, 0.5);
+}
+
+/* Form Styles */
+.input-section {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--border-radius);
+  padding: 2rem;
+  margin-bottom: 2rem;
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.2);
+  transition: var(--transition);
+}
+
+.input-section:hover {
+  box-shadow: 0 0 30px rgba(139, 92, 246, 0.3);
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+label {
+  font-weight: 500;
+  color: var(--accent-blue);
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+}
+
+input, select {
+  padding: 0.75rem;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  background: var(--bg-darker);
+  color: var(--text-light);
+  font-family: var(--font-main);
+  transition: var(--transition);
+}
+
+input:focus, select:focus {
+  outline: none;
+  border-color: var(--accent-purple);
+  box-shadow: 0 0 10px rgba(139, 92, 246, 0.3);
+}
+
+/* Horse Entry Styles */
+.horse-entry {
+  background: var(--bg-darker);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  transition: var(--transition);
+}
+
+.horse-entry:hover {
+  border-color: var(--accent-purple);
+  box-shadow: 0 0 15px rgba(139, 92, 246, 0.2);
+}
+
+/* Button Styles */
+button {
+  background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue));
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-weight: 600;
+  padding: 0.75rem 1.5rem;
+  cursor: pointer;
+  transition: var(--transition);
+  font-family: var(--font-main);
+  font-size: 0.9rem;
+  box-shadow: 0 4px 15px rgba(139, 92, 246, 0.3);
+}
+
+button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(139, 92, 246, 0.4);
+}
+
+button:active {
+  transform: translateY(0);
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent-purple), var(--accent-pink));
+  font-size: 1rem;
+  padding: 1rem 2rem;
+}
+
+.btn-secondary {
+  background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+  font-size: 0.9rem;
+  padding: 0.6rem 1.2rem;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin-top: 2rem;
+  flex-wrap: wrap;
+}
+
+/* Photo Upload Styles */
+.photo-section {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--border-radius);
+  padding: 2rem;
+  margin-bottom: 2rem;
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.2);
+}
+
+.photo-upload {
+  text-align: center;
+}
+
+.photo-preview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.photo-preview img {
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 2px solid var(--card-border);
+  transition: var(--transition);
+}
+
+.photo-preview img:hover {
+  border-color: var(--accent-purple);
+  box-shadow: 0 0 15px rgba(139, 92, 246, 0.3);
+}
+
+/* Loading Styles */
+.loading-section {
+  text-align: center;
+  padding: 3rem;
+  background: var(--card-bg);
+  border-radius: var(--border-radius);
+  margin-bottom: 2rem;
+}
+
+.loading-spinner {
+  width: 50px;
+  height: 50px;
+  border: 3px solid var(--card-border);
+  border-top: 3px solid var(--accent-purple);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 1rem;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Results Styles */
+.results-section {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--border-radius);
+  padding: 2rem;
+  margin-bottom: 2rem;
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.2);
+}
+
+.results-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+  margin-top: 1rem;
+}
+
+.result-card {
+  background: var(--bg-darker);
+  border: 2px solid var(--card-border);
+  border-radius: var(--border-radius);
+  padding: 1.5rem;
+  transition: var(--transition);
+  position: relative;
+  overflow: hidden;
+}
+
+.result-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--accent-purple), var(--accent-blue));
+}
+
+.result-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 30px rgba(139, 92, 246, 0.3);
+}
+
+.win-card {
+  border-color: #fbbf24;
+}
+
+.win-card::before {
+  background: linear-gradient(90deg, #fbbf24, #f59e0b);
+}
+
+.place-card {
+  border-color: #9ca3af;
+}
+
+.place-card::before {
+  background: linear-gradient(90deg, #9ca3af, #6b7280);
+}
+
+.show-card {
+  border-color: #cd7f32;
+}
+
+.show-card::before {
+  background: linear-gradient(90deg, #cd7f32, #b8860b);
+}
+
+.result-card h4 {
+  font-size: 1.2rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+.horse-info {
+  margin-bottom: 1rem;
+}
+
+.horse-name {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--accent-blue);
+  margin-bottom: 0.5rem;
+}
+
+.horse-odds, .horse-prob, .horse-kelly {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  margin-bottom: 0.25rem;
+}
+
+.rationale {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-style: italic;
+  line-height: 1.4;
+}
+
+/* Error Styles */
+.error-section {
+  background: var(--card-bg);
+  border: 1px solid #ef4444;
+  border-radius: var(--border-radius);
+  padding: 2rem;
+  margin-bottom: 2rem;
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.2);
+}
+
+.error-message {
+  text-align: center;
+}
+
+.error-message h4 {
+  color: #ef4444;
+  margin-bottom: 0.5rem;
+}
+
+/* Footer */
+footer {
+  text-align: center;
+  padding: 2rem 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+footer strong {
+  color: var(--accent-purple);
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { 
+    opacity: 0; 
+    transform: translateY(20px); 
+  }
+  to { 
+    opacity: 1; 
+    transform: translateY(0); 
+  }
+}
+
+.input-section, .results-section, .photo-section {
+  animation: fadeIn 0.6s ease;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .container {
+    width: 95%;
+    padding: 1rem 0.5rem;
+  }
+  
+  h1 {
+    font-size: 2rem;
+  }
+  
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+  
+  .action-buttons {
+    flex-direction: column;
+  }
+  
+  .results-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .input-section, .results-section, .photo-section {
+    padding: 1rem;
+  }
+}

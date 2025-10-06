@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FinishLine AI — Win / Place / Show Predictor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🏇 FinishLine AI</h1>
+            <h2>Win / Place / Show Predictor</h2>
+            <p class="subtitle">Advanced horse race prediction powered by NovaSpark AI</p>
+        </header>
+
+        <main>
+            <!-- Input Form -->
+            <section class="input-section">
+                <h3>Race Information</h3>
+                <form id="raceForm">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="raceDate">Race Date</label>
+                            <input type="date" id="raceDate" name="raceDate" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="track">Track</label>
+                            <input type="text" id="track" name="track" placeholder="e.g., Churchill Downs" required>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="surface">Surface</label>
+                            <select id="surface" name="surface" required>
+                                <option value="dirt">Dirt</option>
+                                <option value="turf">Turf</option>
+                                <option value="synthetic">Synthetic</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="distance">Distance</label>
+                            <input type="text" id="distance" name="distance" placeholder="e.g., 1 1/4 miles" required>
+                        </div>
+                    </div>
+
+                    <h3>Horse Data</h3>
+                    <div id="horsesContainer">
+                        <div class="horse-entry">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Horse Name</label>
+                                    <input type="text" name="horseName" placeholder="e.g., Thunderstride" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Odds</label>
+                                    <input type="text" name="odds" placeholder="e.g., 5-2" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Bankroll</label>
+                                    <input type="number" name="bankroll" placeholder="1000" value="1000" min="1" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Kelly Fraction</label>
+                                    <input type="number" name="kellyFraction" placeholder="0.25" value="0.25" min="0" max="1" step="0.01" required>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <button type="button" id="addHorseBtn" class="btn-secondary">+ Add Horse</button>
+                    
+                    <div class="action-buttons">
+                        <button type="button" id="predictBtn" class="btn-primary">🎯 Predict W/P/S</button>
+                        <button type="button" id="photoPredictBtn" class="btn-primary">📸 Analyze Photos with AI</button>
+                    </div>
+                </form>
+            </section>
+
+            <!-- Photo Upload Section -->
+            <section class="photo-section" id="photoSection" style="display: none;">
+                <h3>Upload Race Photos</h3>
+                <div class="photo-upload">
+                    <input type="file" id="photoInput" multiple accept="image/*" style="display: none;">
+                    <button type="button" id="selectPhotosBtn" class="btn-secondary">Select Photos (Max 6)</button>
+                    <div id="photoPreview" class="photo-preview"></div>
+                </div>
+            </section>
+
+            <!-- Loading Section -->
+            <section class="loading-section" id="loadingSection" style="display: none;">
+                <div class="loading-spinner"></div>
+                <p>Analyzing race data...</p>
+            </section>
+
+            <!-- Results Section -->
+            <section class="results-section" id="resultsSection" style="display: none;">
+                <h3>AI Predictions</h3>
+                <div class="results-grid">
+                    <div class="result-card win-card">
+                        <h4>🏆 WIN</h4>
+                        <div class="horse-info">
+                            <div class="horse-name" id="winName">-</div>
+                            <div class="horse-odds" id="winOdds">-</div>
+                            <div class="horse-prob" id="winProb">-</div>
+                            <div class="horse-kelly" id="winKelly">-</div>
+                        </div>
+                        <div class="rationale" id="winRationale">-</div>
+                    </div>
+                    
+                    <div class="result-card place-card">
+                        <h4>🥈 PLACE</h4>
+                        <div class="horse-info">
+                            <div class="horse-name" id="placeName">-</div>
+                            <div class="horse-odds" id="placeOdds">-</div>
+                            <div class="horse-prob" id="placeProb">-</div>
+                            <div class="horse-kelly" id="placeKelly">-</div>
+                        </div>
+                        <div class="rationale" id="placeRationale">-</div>
+                    </div>
+                    
+                    <div class="result-card show-card">
+                        <h4>🥉 SHOW</h4>
+                        <div class="horse-info">
+                            <div class="horse-name" id="showName">-</div>
+                            <div class="horse-odds" id="showOdds">-</div>
+                            <div class="horse-prob" id="showProb">-</div>
+                            <div class="horse-kelly" id="showKelly">-</div>
+                        </div>
+                        <div class="rationale" id="showRationale">-</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Error Section -->
+            <section class="error-section" id="errorSection" style="display: none;">
+                <div class="error-message">
+                    <h4>⚠️ Error</h4>
+                    <p id="errorText">Something went wrong. Please try again.</p>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>Powered by <strong>NovaSpark AI</strong> • FinishLine WPS Prediction Engine</p>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug API (Uvicorn)",
+      "type": "python",
+      "request": "launch",
+      "module": "uvicorn",
+      "cwd": "${workspaceFolder}",
+      "args": ["apps.api.api_main:app", "--reload", "--port", "8000"],
+      "console": "integratedTerminal",
+      "justMyCode": true
+    }
+  ]
+}
