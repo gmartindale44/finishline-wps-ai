@@ -1,7 +1,7 @@
 {
   "version": 2,
   "functions": {
-    "apps/api/*.py": { "runtime": "python3.12" }
+    "apps/api/*.py": { "runtime": "vercel-python@3.11" }
   },
   "routes": [
     { "src": "^/api/finishline/.*", "dest": "/apps/api/api_main.py" },
