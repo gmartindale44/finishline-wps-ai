@@ -2,7 +2,7 @@
 
 **Advanced horse race prediction system for Win/Place/Show betting**
 
-A self-contained FastAPI + Static Web App that predicts horse race outcomes using simulated data and optional multi-image analysis. Built with NovaSpark AI branding and hosted on Vercel.
+A self-contained FastAPI + Static Web App that predicts horse race outcomes using simulated data and optional multi-image analysis. Built with NovaSpark Collective LLC branding and hosted on Vercel.
 
 ## 🏇 Features
 
@@ -235,7 +235,7 @@ window.FINISHLINE_DEBUG = true;
 
 ## 📝 License
 
-This project is part of the NovaSpark AI ecosystem. All rights reserved.
+This project is part of the NovaSpark Collective LLC ecosystem. All rights reserved.
 
 ## 🤝 Contributing
 
@@ -251,7 +251,7 @@ For issues and questions:
 - Check the troubleshooting section
 - Review API documentation
 - Test with provided examples
-- Contact NovaSpark AI support
+- Contact NovaSpark Collective LLC support
 
 ## Deployment (GitHub + Vercel)
 1) **GitHub**  
@@ -282,4 +282,4 @@ For issues and questions:
 
 ---
 
-**Built with ❤️ by NovaSpark AI**
+**Built with ❤️ by NovaSpark Collective LLC**
