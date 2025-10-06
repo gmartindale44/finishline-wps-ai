@@ -1,9 +1,8 @@
 {
   "version": 2,
-  "builds": [
-    { "src": "apps/api/api_main.py", "use": "@vercel/python@3.1.9" },
-    { "src": "apps/web/**", "use": "@vercel/static@1.0.0" }
-  ],
+  "functions": {
+    "apps/api/**/*.py": { "runtime": "@vercel/python@3.1.9" }
+  },
   "routes": [
     { "src": "^/api/finishline/.*", "dest": "/apps/api/api_main.py" },
     { "src": "^/$", "dest": "/apps/web/index.html" },
