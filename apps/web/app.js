@@ -28,6 +28,10 @@ const errorText = document.getElementById('errorText');
 document.addEventListener('DOMContentLoaded', function() {
     console.log('FinishLine AI initialized');
     
+    // Set dynamic year in footer
+    const yearEl = document.getElementById("year"); 
+    if (yearEl) yearEl.textContent = new Date().getFullYear();
+    
     // Set today's date as default
     const today = new Date().toISOString().split('T')[0];
     document.getElementById('raceDate').value = today;
