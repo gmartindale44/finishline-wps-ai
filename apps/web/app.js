@@ -9,6 +9,61 @@ const SAME_ORIGIN = "";
 const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1";
 const API_BASE = isLocal ? LOCAL_API : SAME_ORIGIN;
 
+// --- Photo picker state ---
+let PICKED_FILES = []; // array of File
+const MAX_FILES = 6;
+
+function updatePhotoCount() {
+  const el = document.getElementById("photo-count");
+  if (el) el.textContent = `${PICKED_FILES.length} / ${MAX_FILES} selected`;
+}
+
+function renderThumbs() {
+  const wrap = document.getElementById("thumbs");
+  if (!wrap) return;
+  wrap.innerHTML = "";
+  PICKED_FILES.forEach((file, idx) => {
+    const item = document.createElement("div");
+    item.className = "thumb";
+
+    if (file.type === "application/pdf") {
+      item.innerHTML = `
+        <div class="pdf-badge">PDF</div>
+        <div class="thumb-meta">
+          <span class="name" title="${file.name}">${file.name}</span>
+          <button class="remove" aria-label="Remove">✕</button>
+        </div>`;
+    } else {
+      const url = URL.createObjectURL(file);
+      item.innerHTML = `
+        <img src="${url}" alt="${file.name}" />
+        <div class="thumb-meta">
+          <span class="name" title="${file.name}">${file.name}</span>
+          <button class="remove" aria-label="Remove">✕</button>
+        </div>`;
+      item.querySelector("img").onload = () => URL.revokeObjectURL(url);
+    }
+    item.querySelector(".remove").onclick = () => {
+      PICKED_FILES.splice(idx, 1);
+      updatePhotoCount();
+      renderThumbs();
+    };
+    wrap.appendChild(item);
+  });
+  updatePhotoCount();
+}
+
+function addPickedFiles(list) {
+  const incoming = Array.from(list || []);
+  for (const f of incoming) {
+    if (PICKED_FILES.length >= MAX_FILES) break;
+    if (!/^image\/|application\/pdf$/.test(f.type)) continue;
+    PICKED_FILES.push(f);
+  }
+  updatePhotoCount();
+  renderThumbs();
+}
+
 // DOM Elements
 const raceForm = document.getElementById('raceForm');
 const horsesContainer = document.getElementById('horsesContainer');
@@ -39,9 +94,60 @@ document.addEventListener('DOMContentLoaded', function() {
     // Event listeners
     addHorseBtn.addEventListener('click', addHorseEntry);
     predictBtn.addEventListener('click', handlePredict);
-    photoPredictBtn.addEventListener('click', handlePhotoPredict);
-    selectPhotosBtn.addEventListener('click', () => photoInput.click());
-    photoInput.addEventListener('change', handlePhotoSelection);
+    
+    // Photo picker event listeners
+    const chooseBtn = document.getElementById("choose-files");
+    const input = document.getElementById("photo-input");
+    const drop = document.getElementById("drop-zone");
+    const analyzeBtn = document.getElementById("analyze-photos-btn");
+
+    if (chooseBtn && input) {
+        chooseBtn.onclick = () => input.click();
+        input.onchange = () => addPickedFiles(input.files);
+    }
+
+    if (drop) {
+        ["dragenter","dragover"].forEach(evt =>
+            drop.addEventListener(evt, e => {
+                e.preventDefault(); e.stopPropagation();
+                drop.classList.add("dragging");
+            })
+        );
+        ["dragleave","drop"].forEach(evt =>
+            drop.addEventListener(evt, e => {
+                e.preventDefault(); e.stopPropagation();
+                drop.classList.remove("dragging");
+            })
+        );
+        drop.addEventListener("drop", e => {
+            addPickedFiles(e.dataTransfer.files);
+        });
+    }
+
+    if (analyzeBtn) {
+        analyzeBtn.addEventListener("click", async () => {
+            // if none selected, open the chooser
+            if (PICKED_FILES.length === 0) {
+                const inputEl = document.getElementById("photo-input");
+                if (inputEl) inputEl.click();
+                return;
+            }
+            try {
+                const form = new FormData();
+                PICKED_FILES.slice(0, MAX_FILES).forEach(f => form.append("files", f, f.name));
+                const res = await fetch(`${API_BASE}/api/finishline/photo_predict`, {
+                    method: "POST",
+                    body: form
+                });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                // reuse existing render routine for W/P/S
+                displayResults(data);
+            } catch (err) {
+                showError(`Photo analysis failed: ${err.message || err}`);
+            }
+        });
+    }
     
     // Initial horse entry
     addHorseEntry();

@@ -75,21 +75,43 @@
                     
                     <button type="button" id="addHorseBtn" class="btn-secondary">+ Add Horse</button>
                     
+                    <!-- Photo Upload -->
+                    <div class="photo-box" id="photo-box">
+                        <div class="photo-header">
+                            <div>
+                                <strong>Photos / PDFs</strong>
+                                <span id="photo-count" class="photo-count">0 / 6 selected</span>
+                            </div>
+                            <div class="photo-actions">
+                                <button id="choose-files" type="button" class="btn-secondary">Choose Photos / PDF</button>
+                            </div>
+                        </div>
+
+                        <!-- Hidden file input -->
+                        <input
+                            id="photo-input"
+                            type="file"
+                            accept="image/*,application/pdf"
+                            capture="environment"
+                            multiple
+                            class="hidden-input"
+                        />
+
+                        <!-- Drag & Drop -->
+                        <div id="drop-zone" class="drop-zone">
+                            <p>Drag & drop images or PDFs here, or click <em>Choose Photos / PDF</em>.</p>
+                            <p class="hint">Up to 6 files. Images: PNG/JPG/WebP • PDFs supported.</p>
+                        </div>
+
+                        <!-- Thumbnails -->
+                        <div id="thumbs" class="thumbs"></div>
+                    </div>
+                    
                     <div class="action-buttons">
                         <button type="button" id="predictBtn" class="btn-primary">🎯 Predict W/P/S</button>
-                        <button type="button" id="photoPredictBtn" class="btn-primary">📸 Analyze Photos with AI</button>
+                        <button id="analyze-photos-btn" type="button" class="btn-primary">📸 Analyze Photos with AI</button>
                     </div>
                 </form>
-            </section>
-
-            <!-- Photo Upload Section -->
-            <section class="photo-section" id="photoSection" style="display: none;">
-                <h3>Upload Race Photos</h3>
-                <div class="photo-upload">
-                    <input type="file" id="photoInput" multiple accept="image/*" style="display: none;">
-                    <button type="button" id="selectPhotosBtn" class="btn-secondary">Select Photos (Max 6)</button>
-                    <div id="photoPreview" class="photo-preview"></div>
-                </div>
             </section>
 
             <!-- Loading Section -->
