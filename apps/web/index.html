@@ -51,15 +51,23 @@
 
                     <h3>Horse Data</h3>
                     <div id="horsesContainer">
-                        <div class="horse-entry">
+                        <div class="horse-entry" data-horse-row="1">
                             <div class="form-row">
                                 <div class="form-group">
                                     <label>Horse Name</label>
-                                    <input type="text" name="horseName" placeholder="e.g., Thunderstride" required>
+                                    <input type="text" class="name" name="horseName" placeholder="e.g., Thunderstride" required>
                                 </div>
                                 <div class="form-group">
                                     <label>Odds</label>
-                                    <input type="text" name="odds" placeholder="e.g., 5-2" required>
+                                    <input type="text" class="odds" name="odds" placeholder="e.g., 5-2" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Jockey</label>
+                                    <input type="text" class="jj jockey" name="jockey" placeholder="Jockey (optional)">
+                                </div>
+                                <div class="form-group">
+                                    <label>Trainer</label>
+                                    <input type="text" class="tt trainer" name="trainer" placeholder="Trainer (optional)">
                                 </div>
                                 <div class="form-group">
                                     <label>Bankroll</label>
@@ -73,7 +81,7 @@
                         </div>
                     </div>
                     
-                    <button type="button" id="addHorseBtn" class="btn-secondary">+ Add Horse</button>
+                    <button type="button" id="add-horse" class="btn-secondary">+ Add Horse</button>
                     
                     <!-- Photo Upload -->
                     <div class="photo-box" id="photo-box">

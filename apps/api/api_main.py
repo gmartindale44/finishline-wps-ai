@@ -40,6 +40,8 @@ async def predict_race(data: Dict[str, Any]):
             {
                 "name": "Horse Name",
                 "odds": "5-2",
+                "jockey": "D. Parker (optional)",
+                "trainer": "J. Smith (optional)",
                 "bankroll": 1000,
                 "kelly_fraction": 0.25
             }

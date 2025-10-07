@@ -445,3 +445,15 @@ footer strong {
 .ocr-row input[type="text"] { width:100%; }
 .btn.sm { padding:6px 10px; font-size:.9rem; }
 .btn.ghost { background: transparent; border:1px solid rgba(139,92,246,.45); }
+
+/* Horse row field sizing tweaks */
+[data-horse-row] .jj, [data-horse-row] .tt {
+  width: 100%;
+}
+@media (min-width: 900px) {
+  [data-horse-row] .form-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1.5fr 1.5fr 1fr 1fr; /* Name, Odds, Jockey, Trainer, Bankroll, Kelly */
+    gap: 10px;
+  }
+}

@@ -65,55 +65,49 @@ function addPickedFiles(list) {
 }
 
 function parseHorsesFromText(txt) {
-  // Normalize and split lines
-  const lines = txt
-    .replace(/\r/g, "\n")
-    .split("\n")
-    .map(s => s.trim())
-    .filter(Boolean);
+  const lines = txt.replace(/\r/g,"\n").split("\n").map(s=>s.trim()).filter(Boolean);
 
   const horses = [];
-  // Basic patterns: names (letters, spaces, apostrophes) and odds like 5-2, 3/1, 10-1, or 8-5
   const nameLike = /^[A-Za-z][A-Za-z''\-.\s]+$/;
-  const mlLike = /^(\d{1,2}\s*[-/]\s*\d{1,2}|\d{1,2}-\d{1,2}|\d{1,2}\/\d{1,2})$/;
+  const mlLike = /^(\d{1,2}\s*[-/]\s*\d{1,2})$/; // 5-2, 3/1 etc.
+  const personInit = /^[A-Z]\.\s?[A-Za-z''\-]+$/; // e.g., D. Parker, E. Paucar
 
-  // Walk lines; if line looks like a horse name and the next token looks like odds, pair them
-  for (let i = 0; i < lines.length; i++) {
+  for (let i=0; i<lines.length; i++) {
     const L = lines[i];
 
-    // Skip obvious headers / columns
-    if (/^(horse|jockey|trainer|win|place|show|race|post|purse|claiming|dirt|turf|fast|firm|good|allowance)/i.test(L)) continue;
-    if (/^\d+$/.test(L)) continue; // isolated program number cells
+    // skip headers
+    if (/^(#|horse|jockey|trainer|weight|win|place|show|race|post|purse|claiming|dirt|turf|fast|firm|good|allowance)/i.test(L)) continue;
+    if (/^\d+$/.test(L)) continue; // isolated program no.
 
-    const isName = nameLike.test(L) && L.length >= 3 && L.length <= 40;
+    const isName = nameLike.test(L) && L.length>=3 && L.length<=40;
+    if (!isName) continue;
 
-    // Look ahead for odds on same line or next line
-    let odds = "";
-    // same line token check
-    const sameTokens = L.split(/\s+/);
-    for (const t of sameTokens) {
-      if (mlLike.test(t)) { odds = t; break; }
-    }
-    if (!odds && i + 1 < lines.length && mlLike.test(lines[i+1])) {
-      odds = lines[i+1];
-      i++; // consume next line as odds
-    }
+    // look-ahead for odds/jockey/trainer nearby
+    let odds = "", jockey = "", trainer = "";
 
-    if (isName) {
-      // Avoid duplicates by name
-      if (!horses.some(h => h.name.toLowerCase() === L.toLowerCase())) {
-        horses.push({ checked: true, name: L, odds });
-      }
+    // same line tokens for odds
+    for (const t of L.split(/\s+/)) { if (mlLike.test(t)) { odds = t; break; } }
+    // next lines for odds/jockey/trainer
+    const peek = (k)=> (i+k<lines.length ? lines[i+k] : "");
+    const L1 = peek(1), L2 = peek(2), L3 = peek(3);
+
+    if (!odds && mlLike.test(L1)) { odds = L1; i++; }
+    // jockey often formatted "D. Parker" above trainer
+    if (personInit.test(L1)) { jockey = L1; if (!odds && mlLike.test(L2)) { odds = L2; i++; } }
+    // trainer is often an initial+surname too; try next
+    if (!trainer && personInit.test(L2)) trainer = L2;
+    if (!trainer && personInit.test(L3)) trainer = L3;
+
+    // push
+    if (!horses.some(h => h.name.toLowerCase()===L.toLowerCase())) {
+      horses.push({ name: L, odds, jockey, trainer });
     }
   }
 
-  // Fallback: if nothing matched, try extracting proper-case words sequences as names
-  if (horses.length === 0) {
-    const joined = lines.join(" ");
-    const m = joined.match(/[A-Z][a-zA-Z'']+(?:\s+[A-Z][a-zA-Z'']+){0,3}/g);
-    if (m) {
-      Array.from(new Set(m)).slice(0, 12).forEach(n => horses.push({ checked:true, name:n, odds:"" }));
-    }
+  // Fallback if nothing
+  if (horses.length===0) {
+    const m = txt.match(/[A-Z][a-zA-Z''\-]+(?:\s+[A-Z][a-zA-Z''\-]+){0,3}/g) || [];
+    Array.from(new Set(m)).slice(0, 6).forEach(n => horses.push({ name:n, odds:"", jockey:"", trainer:"" }));
   }
   return horses.slice(0, 12);
 }
@@ -158,25 +152,37 @@ function renderOcrReview(list) {
   box.classList.remove("hidden");
 }
 
-// Inserts checked items into Horse rows (append or update blanks)
-function insertIntoForm(extracted) {
-  const rows = document.querySelectorAll(".horse-row"); // assuming each horse row has class set; if not, we will map by inputs
-  function addRow() {
-    const btn = document.querySelector("button#add-horse") || Array.from(document.querySelectorAll("button")).find(b => /add horse/i.test(b.textContent));
-    if (btn) btn.click();
-  }
-  function setRow(row, name, odds) {
-    const inputs = row.querySelectorAll("input");
-    const nameInput = Array.from(inputs).find(i => /horse/i.test(i.placeholder || "") || /name/i.test(i.name || ""));
-    const oddsInput = Array.from(inputs).find(i => /odds/i.test(i.placeholder || "") || /odds/i.test(i.name || ""));
-    if (nameInput) nameInput.value = name;
-    if (oddsInput && odds) oddsInput.value = odds;
-  }
+function getRowParts(row) {
+  const inputs = row.querySelectorAll("input");
+  // heuristics by className first, then placeholder fallback
+  const nameEl = row.querySelector(".name") || Array.from(inputs).find(i => /horse/i.test(i.placeholder || ""));
+  const oddsEl = row.querySelector(".odds") || Array.from(inputs).find(i => /odds/i.test(i.placeholder || ""));
+  const jockeyEl = row.querySelector(".jj") || Array.from(inputs).find(i => /jockey/i.test(i.placeholder || ""));
+  const trainerEl = row.querySelector(".tt") || Array.from(inputs).find(i => /trainer/i.test(i.placeholder || ""));
+  const bankrollEl = Array.from(inputs).find(i => /bankroll/i.test((i.placeholder || "")) );
+  const kellyEl = Array.from(inputs).find(i => /kelly/i.test((i.placeholder || "")) );
+  return { nameEl, oddsEl, jockeyEl, trainerEl, bankrollEl, kellyEl };
+}
 
-  let current = Array.from(document.querySelectorAll("[data-horse-row], .horse-row"));
-  extracted.filter(h => h.checked && h.name.trim()).forEach((h, idx) => {
-    if (idx >= current.length) { addRow(); current = Array.from(document.querySelectorAll("[data-horse-row], .horse-row")); }
-    setRow(current[idx], h.name.trim(), (h.odds || "").trim());
+function clickAddHorse() {
+  const btn = document.getElementById("add-horse") || Array.from(document.querySelectorAll("button")).find(b => /add horse/i.test(b.textContent));
+  if (btn) btn.click();
+}
+
+// Inserts extracted horses into Horse rows (auto-fill)
+function insertIntoForm(extracted) {
+  // ensure at least N rows
+  let rows = Array.from(document.querySelectorAll("[data-horse-row]"));
+  for (let i = rows.length; i < extracted.length; i++) clickAddHorse();
+  rows = Array.from(document.querySelectorAll("[data-horse-row]"));
+
+  extracted.forEach((h, idx) => {
+    if (!rows[idx]) return;
+    const { nameEl, oddsEl, jockeyEl, trainerEl } = getRowParts(rows[idx]);
+    if (nameEl && h.name) nameEl.value = h.name;
+    if (oddsEl && h.odds) oddsEl.value = h.odds;
+    if (jockeyEl && h.jockey) jockeyEl.value = h.jockey;
+    if (trainerEl && h.trainer) trainerEl.value = h.trainer;
   });
 }
 
@@ -280,15 +286,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 const text = await ocrImagesWithTesseract(PICKED_FILES);
                 const horses = parseHorsesFromText(text);
                 if (horses.length === 0) {
-                    showError("OCR didn't find any horse names—try a clearer image or zoom.");
+                    showError("OCR didn't find any horses. Try a clearer crop.");
                     return;
                 }
-                renderOcrReview(horses);
-                // keep last extraction in memory for insert
+                // Auto-fill form immediately
+                insertIntoForm(horses);
+                // Optionally still show review list for visibility
+                if (document.getElementById("ocr-review")) {
+                    renderOcrReview(horses); // shows what was parsed (editable), but form is already filled
+                }
                 window.__OCR_LAST__ = horses;
+                hideLoading();
             } catch (e) {
                 showError(`OCR failed: ${e.message || e}`);
-            } finally {
                 hideLoading();
             }
         });
@@ -312,15 +322,25 @@ document.addEventListener('DOMContentLoaded', function() {
 function addHorseEntry() {
     const horseEntry = document.createElement('div');
     horseEntry.className = 'horse-entry';
+    const rowNum = horsesContainer.children.length + 1;
+    horseEntry.setAttribute('data-horse-row', rowNum);
     horseEntry.innerHTML = `
         <div class="form-row">
             <div class="form-group">
                 <label>Horse Name</label>
-                <input type="text" name="horseName" placeholder="e.g., Thunderstride" required>
+                <input type="text" class="name" name="horseName" placeholder="e.g., Thunderstride" required>
             </div>
             <div class="form-group">
                 <label>Odds</label>
-                <input type="text" name="odds" placeholder="e.g., 5-2" required>
+                <input type="text" class="odds" name="odds" placeholder="e.g., 5-2" required>
+            </div>
+            <div class="form-group">
+                <label>Jockey</label>
+                <input type="text" class="jj jockey" name="jockey" placeholder="Jockey (optional)">
+            </div>
+            <div class="form-group">
+                <label>Trainer</label>
+                <input type="text" class="tt trainer" name="trainer" placeholder="Trainer (optional)">
             </div>
             <div class="form-group">
                 <label>Bankroll</label>
@@ -467,6 +487,8 @@ function collectHorseData() {
     horseEntries.forEach(entry => {
         const name = entry.querySelector('input[name="horseName"]').value.trim();
         const odds = entry.querySelector('input[name="odds"]').value.trim();
+        const jockey = entry.querySelector('input[name="jockey"]')?.value.trim() || "";
+        const trainer = entry.querySelector('input[name="trainer"]')?.value.trim() || "";
         const bankroll = parseFloat(entry.querySelector('input[name="bankroll"]').value);
         const kellyFraction = parseFloat(entry.querySelector('input[name="kellyFraction"]').value);
         
@@ -474,6 +496,8 @@ function collectHorseData() {
             horses.push({
                 name,
                 odds,
+                jockey,
+                trainer,
                 bankroll,
                 kelly_fraction: kellyFraction
             });
