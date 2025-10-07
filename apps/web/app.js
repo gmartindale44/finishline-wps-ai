@@ -122,15 +122,25 @@ function setRowValues(row, data) {
 }
 
 function insertIntoForm(extracted) {
-  if (!Array.isArray(extracted) || extracted.length === 0) return;
-  const rows = ensureRowCount(extracted.length);
+  if (!Array.isArray(extracted) || !extracted.length) return;
+  // grow rows as needed
+  const list = document.getElementById('horse-list');
+  let rows = getHorseRows();
+  while (rows.length < extracted.length) {
+    list?.appendChild(createHorseRow());
+    rows = getHorseRows();
+  }
   extracted.forEach((h, i) => {
-    if (!rows[i]) return;
-    setRowValues(rows[i], h);
+    const row = rows[i]; if (!row) return;
+    const { nameEl, oddsEl, jockeyEl, trainerEl } = getRowParts(row);
+    if (nameEl && h.name)   nameEl.value = h.name;
+    if (oddsEl && h.odds)   oddsEl.value = h.odds;
+    if (jockeyEl)           jockeyEl.value = h.jockey || '';
+    if (trainerEl)          trainerEl.value = h.trainer || '';
   });
   const firstRow = getHorseRows()[0];
   if (firstRow?.scrollIntoView) firstRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  if (typeof showToast === 'function') showToast('Extracted horses inserted into the form.');
+  console.log('[FinishLine] OCR inserted', extracted.length, 'horses into form');
 }
 
 function parseHorsesFromText(txt) {
@@ -222,7 +232,8 @@ function renderOcrReview(list) {
 }
 
 function collectHorsesForPredict() {
-  return getHorseRows().map(row => {
+  const rows = getHorseRows();
+  const horses = rows.map(row => {
     const { nameEl, oddsEl, jockeyEl, trainerEl, bankrollEl, kellyEl } = getRowParts(row);
     return {
       name: (nameEl?.value || '').trim(),
@@ -232,7 +243,9 @@ function collectHorsesForPredict() {
       bankroll: parseFloat(bankrollEl?.value || '0') || 0,
       kelly_fraction: parseFloat(kellyEl?.value || '0.25') || 0.25
     };
-  }).filter(h => h.name);
+  }).filter(h => h.name); // keep only rows with a name
+  console.log('[FinishLine] collected horses:', horses);
+  return horses;
 }
 
 function getHorseRows_OLD() {
@@ -460,34 +473,44 @@ function handlePhotoSelection(event) {
  */
 async function handlePredict() {
     try {
-        const horses = collectHorseData();
+        const horses = collectHorsesForPredict();
         
-        if (horses.length === 0) {
+        if (!horses.length) {
             showError('Please add at least one horse');
             return;
         }
+        
+        const payload = {
+            date: (document.querySelector('input[name="raceDate"]')?.value || document.getElementById('raceDate')?.value || '').trim(),
+            track: (document.querySelector('input[name="track"]')?.value || document.getElementById('track')?.value || '').trim(),
+            surface: (document.querySelector('select[name="surface"]')?.value || document.getElementById('surface')?.value || '').trim(),
+            distance: (document.querySelector('input[name="distance"]')?.value || document.getElementById('distance')?.value || '').trim(),
+            horses
+        };
+        
+        console.log('[FinishLine] POST /predict payload:', payload);
         
         showLoading();
         hideError();
         hideResults();
         
-        const response = await fetch(`${API_BASE}/api/finishline/predict`, {
+        const res = await fetch(`${API_BASE}/api/finishline/predict`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ horses })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
         });
         
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        const data = await res.json().catch(() => ({}));
+        console.log('[FinishLine] /predict response:', res.status, data);
+        
+        if (!res.ok) {
+            throw new Error(`HTTP ${res.status}: ${res.statusText}`);
         }
         
-        const data = await response.json();
         displayResults(data);
         
     } catch (error) {
-        console.error('Prediction error:', error);
+        console.error('[FinishLine] Prediction error:', error);
         showError(`Prediction failed: ${error.message}`);
     } finally {
         hideLoading();
