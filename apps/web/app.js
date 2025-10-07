@@ -64,6 +64,75 @@ function addPickedFiles(list) {
   renderThumbs();
 }
 
+function createHorseRow() {
+  const row = document.createElement('div');
+  row.className = 'horse-row';
+  row.setAttribute('data-horse-row', '1');
+  row.innerHTML = `
+    <input type="text" class="name"   data-field="name"      placeholder="Horse Name" />
+    <input type="text" class="odds"   data-field="odds"      placeholder="ML Odds (e.g., 5-2)" />
+    <input type="text" class="jj"     data-field="jockey"    placeholder="Jockey (optional)" />
+    <input type="text" class="tt"     data-field="trainer"   placeholder="Trainer (optional)" />
+    <input type="number"              data-field="bankroll"  placeholder="Bankroll" />
+    <input type="number"              data-field="kelly"     placeholder="Kelly (0.25)" />
+  `;
+  return row;
+}
+
+function getHorseList() {
+  return document.getElementById('horse-list');
+}
+
+function getHorseRows() {
+  return Array.from(document.querySelectorAll('#horse-list [data-horse-row]'));
+}
+
+function ensureRowCount(n) {
+  const list = getHorseList();
+  if (!list) return [];
+  let rows = getHorseRows();
+  const addBtn = document.getElementById('add-horse');
+  while (rows.length < n) {
+    const row = createHorseRow();
+    list.appendChild(row);
+    if (!addBtn && rows.length < n - 1) console.warn('[FinishLine] add-horse btn missing; appending rows programmatically');
+    rows = getHorseRows();
+  }
+  return rows;
+}
+
+function getRowParts(row) {
+  const qf = (field) => row.querySelector(`[data-field="${field}"]`);
+  return {
+    nameEl:     qf('name'),
+    oddsEl:     qf('odds'),
+    jockeyEl:   qf('jockey'),
+    trainerEl:  qf('trainer'),
+    bankrollEl: qf('bankroll'),
+    kellyEl:    qf('kelly'),
+  };
+}
+
+function setRowValues(row, data) {
+  const { nameEl, oddsEl, jockeyEl, trainerEl } = getRowParts(row);
+  if (nameEl && data.name)   nameEl.value = data.name;
+  if (oddsEl && data.odds)   oddsEl.value = data.odds;
+  if (jockeyEl)              jockeyEl.value = data.jockey || '';
+  if (trainerEl)             trainerEl.value = data.trainer || '';
+}
+
+function insertIntoForm(extracted) {
+  if (!Array.isArray(extracted) || extracted.length === 0) return;
+  const rows = ensureRowCount(extracted.length);
+  extracted.forEach((h, i) => {
+    if (!rows[i]) return;
+    setRowValues(rows[i], h);
+  });
+  const firstRow = getHorseRows()[0];
+  if (firstRow?.scrollIntoView) firstRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  if (typeof showToast === 'function') showToast('Extracted horses inserted into the form.');
+}
+
 function parseHorsesFromText(txt) {
   const lines = txt.replace(/\r/g,"\n").split("\n").map(s=>s.trim()).filter(Boolean);
 
@@ -152,11 +221,25 @@ function renderOcrReview(list) {
   box.classList.remove("hidden");
 }
 
-function getHorseRows() {
+function collectHorsesForPredict() {
+  return getHorseRows().map(row => {
+    const { nameEl, oddsEl, jockeyEl, trainerEl, bankrollEl, kellyEl } = getRowParts(row);
+    return {
+      name: (nameEl?.value || '').trim(),
+      odds: (oddsEl?.value || '').trim(),
+      jockey: (jockeyEl?.value || '').trim(),
+      trainer: (trainerEl?.value || '').trim(),
+      bankroll: parseFloat(bankrollEl?.value || '0') || 0,
+      kelly_fraction: parseFloat(kellyEl?.value || '0.25') || 0.25
+    };
+  }).filter(h => h.name);
+}
+
+function getHorseRows_OLD() {
   return Array.from(document.querySelectorAll('[data-horse-row]'));
 }
 
-function ensureRowCount(n) {
+function ensureRowCount_OLD(n) {
   let rows = getHorseRows();
   const addBtn = document.getElementById('add-horse') || Array.from(document.querySelectorAll('button')).find(b => /add horse/i.test(b.textContent));
   while (rows.length < n && addBtn) {
@@ -166,7 +249,7 @@ function ensureRowCount(n) {
   return rows;
 }
 
-function getRowParts(row) {
+function getRowParts_OLD(row) {
   // Prefer data-field mapping; fallback to class/placeholder if needed
   const q = (sel) => row.querySelector(sel);
   const byField = (f) => row.querySelector(`[data-field="${f}"]`);
@@ -187,7 +270,7 @@ function setRowValues(row, data) {
   if (trainerEl)             trainerEl.value = data.trainer || '';
 }
 
-function insertIntoForm(extracted) {
+function insertIntoForm_OLD(extracted) {
   if (!Array.isArray(extracted) || extracted.length === 0) return;
   // Make sure there are enough rows
   const rows = ensureRowCount(extracted.length);
@@ -203,7 +286,7 @@ function insertIntoForm(extracted) {
 
 // DOM Elements
 const raceForm = document.getElementById('raceForm');
-const horsesContainer = document.getElementById('horsesContainer');
+const horsesContainer = document.getElementById('horsesContainer') || document.getElementById('horse-list');
 const addHorseBtn = document.getElementById('addHorseBtn');
 const predictBtn = document.getElementById('predictBtn');
 const photoPredictBtn = document.getElementById('photoPredictBtn');
@@ -228,13 +311,21 @@ document.addEventListener('DOMContentLoaded', function() {
     const today = new Date().toISOString().split('T')[0];
     document.getElementById('raceDate').value = today;
     
+    // Wire Add Horse button with canonical template
+    const addBtn = document.getElementById('add-horse');
+    const list = getHorseList();
+    if (addBtn && list) {
+        addBtn.onclick = () => list.appendChild(createHorseRow());
+    }
+    
     // Event listeners
-    addHorseBtn.addEventListener('click', addHorseEntry);
+    // addHorseBtn is fallback, canonical is add-horse
+    if (addHorseBtn) addHorseBtn.addEventListener('click', addHorseEntry);
     predictBtn.addEventListener('click', handlePredict);
     
     // Photo picker wiring moved to bottom of file for reliability
 
-    // OCR event listeners
+    // OCR event listeners - wire to canonical insertIntoForm immediately
     const ocrBtn = document.getElementById("ocr-extract-btn");
     const insertBtn = document.getElementById("ocr-insert");
     if (ocrBtn) {
@@ -253,12 +344,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     hideLoading();
                     return;
                 }
-                // Auto-fill form immediately
                 insertIntoForm(horses);
-                // Optionally still show review list for visibility
-                if (document.getElementById("ocr-review")) {
-                    renderOcrReview(horses); // shows what was parsed (editable), but form is already filled
-                }
                 window.__OCR_LAST__ = horses;
                 hideLoading();
                 console.log("[FinishLine] OCR extracted and inserted", horses.length, "horses");
@@ -277,12 +363,19 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // Initial horse entry
-    addHorseEntry();
+    // Fallback for old addHorseEntry if needed
+    // addHorseEntry();
 });
 
 /**
- * Add a new horse entry to the form
+ * Collect horse data from form - use canonical approach
+ */
+function collectHorseData() {
+    return collectHorsesForPredict();
+}
+
+/**
+ * OLD: Add a new horse entry to the form (for compatibility)
  */
 function addHorseEntry() {
     const horseEntry = document.createElement('div');

@@ -471,3 +471,14 @@ footer strong {
 }
 
 .hidden-input { display: none; }  /* keep for any older refs, unused now */
+
+/* Canonical horse-list layout */
+.horse-list { display: grid; gap: 10px; margin-bottom: 12px; }
+.horse-row { display: grid; gap: 10px; }
+@media (min-width: 900px) {
+  .horse-row {
+    grid-template-columns: 2fr 1fr 1.5fr 1.5fr 1fr 1fr; /* Name, Odds, Jockey, Trainer, Bankroll, Kelly */
+    align-items: center;
+  }
+}
+.row-actions { margin-top: 8px; }

@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import json
 from .odds import ml_to_fraction, ml_to_prob
 from .scoring import calculate_predictions
@@ -47,6 +47,8 @@ async def predict_race(data: Dict[str, Any]):
             }
         ]
     }
+    
+    Note: jockey and trainer fields are accepted but not currently used in scoring.
     """
     try:
         horses = data.get("horses", [])

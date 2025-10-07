@@ -50,38 +50,20 @@
                     </div>
 
                     <h3>Horse Data</h3>
-                    <div id="horsesContainer">
-                        <div class="horse-entry" data-horse-row="1">
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label>Horse Name</label>
-                                    <input type="text" class="name" data-field="name" name="horseName" placeholder="e.g., Thunderstride" required>
-                                </div>
-                                <div class="form-group">
-                                    <label>Odds</label>
-                                    <input type="text" class="odds" data-field="odds" name="odds" placeholder="e.g., 5-2" required>
-                                </div>
-                                <div class="form-group">
-                                    <label>Jockey</label>
-                                    <input type="text" class="jj jockey" data-field="jockey" name="jockey" placeholder="Jockey (optional)">
-                                </div>
-                                <div class="form-group">
-                                    <label>Trainer</label>
-                                    <input type="text" class="tt trainer" data-field="trainer" name="trainer" placeholder="Trainer (optional)">
-                                </div>
-                                <div class="form-group">
-                                    <label>Bankroll</label>
-                                    <input type="number" data-field="bankroll" name="bankroll" placeholder="1000" value="1000" min="1" required>
-                                </div>
-                                <div class="form-group">
-                                    <label>Kelly Fraction</label>
-                                    <input type="number" data-field="kelly" name="kellyFraction" placeholder="0.25" value="0.25" min="0" max="1" step="0.01" required>
-                                </div>
-                            </div>
+                    <div id="horse-list" class="horse-list">
+                        <div class="horse-row" data-horse-row="1">
+                            <input type="text" class="name"   data-field="name"      placeholder="Horse Name" />
+                            <input type="text" class="odds"   data-field="odds"      placeholder="ML Odds (e.g., 5-2)" />
+                            <input type="text" class="jj"     data-field="jockey"    placeholder="Jockey (optional)" />
+                            <input type="text" class="tt"     data-field="trainer"   placeholder="Trainer (optional)" />
+                            <input type="number"              data-field="bankroll"  placeholder="Bankroll" />
+                            <input type="number"              data-field="kelly"     placeholder="Kelly (0.25)" />
                         </div>
                     </div>
                     
-                    <button type="button" id="add-horse" class="btn-secondary">+ Add Horse</button>
+                    <div class="row-actions">
+                        <button id="add-horse" type="button" class="btn-secondary">Add Horse</button>
+                    </div>
                     
                     <!-- Photo Upload -->
                     <div class="photo-box" id="photo-box">
