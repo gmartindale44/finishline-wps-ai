@@ -457,3 +457,17 @@ footer strong {
     gap: 10px;
   }
 }
+
+/* File picker reliability (iOS/Android/desktop) */
+.file-trigger {
+  position: relative;
+  overflow: hidden;
+}
+.file-trigger input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;           /* fully transparent but clickable */
+  cursor: pointer;
+}
+
+.hidden-input { display: none; }  /* keep for any older refs, unused now */

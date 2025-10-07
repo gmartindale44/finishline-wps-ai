@@ -218,40 +218,31 @@ document.addEventListener('DOMContentLoaded', function() {
     predictBtn.addEventListener('click', handlePredict);
     
     // Photo picker event listeners
-    const chooseBtn = document.getElementById("choose-files");
     const input = document.getElementById("photo-input");
     const drop = document.getElementById("drop-zone");
     const analyzeBtn = document.getElementById("analyze-photos-btn");
 
-    if (chooseBtn && input) {
-        chooseBtn.onclick = () => input.click();
+    if (input) {
         input.onchange = () => addPickedFiles(input.files);
     }
 
     if (drop) {
         ["dragenter","dragover"].forEach(evt =>
-            drop.addEventListener(evt, e => {
-                e.preventDefault(); e.stopPropagation();
-                drop.classList.add("dragging");
-            })
+            drop.addEventListener(evt, e => { e.preventDefault(); e.stopPropagation(); drop.classList.add("dragging"); })
         );
         ["dragleave","drop"].forEach(evt =>
-            drop.addEventListener(evt, e => {
-                e.preventDefault(); e.stopPropagation();
-                drop.classList.remove("dragging");
-            })
+            drop.addEventListener(evt, e => { e.preventDefault(); e.stopPropagation(); drop.classList.remove("dragging"); })
         );
-        drop.addEventListener("drop", e => {
-            addPickedFiles(e.dataTransfer.files);
-        });
+        drop.addEventListener("drop", e => addPickedFiles(e.dataTransfer.files));
+        // Clicking the drop-zone also opens the chooser
+        drop.addEventListener("click", () => { input?.click(); });
     }
 
     if (analyzeBtn) {
         analyzeBtn.addEventListener("click", async () => {
             // if none selected, open the chooser
             if (PICKED_FILES.length === 0) {
-                const inputEl = document.getElementById("photo-input");
-                if (inputEl) inputEl.click();
+                input?.click();
                 return;
             }
             try {

@@ -91,19 +91,19 @@
                                 <span id="photo-count" class="photo-count">0 / 6 selected</span>
                             </div>
                             <div class="photo-actions">
-                                <button id="choose-files" type="button" class="btn-secondary">Choose Photos / PDF</button>
+                                <label class="file-trigger btn-secondary" id="choose-files">
+                                    Choose Photos / PDF
+                                    <input
+                                        id="photo-input"
+                                        type="file"
+                                        accept="image/*,application/pdf"
+                                        capture="environment"
+                                        multiple
+                                        aria-label="Choose Photos or PDF"
+                                    />
+                                </label>
                             </div>
                         </div>
-
-                        <!-- Hidden file input -->
-                        <input
-                            id="photo-input"
-                            type="file"
-                            accept="image/*,application/pdf"
-                            capture="environment"
-                            multiple
-                            class="hidden-input"
-                        />
 
                         <!-- Drag & Drop -->
                         <div id="drop-zone" class="drop-zone">
