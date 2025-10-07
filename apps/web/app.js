@@ -152,38 +152,53 @@ function renderOcrReview(list) {
   box.classList.remove("hidden");
 }
 
+function getHorseRows() {
+  return Array.from(document.querySelectorAll('[data-horse-row]'));
+}
+
+function ensureRowCount(n) {
+  let rows = getHorseRows();
+  const addBtn = document.getElementById('add-horse') || Array.from(document.querySelectorAll('button')).find(b => /add horse/i.test(b.textContent));
+  while (rows.length < n && addBtn) {
+    addBtn.click();
+    rows = getHorseRows();
+  }
+  return rows;
+}
+
 function getRowParts(row) {
-  const inputs = row.querySelectorAll("input");
-  // heuristics by className first, then placeholder fallback
-  const nameEl = row.querySelector(".name") || Array.from(inputs).find(i => /horse/i.test(i.placeholder || ""));
-  const oddsEl = row.querySelector(".odds") || Array.from(inputs).find(i => /odds/i.test(i.placeholder || ""));
-  const jockeyEl = row.querySelector(".jj") || Array.from(inputs).find(i => /jockey/i.test(i.placeholder || ""));
-  const trainerEl = row.querySelector(".tt") || Array.from(inputs).find(i => /trainer/i.test(i.placeholder || ""));
-  const bankrollEl = Array.from(inputs).find(i => /bankroll/i.test((i.placeholder || "")) );
-  const kellyEl = Array.from(inputs).find(i => /kelly/i.test((i.placeholder || "")) );
+  // Prefer data-field mapping; fallback to class/placeholder if needed
+  const q = (sel) => row.querySelector(sel);
+  const byField = (f) => row.querySelector(`[data-field="${f}"]`);
+  const nameEl = byField('name')     || q('.name')   || q('input[placeholder*="Horse"]');
+  const oddsEl = byField('odds')     || q('.odds')   || q('input[placeholder*="Odds"]');
+  const jockeyEl = byField('jockey') || q('.jj')     || q('input[placeholder*="Jockey"]');
+  const trainerEl= byField('trainer')|| q('.tt')     || q('input[placeholder*="Trainer"]');
+  const bankrollEl = byField('bankroll') || q('input[placeholder*="Bankroll"]');
+  const kellyEl    = byField('kelly')    || q('input[placeholder*="Kelly"]');
   return { nameEl, oddsEl, jockeyEl, trainerEl, bankrollEl, kellyEl };
 }
 
-function clickAddHorse() {
-  const btn = document.getElementById("add-horse") || Array.from(document.querySelectorAll("button")).find(b => /add horse/i.test(b.textContent));
-  if (btn) btn.click();
+function setRowValues(row, data) {
+  const { nameEl, oddsEl, jockeyEl, trainerEl } = getRowParts(row);
+  if (nameEl && data.name)   nameEl.value = data.name;
+  if (oddsEl && data.odds)   oddsEl.value = data.odds;
+  if (jockeyEl)              jockeyEl.value = data.jockey || '';
+  if (trainerEl)             trainerEl.value = data.trainer || '';
 }
 
-// Inserts extracted horses into Horse rows (auto-fill)
 function insertIntoForm(extracted) {
-  // ensure at least N rows
-  let rows = Array.from(document.querySelectorAll("[data-horse-row]"));
-  for (let i = rows.length; i < extracted.length; i++) clickAddHorse();
-  rows = Array.from(document.querySelectorAll("[data-horse-row]"));
-
-  extracted.forEach((h, idx) => {
-    if (!rows[idx]) return;
-    const { nameEl, oddsEl, jockeyEl, trainerEl } = getRowParts(rows[idx]);
-    if (nameEl && h.name) nameEl.value = h.name;
-    if (oddsEl && h.odds) oddsEl.value = h.odds;
-    if (jockeyEl && h.jockey) jockeyEl.value = h.jockey;
-    if (trainerEl && h.trainer) trainerEl.value = h.trainer;
+  if (!Array.isArray(extracted) || extracted.length === 0) return;
+  // Make sure there are enough rows
+  const rows = ensureRowCount(extracted.length);
+  // Fill rows in order
+  extracted.forEach((h, i) => {
+    if (!rows[i]) return;
+    setRowValues(rows[i], h);
   });
+  // Optional: scroll to form
+  const firstRow = getHorseRows()[0];
+  if (firstRow && firstRow.scrollIntoView) firstRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 // DOM Elements
@@ -224,17 +239,18 @@ document.addEventListener('DOMContentLoaded', function() {
     const insertBtn = document.getElementById("ocr-insert");
     if (ocrBtn) {
         ocrBtn.addEventListener("click", async () => {
-            if (PICKED_FILES.length === 0) {
+            if ((window.PICKED_FILES || []).length === 0) {
                 const inputEl = document.getElementById("photo-input");
                 if (inputEl) inputEl.click();
                 return;
             }
             try {
                 showLoading();
-                const text = await ocrImagesWithTesseract(PICKED_FILES);
+                const text = await ocrImagesWithTesseract(window.PICKED_FILES);
                 const horses = parseHorsesFromText(text);
                 if (horses.length === 0) {
                     showError("OCR didn't find any horses. Try a clearer crop.");
+                    hideLoading();
                     return;
                 }
                 // Auto-fill form immediately
@@ -245,6 +261,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 window.__OCR_LAST__ = horses;
                 hideLoading();
+                console.log("[FinishLine] OCR extracted and inserted", horses.length, "horses");
             } catch (e) {
                 showError(`OCR failed: ${e.message || e}`);
                 hideLoading();
@@ -276,27 +293,27 @@ function addHorseEntry() {
         <div class="form-row">
             <div class="form-group">
                 <label>Horse Name</label>
-                <input type="text" class="name" name="horseName" placeholder="e.g., Thunderstride" required>
+                <input type="text" class="name" data-field="name" name="horseName" placeholder="e.g., Thunderstride" required>
             </div>
             <div class="form-group">
                 <label>Odds</label>
-                <input type="text" class="odds" name="odds" placeholder="e.g., 5-2" required>
+                <input type="text" class="odds" data-field="odds" name="odds" placeholder="e.g., 5-2" required>
             </div>
             <div class="form-group">
                 <label>Jockey</label>
-                <input type="text" class="jj jockey" name="jockey" placeholder="Jockey (optional)">
+                <input type="text" class="jj jockey" data-field="jockey" name="jockey" placeholder="Jockey (optional)">
             </div>
             <div class="form-group">
                 <label>Trainer</label>
-                <input type="text" class="tt trainer" name="trainer" placeholder="Trainer (optional)">
+                <input type="text" class="tt trainer" data-field="trainer" name="trainer" placeholder="Trainer (optional)">
             </div>
             <div class="form-group">
                 <label>Bankroll</label>
-                <input type="number" name="bankroll" placeholder="1000" value="1000" min="1" required>
+                <input type="number" data-field="bankroll" name="bankroll" placeholder="1000" value="1000" min="1" required>
             </div>
             <div class="form-group">
                 <label>Kelly Fraction</label>
-                <input type="number" name="kellyFraction" placeholder="0.25" value="0.25" min="0" max="1" step="0.01" required>
+                <input type="number" data-field="kelly" name="kellyFraction" placeholder="0.25" value="0.25" min="0" max="1" step="0.01" required>
             </div>
         </div>
         <button type="button" class="btn-secondary remove-horse" style="margin-top: 0.5rem;">Remove Horse</button>
