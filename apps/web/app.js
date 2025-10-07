@@ -10,22 +10,21 @@ const isLocal = location.hostname === "localhost" || location.hostname === "127.
 const API_BASE = isLocal ? LOCAL_API : SAME_ORIGIN;
 
 // --- Photo picker state ---
-let PICKED_FILES = []; // array of File
+window.PICKED_FILES = window.PICKED_FILES || [];
 const MAX_FILES = 6;
 
 function updatePhotoCount() {
   const el = document.getElementById("photo-count");
-  if (el) el.textContent = `${PICKED_FILES.length} / ${MAX_FILES} selected`;
+  if (el) el.textContent = `${(window.PICKED_FILES || []).length} / ${MAX_FILES} selected`;
 }
 
 function renderThumbs() {
   const wrap = document.getElementById("thumbs");
-  if (!wrap) return;
+  if (!wrap) { console.warn("[FinishLine] #thumbs not found"); return; }
   wrap.innerHTML = "";
-  PICKED_FILES.forEach((file, idx) => {
+  (window.PICKED_FILES || []).forEach((file, idx) => {
     const item = document.createElement("div");
     item.className = "thumb";
-
     if (file.type === "application/pdf") {
       item.innerHTML = `
         <div class="pdf-badge">PDF</div>
@@ -44,7 +43,7 @@ function renderThumbs() {
       item.querySelector("img").onload = () => URL.revokeObjectURL(url);
     }
     item.querySelector(".remove").onclick = () => {
-      PICKED_FILES.splice(idx, 1);
+      window.PICKED_FILES.splice(idx, 1);
       updatePhotoCount();
       renderThumbs();
     };
@@ -54,13 +53,14 @@ function renderThumbs() {
 }
 
 function addPickedFiles(list) {
-  const incoming = Array.from(list || []);
+  if (!list) return;
+  const incoming = Array.from(list);
+  console.log("[FinishLine] addPickedFiles got", incoming.map(f => ({name:f.name, type:f.type, size:f.size})));
   for (const f of incoming) {
-    if (PICKED_FILES.length >= MAX_FILES) break;
-    if (!/^image\/|application\/pdf$/.test(f.type)) continue;
-    PICKED_FILES.push(f);
+    if (window.PICKED_FILES.length >= MAX_FILES) break;
+    if (!/^image\//.test(f.type) && f.type !== "application/pdf") continue;
+    window.PICKED_FILES.push(f);
   }
-  updatePhotoCount();
   renderThumbs();
 }
 
@@ -217,50 +217,7 @@ document.addEventListener('DOMContentLoaded', function() {
     addHorseBtn.addEventListener('click', addHorseEntry);
     predictBtn.addEventListener('click', handlePredict);
     
-    // Photo picker event listeners
-    const input = document.getElementById("photo-input");
-    const drop = document.getElementById("drop-zone");
-    const analyzeBtn = document.getElementById("analyze-photos-btn");
-
-    if (input) {
-        input.onchange = () => addPickedFiles(input.files);
-    }
-
-    if (drop) {
-        ["dragenter","dragover"].forEach(evt =>
-            drop.addEventListener(evt, e => { e.preventDefault(); e.stopPropagation(); drop.classList.add("dragging"); })
-        );
-        ["dragleave","drop"].forEach(evt =>
-            drop.addEventListener(evt, e => { e.preventDefault(); e.stopPropagation(); drop.classList.remove("dragging"); })
-        );
-        drop.addEventListener("drop", e => addPickedFiles(e.dataTransfer.files));
-        // Clicking the drop-zone also opens the chooser
-        drop.addEventListener("click", () => { input?.click(); });
-    }
-
-    if (analyzeBtn) {
-        analyzeBtn.addEventListener("click", async () => {
-            // if none selected, open the chooser
-            if (PICKED_FILES.length === 0) {
-                input?.click();
-                return;
-            }
-            try {
-                const form = new FormData();
-                PICKED_FILES.slice(0, MAX_FILES).forEach(f => form.append("files", f, f.name));
-                const res = await fetch(`${API_BASE}/api/finishline/photo_predict`, {
-                    method: "POST",
-                    body: form
-                });
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                const data = await res.json();
-                // reuse existing render routine for W/P/S
-                displayResults(data);
-            } catch (err) {
-                showError(`Photo analysis failed: ${err.message || err}`);
-            }
-        });
-    }
+    // Photo picker wiring moved to bottom of file for reliability
 
     // OCR event listeners
     const ocrBtn = document.getElementById("ocr-extract-btn");
@@ -585,3 +542,62 @@ async function testAPI() {
 
 // Test API on load
 testAPI();
+
+// Robust photo picker wiring
+(function wirePhotoPicker() {
+  function attach() {
+    const input = document.getElementById("photo-input");
+    const drop = document.getElementById("drop-zone");
+    const analyzeBtn = document.getElementById("analyze-photos-btn");
+    if (!input) { console.warn("[FinishLine] #photo-input not found yet"); return false; }
+
+    // Always handle change, and reset value so picking the same file twice works
+    input.onchange = () => {
+      addPickedFiles(input.files);
+      input.value = ""; // critical for repeat selection of same file
+    };
+
+    if (drop) {
+      ["dragenter","dragover"].forEach(evt =>
+        drop.addEventListener(evt, e => { e.preventDefault(); e.stopPropagation(); drop.classList.add("dragging"); })
+      );
+      ["dragleave","drop"].forEach(evt =>
+        drop.addEventListener(evt, e => { e.preventDefault(); e.stopPropagation(); drop.classList.remove("dragging"); })
+      );
+      drop.addEventListener("drop", e => addPickedFiles(e.dataTransfer.files));
+      drop.addEventListener("click", () => input.click());
+    }
+
+    if (analyzeBtn) {
+      analyzeBtn.addEventListener("click", async () => {
+        if ((window.PICKED_FILES || []).length === 0) {
+          console.log("[FinishLine] analyze clicked with 0 files → opening chooser");
+          input.click();
+          return;
+        }
+        console.log("[FinishLine] analyze clicked with", window.PICKED_FILES.length, "files");
+        try {
+          const form = new FormData();
+          window.PICKED_FILES.slice(0, MAX_FILES).forEach(f => form.append("files", f, f.name));
+          const res = await fetch(`${API_BASE}/api/finishline/photo_predict`, {
+            method: "POST",
+            body: form
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          displayResults(data);
+        } catch (err) {
+          showError(`Photo analysis failed: ${err.message || err}`);
+        }
+      });
+    }
+
+    console.log("[FinishLine] photo picker wired");
+    return true;
+  }
+
+  if (!attach()) {
+    // Try again on DOM ready
+    document.addEventListener("DOMContentLoaded", attach);
+  }
+})();
