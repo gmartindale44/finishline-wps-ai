@@ -435,3 +435,13 @@ footer strong {
 .thumb .name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size: 0.85rem; opacity: 0.9; }
 .thumb .remove { background: transparent; border: 1px solid rgba(255,255,255,0.25); color: #fff; border-radius: 8px; padding: 2px 6px; cursor: pointer; }
 .thumb .remove:hover { background: rgba(255,255,255,0.08); }
+
+/* OCR Review Panel */
+.ocr-review.hidden { display:none; }
+.ocr-review { margin-top: 12px; padding: 12px; border:1px solid rgba(139,92,246,.35); border-radius: 12px; background: rgba(255,255,255,.04); }
+.ocr-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+.ocr-items { display:grid; gap:8px; }
+.ocr-row { display:grid; grid-template-columns: 24px 1fr 120px; gap:8px; align-items:center; }
+.ocr-row input[type="text"] { width:100%; }
+.btn.sm { padding:6px 10px; font-size:.9rem; }
+.btn.ghost { background: transparent; border:1px solid rgba(139,92,246,.45); }

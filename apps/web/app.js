@@ -64,6 +64,122 @@ function addPickedFiles(list) {
   renderThumbs();
 }
 
+function parseHorsesFromText(txt) {
+  // Normalize and split lines
+  const lines = txt
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .map(s => s.trim())
+    .filter(Boolean);
+
+  const horses = [];
+  // Basic patterns: names (letters, spaces, apostrophes) and odds like 5-2, 3/1, 10-1, or 8-5
+  const nameLike = /^[A-Za-z][A-Za-z''\-.\s]+$/;
+  const mlLike = /^(\d{1,2}\s*[-/]\s*\d{1,2}|\d{1,2}-\d{1,2}|\d{1,2}\/\d{1,2})$/;
+
+  // Walk lines; if line looks like a horse name and the next token looks like odds, pair them
+  for (let i = 0; i < lines.length; i++) {
+    const L = lines[i];
+
+    // Skip obvious headers / columns
+    if (/^(horse|jockey|trainer|win|place|show|race|post|purse|claiming|dirt|turf|fast|firm|good|allowance)/i.test(L)) continue;
+    if (/^\d+$/.test(L)) continue; // isolated program number cells
+
+    const isName = nameLike.test(L) && L.length >= 3 && L.length <= 40;
+
+    // Look ahead for odds on same line or next line
+    let odds = "";
+    // same line token check
+    const sameTokens = L.split(/\s+/);
+    for (const t of sameTokens) {
+      if (mlLike.test(t)) { odds = t; break; }
+    }
+    if (!odds && i + 1 < lines.length && mlLike.test(lines[i+1])) {
+      odds = lines[i+1];
+      i++; // consume next line as odds
+    }
+
+    if (isName) {
+      // Avoid duplicates by name
+      if (!horses.some(h => h.name.toLowerCase() === L.toLowerCase())) {
+        horses.push({ checked: true, name: L, odds });
+      }
+    }
+  }
+
+  // Fallback: if nothing matched, try extracting proper-case words sequences as names
+  if (horses.length === 0) {
+    const joined = lines.join(" ");
+    const m = joined.match(/[A-Z][a-zA-Z'']+(?:\s+[A-Z][a-zA-Z'']+){0,3}/g);
+    if (m) {
+      Array.from(new Set(m)).slice(0, 12).forEach(n => horses.push({ checked:true, name:n, odds:"" }));
+    }
+  }
+  return horses.slice(0, 12);
+}
+
+async function ocrImagesWithTesseract(files) {
+  const T = window.Tesseract;
+  if (!T) throw new Error("OCR engine not loaded");
+  // Only images (skip PDFs for now)
+  const imgs = Array.from(files || []).filter(f => /^image\//.test(f.type));
+  const results = [];
+  for (const f of imgs) {
+    const url = URL.createObjectURL(f);
+    try {
+      const { data } = await T.recognize(url, "eng", { logger: () => {} });
+      if (data && data.text) results.push(data.text);
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+  return results.join("\n");
+}
+
+function renderOcrReview(list) {
+  const box = document.getElementById("ocr-review");
+  const wrap = document.getElementById("ocr-items");
+  if (!box || !wrap) return;
+  wrap.innerHTML = "";
+  list.forEach((h, idx) => {
+    const row = document.createElement("div");
+    row.className = "ocr-row";
+    row.innerHTML = `
+      <input type="checkbox" ${h.checked ? "checked" : ""} />
+      <input type="text" class="name" value="${h.name}" />
+      <input type="text" class="odds" placeholder="e.g., 5-2" value="${h.odds || ""}" />
+    `;
+    const [chk, nameEl, oddsEl] = row.querySelectorAll("input");
+    chk.onchange = () => { h.checked = chk.checked; };
+    nameEl.oninput = () => { h.name = nameEl.value; };
+    oddsEl.oninput = () => { h.odds = oddsEl.value; };
+    wrap.appendChild(row);
+  });
+  box.classList.remove("hidden");
+}
+
+// Inserts checked items into Horse rows (append or update blanks)
+function insertIntoForm(extracted) {
+  const rows = document.querySelectorAll(".horse-row"); // assuming each horse row has class set; if not, we will map by inputs
+  function addRow() {
+    const btn = document.querySelector("button#add-horse") || Array.from(document.querySelectorAll("button")).find(b => /add horse/i.test(b.textContent));
+    if (btn) btn.click();
+  }
+  function setRow(row, name, odds) {
+    const inputs = row.querySelectorAll("input");
+    const nameInput = Array.from(inputs).find(i => /horse/i.test(i.placeholder || "") || /name/i.test(i.name || ""));
+    const oddsInput = Array.from(inputs).find(i => /odds/i.test(i.placeholder || "") || /odds/i.test(i.name || ""));
+    if (nameInput) nameInput.value = name;
+    if (oddsInput && odds) oddsInput.value = odds;
+  }
+
+  let current = Array.from(document.querySelectorAll("[data-horse-row], .horse-row"));
+  extracted.filter(h => h.checked && h.name.trim()).forEach((h, idx) => {
+    if (idx >= current.length) { addRow(); current = Array.from(document.querySelectorAll("[data-horse-row], .horse-row")); }
+    setRow(current[idx], h.name.trim(), (h.odds || "").trim());
+  });
+}
+
 // DOM Elements
 const raceForm = document.getElementById('raceForm');
 const horsesContainer = document.getElementById('horsesContainer');
@@ -146,6 +262,43 @@ document.addEventListener('DOMContentLoaded', function() {
             } catch (err) {
                 showError(`Photo analysis failed: ${err.message || err}`);
             }
+        });
+    }
+
+    // OCR event listeners
+    const ocrBtn = document.getElementById("ocr-extract-btn");
+    const insertBtn = document.getElementById("ocr-insert");
+    if (ocrBtn) {
+        ocrBtn.addEventListener("click", async () => {
+            if (PICKED_FILES.length === 0) {
+                const inputEl = document.getElementById("photo-input");
+                if (inputEl) inputEl.click();
+                return;
+            }
+            try {
+                showLoading();
+                const text = await ocrImagesWithTesseract(PICKED_FILES);
+                const horses = parseHorsesFromText(text);
+                if (horses.length === 0) {
+                    showError("OCR didn't find any horse names—try a clearer image or zoom.");
+                    return;
+                }
+                renderOcrReview(horses);
+                // keep last extraction in memory for insert
+                window.__OCR_LAST__ = horses;
+            } catch (e) {
+                showError(`OCR failed: ${e.message || e}`);
+            } finally {
+                hideLoading();
+            }
+        });
+    }
+    if (insertBtn) {
+        insertBtn.addEventListener("click", () => {
+            const list = window.__OCR_LAST__ || [];
+            insertIntoForm(list);
+            const box = document.getElementById("ocr-review");
+            if (box) box.classList.add("hidden");
         });
     }
     

@@ -107,9 +107,20 @@
                         <div id="thumbs" class="thumbs"></div>
                     </div>
                     
+                    <!-- OCR Review Panel -->
+                    <div id="ocr-review" class="ocr-review hidden">
+                        <div class="ocr-head">
+                            <strong>Extracted Horses</strong>
+                            <button id="ocr-insert" type="button" class="btn-primary sm">Insert into Form</button>
+                        </div>
+                        <div id="ocr-items" class="ocr-items"></div>
+                        <div id="ocr-note" class="ocr-note">Tip: Edit names/odds if needed. Only checked rows will be inserted.</div>
+                    </div>
+                    
                     <div class="action-buttons">
                         <button type="button" id="predictBtn" class="btn-primary">🎯 Predict W/P/S</button>
                         <button id="analyze-photos-btn" type="button" class="btn-primary">📸 Analyze Photos with AI</button>
+                        <button id="ocr-extract-btn" type="button" class="btn-secondary">📄 Extract from Photos</button>
                     </div>
                 </form>
             </section>
@@ -176,6 +187,7 @@
         </footer>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
