@@ -5,7 +5,6 @@ import json
 from .odds import ml_to_fraction, ml_to_prob
 from .scoring import calculate_predictions
 from .ocr_stub import analyze_photos
-from vercel_asgi import VercelASGI
 
 app = FastAPI(
     title="FinishLine WPS AI",
@@ -98,11 +97,8 @@ async def photo_predict(
         }
     
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Photo analysis error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"photo_predict_error: {e}")
 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
-
-# Vercel ASGI handler
-handler = VercelASGI(app)
