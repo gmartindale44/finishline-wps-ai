@@ -14,27 +14,23 @@ def analyze_photos(files: List[Any]) -> List[Dict[str, Any]]:
         files: List of uploaded image files
     
     Returns:
-        List of extracted horse data dictionaries
+        List of extracted horse data dictionaries with trainer/jockey
     """
     try:
         # Simulate processing delay
         import time
         time.sleep(0.5)
         
-        # Static horse data for simulation
+        # Static horse data for simulation with trainer/jockey
         horse_pool = [
-            {"name": "Thunderstride", "odds": "5-2"},
-            {"name": "Silver Blaze", "odds": "3-1"},
-            {"name": "Midnight Arrow", "odds": "6-1"},
-            {"name": "Crimson Dash", "odds": "8-1"},
-            {"name": "Golden Thunder", "odds": "4-1"},
-            {"name": "Storm Chaser", "odds": "7-2"},
-            {"name": "Lightning Bolt", "odds": "9-2"},
-            {"name": "Wind Runner", "odds": "5-1"},
-            {"name": "Fire Storm", "odds": "10-1"},
-            {"name": "Ice Princess", "odds": "12-1"},
-            {"name": "Desert Wind", "odds": "15-1"},
-            {"name": "Ocean Wave", "odds": "20-1"},
+            {"name": "Flyin Ryan", "trainer": "Kathy Jarvis", "jockey": "Jose Ramos Gutierrez", "ml_odds": "8/1"},
+            {"name": "Improbable", "trainer": "Bob Baffert", "jockey": "Irad Ortiz Jr", "ml_odds": "5-2"},
+            {"name": "Silver Blaze", "trainer": "John Kimmel", "jockey": "Joel Rosario", "ml_odds": "3-1"},
+            {"name": "Midnight Arrow", "trainer": "Steve Asmussen", "jockey": "Ricardo Santana Jr", "ml_odds": "6-1"},
+            {"name": "Crimson Dash", "trainer": "Brad Cox", "jockey": "Florent Geroux", "ml_odds": "8-1"},
+            {"name": "Golden Thunder", "trainer": "Chad Brown", "jockey": "Jose Ortiz", "ml_odds": "4-1"},
+            {"name": "Storm Chaser", "trainer": "Todd Pletcher", "jockey": "John Velazquez", "ml_odds": "7-2"},
+            {"name": "Lightning Bolt", "trainer": "Mark Casse", "jockey": "Tyler Gaffalione", "ml_odds": "9-2"},
         ]
         
         # Return subset based on number of files
@@ -48,24 +44,13 @@ def analyze_photos(files: List[Any]) -> List[Dict[str, Any]]:
         # Randomly select horses (simulating OCR extraction)
         selected_horses = random.sample(horse_pool, num_horses)
         
-        # Add default bankroll and kelly fraction
-        result = []
-        for horse in selected_horses:
-            result.append({
-                "name": horse["name"],
-                "odds": horse["odds"],
-                "bankroll": 1000,
-                "kelly_fraction": 0.25
-            })
-        
-        return result
+        return selected_horses
     
     except Exception as e:
         # Return fallback data if simulation fails
         return [
-            {"name": "Thunderstride", "odds": "5-2", "bankroll": 1000, "kelly_fraction": 0.25},
-            {"name": "Silver Blaze", "odds": "3-1", "bankroll": 1000, "kelly_fraction": 0.25},
-            {"name": "Midnight Arrow", "odds": "6-1", "bankroll": 1000, "kelly_fraction": 0.25},
+            {"name": "Flyin Ryan", "trainer": "Kathy Jarvis", "jockey": "Jose Ramos Gutierrez", "ml_odds": "8/1"},
+            {"name": "Improbable", "trainer": "Bob Baffert", "jockey": "Irad Ortiz Jr", "ml_odds": "5-2"},
         ]
 
 def simulate_ocr_confidence(file_name: str) -> float:

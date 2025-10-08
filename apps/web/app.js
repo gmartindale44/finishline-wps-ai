@@ -64,17 +64,40 @@ function addPickedFiles(list) {
   renderThumbs();
 }
 
+function normalizeOddsString(s) {
+  if (!s) return "";
+  const raw = String(s).trim().toLowerCase().replace(/\s+/g, " ");
+  const m = raw.match(/^(\d+)\s*(\/|-|:|\s*to\s*)\s*(\d+)$/i);
+  if (m) {
+    const a = parseFloat(m[1]), b = parseFloat(m[3]);
+    if (b > 0) return `${a}/${b}`;
+  }
+  const num = Number(raw);
+  if (!Number.isNaN(num) && num > 0) return `${num}`;
+  return s.trim();
+}
+
+function cleanHorseName(name) {
+  if (!name) return "";
+  let n = String(name).trim();
+  // split lines like "Flyin Ryan\nImprobable"
+  n = n.split(/\r?\n/)[0];
+  // remove obvious sire fragments after a comma or slash
+  n = n.replace(/\s*\/.*$/, "").replace(/,\s*.+$/, "");
+  return n.trim();
+}
+
 function createHorseRow() {
   const row = document.createElement('div');
   row.className = 'horse-row';
-  row.setAttribute('data-horse-row', '1');
+  row.setAttribute('data-horse-row', '0');
   row.innerHTML = `
-    <input type="text" class="name"   data-field="name"      placeholder="Horse Name" />
-    <input type="text" class="odds"   data-field="odds"      placeholder="ML Odds (e.g., 5-2)" />
-    <input type="text" class="jj"     data-field="jockey"    placeholder="Jockey (optional)" />
-    <input type="text" class="tt"     data-field="trainer"   placeholder="Trainer (optional)" />
-    <input type="number"              data-field="bankroll"  placeholder="Bankroll" />
-    <input type="number"              data-field="kelly"     placeholder="Kelly (0.25)" />
+    <input type="text" class="horse-name name" data-field="name" placeholder="Horse Name" />
+    <input type="text" class="horse-odds odds" data-field="odds" placeholder="ML Odds (e.g., 5-2)" />
+    <input type="text" class="horse-jockey jj" data-field="jockey" placeholder="Jockey (optional)" />
+    <input type="text" class="horse-trainer tt" data-field="trainer" placeholder="Trainer (optional)" />
+    <input type="number" class="horse-bankroll" data-field="bankroll" placeholder="Bankroll" value="1000" />
+    <input type="number" class="horse-kelly" data-field="kelly_fraction" placeholder="Kelly (0.25)" value="0.25" step="0.01" />
   `;
   return row;
 }
@@ -88,17 +111,50 @@ function getHorseRows() {
 }
 
 function ensureRowCount(n) {
-  const list = getHorseList();
-  if (!list) return [];
-  let rows = getHorseRows();
-  const addBtn = document.getElementById('add-horse');
-  while (rows.length < n) {
-    const row = createHorseRow();
-    list.appendChild(row);
-    if (!addBtn && rows.length < n - 1) console.warn('[FinishLine] add-horse btn missing; appending rows programmatically');
-    rows = getHorseRows();
-  }
-  return rows;
+  const addBtn = document.getElementById('btnAddHorse') || document.getElementById('add-horse') || document.querySelector('[data-add-horse]');
+  while (document.querySelectorAll('[data-horse-row]').length < n && addBtn) addBtn.click();
+}
+
+function readRow(i) {
+  const row = document.querySelector(`[data-horse-row="${i}"]`);
+  if (!row) return null;
+  return {
+    name: row.querySelector('.horse-name')?.value?.trim() || "",
+    trainer: row.querySelector('.horse-trainer')?.value?.trim() || "",
+    jockey: row.querySelector('.horse-jockey')?.value?.trim() || "",
+    odds: row.querySelector('.horse-odds')?.value?.trim() || "",
+    bankroll: Number(row.querySelector('.horse-bankroll')?.value || 0) || 0,
+    kelly_fraction: Number(row.querySelector('.horse-kelly')?.value || 0) || 0,
+  };
+}
+
+function writeRow(i, data) {
+  const row = document.querySelector(`[data-horse-row="${i}"]`);
+  if (!row) return;
+  if (data.name !== undefined) row.querySelector('.horse-name').value = data.name || "";
+  if (data.trainer !== undefined) row.querySelector('.horse-trainer').value = data.trainer || "";
+  if (data.jockey !== undefined) row.querySelector('.horse-jockey').value = data.jockey || "";
+  if (data.odds !== undefined) row.querySelector('.horse-odds').value = normalizeOddsString(data.odds || "");
+  if (data.bankroll !== undefined) row.querySelector('.horse-bankroll').value = data.bankroll ?? "";
+  if (data.kelly_fraction !== undefined) row.querySelector('.horse-kelly').value = data.kelly_fraction ?? "";
+}
+
+function gatherFormHorses() {
+  const rows = document.querySelectorAll('[data-horse-row]');
+  const out = [];
+  rows.forEach(r => {
+    const name = r.querySelector('.horse-name')?.value?.trim() || "";
+    if (!name) return;
+    out.push({
+      name,
+      trainer: r.querySelector('.horse-trainer')?.value?.trim() || "",
+      jockey:  r.querySelector('.horse-jockey')?.value?.trim() || "",
+      odds:    r.querySelector('.horse-odds')?.value?.trim() || "",
+      bankroll: Number(r.querySelector('.horse-bankroll')?.value || 0) || 0,
+      kelly_fraction: Number(r.querySelector('.horse-kelly')?.value || 0) || 0,
+    });
+  });
+  return out;
 }
 
 function getRowParts(row) {
@@ -325,16 +381,109 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('raceDate').value = today;
     
     // Wire Add Horse button with canonical template
-    const addBtn = document.getElementById('add-horse');
+    const addBtn = document.getElementById('add-horse') || document.getElementById('btnAddHorse');
     const list = getHorseList();
     if (addBtn && list) {
         addBtn.onclick = () => list.appendChild(createHorseRow());
     }
     
-    // Event listeners
-    // addHorseBtn is fallback, canonical is add-horse
+    // Wire photo extraction
+    const fileInput = document.getElementById('photoFiles') || document.getElementById('photo-input');
+    const btnChoose = document.getElementById('btnChoosePhotos');
+    const btnExtract = document.getElementById('btnExtract') || document.getElementById('ocr-extract-btn');
+    const btnPredict = document.getElementById('btnPredict') || document.getElementById('predictBtn');
+    const btnAnalyze = document.getElementById('btnAnalyze') || document.getElementById('analyze-photos-btn');
+    
+    if (btnChoose && fileInput) btnChoose.addEventListener('click', () => fileInput.click());
+    
+    async function extractFromPhotos() {
+      if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+        showError && showError("Please select at least one photo/PDF.");
+        return;
+      }
+      const API_URL = (window.FINISHLINE_API_BASE || API_BASE).replace(/\/$/, "");
+      const fd = new FormData();
+      Array.from(fileInput.files).slice(0, 6).forEach(f => fd.append("files", f, f.name));
+      fd.append("date", document.getElementById('raceDate')?.value || "");
+      fd.append("track", document.getElementById('raceTrack')?.value || document.getElementById('track')?.value || "");
+      fd.append("surface", document.getElementById('raceSurface')?.value || document.getElementById('surface')?.value || "");
+      fd.append("distance", document.getElementById('raceDistance')?.value || document.getElementById('distance')?.value || "");
+
+      if (btnExtract) btnExtract.disabled = true;
+      try {
+        const res = await fetch(`${API_URL}/api/finishline/photo_predict`, { method: "POST", body: fd });
+        if (!res.ok) throw new Error(`photo_predict ${res.status}`);
+        const data = await res.json();
+        let rows = data?.parsed_horses || data?.rows || data?.horses || data?.extracted_horses || [];
+        if (!Array.isArray(rows)) rows = [];
+
+        if (rows.length === 0) {
+          showError && showError("No horses detected. Try another image/crop.");
+          return;
+        }
+
+        ensureRowCount(rows.length);
+        rows.forEach((r, i) => {
+          const name = cleanHorseName(r.name || r.horse || "");
+          const trainer = r.trainer || "";
+          const jockey = r.jockey || "";
+          const odds = r.ml_odds || r.odds || "";
+          writeRow(i, { name, trainer, jockey, odds });
+        });
+
+        console.log(`[FinishLine] Filled ${rows.length} horses from photos.`);
+        if (showError) hideError();
+      } catch (e) {
+        console.error(e);
+        showError && showError("Extract failed. Check image quality & try again.");
+      } finally {
+        if (btnExtract) btnExtract.disabled = false;
+      }
+    }
+    if (btnExtract) btnExtract.addEventListener('click', extractFromPhotos);
+    
+    async function doPredict(endpoint) {
+      const API_URL = (window.FINISHLINE_API_BASE || API_BASE).replace(/\/$/, "");
+      const horses = gatherFormHorses();
+      if (horses.length === 0) {
+        showError && showError("Please add at least one horse.");
+        return;
+      }
+      const payload = {
+        date: document.getElementById('raceDate')?.value || "",
+        track: document.getElementById('raceTrack')?.value || document.getElementById('track')?.value || "",
+        surface: document.getElementById('raceSurface')?.value || document.getElementById('surface')?.value || "",
+        distance: document.getElementById('raceDistance')?.value || document.getElementById('distance')?.value || "",
+        horses
+      };
+      console.log('[FinishLine] POST /'+endpoint+' payload:', payload);
+      
+      showLoading && showLoading();
+      hideError && hideError();
+      try {
+        const res = await fetch(`${API_URL}/api/finishline/${endpoint}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const json = await res.json();
+        console.log('[FinishLine] /'+endpoint+' response:', res.status, json);
+        if (!res.ok) throw new Error(`${endpoint} returned ${res.status}`);
+        displayResults(json);
+      } catch (e) {
+        console.error('[FinishLine] Prediction error:', e);
+        showError && showError(`Prediction failed: ${e.message}`);
+      } finally {
+        hideLoading && hideLoading();
+      }
+    }
+
+    if (btnPredict) btnPredict.addEventListener('click', () => doPredict('predict'));
+    if (btnAnalyze) btnAnalyze.addEventListener('click', () => doPredict('research_predict'));
+    
+    // Event listeners (fallback)
     if (addHorseBtn) addHorseBtn.addEventListener('click', addHorseEntry);
-    predictBtn.addEventListener('click', handlePredict);
+    if (predictBtn && !btnPredict) predictBtn.addEventListener('click', handlePredict);
     
     // Photo picker wiring moved to bottom of file for reliability
 

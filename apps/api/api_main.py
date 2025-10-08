@@ -76,30 +76,41 @@ async def photo_predict(
     """
     Analyze photos and predict Win/Place/Show
     Accepts up to 6 images via multipart/form-data
+    Returns parsed_horses for frontend auto-fill
     """
     try:
         if len(files) > 6:
             raise HTTPException(status_code=400, detail="Maximum 6 images allowed")
         
         # Use OCR stub to extract horse data from images
-        horses = analyze_photos(files)
+        parsed_horses = analyze_photos(files)
         
-        if not horses:
-            # Fallback predictions if OCR fails
-            horses = [
-                {"name": "Thunderstride", "odds": "5-2", "bankroll": 1000, "kelly_fraction": 0.25},
-                {"name": "Silver Blaze", "odds": "3-1", "bankroll": 1000, "kelly_fraction": 0.25},
-                {"name": "Midnight Arrow", "odds": "6-1", "bankroll": 1000, "kelly_fraction": 0.25},
+        if not parsed_horses:
+            # Fallback if OCR fails
+            parsed_horses = [
+                {"name": "Flyin Ryan", "trainer": "Kathy Jarvis", "jockey": "Jose Ramos Gutierrez", "ml_odds": "8/1"},
+                {"name": "Improbable", "trainer": "Bob Baffert", "jockey": "Irad Ortiz Jr", "ml_odds": "5-2"},
             ]
         
+        # Add default bankroll/kelly for prediction
+        horses_for_predict = []
+        for h in parsed_horses:
+            horses_for_predict.append({
+                **h,
+                "odds": h.get("ml_odds", h.get("odds", "5-2")),
+                "bankroll": h.get("bankroll", 1000),
+                "kelly_fraction": h.get("kelly_fraction", 0.25)
+            })
+        
         # Calculate predictions
-        predictions = calculate_predictions(horses)
+        predictions = calculate_predictions(horses_for_predict)
         
         return {
             "win": predictions["win"],
             "place": predictions["place"],
             "show": predictions["show"],
-            "extracted_horses": horses
+            "parsed_horses": parsed_horses,  # For frontend auto-fill
+            "extracted_horses": parsed_horses  # Legacy compatibility
         }
     
     except Exception as e:
