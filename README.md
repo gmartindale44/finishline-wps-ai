@@ -63,7 +63,7 @@ FINISHLINE_ALLOWED_ORIGINS=https://<your-vercel>.vercel.app
 FINISHLINE_LOG_LEVEL=info
 ```
 
-### Research API Provider (Optional)
+### Research API Provider - Custom (Optional)
 ```
 FINISHLINE_DATA_PROVIDER=custom
 FINISHLINE_RESEARCH_API_URL=https://api.your-domain.tld
@@ -83,6 +83,35 @@ FINISHLINE_PROVIDER_DEBUG=false
 - Horse: `last_speed_fig`, `pace_style`, `form_delta`, `days_since`
 - Trainer/Jockey: `win_pct`, `trainer_win_pct`, `jockey_win_pct`
 - Track: `bias` (object with track bias data)
+
+### Research API Provider - WebSearch (Optional)
+```
+FINISHLINE_DATA_PROVIDER=websearch
+FINISHLINE_TAVILY_API_KEY=tvly-xxxxx
+FINISHLINE_OPENAI_API_KEY=sk-xxxxx
+FINISHLINE_PROVIDER_TIMEOUT_MS=7000
+FINISHLINE_PROVIDER_CACHE_SECONDS=900
+FINISHLINE_PROVIDER_DEBUG=false
+FINISHLINE_OPENAI_MODEL=gpt-4o-mini
+```
+
+**How it works:**
+- Uses Tavily API to search for public racing information
+- Extracts structured features from web pages using OpenAI
+- No database required - pure web research
+- TTL cache (15 min default) controls costs and latency
+- Graceful fallback if API keys are missing
+
+**Cost Considerations:**
+- Tavily: ~$0.005 per search (3 results/horse × 3 entities = ~$0.05 per race)
+- OpenAI: gpt-4o-mini ~$0.15 per 1M input tokens (~$0.02 per race)
+- Cache hits eliminate costs for repeat queries
+- Total: ~$0.07 per uncached race prediction
+
+**Latency:**
+- First request: 5-8 seconds (web search + OpenAI extraction)
+- Cached request: <100ms
+- Timeout: 7 seconds default (configurable)
 
 ## Endpoints
 
