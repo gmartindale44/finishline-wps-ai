@@ -408,9 +408,22 @@ document.addEventListener('DOMContentLoaded', function() {
     function toast(msg, t="info"){ (window.showToast && showToast(msg, t)) || console.log(`[${t}] ${msg}`); }
     function uniqBy(arr, keyFn){ const s=new Set(); return arr.filter(x=>{const k=keyFn(x); if(s.has(k)) return false; s.add(k); return true;}); }
 
+    function populateFormFromParsed(parsed) {
+      if (!Array.isArray(parsed) || !parsed.length) return;
+      ensureRowCount(parsed.length);
+      parsed.forEach((h, i) => {
+        writeRow(i, {
+          name: (h.name || "").split("\n")[0].trim(),
+          trainer: (h.trainer || "").split("\n")[0].trim(),
+          jockey: (h.jockey || "").split("\n")[0].trim(),
+          odds: (h.ml_odds || h.odds || "").trim(),
+        });
+      });
+    }
+
     async function callPhotoExtract(fd){
       const base = (window.FINISHLINE_API_BASE || "/api/finishline").replace(/\/$/, "");
-      const endpoints = [`${base}/photo_extract_openai`, `${base}/photo_predict`]; // try real OCR then stub
+      const endpoints = [`${base}/photo_extract_openai`, `${base}/photo_predict`];
       for (const url of endpoints) {
         try { const r = await fetch(url, { method: "POST", body: fd }); if (r.ok) return await r.json(); }
         catch(e){}
@@ -429,7 +442,11 @@ document.addEventListener('DOMContentLoaded', function() {
       fd.append("distance", document.getElementById('raceDistance')?.value || "");
       try {
         const data = await callPhotoExtract(fd);
+        const debugEl = document.getElementById('ocr-debug-json');
+        if (debugEl) debugEl.textContent = JSON.stringify(data, null, 2);
+        
         let rows = data?.parsed_horses || data?.rows || data?.horses || [];
+        if (!Array.isArray(rows)) rows = [];
         rows = rows.map(r => ({
           name: (r.name||r.horse||"").split("\n")[0].trim(),
           trainer: (r.trainer||"").split("\n")[0].trim(),
@@ -437,11 +454,15 @@ document.addEventListener('DOMContentLoaded', function() {
           odds:    (r.ml_odds||r.odds||"").trim(),
         })).filter(r => r.name && r.odds);
         rows = uniqBy(rows, h => h.name.toLowerCase());
-        if (!rows.length) { toast("No horses detected. Try a tighter crop.","warn"); return; }
-        ensureRowCount(rows.length);
-        rows.forEach((h,i)=>writeRow(i,h));
-        toast(`Filled ${rows.length} horses from photos.`,"success");
-        console.debug("parsed_horses", rows);
+        
+        if (!rows.length) { 
+          toast("No rows were detected in the photo. Try cropping tighter around the table.","error"); 
+          return; 
+        }
+        
+        populateFormFromParsed(rows);
+        toast(`Extracted ${rows.length} horses from photos.`,"success");
+        console.debug("[FinishLine] parsed_horses", rows);
       } catch (e) {
         console.error(e);
         toast("Extract failed. See console/network.","error");
@@ -459,11 +480,68 @@ document.addEventListener('DOMContentLoaded', function() {
         distance: document.getElementById('raceDistance')?.value || "",
         horses
       };
-      const r = await fetch(`${base}/${endpoint}`, { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify(payload) });
-      const j = await r.json();
-      if (!r.ok) { console.error("predict error", j); toast(`Prediction failed: ${j?.error||r.status}`,"error"); return; }
-      displayResults(j);
+      try {
+        const r = await fetch(`${base}/${endpoint}`, { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify(payload) });
+        if (!r.ok) {
+          const text = await r.text().catch(() => "");
+          const preview = text.substring(0, 160);
+          console.error("predict error", r.status, text);
+          toast(`Prediction failed (${r.status}): ${preview}`, "error");
+          return;
+        }
+        const j = await r.json();
+        displayResults(j);
+      } catch (e) {
+        console.error(e);
+        toast(`Prediction error: ${e.message}`, "error");
+      }
     }
+    
+    // Developer helper: test OCR from URL
+    window.debugExtractFromUrl = async function(url) {
+      const base = (window.FINISHLINE_API_BASE || "/api/finishline").replace(/\/$/, "");
+      try {
+        const r = await fetch(`${base}/photo_extract_openai_url`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ url })
+        });
+        const data = await r.json();
+        const debugEl = document.getElementById('ocr-debug-json');
+        if (debugEl) {
+          debugEl.textContent = JSON.stringify(data, null, 2);
+          document.getElementById('ocr-debug')?.setAttribute('open', 'true');
+        }
+        console.log("[debugExtractFromUrl] response:", data);
+        const rows = data?.parsed_horses || [];
+        if (rows.length) {
+          populateFormFromParsed(rows);
+          toast(`Extracted ${rows.length} horses from URL.`, "success");
+        } else {
+          toast("No horses extracted from URL.", "warn");
+        }
+      } catch (e) {
+        console.error(e);
+        toast(`URL extract failed: ${e.message}`, "error");
+      }
+    };
+    
+    // Fetch and display runtime config
+    (async function loadRuntimeConfig() {
+      const base = (window.FINISHLINE_API_BASE || "/api/finishline").replace(/\/$/, "");
+      try {
+        const r = await fetch(`${base}/debug_info`);
+        if (r.ok) {
+          const info = await r.json();
+          const el = document.getElementById('runtime-config');
+          if (el) {
+            el.textContent = `Provider: ${info.provider} · OCR: ${info.ocr_enabled} · OpenAI: ${info.openai_present ? '✓' : '✗'} · Tavily: ${info.tavily_present ? '✓' : '✗'}`;
+          }
+        }
+      } catch (e) {
+        console.warn("Could not load runtime config:", e);
+      }
+    })();
 
     if (fileInput) fileInput.addEventListener('change', ()=> fileInput.files?.length && extractFromPhotos());
     if (btnExtract) btnExtract.addEventListener('click', extractFromPhotos);

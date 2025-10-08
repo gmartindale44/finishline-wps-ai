@@ -35,6 +35,20 @@ async def get_version():
     """Version endpoint"""
     return {"version": "1.0.0"}
 
+@app.get("/api/finishline/debug_info")
+async def debug_info():
+    """
+    Debug info endpoint - returns safe runtime configuration (no secrets)
+    """
+    import os
+    return {
+        "provider": os.getenv("FINISHLINE_DATA_PROVIDER", "stub"),
+        "ocr_enabled": os.getenv("FINISHLINE_OCR_ENABLED", "true"),
+        "openai_model": os.getenv("FINISHLINE_OPENAI_MODEL", "unset"),
+        "tavily_present": bool(os.getenv("FINISHLINE_TAVILY_API_KEY")),
+        "openai_present": bool(os.getenv("FINISHLINE_OPENAI_API_KEY"))
+    }
+
 @app.post("/api/finishline/predict")
 async def predict_race(data: Dict[str, Any]):
     """
@@ -136,9 +150,79 @@ async def photo_extract_openai(
     if not os.getenv("FINISHLINE_OPENAI_API_KEY"):
         return {"parsed_horses": []}
     try:
-        return await extract_rows_with_openai(files)
+        result = await extract_rows_with_openai(files)
+        result["meta"] = {
+            "model": os.getenv("FINISHLINE_OPENAI_MODEL", "gpt-4o-mini"),
+            "count": len(result.get("parsed_horses", []))
+        }
+        return result
     except Exception as e:
         return {"parsed_horses": [], "error": str(e)}
+
+@app.post("/api/finishline/photo_extract_openai_url")
+async def photo_extract_openai_url(data: Dict[str, Any]):
+    """
+    Extract horses from image URL using OpenAI Vision API
+    Useful for testing OCR without manual file upload
+    
+    Input: { "url": "https://example.com/race-table.png" }
+    Returns: Same as photo_extract_openai
+    """
+    import os
+    import httpx
+    from io import BytesIO
+    from PIL import Image
+    
+    try:
+        image_url = data.get("url", "").strip()
+        if not image_url:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "missing_url", "where": "photo_extract_openai_url", "detail": "url field required"}
+            )
+        
+        if not os.getenv("FINISHLINE_OPENAI_API_KEY"):
+            return JSONResponse(
+                status_code=400,
+                content={"error": "openai_key_missing", "where": "photo_extract_openai_url", "detail": "FINISHLINE_OPENAI_API_KEY not set"}
+            )
+        
+        # Download image
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.get(image_url)
+            if r.status_code != 200:
+                return JSONResponse(
+                    status_code=400,
+                    content={"error": "download_failed", "where": "photo_extract_openai_url", "detail": f"HTTP {r.status_code}"}
+                )
+            image_data = r.content
+        
+        # Create a fake UploadFile from the downloaded data
+        from fastapi import UploadFile
+        from io import BytesIO
+        
+        # Detect content type
+        content_type = r.headers.get("content-type", "image/jpeg")
+        fake_file = UploadFile(
+            filename="downloaded.jpg",
+            file=BytesIO(image_data)
+        )
+        fake_file.content_type = content_type
+        
+        # Reuse the same OCR pipeline
+        result = await extract_rows_with_openai([fake_file])
+        result["meta"] = {
+            "model": os.getenv("FINISHLINE_OPENAI_MODEL", "gpt-4o-mini"),
+            "count": len(result.get("parsed_horses", [])),
+            "source_url": image_url
+        }
+        return result
+    
+    except Exception as e:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "extraction_failed", "where": "photo_extract_openai_url", "detail": str(e)}
+        )
 
 @app.post("/api/finishline/research_predict")
 async def research_predict(data: Dict[str, Any]):

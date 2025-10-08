@@ -88,15 +88,14 @@
                         <div id="thumbs" class="thumbs"></div>
                     </div>
                     
-                    <!-- OCR Review Panel -->
-                    <div id="ocr-review" class="ocr-review hidden">
-                        <div class="ocr-head">
-                            <strong>Extracted Horses</strong>
-                            <button id="ocr-insert" type="button" class="btn-primary sm">Insert into Form</button>
-                        </div>
-                        <div id="ocr-items" class="ocr-items"></div>
-                        <div id="ocr-note" class="ocr-note">Tip: Edit names/odds if needed. Only checked rows will be inserted.</div>
-                    </div>
+                    <!-- OCR Debug Panel -->
+                    <details id="ocr-debug" style="margin-top:8px;color:#9ca3af;">
+                        <summary style="cursor:pointer;user-select:none;">OCR Debug</summary>
+                        <pre id="ocr-debug-json" style="white-space:pre-wrap;font-size:0.85rem;background:rgba(0,0,0,0.3);padding:8px;border-radius:6px;margin-top:6px;"></pre>
+                    </details>
+                    
+                    <!-- Runtime Config -->
+                    <div id="runtime-config" style="margin-top:8px;font-size:0.85rem;color:#9ca3af;"></div>
                     
                     <div class="action-buttons">
                         <button type="button" id="btnPredict" id="predictBtn" class="btn-primary">🎯 Predict W/P/S</button>

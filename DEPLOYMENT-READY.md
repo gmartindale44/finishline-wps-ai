@@ -225,6 +225,79 @@ python test_api.py
 
 ---
 
+## 🧪 Endpoint Smoke Tests
+
+### 1. OCR by URL (Test OpenAI Vision without uploading files)
+```bash
+curl -sS -X POST "https://<YOUR-DEPLOY>.vercel.app/api/finishline/photo_extract_openai_url" \
+  -H "content-type: application/json" \
+  -d '{"url":"https://raw.githubusercontent.com/public-sample-assets/horse-racing/main/drf-table-sample.png"}' | jq .
+```
+
+**Expected response:**
+```json
+{
+  "parsed_horses": [
+    {"name": "Flyin Ryan", "trainer": "Kathy Jarvis", "jockey": "Jose Ramos Gutierrez", "ml_odds": "8/1"},
+    ...
+  ],
+  "meta": {
+    "model": "gpt-4o-mini",
+    "count": 8,
+    "source_url": "https://..."
+  }
+}
+```
+
+### 2. Research Predict (Test with sample horses)
+```bash
+curl -sS -X POST "https://<YOUR-DEPLOY>.vercel.app/api/finishline/research_predict" \
+  -H "content-type: application/json" \
+  -d '{
+    "date":"2025-10-08",
+    "track":"Horseshoe Indianapolis",
+    "surface":"Dirt",
+    "distance":"6f",
+    "horses":[
+      {"name":"Flyin Ryan","odds":"8/1","trainer":"Kathy Jarvis","jockey":"Jose Ramos Gutierrez","bankroll":1000,"kelly_fraction":0.25},
+      {"name":"Galpin Sunday","odds":"3/1","trainer":"Genaro Garcia","jockey":"Alex Achard","bankroll":1000,"kelly_fraction":0.25}
+    ]
+  }' | jq .
+```
+
+**Note:** If `research_predict` returns 500, it's almost always:
+- Missing/invalid `FINISHLINE_TAVILY_API_KEY` (must start with `tvly-`)
+- Missing/invalid `FINISHLINE_OPENAI_API_KEY` (must start with `sk-`)
+- Check the `detail` field in the error response for specifics
+
+### 3. Debug Info (Check runtime configuration)
+```bash
+curl -sS "https://<YOUR-DEPLOY>.vercel.app/api/finishline/debug_info" | jq .
+```
+
+**Expected response:**
+```json
+{
+  "provider": "websearch",
+  "ocr_enabled": "true",
+  "openai_model": "gpt-4o-mini",
+  "tavily_present": true,
+  "openai_present": true
+}
+```
+
+### 4. Developer Console Helper
+Open browser DevTools console and run:
+```javascript
+// Test OCR from any public image URL
+await window.debugExtractFromUrl('https://example.com/race-table.png');
+
+// Form will auto-fill with extracted horses
+// OCR Debug panel shows raw JSON
+```
+
+---
+
 ## 🔄 Rollback Plan
 
 If issues occur after production deploy:
