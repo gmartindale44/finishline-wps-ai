@@ -5,6 +5,8 @@ import json
 from .odds import ml_to_fraction, ml_to_prob
 from .scoring import calculate_predictions
 from .ocr_stub import analyze_photos
+from .provider_base import get_provider
+from .research_scoring import calculate_research_predictions
 
 app = FastAPI(
     title="FinishLine WPS AI",
@@ -102,6 +104,70 @@ async def photo_predict(
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"photo_predict_error: {e}")
+
+@app.post("/api/finishline/research_predict")
+async def research_predict(data: Dict[str, Any]):
+    """
+    Research-enhanced Win/Place/Show predictions using custom data provider.
+    
+    Expected input: {
+        "date": "2024-01-15",
+        "track": "Churchill Downs",
+        "surface": "dirt",
+        "distance": "1 1/4 miles",
+        "horses": [
+            {
+                "name": "Horse Name",
+                "odds": "5-2",
+                "trainer": "Trainer Name (optional)",
+                "jockey": "Jockey Name (optional)",
+                "bankroll": 1000,
+                "kelly_fraction": 0.25
+            }
+        ]
+    }
+    
+    Returns: Win/Place/Show predictions with research-enhanced scoring
+    """
+    try:
+        horses = data.get("horses", [])
+        if not horses:
+            raise HTTPException(status_code=400, detail="No horses provided")
+        
+        # Extract race context
+        date = data.get("date", "")
+        track = data.get("track", "")
+        surface = data.get("surface", "dirt")
+        distance = data.get("distance", "")
+        
+        # Get configured provider
+        provider = get_provider()
+        
+        # Enrich horses with research data
+        enriched_horses = provider.enrich_horses(
+            horses,
+            date=date,
+            track=track
+        )
+        
+        # Calculate research-enhanced predictions
+        predictions = calculate_research_predictions(enriched_horses)
+        
+        return {
+            "win": predictions["win"],
+            "place": predictions["place"],
+            "show": predictions["show"],
+            "enrichment_source": predictions.get("enrichment_source", "unknown"),
+            "race_context": {
+                "date": date,
+                "track": track,
+                "surface": surface,
+                "distance": distance
+            }
+        }
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Research prediction error: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
