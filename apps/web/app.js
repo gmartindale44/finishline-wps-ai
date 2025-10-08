@@ -387,90 +387,139 @@ document.addEventListener('DOMContentLoaded', function() {
         addBtn.onclick = () => list.appendChild(createHorseRow());
     }
     
-    // Wire photo extraction
+    // Wire photo extraction with robust debugging
     const fileInput = document.getElementById('photoFiles') || document.getElementById('photo-input');
     const btnChoose = document.getElementById('btnChoosePhotos');
     const btnExtract = document.getElementById('btnExtract') || document.getElementById('ocr-extract-btn');
     const btnPredict = document.getElementById('btnPredict') || document.getElementById('predictBtn');
     const btnAnalyze = document.getElementById('btnAnalyze') || document.getElementById('analyze-photos-btn');
     
-    if (btnChoose && fileInput) btnChoose.addEventListener('click', () => fileInput.click());
+    const API_URL = (window.FINISHLINE_API_BASE || "/api/finishline").replace(/\/$/, "");
+    
+    function log(...args) { console.debug("[FinishLine]", ...args); }
+    
+    if (btnChoose && fileInput) {
+      btnChoose.addEventListener('click', () => {
+        log("btnChoose clicked, opening file picker");
+        fileInput.click();
+      });
+    }
     
     async function extractFromPhotos() {
+      log("extractFromPhotos: start");
       if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+        log("extractFromPhotos: no files selected");
         showError && showError("Please select at least one photo/PDF.");
         return;
       }
-      const API_URL = (window.FINISHLINE_API_BASE || API_BASE).replace(/\/$/, "");
+      log("extractFromPhotos: files count", fileInput.files.length);
       const fd = new FormData();
-      Array.from(fileInput.files).slice(0, 6).forEach(f => fd.append("files", f, f.name));
+      Array.from(fileInput.files).slice(0, 6).forEach(f => {
+        log("extractFromPhotos: adding file", f.name, f.type, f.size);
+        fd.append("files", f, f.name);
+      });
       fd.append("date", document.getElementById('raceDate')?.value || "");
-      fd.append("track", document.getElementById('raceTrack')?.value || document.getElementById('track')?.value || "");
-      fd.append("surface", document.getElementById('raceSurface')?.value || document.getElementById('surface')?.value || "");
-      fd.append("distance", document.getElementById('raceDistance')?.value || document.getElementById('distance')?.value || "");
+      fd.append("track", document.getElementById('raceTrack')?.value || "");
+      fd.append("surface", document.getElementById('raceSurface')?.value || "");
+      fd.append("distance", document.getElementById('raceDistance')?.value || "");
 
       if (btnExtract) btnExtract.disabled = true;
       try {
-        const res = await fetch(`${API_URL}/api/finishline/photo_predict`, { method: "POST", body: fd });
+        log("extractFromPhotos: POST", `${API_URL}/photo_predict`);
+        const res = await fetch(`${API_URL}/photo_predict`, { method: "POST", body: fd });
+        log("extractFromPhotos: status", res.status);
         if (!res.ok) throw new Error(`photo_predict ${res.status}`);
         const data = await res.json();
-        let rows = data?.parsed_horses || data?.rows || data?.horses || data?.extracted_horses || [];
+        log("extractFromPhotos: json", data);
+        
+        let rows = data?.parsed_horses || data?.rows || data?.horses || [];
         if (!Array.isArray(rows)) rows = [];
+        log("extractFromPhotos: parsed rows", rows);
 
         if (rows.length === 0) {
-          showError && showError("No horses detected. Try another image/crop.");
+          showError && showError("No horses detected. Try a tighter crop / clearer screenshot.");
           return;
         }
 
+        log("extractFromPhotos: ensuring", rows.length, "rows");
         ensureRowCount(rows.length);
         rows.forEach((r, i) => {
-          const name = cleanHorseName(r.name || r.horse || "");
-          const trainer = r.trainer || "";
-          const jockey = r.jockey || "";
-          const odds = r.ml_odds || r.odds || "";
-          writeRow(i, { name, trainer, jockey, odds });
+          const cleaned = {
+            name: cleanHorseName(r.name || r.horse || ""),
+            trainer: r.trainer || "",
+            jockey: r.jockey || "",
+            odds: r.ml_odds || r.odds || "",
+          };
+          log("extractFromPhotos: writeRow", i, cleaned);
+          writeRow(i, cleaned);
         });
 
-        console.log(`[FinishLine] Filled ${rows.length} horses from photos.`);
-        if (showError) hideError();
+        log(`extractFromPhotos: SUCCESS - filled ${rows.length} horses`);
+        showError && hideError && hideError();
+        // Show success message
+        const msg = `Filled ${rows.length} horse${rows.length > 1 ? 's' : ''} from photos.`;
+        if (typeof showToast === 'function') {
+          showToast(msg, "success");
+        } else {
+          console.log(`[FinishLine] ${msg}`);
+        }
       } catch (e) {
-        console.error(e);
+        log("extractFromPhotos: ERROR", e);
+        console.error("[FinishLine] Extract error:", e);
         showError && showError("Extract failed. Check image quality & try again.");
       } finally {
         if (btnExtract) btnExtract.disabled = false;
       }
     }
-    if (btnExtract) btnExtract.addEventListener('click', extractFromPhotos);
+    
+    // Auto-extract right after user picks files (nice UX and proves wiring)
+    if (fileInput) {
+      fileInput.addEventListener('change', () => {
+        log("fileInput change: files", fileInput.files?.length || 0);
+        if ((fileInput.files?.length || 0) > 0) {
+          log("fileInput change: auto-extracting");
+          extractFromPhotos();
+        }
+      });
+    }
+    
+    if (btnExtract) {
+      btnExtract.addEventListener('click', () => {
+        log("btnExtract clicked");
+        extractFromPhotos();
+      });
+    }
     
     async function doPredict(endpoint) {
-      const API_URL = (window.FINISHLINE_API_BASE || API_BASE).replace(/\/$/, "");
       const horses = gatherFormHorses();
+      log("doPredict", endpoint, "horses:", horses);
       if (horses.length === 0) {
         showError && showError("Please add at least one horse.");
         return;
       }
       const payload = {
         date: document.getElementById('raceDate')?.value || "",
-        track: document.getElementById('raceTrack')?.value || document.getElementById('track')?.value || "",
-        surface: document.getElementById('raceSurface')?.value || document.getElementById('surface')?.value || "",
-        distance: document.getElementById('raceDistance')?.value || document.getElementById('distance')?.value || "",
+        track: document.getElementById('raceTrack')?.value || "",
+        surface: document.getElementById('raceSurface')?.value || "",
+        distance: document.getElementById('raceDistance')?.value || "",
         horses
       };
-      console.log('[FinishLine] POST /'+endpoint+' payload:', payload);
+      log("doPredict: payload", payload);
       
       showLoading && showLoading();
       hideError && hideError();
       try {
-        const res = await fetch(`${API_URL}/api/finishline/${endpoint}`, {
+        const res = await fetch(`${API_URL}/${endpoint}`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify(payload)
         });
         const json = await res.json();
-        console.log('[FinishLine] /'+endpoint+' response:', res.status, json);
+        log("doPredict: response", res.status, json);
         if (!res.ok) throw new Error(`${endpoint} returned ${res.status}`);
         displayResults(json);
       } catch (e) {
+        log("doPredict: ERROR", e);
         console.error('[FinishLine] Prediction error:', e);
         showError && showError(`Prediction failed: ${e.message}`);
       } finally {
@@ -478,8 +527,18 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     }
 
-    if (btnPredict) btnPredict.addEventListener('click', () => doPredict('predict'));
-    if (btnAnalyze) btnAnalyze.addEventListener('click', () => doPredict('research_predict'));
+    if (btnPredict) {
+      btnPredict.addEventListener('click', () => {
+        log("btnPredict clicked");
+        doPredict('predict');
+      });
+    }
+    if (btnAnalyze) {
+      btnAnalyze.addEventListener('click', () => {
+        log("btnAnalyze clicked");
+        doPredict('research_predict');
+      });
+    }
     
     // Event listeners (fallback)
     if (addHorseBtn) addHorseBtn.addEventListener('click', addHorseEntry);
