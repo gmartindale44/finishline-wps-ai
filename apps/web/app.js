@@ -406,115 +406,52 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     function toast(msg, t="info"){ (window.showToast && showToast(msg, t)) || console.log(`[${t}] ${msg}`); }
-    function uniqBy(arr, keyFn){ const seen=new Set(); return arr.filter(x=>{const k=keyFn(x); if(seen.has(k)) return false; seen.add(k); return true;}); }
+    function uniqBy(arr, keyFn){ const s=new Set(); return arr.filter(x=>{const k=keyFn(x); if(s.has(k)) return false; s.add(k); return true;}); }
 
-    async function callPhotoExtract(formData){
-      log("callPhotoExtract: trying endpoints");
-      // Prefer real OCR if available; fall back to stub
-      const endpoints = [
-        `${API_URL}/photo_extract_openai`, // new OCR via OpenAI Vision (if OPENAI key present)
-        `${API_URL}/photo_predict`,       // legacy stub
-      ];
+    async function callPhotoExtract(fd){
+      const base = (window.FINISHLINE_API_BASE || "/api/finishline").replace(/\/$/, "");
+      const endpoints = [`${base}/photo_extract_openai`, `${base}/photo_predict`]; // try real OCR then stub
       for (const url of endpoints) {
-        try {
-          log("callPhotoExtract: trying", url);
-          const r = await fetch(url, { method: "POST", body: formData });
-          if (r.ok) {
-            const data = await r.json();
-            log("callPhotoExtract: success from", url, data);
-            return data;
-          }
-          log("callPhotoExtract: not ok from", url, r.status);
-        } catch(e){
-          log("callPhotoExtract: error from", url, e);
-        }
+        try { const r = await fetch(url, { method: "POST", body: fd }); if (r.ok) return await r.json(); }
+        catch(e){}
       }
       throw new Error("No OCR endpoint available");
     }
 
     async function extractFromPhotos() {
-      log("extractFromPhotos: start");
-      if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
-        log("extractFromPhotos: no files selected");
-        toast("Please select at least one photo/PDF.", "error");
-        return;
-      }
-      log("extractFromPhotos: files count", fileInput.files.length);
+      const files = fileInput?.files || [];
+      if (!files.length) { toast("Please select at least one photo/PDF.","error"); return; }
       const fd = new FormData();
-      Array.from(fileInput.files).slice(0, 6).forEach(f => {
-        log("extractFromPhotos: adding file", f.name, f.type, f.size);
-        fd.append("files", f, f.name);
-      });
+      [...files].slice(0,6).forEach(f => fd.append("files", f, f.name));
       fd.append("date", document.getElementById('raceDate')?.value || "");
       fd.append("track", document.getElementById('raceTrack')?.value || "");
       fd.append("surface", document.getElementById('raceSurface')?.value || "");
       fd.append("distance", document.getElementById('raceDistance')?.value || "");
-
-      if (btnExtract) btnExtract.disabled = true;
       try {
         const data = await callPhotoExtract(fd);
         let rows = data?.parsed_horses || data?.rows || data?.horses || [];
-        if (!Array.isArray(rows)) rows = [];
-        log("extractFromPhotos: raw rows", rows);
-
-        // map, clean, drop empties, dedupe by name
         rows = rows.map(r => ({
-          name: cleanHorseName(r.name || r.horse || ""),
-          trainer: r.trainer || "",
-          jockey:  r.jockey  || "",
-          odds:    r.ml_odds || r.odds || "",
-        })).filter(h => h.name);
+          name: (r.name||r.horse||"").split("\n")[0].trim(),
+          trainer: (r.trainer||"").split("\n")[0].trim(),
+          jockey:  (r.jockey||"").split("\n")[0].trim(),
+          odds:    (r.ml_odds||r.odds||"").trim(),
+        })).filter(r => r.name && r.odds);
         rows = uniqBy(rows, h => h.name.toLowerCase());
-        log("extractFromPhotos: cleaned & deduped rows", rows);
-
-        if (rows.length === 0) {
-          toast("No horses detected. Try a tighter crop / clearer screenshot.", "warn");
-          return;
-        }
-
-        log("extractFromPhotos: ensuring", rows.length, "rows");
+        if (!rows.length) { toast("No horses detected. Try a tighter crop.","warn"); return; }
         ensureRowCount(rows.length);
-        rows.forEach((h, i) => {
-          log("extractFromPhotos: writeRow", i, h);
-          writeRow(i, h);
-        });
-
-        log(`extractFromPhotos: SUCCESS - filled ${rows.length} horses`);
-        toast(`Filled ${rows.length} horse${rows.length > 1 ? 's' : ''} from photos.`, "success");
+        rows.forEach((h,i)=>writeRow(i,h));
+        toast(`Filled ${rows.length} horses from photos.`,"success");
+        console.debug("parsed_horses", rows);
       } catch (e) {
-        log("extractFromPhotos: ERROR", e);
-        console.error("[FinishLine] Extract error:", e);
-        toast("Extract failed. Check image quality & try again.", "error");
-      } finally {
-        if (btnExtract) btnExtract.disabled = false;
+        console.error(e);
+        toast("Extract failed. See console/network.","error");
       }
     }
-    
-    // Auto-extract right after user picks files (nice UX and proves wiring)
-    if (fileInput) {
-      fileInput.addEventListener('change', () => {
-        log("fileInput change: files", fileInput.files?.length || 0);
-        if ((fileInput.files?.length || 0) > 0) {
-          log("fileInput change: auto-extracting");
-          extractFromPhotos();
-        }
-      });
-    }
-    
-    if (btnExtract) {
-      btnExtract.addEventListener('click', () => {
-        log("btnExtract clicked");
-        extractFromPhotos();
-      });
-    }
-    
-    async function doPredict(endpoint) {
+
+    async function doPredict(endpoint){
+      const base = (window.FINISHLINE_API_BASE || "/api/finishline").replace(/\/$/, "");
       const horses = gatherFormHorses();
-      log("doPredict", endpoint, "horses:", horses);
-      if (horses.length === 0) {
-        showError && showError("Please add at least one horse.");
-        return;
-      }
+      if (!horses.length) { toast("Please add at least one horse.","error"); return; }
       const payload = {
         date: document.getElementById('raceDate')?.value || "",
         track: document.getElementById('raceTrack')?.value || "",
@@ -522,41 +459,16 @@ document.addEventListener('DOMContentLoaded', function() {
         distance: document.getElementById('raceDistance')?.value || "",
         horses
       };
-      log("doPredict: payload", payload);
-      
-      showLoading && showLoading();
-      hideError && hideError();
-      try {
-        const res = await fetch(`${API_URL}/${endpoint}`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(payload)
-        });
-        const json = await res.json();
-        log("doPredict: response", res.status, json);
-        if (!res.ok) throw new Error(`${endpoint} returned ${res.status}`);
-        displayResults(json);
-      } catch (e) {
-        log("doPredict: ERROR", e);
-        console.error('[FinishLine] Prediction error:', e);
-        showError && showError(`Prediction failed: ${e.message}`);
-      } finally {
-        hideLoading && hideLoading();
-      }
+      const r = await fetch(`${base}/${endpoint}`, { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify(payload) });
+      const j = await r.json();
+      if (!r.ok) { console.error("predict error", j); toast(`Prediction failed: ${j?.error||r.status}`,"error"); return; }
+      displayResults(j);
     }
 
-    if (btnPredict) {
-      btnPredict.addEventListener('click', () => {
-        log("btnPredict clicked");
-        doPredict('predict');
-      });
-    }
-    if (btnAnalyze) {
-      btnAnalyze.addEventListener('click', () => {
-        log("btnAnalyze clicked");
-        doPredict('research_predict');
-      });
-    }
+    if (fileInput) fileInput.addEventListener('change', ()=> fileInput.files?.length && extractFromPhotos());
+    if (btnExtract) btnExtract.addEventListener('click', extractFromPhotos);
+    if (btnAnalyze) btnAnalyze.addEventListener('click', ()=> doPredict('research_predict'));
+    if (btnPredict) btnPredict.addEventListener('click', ()=> doPredict('predict'));
     
     // Event listeners (fallback)
     if (addHorseBtn) addHorseBtn.addEventListener('click', addHorseEntry);

@@ -1,120 +1,107 @@
 """
 OpenAI Vision OCR for Horse Racing Photos
-Extracts structured horse data from race tables/programs using GPT-4 Vision
+Extracts structured horse data from DRF-like race tables using GPT-4 Vision
 """
+from __future__ import annotations
+import base64, io
 from typing import List, Dict, Any
 from fastapi import UploadFile
-import os
-import base64
-import json
+import os, httpx
+from PIL import Image
 
-_OPENAI_KEY = os.getenv("FINISHLINE_OPENAI_API_KEY", "").strip()
-_OPENAI_MODEL = os.getenv("FINISHLINE_OPENAI_MODEL", "gpt-4o-mini")
+OPENAI_API_KEY = os.getenv("FINISHLINE_OPENAI_API_KEY", "")
+OPENAI_MODEL = os.getenv("FINISHLINE_OPENAI_MODEL", "gpt-4o-mini")
 
-def is_available() -> bool:
-    """Check if OpenAI Vision OCR is available"""
-    return bool(_OPENAI_KEY)
+def _img_to_data_url(data: bytes, mime: str) -> str:
+    b64 = base64.b64encode(data).decode("utf-8")
+    return f"data:{mime};base64,{b64}"
 
-async def extract_horses_from_images(files: List[UploadFile]) -> List[Dict[str, Any]]:
-    """
-    Extract horse racing data from images using OpenAI Vision API
-    
-    Args:
-        files: List of uploaded image files
-    
-    Returns:
-        List of horse dictionaries with name, trainer, jockey, ml_odds
-    """
-    if not _OPENAI_KEY:
-        raise ValueError("OpenAI API key not configured")
-    
-    from openai import OpenAI
-    
-    client = OpenAI(api_key=_OPENAI_KEY)
-    
-    # Process up to 6 images
-    image_data_urls = []
-    for file in files[:6]:
-        content = await file.read()
-        
-        # Only process images (skip PDFs for now with Vision API)
-        if file.content_type and file.content_type.startswith('image/'):
-            b64 = base64.b64encode(content).decode('utf-8')
-            mime_type = file.content_type or 'image/jpeg'
-            data_url = f"data:{mime_type};base64,{b64}"
-            image_data_urls.append(data_url)
-        
-        # Reset file pointer for potential reuse
-        await file.seek(0)
-    
-    if not image_data_urls:
-        return []
-    
-    # Build messages with images
-    messages = [
-        {
-            "role": "system",
-            "content": (
-                "You extract horse racing data from race programs/tables. "
-                "Return ONLY a JSON array with each horse as an object containing: "
-                "name (string), trainer (string, optional), jockey (string, optional), "
-                "ml_odds (string like '8/1', '9-2', '5/2', '6', optional). "
-                "Extract ALL horses visible. Return valid JSON only, no commentary."
-            )
-        },
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "text",
-                    "text": "Extract all horses from these race images. Return JSON array with: name, trainer, jockey, ml_odds"
-                }
-            ] + [
-                {
-                    "type": "image_url",
-                    "image_url": {"url": url, "detail": "high"}
-                }
-                for url in image_data_urls
-            ]
-        }
-    ]
-    
-    try:
-        response = client.chat.completions.create(
-            model=_OPENAI_MODEL,
-            messages=messages,
-            temperature=0.1,
-            max_tokens=2000,
-        )
-        
-        content = response.choices[0].message.content.strip()
-        
-        # Extract JSON from markdown code blocks if present
-        if '```json' in content:
-            content = content.split('```json')[1].split('```')[0].strip()
-        elif '```' in content:
-            content = content.split('```')[1].split('```')[0].strip()
-        
-        # Parse JSON
-        horses = json.loads(content)
-        
-        if not isinstance(horses, list):
-            horses = []
-        
-        # Normalize field names
-        normalized = []
-        for h in horses:
-            if isinstance(h, dict) and h.get('name'):
-                normalized.append({
-                    'name': h.get('name', ''),
-                    'trainer': h.get('trainer', ''),
-                    'jockey': h.get('jockey', ''),
-                    'ml_odds': h.get('ml_odds') or h.get('odds', ''),
-                })
-        
-        return normalized
-    
-    except Exception as e:
-        print(f"[OpenAI OCR] Error: {e}")
-        return []
+def _first_page_pdf_to_png(pdf_bytes: bytes) -> bytes:
+    # Light fallback: if PIL can't read PDF (likely), we just return empty.
+    # In real deployments, use "pdf2image". For now, skip PDFs quietly.
+    return b""
+
+async def extract_rows_with_openai(files: List[UploadFile]) -> Dict[str, Any]:
+    if not OPENAI_API_KEY:
+        return {"parsed_horses": []}
+
+    images: List[Dict[str, str]] = []
+    for f in files[:6]:
+        data = await f.read()
+        mime = f.content_type or "application/octet-stream"
+        if mime == "application/pdf":
+            png = _first_page_pdf_to_png(data)
+            if png:
+                images.append({"type": "image_url", "image_url": {"url": _img_to_data_url(png, "image/png")}})
+        else:
+            # compress overly large images a bit to help OCR
+            try:
+                im = Image.open(io.BytesIO(data))
+                im = im.convert("RGB")
+                im.thumbnail((2000, 2000))
+                buf = io.BytesIO()
+                im.save(buf, format="JPEG", quality=88)
+                data = buf.getvalue()
+                mime = "image/jpeg"
+            except Exception:
+                pass
+            images.append({"type": "image_url", "image_url": {"url": _img_to_data_url(data, mime)}})
+
+    if not images:
+        return {"parsed_horses": []}
+
+    # System instruction: extract table rows into strict JSON
+    system = (
+        "You are an OCR parser for horse race tables. "
+        "Input is a screenshot of a race card with three columns:\n"
+        "Left: 'Horse (last) / Sire' (first line is the horse name, next line is sire — ignore the sire).\n"
+        "Middle: 'Trainer / Jockey' (first line trainer, second line jockey).\n"
+        "Right: 'ML' with moneyline odds like '8/1', '9/2', '5/2' or whole numbers.\n\n"
+        "Return STRICT JSON only (no text), shape:\n"
+        "{ \"parsed_horses\": [ {\"name\":\"...\",\"trainer\":\"...\",\"jockey\":\"...\",\"ml_odds\":\"...\"}, ... ] }\n"
+        "Rules:\n"
+        "- name = first line of left column (drop the sire).\n"
+        "- trainer = first line of middle column.\n"
+        "- jockey = second line of middle column.\n"
+        "- ml_odds = the ML odds string from right column (e.g., '8/1').\n"
+        "- Do not make up names. If a row is incomplete, skip it.\n"
+    )
+
+    user_content = []
+    for img in images:
+        user_content.append(img)
+
+    body = {
+        "model": OPENAI_MODEL,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user_content},
+        ],
+        "temperature": 0.0,
+        "response_format": {"type": "json_object"},
+    }
+
+    headers = {"Authorization": f"Bearer {OPENAI_API_KEY}"}
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.post("https://api.openai.com/v1/chat/completions", json=body, headers=headers)
+        r.raise_for_status()
+        data = r.json()
+        raw = data["choices"][0]["message"]["content"]
+        try:
+            import json
+            parsed = json.loads(raw)
+            rows = parsed.get("parsed_horses", [])
+            # Clean up a bit
+            cleaned = []
+            for h in rows:
+                name = (h.get("name") or "").strip()
+                trainer = (h.get("trainer") or "").strip()
+                jockey = (h.get("jockey") or "").strip()
+                odds = (h.get("ml_odds") or h.get("odds") or "").strip()
+                if not name or not odds:
+                    continue
+                cleaned.append({"name": name, "trainer": trainer, "jockey": jockey, "ml_odds": odds})
+            return {"parsed_horses": cleaned}
+        except Exception:
+            return {"parsed_horses": []}
 

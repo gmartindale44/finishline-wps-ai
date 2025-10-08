@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from typing import List, Dict, Any, Optional
 import json
 from .odds import ml_to_fraction, ml_to_prob
@@ -7,7 +8,7 @@ from .scoring import calculate_predictions
 from .ocr_stub import analyze_photos
 from .provider_base import get_provider
 from .research_scoring import calculate_research_predictions
-from . import openai_ocr
+from .openai_ocr import extract_rows_with_openai
 
 app = FastAPI(
     title="FinishLine WPS AI",
@@ -118,40 +119,26 @@ async def photo_predict(
         raise HTTPException(status_code=500, detail=f"photo_predict_error: {e}")
 
 @app.post("/api/finishline/photo_extract_openai")
-async def photo_extract_openai(files: List[UploadFile] = File(...)):
+async def photo_extract_openai(
+    files: List[UploadFile] = File(default=[]),
+    date: str = Form(default=""),
+    track: str = Form(default=""),
+    surface: str = Form(default=""),
+    distance: str = Form(default="")
+):
     """
     Extract horses from photos using OpenAI Vision API
-    Requires FINISHLINE_OPENAI_API_KEY environment variable
     Returns parsed_horses array for frontend auto-fill
+    Falls back gracefully if no OPENAI_API_KEY set
     """
+    # If no OPENAI key exists, return empty; frontend will fall back to stub
+    import os
+    if not os.getenv("FINISHLINE_OPENAI_API_KEY"):
+        return {"parsed_horses": []}
     try:
-        # Check if OpenAI is available
-        if not openai_ocr.is_available():
-            raise HTTPException(
-                status_code=404, 
-                detail="OpenAI Vision OCR not configured. Set FINISHLINE_OPENAI_API_KEY."
-            )
-        
-        if len(files) > 6:
-            raise HTTPException(status_code=400, detail="Maximum 6 images allowed")
-        
-        # Extract horses using OpenAI Vision
-        parsed_horses = await openai_ocr.extract_horses_from_images(files)
-        
-        if not parsed_horses:
-            # Return empty but valid response
-            parsed_horses = []
-        
-        return {
-            "parsed_horses": parsed_horses,
-            "source": "openai_vision",
-            "count": len(parsed_horses)
-        }
-    
-    except HTTPException:
-        raise
+        return await extract_rows_with_openai(files)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"OpenAI Vision OCR error: {str(e)}")
+        return {"parsed_horses": [], "error": str(e)}
 
 @app.post("/api/finishline/research_predict")
 async def research_predict(data: Dict[str, Any]):
@@ -215,7 +202,10 @@ async def research_predict(data: Dict[str, Any]):
         }
     
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Research prediction error: {str(e)}")
+        return JSONResponse(
+            status_code=500, 
+            content={"error": "research_predict_failed", "detail": str(e)}
+        )
 
 if __name__ == "__main__":
     import uvicorn
