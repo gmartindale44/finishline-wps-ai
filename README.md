@@ -95,6 +95,20 @@ FINISHLINE_PROVIDER_DEBUG=false
 FINISHLINE_OPENAI_MODEL=gpt-4o-mini
 ```
 
+### Photo OCR - OpenAI Vision (Optional)
+```
+FINISHLINE_OPENAI_API_KEY=sk-xxxxx
+FINISHLINE_OPENAI_MODEL=gpt-4o-mini
+```
+
+**How it works:**
+- When `FINISHLINE_OPENAI_API_KEY` is set, "Extract from Photos" uses GPT-4 Vision
+- Extracts ALL horses from race tables/programs with high accuracy
+- Falls back to stub OCR if OpenAI key not set
+- Independent of research provider settings
+- Supports multiple images (up to 6)
+- Returns: name, trainer, jockey, ml_odds for each horse
+
 **How it works:**
 - Uses Tavily API to search for public racing information
 - Extracts structured features from web pages using OpenAI

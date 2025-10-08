@@ -405,11 +405,38 @@ document.addEventListener('DOMContentLoaded', function() {
       });
     }
     
+    function toast(msg, t="info"){ (window.showToast && showToast(msg, t)) || console.log(`[${t}] ${msg}`); }
+    function uniqBy(arr, keyFn){ const seen=new Set(); return arr.filter(x=>{const k=keyFn(x); if(seen.has(k)) return false; seen.add(k); return true;}); }
+
+    async function callPhotoExtract(formData){
+      log("callPhotoExtract: trying endpoints");
+      // Prefer real OCR if available; fall back to stub
+      const endpoints = [
+        `${API_URL}/photo_extract_openai`, // new OCR via OpenAI Vision (if OPENAI key present)
+        `${API_URL}/photo_predict`,       // legacy stub
+      ];
+      for (const url of endpoints) {
+        try {
+          log("callPhotoExtract: trying", url);
+          const r = await fetch(url, { method: "POST", body: formData });
+          if (r.ok) {
+            const data = await r.json();
+            log("callPhotoExtract: success from", url, data);
+            return data;
+          }
+          log("callPhotoExtract: not ok from", url, r.status);
+        } catch(e){
+          log("callPhotoExtract: error from", url, e);
+        }
+      }
+      throw new Error("No OCR endpoint available");
+    }
+
     async function extractFromPhotos() {
       log("extractFromPhotos: start");
       if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
         log("extractFromPhotos: no files selected");
-        showError && showError("Please select at least one photo/PDF.");
+        toast("Please select at least one photo/PDF.", "error");
         return;
       }
       log("extractFromPhotos: files count", fileInput.files.length);
@@ -425,48 +452,39 @@ document.addEventListener('DOMContentLoaded', function() {
 
       if (btnExtract) btnExtract.disabled = true;
       try {
-        log("extractFromPhotos: POST", `${API_URL}/photo_predict`);
-        const res = await fetch(`${API_URL}/photo_predict`, { method: "POST", body: fd });
-        log("extractFromPhotos: status", res.status);
-        if (!res.ok) throw new Error(`photo_predict ${res.status}`);
-        const data = await res.json();
-        log("extractFromPhotos: json", data);
-        
+        const data = await callPhotoExtract(fd);
         let rows = data?.parsed_horses || data?.rows || data?.horses || [];
         if (!Array.isArray(rows)) rows = [];
-        log("extractFromPhotos: parsed rows", rows);
+        log("extractFromPhotos: raw rows", rows);
+
+        // map, clean, drop empties, dedupe by name
+        rows = rows.map(r => ({
+          name: cleanHorseName(r.name || r.horse || ""),
+          trainer: r.trainer || "",
+          jockey:  r.jockey  || "",
+          odds:    r.ml_odds || r.odds || "",
+        })).filter(h => h.name);
+        rows = uniqBy(rows, h => h.name.toLowerCase());
+        log("extractFromPhotos: cleaned & deduped rows", rows);
 
         if (rows.length === 0) {
-          showError && showError("No horses detected. Try a tighter crop / clearer screenshot.");
+          toast("No horses detected. Try a tighter crop / clearer screenshot.", "warn");
           return;
         }
 
         log("extractFromPhotos: ensuring", rows.length, "rows");
         ensureRowCount(rows.length);
-        rows.forEach((r, i) => {
-          const cleaned = {
-            name: cleanHorseName(r.name || r.horse || ""),
-            trainer: r.trainer || "",
-            jockey: r.jockey || "",
-            odds: r.ml_odds || r.odds || "",
-          };
-          log("extractFromPhotos: writeRow", i, cleaned);
-          writeRow(i, cleaned);
+        rows.forEach((h, i) => {
+          log("extractFromPhotos: writeRow", i, h);
+          writeRow(i, h);
         });
 
         log(`extractFromPhotos: SUCCESS - filled ${rows.length} horses`);
-        showError && hideError && hideError();
-        // Show success message
-        const msg = `Filled ${rows.length} horse${rows.length > 1 ? 's' : ''} from photos.`;
-        if (typeof showToast === 'function') {
-          showToast(msg, "success");
-        } else {
-          console.log(`[FinishLine] ${msg}`);
-        }
+        toast(`Filled ${rows.length} horse${rows.length > 1 ? 's' : ''} from photos.`, "success");
       } catch (e) {
         log("extractFromPhotos: ERROR", e);
         console.error("[FinishLine] Extract error:", e);
-        showError && showError("Extract failed. Check image quality & try again.");
+        toast("Extract failed. Check image quality & try again.", "error");
       } finally {
         if (btnExtract) btnExtract.disabled = false;
       }

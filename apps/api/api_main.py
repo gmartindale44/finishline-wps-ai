@@ -7,6 +7,7 @@ from .scoring import calculate_predictions
 from .ocr_stub import analyze_photos
 from .provider_base import get_provider
 from .research_scoring import calculate_research_predictions
+from . import openai_ocr
 
 app = FastAPI(
     title="FinishLine WPS AI",
@@ -115,6 +116,42 @@ async def photo_predict(
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"photo_predict_error: {e}")
+
+@app.post("/api/finishline/photo_extract_openai")
+async def photo_extract_openai(files: List[UploadFile] = File(...)):
+    """
+    Extract horses from photos using OpenAI Vision API
+    Requires FINISHLINE_OPENAI_API_KEY environment variable
+    Returns parsed_horses array for frontend auto-fill
+    """
+    try:
+        # Check if OpenAI is available
+        if not openai_ocr.is_available():
+            raise HTTPException(
+                status_code=404, 
+                detail="OpenAI Vision OCR not configured. Set FINISHLINE_OPENAI_API_KEY."
+            )
+        
+        if len(files) > 6:
+            raise HTTPException(status_code=400, detail="Maximum 6 images allowed")
+        
+        # Extract horses using OpenAI Vision
+        parsed_horses = await openai_ocr.extract_horses_from_images(files)
+        
+        if not parsed_horses:
+            # Return empty but valid response
+            parsed_horses = []
+        
+        return {
+            "parsed_horses": parsed_horses,
+            "source": "openai_vision",
+            "count": len(parsed_horses)
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"OpenAI Vision OCR error: {str(e)}")
 
 @app.post("/api/finishline/research_predict")
 async def research_predict(data: Dict[str, Any]):
