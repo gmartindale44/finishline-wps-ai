@@ -90,12 +90,13 @@ function cleanHorseName(name) {
 function createHorseRow() {
   const row = document.createElement('div');
   row.className = 'horse-row';
+  row.setAttribute('data-row', 'horse');
   row.setAttribute('data-horse-row', '0');
   row.innerHTML = `
     <input type="text" class="horse-name name" data-field="name" placeholder="Horse Name" />
     <input type="text" class="horse-odds odds" data-field="odds" placeholder="ML Odds (e.g., 5-2)" />
-    <input type="text" class="horse-jockey jj" data-field="jockey" placeholder="Jockey (optional)" />
-    <input type="text" class="horse-trainer tt" data-field="trainer" placeholder="Trainer (optional)" />
+    <input type="text" class="horse-jockey jj" data-field="jockey" placeholder="Jockey" />
+    <input type="text" class="horse-trainer tt" data-field="trainer" placeholder="Trainer" />
     <input type="number" class="horse-bankroll" data-field="bankroll" placeholder="Bankroll" value="1000" />
     <input type="number" class="horse-kelly" data-field="kelly_fraction" placeholder="Kelly (0.25)" value="0.25" step="0.01" />
   `;
@@ -107,12 +108,20 @@ function getHorseList() {
 }
 
 function getHorseRows() {
-  return Array.from(document.querySelectorAll('#horse-list [data-horse-row]'));
+  return Array.from(document.querySelectorAll('[data-row="horse"]'));
 }
 
 function ensureRowCount(n) {
-  const addBtn = document.getElementById('btnAddHorse') || document.getElementById('add-horse') || document.querySelector('[data-add-horse]');
-  while (document.querySelectorAll('[data-horse-row]').length < n && addBtn) addBtn.click();
+  const addBtn = document.getElementById('add-horse-btn') || document.getElementById('btnAddHorse') || document.getElementById('add-horse');
+  if (!addBtn) { console.warn('[FinishLine] add-horse-btn not found'); return; }
+  let rows = getHorseRows().length;
+  while (rows < n) {
+    addBtn.click();
+    rows = getHorseRows().length;
+  }
+  if (getHorseRows().length < n) {
+    console.warn(`[FinishLine] ensureRowCount wanted ${n} rows but only created ${getHorseRows().length}`);
+  }
 }
 
 function readRow(i) {
@@ -128,15 +137,28 @@ function readRow(i) {
   };
 }
 
-function writeRow(i, data) {
-  const row = document.querySelector(`[data-horse-row="${i}"]`);
-  if (!row) return;
-  if (data.name !== undefined) row.querySelector('.horse-name').value = data.name || "";
-  if (data.trainer !== undefined) row.querySelector('.horse-trainer').value = data.trainer || "";
-  if (data.jockey !== undefined) row.querySelector('.horse-jockey').value = data.jockey || "";
-  if (data.odds !== undefined) row.querySelector('.horse-odds').value = normalizeOddsString(data.odds || "");
-  if (data.bankroll !== undefined) row.querySelector('.horse-bankroll').value = data.bankroll ?? "";
-  if (data.kelly_fraction !== undefined) row.querySelector('.horse-kelly').value = data.kelly_fraction ?? "";
+function writeRow(idx, h) {
+  const rows = getHorseRows();
+  const row = rows[idx];
+  if (!row) {
+    console.warn(`[FinishLine] writeRow: row ${idx} not found (have ${rows.length} rows)`);
+    return;
+  }
+  const set = (sel, v) => {
+    const el = row.querySelector(sel);
+    if (el) {
+      el.value = v ?? '';
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    } else {
+      console.warn(`[FinishLine] writeRow ${idx}: selector "${sel}" not found`);
+    }
+  };
+  // Normalize odds to fraction format (e.g., 8/1, 5-2 → 5/2)
+  const oddsStr = (h.odds ?? h.ml_odds ?? '').toString().replace(/\s+/g, '').replace('-', '/');
+  set('input[placeholder="Horse Name"]', h.name ?? '');
+  set('input[placeholder^="ML Odds"]', oddsStr);
+  set('input[placeholder="Jockey"]', h.jockey ?? '');
+  set('input[placeholder="Trainer"]', h.trainer ?? '');
 }
 
 function gatherFormHorses() {
@@ -408,17 +430,34 @@ document.addEventListener('DOMContentLoaded', function() {
     function toast(msg, t="info"){ (window.showToast && showToast(msg, t)) || console.log(`[${t}] ${msg}`); }
     function uniqBy(arr, keyFn){ const s=new Set(); return arr.filter(x=>{const k=keyFn(x); if(s.has(k)) return false; s.add(k); return true;}); }
 
+    function splitTrainerJockey(obj) {
+      if (!obj) return obj;
+      if (!obj.trainer && !obj.jockey && obj.trainer_jockey) {
+        // Expect patterns like "Kathy Jarvis / Jose Ramos Gutierrez"
+        const parts = obj.trainer_jockey.split('/').map(s => s.trim());
+        if (parts.length === 2) { obj.trainer = parts[0]; obj.jockey = parts[1]; }
+      }
+      return obj;
+    }
+
     function populateFormFromParsed(parsed) {
-      if (!Array.isArray(parsed) || !parsed.length) return;
-      ensureRowCount(parsed.length);
-      parsed.forEach((h, i) => {
-        writeRow(i, {
+      if (!Array.isArray(parsed) || !parsed.length) {
+        console.warn('[FinishLine] populateFormFromParsed: empty or invalid input');
+        return;
+      }
+      console.log(`[FinishLine] populateFormFromParsed: ${parsed.length} horses`);
+      const cleaned = parsed.map(splitTrainerJockey);
+      ensureRowCount(cleaned.length);
+      cleaned.forEach((h, i) => {
+        const normalized = {
           name: (h.name || "").split("\n")[0].trim(),
           trainer: (h.trainer || "").split("\n")[0].trim(),
           jockey: (h.jockey || "").split("\n")[0].trim(),
           odds: (h.ml_odds || h.odds || "").trim(),
-        });
+        };
+        writeRow(i, normalized);
       });
+      console.log(`[FinishLine] populateFormFromParsed: wrote ${cleaned.length} rows`);
     }
 
     async function callPhotoExtract(fd){
@@ -547,6 +586,30 @@ document.addEventListener('DOMContentLoaded', function() {
     if (btnExtract) btnExtract.addEventListener('click', extractFromPhotos);
     if (btnAnalyze) btnAnalyze.addEventListener('click', ()=> doPredict('research_predict'));
     if (btnPredict) btnPredict.addEventListener('click', ()=> doPredict('predict'));
+    
+    // Developer console helper for testing OCR by URL
+    window.debugExtractFromUrl = async function(url) {
+      const base = (window.FINISHLINE_API_BASE || "/api/finishline").replace(/\/$/, "");
+      try {
+        const r = await fetch(`${base}/photo_extract_openai_url`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ url })
+        });
+        const j = await r.json();
+        console.log('[debugExtractFromUrl] OCR parsed:', j.parsed_horses ?? j.horses ?? j);
+        const debugEl = document.getElementById('ocr-debug-json');
+        if (debugEl) {
+          debugEl.textContent = JSON.stringify(j, null, 2);
+          document.getElementById('ocr-debug')?.setAttribute('open', 'true');
+        }
+        populateFormFromParsed(j.parsed_horses ?? j.horses ?? []);
+        return j;
+      } catch (e) {
+        console.error('[debugExtractFromUrl] Error:', e);
+        throw e;
+      }
+    };
     
     // Event listeners (fallback)
     if (addHorseBtn) addHorseBtn.addEventListener('click', addHorseEntry);

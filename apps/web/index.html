@@ -51,18 +51,18 @@
 
                     <h3>Horse Data</h3>
                     <div id="horse-list" class="horse-list">
-                        <div class="horse-row" data-horse-row="0">
+                        <div class="horse-row" data-row="horse" data-horse-row="0">
                             <input type="text" class="horse-name name" data-field="name" placeholder="Horse Name" />
                             <input type="text" class="horse-odds odds" data-field="odds" placeholder="ML Odds (e.g., 5-2)" />
-                            <input type="text" class="horse-jockey jj" data-field="jockey" placeholder="Jockey (optional)" />
-                            <input type="text" class="horse-trainer tt" data-field="trainer" placeholder="Trainer (optional)" />
+                            <input type="text" class="horse-jockey jj" data-field="jockey" placeholder="Jockey" />
+                            <input type="text" class="horse-trainer tt" data-field="trainer" placeholder="Trainer" />
                             <input type="number" class="horse-bankroll" data-field="bankroll" placeholder="Bankroll" value="1000" />
                             <input type="number" class="horse-kelly" data-field="kelly_fraction" placeholder="Kelly (0.25)" value="0.25" step="0.01" />
                         </div>
                     </div>
                     
                     <div class="row-actions">
-                        <button id="add-horse" id="btnAddHorse" type="button" class="btn-secondary" data-add-horse>Add Horse</button>
+                        <button id="add-horse-btn" id="add-horse" id="btnAddHorse" type="button" class="btn-secondary" data-add-horse>Add Horse</button>
                     </div>
                     
                     <!-- Photo Upload -->
