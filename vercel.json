@@ -1,5 +1,8 @@
 {
   "version": 2,
+  "functions": {
+    "api/*.py": { "maxDuration": 30 }
+  },
   "routes": [
     { "src": "^/api/finishline/.*", "dest": "/api/main.py" },
     { "src": "^/$", "dest": "/apps/web/index.html" },

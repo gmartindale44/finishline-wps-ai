@@ -1,8 +1,9 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from typing import List, Dict, Any, Optional
 import json
+import os
 from .odds import ml_to_fraction, ml_to_prob
 from .scoring import calculate_predictions
 from .ocr_stub import analyze_photos
@@ -16,13 +17,23 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Enable CORS for frontend
+# CORS: read comma-separated origins or "*" during debug
+raw_origins = os.getenv("FINISHLINE_ALLOWED_ORIGINS", "*").strip()
+if raw_origins in ("", "*"):
+    allow_origins = ["*"]
+else:
+    allow_origins = [o.strip() for o in raw_origins.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allow_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=[
+        "Authorization", "Content-Type", "Accept", "Origin",
+        "User-Agent", "Cache-Control", "Pragma"
+    ],
+    max_age=86400,
 )
 
 @app.get("/api/finishline/health")
@@ -40,14 +51,19 @@ async def debug_info():
     """
     Debug info endpoint - returns safe runtime configuration (no secrets)
     """
-    import os
     return {
+        "allowed_origins": allow_origins,
         "provider": os.getenv("FINISHLINE_DATA_PROVIDER", "stub"),
         "ocr_enabled": os.getenv("FINISHLINE_OCR_ENABLED", "true"),
         "openai_model": os.getenv("FINISHLINE_OPENAI_MODEL", "unset"),
         "tavily_present": bool(os.getenv("FINISHLINE_TAVILY_API_KEY")),
         "openai_present": bool(os.getenv("FINISHLINE_OPENAI_API_KEY"))
     }
+
+# Explicit OPTIONS handler (belt-and-suspenders with some edge clients)
+@app.options("/{full_path:path}")
+async def any_options(full_path: str, request: Request):
+    return PlainTextResponse("", status_code=204)
 
 @app.post("/api/finishline/predict")
 async def predict_race(data: Dict[str, Any]):
