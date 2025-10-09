@@ -64,11 +64,90 @@ def post_process_horses(items: List[Dict]) -> List[Dict]:
             "name": name,
             "trainer": trainer,
             "jockey": jockey,
-            "ml_odds": odds,
+            "odds": odds,
             "bankroll": h.get("bankroll", FALLBACK_BANKROLL),
             "kelly_fraction": h.get("kelly_fraction", FALLBACK_KELLY),
         })
     return out
+
+def decode_data_url_or_b64(data_b64: str) -> bytes:
+    """Decode plain base64 or data URL to bytes"""
+    if data_b64.startswith("data:"):
+        _, b64 = data_b64.split(",", 1)
+        return base64.b64decode(b64)
+    return base64.b64decode(data_b64)
+
+async def run_openai_ocr_on_bytes(content: bytes, filename: str) -> Dict[str, Any]:
+    """Run OpenAI Vision OCR on raw image bytes"""
+    if not OPENAI_API_KEY:
+        return {"horses": []}
+    
+    # Create fake upload file from bytes
+    from io import BytesIO
+    fake_file_list = []
+    
+    # Detect mime type from filename
+    mime = "image/jpeg"
+    if filename.lower().endswith('.png'):
+        mime = "image/png"
+    elif filename.lower().endswith('.webp'):
+        mime = "image/webp"
+    
+    # Use existing image compression logic
+    try:
+        im = Image.open(BytesIO(content))
+        im = im.convert("RGB")
+        im.thumbnail((2000, 2000))
+        buf = BytesIO()
+        im.save(buf, format="JPEG", quality=88)
+        content = buf.getvalue()
+        mime = "image/jpeg"
+    except Exception:
+        pass
+    
+    # Create data URL
+    b64 = base64.b64encode(content).decode("utf-8")
+    data_url = f"data:{mime};base64,{b64}"
+    
+    # Build OpenAI Vision API request
+    system = ocr_system_prompt()
+    user_content = [
+        {"type": "text", "text": ocr_user_prompt()},
+        {"type": "image_url", "image_url": {"url": data_url}}
+    ]
+    
+    body = {
+        "model": OPENAI_MODEL,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user_content},
+        ],
+        "temperature": 0.0,
+        "response_format": {"type": "json_object"},
+    }
+    
+    headers = {"Authorization": f"Bearer {OPENAI_API_KEY}"}
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.post("https://api.openai.com/v1/chat/completions", json=body, headers=headers)
+        r.raise_for_status()
+        data = r.json()
+        raw = data["choices"][0]["message"]["content"]
+        try:
+            import json as json_module
+            parsed = json_module.loads(raw)
+            rows = parsed.get("parsed_horses", parsed.get("horses", []))
+            cleaned = post_process_horses(rows)
+            return {"horses": cleaned}
+        except Exception as e:
+            print(f"[OpenAI OCR] Parse error: {e}")
+            return {"horses": []}
+
+def decode_data_url_or_b64(data_b64: str) -> bytes:
+    """Decode plain base64 or data URL to bytes"""
+    if data_b64.startswith("data:"):
+        _, b64 = data_b64.split(",", 1)
+        return base64.b64decode(b64)
+    return base64.b64decode(data_b64)
 
 def _img_to_data_url(data: bytes, mime: str) -> str:
     b64 = base64.b64encode(data).decode("utf-8")
@@ -78,6 +157,65 @@ def _first_page_pdf_to_png(pdf_bytes: bytes) -> bytes:
     # Light fallback: if PIL can't read PDF (likely), we just return empty.
     # In real deployments, use "pdf2image". For now, skip PDFs quietly.
     return b""
+
+async def run_openai_ocr_on_bytes(content: bytes, filename: str) -> Dict[str, Any]:
+    """Run OpenAI Vision OCR on raw image bytes"""
+    if not OPENAI_API_KEY:
+        return {"horses": []}
+    
+    # Compress/optimize image
+    mime = "image/jpeg"
+    if filename.lower().endswith('.png'):
+        mime = "image/png"
+    elif filename.lower().endswith('.webp'):
+        mime = "image/webp"
+    
+    try:
+        im = Image.open(io.BytesIO(content))
+        im = im.convert("RGB")
+        im.thumbnail((2000, 2000))
+        buf = io.BytesIO()
+        im.save(buf, format="JPEG", quality=88)
+        content = buf.getvalue()
+        mime = "image/jpeg"
+    except Exception:
+        pass
+    
+    # Create data URL
+    data_url = _img_to_data_url(content, mime)
+    
+    # Build OpenAI Vision API request
+    system = ocr_system_prompt()
+    user_content = [
+        {"type": "text", "text": ocr_user_prompt()},
+        {"type": "image_url", "image_url": {"url": data_url}}
+    ]
+    
+    body = {
+        "model": OPENAI_MODEL,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user_content},
+        ],
+        "temperature": 0.0,
+        "response_format": {"type": "json_object"},
+    }
+    
+    headers = {"Authorization": f"Bearer {OPENAI_API_KEY}"}
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.post("https://api.openai.com/v1/chat/completions", json=body, headers=headers)
+        r.raise_for_status()
+        data = r.json()
+        raw = data["choices"][0]["message"]["content"]
+        try:
+            import json as json_module
+            parsed = json_module.loads(raw)
+            rows = parsed.get("parsed_horses", parsed.get("horses", []))
+            cleaned = post_process_horses(rows)
+            return {"horses": cleaned}
+        except Exception as e:
+            print(f"[OpenAI OCR] Parse error: {e}")
+            return {"horses": []}
 
 async def extract_rows_with_openai(files: List[UploadFile]) -> Dict[str, Any]:
     if not OPENAI_API_KEY:

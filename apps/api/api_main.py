@@ -240,6 +240,57 @@ async def photo_extract_openai_url(data: Dict[str, Any]):
             content={"error": "extraction_failed", "where": "photo_extract_openai_url", "detail": str(e)}
         )
 
+@app.post("/api/finishline/photo_extract_openai_b64")
+async def photo_extract_openai_b64(body: Dict[str, Any]):
+    """
+    Extract horses from base64-encoded image (bypasses multipart upload issues)
+    Input: {"filename": "race.png", "mime": "image/png", "data_b64": "base64..."}
+    Returns: {"horses": [...]}
+    """
+    import asyncio
+    import logging
+    from .openai_ocr import run_openai_ocr_on_bytes, decode_data_url_or_b64
+    
+    logger = logging.getLogger("finishline")
+    logger.setLevel(logging.INFO)
+    
+    try:
+        filename = body.get("filename", "image.jpg")
+        mime = body.get("mime", "image/jpeg")
+        data_b64 = body.get("data_b64", "")
+        
+        if not data_b64:
+            return JSONResponse(
+                {"error": "missing data_b64", "horses": []},
+                status_code=400
+            )
+        
+        content = decode_data_url_or_b64(data_b64)
+        kb = round(len(content) / 1024, 1)
+        logger.info(f"[photo_extract_openai_b64] file={filename} mime={mime} size={kb}KB")
+        
+        # Timeout from env var (default 25s)
+        timeout_ms = int(os.getenv("FINISHLINE_PROVIDER_TIMEOUT_MS", "25000"))
+        
+        async def _run():
+            return await run_openai_ocr_on_bytes(content, filename=filename)
+        
+        result = await asyncio.wait_for(_run(), timeout=timeout_ms / 1000.0)
+        
+        if not isinstance(result, dict) or "horses" not in result:
+            logger.warning(f"[photo_extract_openai_b64] bad OCR shape: {type(result)}")
+            return JSONResponse({"error": "Bad OCR shape", "horses": []}, status_code=502)
+        
+        logger.info(f"[photo_extract_openai_b64] horses={len(result.get('horses') or [])}")
+        return JSONResponse(result, status_code=200)
+    
+    except asyncio.TimeoutError:
+        logger.error(f"[photo_extract_openai_b64] timeout after {timeout_ms}ms")
+        return JSONResponse({"error": "OCR timed out", "horses": []}, status_code=504)
+    except Exception as e:
+        logger.exception("[photo_extract_openai_b64] exception")
+        return JSONResponse({"error": str(e), "horses": []}, status_code=500)
+
 @app.post("/api/finishline/research_predict")
 async def research_predict(data: Dict[str, Any]):
     """
