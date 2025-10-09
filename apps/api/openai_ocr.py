@@ -3,16 +3,21 @@ OpenAI Vision OCR for Horse Racing Photos
 Extracts structured horse data from DRF-like race tables using GPT-4 Vision
 """
 from __future__ import annotations
-import base64, io, re
+import os, re, io, base64, logging
 from typing import List, Dict, Any
 from fastapi import UploadFile
-import os, httpx
 from PIL import Image
+from openai import OpenAI
 
-OPENAI_API_KEY = os.getenv("FINISHLINE_OPENAI_API_KEY", "")
-OPENAI_MODEL = os.getenv("FINISHLINE_OPENAI_MODEL", "gpt-4o-mini")
+logger = logging.getLogger("finishline")
+logger.setLevel(logging.INFO)
+
 FALLBACK_BANKROLL = 1000
 FALLBACK_KELLY = 0.25
+
+def _env(name: str, default: str = "") -> str:
+    v = os.getenv(name)
+    return v if v is not None else default
 
 def parse_fractional_odds(raw: str) -> str:
     """
@@ -158,64 +163,144 @@ def _first_page_pdf_to_png(pdf_bytes: bytes) -> bytes:
     # In real deployments, use "pdf2image". For now, skip PDFs quietly.
     return b""
 
-async def run_openai_ocr_on_bytes(content: bytes, filename: str) -> Dict[str, Any]:
-    """Run OpenAI Vision OCR on raw image bytes"""
-    if not OPENAI_API_KEY:
-        return {"horses": []}
-    
-    # Compress/optimize image
-    mime = "image/jpeg"
-    if filename.lower().endswith('.png'):
-        mime = "image/png"
-    elif filename.lower().endswith('.webp'):
-        mime = "image/webp"
-    
+def _smart_downscale(png_bytes: bytes, max_w=1600, max_h=1600) -> bytes:
+    """Downscale large images to keep request size small"""
     try:
-        im = Image.open(io.BytesIO(content))
-        im = im.convert("RGB")
-        im.thumbnail((2000, 2000))
-        buf = io.BytesIO()
-        im.save(buf, format="JPEG", quality=88)
-        content = buf.getvalue()
-        mime = "image/jpeg"
+        img = Image.open(io.BytesIO(png_bytes)).convert("RGB")
+        img.thumbnail((max_w, max_h))
+        out = io.BytesIO()
+        img.save(out, format="JPEG", quality=85)
+        return out.getvalue()
     except Exception:
-        pass
-    
-    # Create data URL
-    data_url = _img_to_data_url(content, mime)
-    
-    # Build OpenAI Vision API request
-    system = ocr_system_prompt()
-    user_content = [
-        {"type": "text", "text": ocr_user_prompt()},
-        {"type": "image_url", "image_url": {"url": data_url}}
-    ]
-    
-    body = {
-        "model": OPENAI_MODEL,
-        "messages": [
-            {"role": "system", "content": system},
-            {"role": "user", "content": user_content},
-        ],
-        "temperature": 0.0,
-        "response_format": {"type": "json_object"},
+        return png_bytes
+
+def _openai_client() -> OpenAI:
+    api_key = _env("FINISHLINE_OPENAI_API_KEY") or _env("OPENAI_API_KEY")
+    if not api_key:
+        raise RuntimeError("Missing FINISHLINE_OPENAI_API_KEY/OPENAI_API_KEY")
+    return OpenAI(api_key=api_key)
+
+def _model_name() -> str:
+    return _env("FINISHLINE_OPENAI_MODEL", "gpt-4o-mini")
+
+def _json_schema():
+    return {
+        "name": "FinishLineHorses",
+        "schema": {
+            "type": "object",
+            "properties": {
+                "horses": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": ["name"],
+                        "properties": {
+                            "name": {"type": "string"},
+                            "odds": {"type": "string"},
+                            "trainer": {"type": "string"},
+                            "jockey": {"type": "string"},
+                            "bankroll": {"type": "number"},
+                            "kelly_fraction": {"type": "number"}
+                        },
+                        "additionalProperties": False
+                    }
+                }
+            },
+            "required": ["horses"],
+            "additionalProperties": False
+        },
+        "strict": True
     }
+
+def _smart_downscale(png_bytes: bytes, max_w=1600, max_h=1600) -> bytes:
+    """Downscale large images to keep request size small"""
+    try:
+        img = Image.open(io.BytesIO(png_bytes)).convert("RGB")
+        img.thumbnail((max_w, max_h))
+        out = io.BytesIO()
+        img.save(out, format="JPEG", quality=85)
+        return out.getvalue()
+    except Exception:
+        return png_bytes
+
+def _openai_client() -> OpenAI:
+    api_key = _env("FINISHLINE_OPENAI_API_KEY") or _env("OPENAI_API_KEY")
+    if not api_key:
+        raise RuntimeError("Missing FINISHLINE_OPENAI_API_KEY/OPENAI_API_KEY")
+    return OpenAI(api_key=api_key)
+
+def _model_name() -> str:
+    return _env("FINISHLINE_OPENAI_MODEL", "gpt-4o-mini")
+
+def _json_schema():
+    return {
+        "name": "FinishLineHorses",
+        "schema": {
+            "type": "object",
+            "properties": {
+                "horses": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": ["name"],
+                        "properties": {
+                            "name": {"type": "string"},
+                            "odds": {"type": "string"},
+                            "trainer": {"type": "string"},
+                            "jockey": {"type": "string"},
+                            "bankroll": {"type": "number"},
+                            "kelly_fraction": {"type": "number"}
+                        },
+                        "additionalProperties": False
+                    }
+                }
+            },
+            "required": ["horses"],
+            "additionalProperties": False
+        },
+        "strict": True
+    }
+
+async def run_openai_ocr_on_bytes(content: bytes, filename: str) -> Dict[str, Any]:
+    """Run OpenAI Vision OCR on raw image bytes with strict JSON schema"""
+    # Prepare image
+    img_bytes = _smart_downscale(content)
+    b64 = base64.b64encode(img_bytes).decode("utf-8")
+    data_url = f"data:image/jpeg;base64,{b64}"
+
+    client = _openai_client()
+    model = _model_name()
+
+    # 25s client-side timeout to match function budget
+    client = client.with_options(timeout=25.0)
+
+    messages = [
+        {"role": "system", "content": ocr_system_prompt()},
+        {"role": "user", "content": [
+            {"type": "text", "text": ocr_user_prompt()},
+            {"type": "image_url", "image_url": {"url": data_url}}
+        ]}
+    ]
+
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            response_format={"type": "json_schema", "json_schema": _json_schema()},
+            temperature=0.0
+        )
+        
+        # Parse structured response
+        content_text = response.choices[0].message.content
+        import json as json_module
+        parsed = json_module.loads(content_text)
+        horses = post_process_horses(parsed.get("horses", []))
+        logger.info(f"[openai_ocr] extracted {len(horses)} horses")
+        return {"horses": horses}
     
-    headers = {"Authorization": f"Bearer {OPENAI_API_KEY}"}
-    async with httpx.AsyncClient(timeout=30) as client:
-        r = await client.post("https://api.openai.com/v1/chat/completions", json=body, headers=headers)
-        r.raise_for_status()
-        data = r.json()
-        raw = data["choices"][0]["message"]["content"]
-        try:
-            import json as json_module
-            parsed = json_module.loads(raw)
-            rows = parsed.get("parsed_horses", parsed.get("horses", []))
-            cleaned = post_process_horses(rows)
-            return {"horses": cleaned}
-        except Exception as e:
-            print(f"[OpenAI OCR] Parse error: {e}")
-            return {"horses": []}
+    except Exception as e:
+        logger.exception("[openai_ocr] exception")
+        return {"horses": []}
 
 async def extract_rows_with_openai(files: List[UploadFile]) -> Dict[str, Any]:
     if not OPENAI_API_KEY:

@@ -667,6 +667,23 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     };
     
+    // Developer helper: test population pipeline with stub
+    window.devPopulateFromStub = async function() {
+      const base = (window.FINISHLINE_API_BASE || "/api/finishline").replace(/\/$/, "");
+      try {
+        const resp = await fetch(`${base}/echo_stub`);
+        const data = await resp.json();
+        if (Array.isArray(data?.horses) && data.horses.length) {
+          populateFormFromParsed(data.horses);
+          console.log("[devPopulateFromStub] Populated", data.horses.length, "horses from stub");
+        } else {
+          console.warn("[devPopulateFromStub] Stub returned no horses");
+        }
+      } catch (e) {
+        console.error("[devPopulateFromStub] Error:", e);
+      }
+    };
+    
     // Event listeners (fallback)
     if (addHorseBtn) addHorseBtn.addEventListener('click', addHorseEntry);
     if (predictBtn && !btnPredict) predictBtn.addEventListener('click', handlePredict);

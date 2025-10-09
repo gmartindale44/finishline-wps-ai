@@ -240,6 +240,17 @@ async def photo_extract_openai_url(data: Dict[str, Any]):
             content={"error": "extraction_failed", "where": "photo_extract_openai_url", "detail": str(e)}
         )
 
+@app.get("/api/finishline/echo_stub")
+async def echo_stub():
+    """Quick stub to prove UI fill works without OCR"""
+    return {
+        "horses": [
+            {"name": "Alpha", "odds": "3/1", "trainer": "T One", "jockey": "J A", "bankroll": 1000, "kelly_fraction": 0.25},
+            {"name": "Bravo", "odds": "9/2", "trainer": "T Two", "jockey": "J B", "bankroll": 1000, "kelly_fraction": 0.25},
+            {"name": "Charlie", "odds": "8/1", "trainer": "T Three", "jockey": "J C", "bankroll": 1000, "kelly_fraction": 0.25}
+        ]
+    }
+
 @app.post("/api/finishline/photo_extract_openai_b64")
 async def photo_extract_openai_b64(body: Dict[str, Any]):
     """
@@ -253,6 +264,14 @@ async def photo_extract_openai_b64(body: Dict[str, Any]):
     
     logger = logging.getLogger("finishline")
     logger.setLevel(logging.INFO)
+    
+    # Fail fast if OCR disabled or API key missing
+    ocr_enabled = os.getenv("FINISHLINE_OCR_ENABLED", "true").lower() not in ("false", "0", "no", "off")
+    if not ocr_enabled:
+        return JSONResponse({"error": "OCR disabled", "horses": []}, status_code=400)
+    
+    if not (os.getenv("FINISHLINE_OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")):
+        return JSONResponse({"error": "Missing OpenAI API key env", "horses": []}, status_code=500)
     
     try:
         filename = body.get("filename", "image.jpg")
