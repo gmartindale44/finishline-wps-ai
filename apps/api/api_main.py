@@ -311,39 +311,40 @@ async def photo_extract_openai_b64(body: Dict[str, Any]):
         return JSONResponse({"error": str(e), "horses": []}, status_code=500)
 
 @app.post("/api/finishline/research_predict")
-async def research_predict(data: Dict[str, Any]):
+async def research_predict(payload: Dict[str, Any]):
     """
     Research-enhanced Win/Place/Show predictions using custom data provider.
-    
-    Expected input: {
-        "date": "2024-01-15",
-        "track": "Churchill Downs",
-        "surface": "dirt",
-        "distance": "1 1/4 miles",
-        "horses": [
-            {
-                "name": "Horse Name",
-                "odds": "5-2",
-                "trainer": "Trainer Name (optional)",
-                "jockey": "Jockey Name (optional)",
-                "bankroll": 1000,
-                "kelly_fraction": 0.25
-            }
-        ]
-    }
-    
-    Returns: Win/Place/Show predictions with research-enhanced scoring
+    Strictly limited to horses provided in the request (no off-list suggestions).
     """
+    import logging
+    logger = logging.getLogger("finishline")
+    
     try:
-        horses = data.get("horses", [])
+        horses = payload.get("horses", [])
+        race_context = payload.get("race_context", {})
+        use_research = bool(payload.get("useResearch", True))
+        
         if not horses:
-            raise HTTPException(status_code=400, detail="No horses provided")
+            return JSONResponse(
+                {"error": "No horses provided"},
+                status_code=400
+            )
+        
+        # Whitelist of allowed names (exact form names)
+        allowed = {(h.get("name") or "").strip(): h for h in horses if (h.get("name") or "").strip()}
+        if not allowed:
+            return JSONResponse(
+                {"error": "No valid horses provided"},
+                status_code=400
+            )
         
         # Extract race context
-        date = data.get("date", "")
-        track = data.get("track", "")
-        surface = data.get("surface", "dirt")
-        distance = data.get("distance", "")
+        date = race_context.get("raceDate", race_context.get("date", ""))
+        track = race_context.get("track", "")
+        surface = race_context.get("surface", "dirt")
+        distance = race_context.get("distance", "")
+        
+        logger.info(f"[research_predict] horses={list(allowed.keys())} track={track} useResearch={use_research}")
         
         # Get configured provider
         provider = get_provider()
@@ -358,11 +359,28 @@ async def research_predict(data: Dict[str, Any]):
         # Calculate research-enhanced predictions
         predictions = calculate_research_predictions(enriched_horses)
         
+        # CRITICAL: Ensure predictions only reference horses from the allowed list
+        # Filter any off-list suggestions
+        win_name = predictions.get("win", {}).get("name", "")
+        place_name = predictions.get("place", {}).get("name", "")
+        show_name = predictions.get("show", {}).get("name", "")
+        
+        if win_name not in allowed:
+            logger.warning(f"[research_predict] Win pick '{win_name}' not in allowed list, using first")
+            predictions["win"]["name"] = list(allowed.keys())[0]
+        if place_name not in allowed:
+            logger.warning(f"[research_predict] Place pick '{place_name}' not in allowed list")
+            predictions["place"]["name"] = list(allowed.keys())[min(1, len(allowed)-1)]
+        if show_name not in allowed:
+            logger.warning(f"[research_predict] Show pick '{show_name}' not in allowed list")
+            predictions["show"]["name"] = list(allowed.keys())[min(2, len(allowed)-1)]
+        
         return {
             "win": predictions["win"],
             "place": predictions["place"],
             "show": predictions["show"],
             "enrichment_source": predictions.get("enrichment_source", "unknown"),
+            "candidate_pool": list(allowed.keys()),
             "race_context": {
                 "date": date,
                 "track": track,
@@ -372,6 +390,7 @@ async def research_predict(data: Dict[str, Any]):
         }
     
     except Exception as e:
+        logger.exception("[research_predict] exception")
         return JSONResponse(
             status_code=500, 
             content={"error": "research_predict_failed", "detail": str(e)}

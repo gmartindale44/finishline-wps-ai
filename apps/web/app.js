@@ -568,13 +568,21 @@ document.addEventListener('DOMContentLoaded', function() {
       const base = (window.FINISHLINE_API_BASE || "/api/finishline").replace(/\/$/, "");
       const horses = gatherFormHorses();
       if (!horses.length) { toast("Please add at least one horse.","error"); return; }
+      
+      // Race context fields
+      const raceDate = document.getElementById('raceDate')?.value || "";
+      const track = document.getElementById('raceTrack')?.value || document.getElementById('track')?.value || "";
+      const surface = document.getElementById('raceSurface')?.value || document.getElementById('surface')?.value || "";
+      const distance = document.getElementById('raceDistance')?.value || document.getElementById('distance')?.value || "";
+      
       const payload = {
-        date: document.getElementById('raceDate')?.value || "",
-        track: document.getElementById('raceTrack')?.value || "",
-        surface: document.getElementById('raceSurface')?.value || "",
-        distance: document.getElementById('raceDistance')?.value || "",
-        horses
+        horses,
+        race_context: { raceDate, track, surface, distance },
+        useResearch: endpoint === 'research_predict'
       };
+      
+      console.log(`[FinishLine] ${endpoint} payload:`, payload);
+      
       try {
         const r = await fetch(`${base}/${endpoint}`, { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify(payload) });
         if (!r.ok) {
@@ -585,6 +593,7 @@ document.addEventListener('DOMContentLoaded', function() {
           return;
         }
         const j = await r.json();
+        console.log(`[FinishLine] ${endpoint} response:`, j);
         displayResults(j);
       } catch (e) {
         console.error(e);

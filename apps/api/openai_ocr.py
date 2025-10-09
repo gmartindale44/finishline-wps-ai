@@ -42,18 +42,37 @@ def parse_fractional_odds(raw: str) -> str:
 
 def ocr_system_prompt():
     return (
-        "You are an expert at extracting structured data from horse-racing program tables. "
-        "Output ONLY valid JSON matching the schema. Rules:\n"
-        "- 'name' MUST be the horse name (often bold/blue). Do NOT use sire.\n"
-        "- If a stacked 'Trainer / Jockey' exists: top line = trainer, bottom line = jockey.\n"
-        "- 'odds' MUST be the morning line (ML) fractional odds if present.\n"
-        "- Ignore weight and sire. Missing values should be empty strings.\n"
+        "You are an expert at extracting structured data from DRF-style race tables. "
+        "Extract ONLY horses that appear in the table and output STRICT JSON per schema.\n"
+        "Layout cues:\n"
+        "• Left column header: 'Horse (last) / Sire' — the first line in BLUE/BOLD is the HORSE NAME.\n"
+        "  The small grey line beneath it is the SIRE (IGNORE sire; do not place sire in name).\n"
+        "• Middle column header: 'Trainer / Jockey' — two stacked lines: top is TRAINER, bottom is JOCKEY.\n"
+        "• Right column header: 'ML' — this is MORNING LINE fractional odds like '6/1', '9/2', '7/2'.\n"
+        "Extraction rules:\n"
+        "1) name MUST be the blue/bold horse name (no sire, no numbers in parentheses).\n"
+        "2) trainer = top line from Trainer/Jockey column; jockey = bottom line from that column.\n"
+        "3) odds = the right-most ML fractional odds; normalize to 'A/B' (e.g., '3/1', '9/2').\n"
+        "4) Ignore sire, weight, and any parenthetical ratings like (66). Leave missing values as empty strings.\n"
+        "5) Output ONLY horses listed in the image. Do not invent or include any non-visible horse.\n"
     )
 
 def ocr_user_prompt():
     return (
-        "Extract horses from the image(s). Return JSON: {\"horses\": Horse[]}. "
-        "Use bankroll=1000 and kelly_fraction=0.25 if not present."
+        "Extract horses from the table image. Return JSON: {\"horses\": Horse[]}.\n"
+        "Use bankroll=1000 and kelly_fraction=0.25 if not present.\n"
+        "Example (visual pattern hint, not exact text):\n"
+        "Row example:\n"
+        "  [Horse column]\n"
+        "    Cosmic Connection   (blue/bold horse name)\n"
+        "    Eastwood            (sire — IGNORE)\n"
+        "  [Trainer/Jockey column]\n"
+        "    Debbie Schaber      (trainer)\n"
+        "    Huber Villa-Gomez   (jockey)\n"
+        "  [ML column]\n"
+        "    6/1                 (ML fractional odds)\n"
+        "Your JSON should look like:\n"
+        "{\"horses\":[{\"name\":\"Cosmic Connection\",\"odds\":\"6/1\",\"trainer\":\"Debbie Schaber\",\"jockey\":\"Huber Villa-Gomez\",\"bankroll\":1000,\"kelly_fraction\":0.25}]}\n"
     )
 
 def post_process_horses(items: List[Dict]) -> List[Dict]:
