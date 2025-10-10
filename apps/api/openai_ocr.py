@@ -57,23 +57,7 @@ def ocr_system_prompt():
         "5) Output ONLY horses listed in the image. Do not invent or include any non-visible horse.\n"
     )
 
-def ocr_user_prompt():
-    return (
-        "Extract horses from the table image. Return JSON: {\"horses\": Horse[]}.\n"
-        "Use bankroll=1000 and kelly_fraction=0.25 if not present.\n"
-        "Example (visual pattern hint, not exact text):\n"
-        "Row example:\n"
-        "  [Horse column]\n"
-        "    Cosmic Connection   (blue/bold horse name)\n"
-        "    Eastwood            (sire — IGNORE)\n"
-        "  [Trainer/Jockey column]\n"
-        "    Debbie Schaber      (trainer)\n"
-        "    Huber Villa-Gomez   (jockey)\n"
-        "  [ML column]\n"
-        "    6/1                 (ML fractional odds)\n"
-        "Your JSON should look like:\n"
-        "{\"horses\":[{\"name\":\"Cosmic Connection\",\"odds\":\"6/1\",\"trainer\":\"Debbie Schaber\",\"jockey\":\"Huber Villa-Gomez\",\"bankroll\":1000,\"kelly_fraction\":0.25}]}\n"
-    )
+# Removed - now using ocr_user_prompt_json() and ocr_user_prompt_tsv()
 
 def post_process_horses(items: List[Dict]) -> List[Dict]:
     out = []
@@ -231,16 +215,21 @@ def _json_schema():
         "strict": True
     }
 
-def _smart_downscale(png_bytes: bytes, max_w=1600, max_h=1600) -> bytes:
-    """Downscale large images to keep request size small"""
+# Keep PNG; upscale small images a bit; cap max edge ~2048 to maintain text sharpness
+def _prepare_png_bytes(src_bytes: bytes, max_edge=2048) -> Tuple[bytes, str]:
     try:
-        img = Image.open(io.BytesIO(png_bytes)).convert("RGB")
-        img.thumbnail((max_w, max_h))
+        img = Image.open(io.BytesIO(src_bytes))
+        # Convert paletted to RGBA if needed, but keep PNG
+        if max(img.size) > max_edge:
+            scale = max_edge / float(max(img.size))
+            new_size = (int(img.size[0]*scale), int(img.size[1]*scale))
+            img = img.resize(new_size)
         out = io.BytesIO()
-        img.save(out, format="JPEG", quality=85)
-        return out.getvalue()
+        img.save(out, format="PNG", optimize=True)
+        return out.getvalue(), "image/png"
     except Exception:
-        return png_bytes
+        # If PIL fails, send original buffer and a best-guess mime
+        return src_bytes, "image/png"
 
 def _openai_client() -> OpenAI:
     api_key = _env("FINISHLINE_OPENAI_API_KEY") or _env("OPENAI_API_KEY")
@@ -251,7 +240,7 @@ def _openai_client() -> OpenAI:
 def _model_name() -> str:
     return _env("FINISHLINE_OPENAI_MODEL", "gpt-4o-mini")
 
-def _json_schema():
+def _json_schema_def():
     return {
         "name": "FinishLineHorses",
         "schema": {
@@ -280,46 +269,115 @@ def _json_schema():
         "strict": True
     }
 
-async def run_openai_ocr_on_bytes(content: bytes, filename: str) -> Dict[str, Any]:
-    """Run OpenAI Vision OCR on raw image bytes with strict JSON schema"""
-    # Prepare image
-    img_bytes = _smart_downscale(content)
-    b64 = base64.b64encode(img_bytes).decode("utf-8")
-    data_url = f"data:image/jpeg;base64,{b64}"
+def ocr_user_prompt_json():
+    return (
+        "Extract horses from the table image.\n"
+        "Return JSON matching the provided schema with key 'horses'.\n"
+        "Default bankroll=1000 and kelly_fraction=0.25."
+    )
 
-    client = _openai_client()
+def ocr_user_prompt_tsv():
+    return (
+        "If JSON extraction is difficult, output ONLY a TSV (tab-separated) list of rows:\n"
+        "name\ttrainer\tjockey\todds\n"
+        "Use one row per horse visible in the image. Do not include sire or extra commentary."
+    )
+
+def _to_image_content(b64: str, mime: str):
+    return {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}}
+
+def _messages_for(mode: str, image_b64: str, mime: str):
+    if mode == "json":
+        return [
+            {"role": "system", "content": ocr_system_prompt()},
+            {"role": "user", "content": [
+                {"type": "text", "text": ocr_user_prompt_json()},
+                _to_image_content(image_b64, mime)
+            ]}
+        ]
+    else:  # tsv
+        return [
+            {"role": "system", "content": ocr_system_prompt()},
+            {"role": "user", "content": [
+                {"type": "text", "text": ocr_user_prompt_tsv()},
+                _to_image_content(image_b64, mime)
+            ]}
+        ]
+
+def _call_openai(messages, expect_json: bool):
+    client = _openai_client().with_options(timeout=25.0)
     model = _model_name()
-
-    # 25s client-side timeout to match function budget
-    client = client.with_options(timeout=25.0)
-
-    messages = [
-        {"role": "system", "content": ocr_system_prompt()},
-        {"role": "user", "content": [
-            {"type": "text", "text": ocr_user_prompt()},
-            {"type": "image_url", "image_url": {"url": data_url}}
-        ]}
-    ]
-
-    try:
+    if expect_json:
         response = client.chat.completions.create(
             model=model,
             messages=messages,
-            response_format={"type": "json_schema", "json_schema": _json_schema()},
+            response_format={"type": "json_schema", "json_schema": _json_schema_def()},
             temperature=0.0
         )
-        
-        # Parse structured response
         content_text = response.choices[0].message.content
         import json as json_module
-        parsed = json_module.loads(content_text)
-        horses = post_process_horses(parsed.get("horses", []))
-        logger.info(f"[openai_ocr] extracted {len(horses)} horses")
-        return {"horses": horses}
-    
+        return json_module.loads(content_text)
+    else:
+        response = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=0.0
+        )
+        return response.choices[0].message.content or ""
+
+def _parse_tsv(tsv: str) -> List[Dict]:
+    rows = []
+    for line in tsv.splitlines():
+        line = line.strip()
+        if not line or line.lower().startswith("name\t"):  # skip header
+            continue
+        parts = [p.strip() for p in line.split("\t")]
+        if len(parts) < 4: 
+            continue
+        name, trainer, jockey, odds = parts[:4]
+        rows.append({
+            "name": name,
+            "trainer": trainer,
+            "jockey": jockey,
+            "odds": odds,
+            "bankroll": FALLBACK_BANKROLL,
+            "kelly_fraction": FALLBACK_KELLY
+        })
+    return post_process_horses(rows)
+
+async def run_openai_ocr_on_bytes(content: bytes, filename: str) -> Dict[str, Any]:
+    """Run OpenAI Vision OCR with JSON schema first, TSV fallback if empty"""
+    # Prepare PNG and base64
+    png_bytes, mime = _prepare_png_bytes(content, max_edge=2048)
+    b64 = base64.b64encode(png_bytes).decode("utf-8")
+
+    # Pass 1: strict JSON schema
+    try:
+        messages = _messages_for("json", b64, mime)
+        parsed = _call_openai(messages, expect_json=True)
+        horses = post_process_horses((parsed or {}).get("horses", []))
+        if horses:
+            logger.info(f"[openai_ocr] JSON schema extracted {len(horses)} horses")
+            return {"horses": horses}
+        logger.warning("[openai_ocr] JSON schema returned no horses; trying TSV fallback.")
     except Exception as e:
-        logger.exception("[openai_ocr] exception")
-        return {"horses": []}
+        logger.warning(f"[openai_ocr] JSON extraction failed: {e}; trying TSV fallback.")
+
+    # Pass 2: TSV fallback
+    try:
+        messages = _messages_for("tsv", b64, mime)
+        tsv = _call_openai(messages, expect_json=False)
+        horses = _parse_tsv(tsv or "")
+        if horses:
+            logger.info(f"[openai_ocr] TSV fallback extracted {len(horses)} horses")
+            return {"horses": horses}
+        logger.warning("[openai_ocr] TSV fallback returned no horses.")
+    except Exception as e:
+        logger.warning(f"[openai_ocr] TSV fallback failed: {e}")
+
+    # Nothing parsed
+    logger.error("[openai_ocr] Both JSON and TSV failed to extract horses")
+    return {"horses": []}
 
 async def extract_rows_with_openai(files: List[UploadFile]) -> Dict[str, Any]:
     if not OPENAI_API_KEY:

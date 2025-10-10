@@ -300,8 +300,12 @@ async def photo_extract_openai_b64(body: Dict[str, Any]):
             logger.warning(f"[photo_extract_openai_b64] bad OCR shape: {type(result)}")
             return JSONResponse({"error": "Bad OCR shape", "horses": []}, status_code=502)
         
-        logger.info(f"[photo_extract_openai_b64] horses={len(result.get('horses') or [])}")
-        return JSONResponse(result, status_code=200)
+        horses = result.get("horses") or []
+        if not horses:
+            logger.warning("[photo_extract_openai_b64] OCR returned 0 horses after TSV fallback.")
+        
+        logger.info(f"[photo_extract_openai_b64] horses={len(horses)}")
+        return JSONResponse({"horses": horses}, status_code=200)
     
     except asyncio.TimeoutError:
         logger.error(f"[photo_extract_openai_b64] timeout after {timeout_ms}ms")
