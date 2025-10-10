@@ -89,10 +89,18 @@
                     </div>
                     
                     <!-- OCR Debug Panel -->
-                    <details id="ocr-debug" style="margin-top:8px;color:#9ca3af;">
-                        <summary style="cursor:pointer;user-select:none;">OCR Debug</summary>
-                        <pre id="ocr-debug-json" style="white-space:pre-wrap;font-size:0.85rem;background:rgba(0,0,0,0.3);padding:8px;border-radius:6px;margin-top:6px;"></pre>
-                    </details>
+                    <div id="ocr-debug-panel" style="margin-top:12px;">
+                        <details>
+                            <summary style="cursor:pointer;user-select:none;color:#9ca3af;">OCR Debug</summary>
+                            <div style="margin-top:8px; display:flex; gap:8px; align-items:center;">
+                                <input id="debug-ocr-url" type="url" placeholder="https://.../drf-table-sample.png" style="flex:1; padding:6px 8px; border-radius:8px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); color:#fff;" />
+                                <button id="btn-extract-url" type="button" class="btn">Extract (URL)</button>
+                                <button id="btn-load-demo" type="button" class="btn">Load Demo DRF</button>
+                            </div>
+                            <small style="display:block; margin-top:6px; color:#9ca3af;">Use a direct image URL to test the server OCR without file upload. "Load Demo DRF" fills the form with a sample list.</small>
+                            <pre id="ocr-debug-json" style="white-space:pre-wrap;font-size:0.85rem;background:rgba(0,0,0,0.3);padding:8px;border-radius:6px;margin-top:6px;color:#9ca3af;"></pre>
+                        </details>
+                    </div>
                     
                     <!-- Runtime Config -->
                     <div id="runtime-config" style="margin-top:8px;font-size:0.85rem;color:#9ca3af;"></div>

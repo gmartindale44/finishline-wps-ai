@@ -647,6 +647,74 @@ document.addEventListener('DOMContentLoaded', function() {
     if (btnAnalyze) btnAnalyze.addEventListener('click', ()=> doPredict('research_predict'));
     if (btnPredict) btnPredict.addEventListener('click', ()=> doPredict('predict'));
     
+    // Helper to safely log and parse JSON responses
+    function logAndParseJson(resp) {
+      return resp.text().then(txt => {
+        console.log("📥 Raw OCR response:", txt);
+        try { return JSON.parse(txt); }
+        catch (e) {
+          console.error("❌ Non-JSON response:", e);
+          alert("OCR returned non-JSON. See console for details.");
+          return null;
+        }
+      });
+    }
+    
+    // Debug: Extract by URL
+    const btnExtractUrl = document.getElementById("btn-extract-url");
+    if (btnExtractUrl) {
+      btnExtractUrl.addEventListener("click", async () => {
+        const urlInput = document.getElementById("debug-ocr-url");
+        const url = urlInput?.value.trim();
+        if (!url) { alert("Paste a direct image URL first."); return; }
+
+        console.log("🌐 OCR by URL:", url);
+        let resp;
+        try {
+          resp = await fetch("/api/finishline/photo_extract_openai_url", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ url })
+          });
+        } catch (e) {
+          console.error("❌ Network/timeout calling OCR URL endpoint:", e);
+          alert("Request failed (network/timeout). See console.");
+          return;
+        }
+
+        const data = await logAndParseJson(resp);
+        if (!data) return;
+        
+        // Display in debug panel
+        const debugEl = document.getElementById('ocr-debug-json');
+        if (debugEl) debugEl.textContent = JSON.stringify(data, null, 2);
+
+        if (Array.isArray(data?.horses) && data.horses.length) {
+          console.log(`✅ Parsed ${data.horses.length} horses from URL`);
+          populateFormFromParsed(data.horses);
+        } else {
+          alert(`No horses parsed.\nServer response:\n${JSON.stringify(data, null, 2)}`);
+        }
+      });
+    }
+    
+    // Debug: Load Demo DRF
+    const btnLoadDemo = document.getElementById("btn-load-demo");
+    if (btnLoadDemo) {
+      btnLoadDemo.addEventListener("click", () => {
+        const demo = [
+          { name:"Cosmic Connection", odds:"6/1", trainer:"Debbie Schaber", jockey:"Huber Villa-Gomez", bankroll:1000, kelly_fraction:0.25 },
+          { name:"Dancing On Air",   odds:"10/1", trainer:"Wendy Uhacz",   jockey:"Francisco Garcia",  bankroll:1000, kelly_fraction:0.25 },
+          { name:"Double Up Larry",  odds:"5/2", trainer:"Randall R. Russell", jockey:"Gaddiel A. Martinez", bankroll:1000, kelly_fraction:0.25 },
+          { name:"Gruit",            odds:"20/1", trainer:"Mary R. McKinley", jockey:"Kris Fox",        bankroll:1000, kelly_fraction:0.25 },
+          { name:"Mr. Impatient",    odds:"7/2", trainer:"Kevin Rice",     jockey:"Israel O. Rodriguez", bankroll:1000, kelly_fraction:0.25 },
+          { name:"Shannonia",        odds:"6/5", trainer:"Teresa Connelly", jockey:"Willie Martinez",  bankroll:1000, kelly_fraction:0.25 }
+        ];
+        console.log("🧪 Loading demo DRF list", demo);
+        populateFormFromParsed(demo);
+      });
+    }
+    
     // Developer console helper for testing OCR by URL
     window.debugExtractFromUrl = async function(url) {
       const base = (window.FINISHLINE_API_BASE || "/api/finishline").replace(/\/$/, "");
