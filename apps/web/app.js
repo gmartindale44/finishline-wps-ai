@@ -495,73 +495,68 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     async function extractFromPhotos() {
-      const files = fileInput?.files || [];
-      if (!files.length) { toast("Please select at least one photo/PDF.", "error"); return; }
-      
-      const f = files[0];
-      if (!/^image\//.test(f.type)) {
-        toast("Please upload a PNG/JPG image.", "error");
+      const input = document.getElementById("photoFiles") || document.getElementById("photo-input");
+      if (!input || !input.files || input.files.length === 0) {
+        alert("Choose an image first.");
         return;
       }
-      
-      console.log(`[FinishLine] extractFromPhotos: encoding ${f.name} (${f.type})`);
+
+      const f = input.files[0];
+      // Defensive: only images for now
+      if (!/^image\//.test(f.type)) {
+        alert("Please upload a PNG or JPG image of the race table.");
+        return;
+      }
+
+      // Convert to data URL so we can call the b64 JSON endpoint (avoids multipart issues)
       const dataURL = await fileToDataURL(f);
-      
-      const payload = {
-        filename: f.name,
-        mime: f.type || "image/png",
-        data_b64: dataURL
-      };
-      
-      const base = (window.FINISHLINE_API_BASE || "/api/finishline").replace(/\/$/, "");
-      
+      const payload = { filename: f.name, mime: f.type || "image/png", data_b64: dataURL };
+
+      console.log("📤 Uploading for OCR:", payload.filename, payload.mime);
+
       let resp;
       try {
-        console.log(`[FinishLine] POSTing to ${base}/photo_extract_openai_b64`);
-        resp = await fetchWithTimeout(`${base}/photo_extract_openai_b64`, {
+        resp = await fetch("/api/finishline/photo_extract_openai_b64", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify(payload)
-        }, 25000);
+        });
       } catch (e) {
-        console.error("[FinishLine] Request aborted or network error:", e);
-        toast("Extraction request timed out or was blocked.", "error");
+        console.error("❌ Network/timeout calling OCR endpoint:", e);
+        alert("Request failed (network/timeout). See console for details.");
         return;
       }
-      
-      const ct = resp.headers.get("content-type") || "";
-      if (!resp.ok || !ct.includes("application/json")) {
-        const text = await resp.text();
-        console.error("[FinishLine] Unexpected response:", text.slice(0, 500));
-        toast("Extraction failed (see console).", "error");
+
+      // Read raw text FIRST so we can always see exactly what came back
+      const raw = await resp.text();
+      console.log("📥 Raw OCR response:", raw);
+
+      // Try to parse as JSON
+      let data;
+      try {
+        data = JSON.parse(raw);
+      } catch (e) {
+        console.error("❌ OCR returned non-JSON:", e);
+        alert("OCR returned non-JSON. See console for details.");
         return;
       }
-      
-      const data = await resp.json();
-      console.log(`[FinishLine] Response:`, data);
-      
-      const debugEl = document.getElementById('ocr-debug-json');
-      if (debugEl) debugEl.textContent = JSON.stringify(data, null, 2);
-      
-      let rows = data?.horses || data?.parsed_horses || data?.rows || [];
-      if (!Array.isArray(rows)) rows = [];
-      
-      rows = rows.map(r => ({
-        name: (r.name || r.horse || "").split("\n")[0].trim(),
-        trainer: (r.trainer || "").split("\n")[0].trim(),
-        jockey: (r.jockey || "").split("\n")[0].trim(),
-        odds: (r.odds || r.ml_odds || "").trim(),
-      })).filter(r => r.name && r.odds);
-      rows = uniqBy(rows, h => h.name.toLowerCase());
-      
-      if (!rows.length) {
-        toast("No rows were detected in the photo. Try cropping tighter around the table.", "error");
+
+      // If server surfaced an error string, show it verbatim
+      if (data?.error) {
+        console.warn("⚠️ OCR error:", data.error);
+        alert(`OCR error: ${data.error}`);
         return;
       }
-      
-      console.log(`[FinishLine] Populating ${rows.length} horses into form`);
-      populateFormFromParsed(rows);
-      toast(`Extracted ${rows.length} horses from photos.`, "success");
+
+      // Expect: { horses: [...] }
+      if (Array.isArray(data?.horses) && data.horses.length) {
+        console.log(`✅ Parsed ${data.horses.length} horses`);
+        // Canonical path that fills ALL rows
+        populateFormFromParsed(data.horses);
+      } else {
+        console.warn("⚠️ No horses parsed from OCR", data);
+        alert(`No horses parsed.\nServer response:\n${JSON.stringify(data, null, 2)}`);
+      }
     }
 
     async function doPredict(endpoint){
