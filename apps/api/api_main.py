@@ -316,72 +316,95 @@ async def research_predict_selftest():
     }
 
 @app.post("/api/finishline/photo_extract_openai_b64")
-async def photo_extract_openai_b64(body: Dict[str, Any]):
+async def photo_extract_openai_b64(request: Request, body: Dict[str, Any]):
     """
     Extract horses from base64-encoded image (bypasses multipart upload issues)
     Input: {"filename": "race.png", "mime": "image/png", "data_b64": "base64..."}
-    Returns: {"horses": [...]}
+    Returns: {"ok": true, "horses": [...], "reqId": "...", "elapsed_ms": 123}
     Server-side timeout: 25s (configurable via FINISHLINE_PROVIDER_TIMEOUT_MS)
     """
-    import asyncio
-    import logging
-    from .openai_ocr import run_openai_ocr_on_bytes, decode_data_url_or_b64
-    
-    logger = logging.getLogger("finishline")
-    logger.setLevel(logging.INFO)
-    
-    # Fail fast if OCR disabled or API key missing
-    ocr_enabled = os.getenv("FINISHLINE_OCR_ENABLED", "true").lower() not in ("false", "0", "no", "off")
-    if not ocr_enabled:
-        logger.warning("[photo_extract_openai_b64] OCR disabled")
-        return JSONResponse({"error": "OCR disabled", "horses": []}, status_code=400)
-    
-    if not (os.getenv("FINISHLINE_OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")):
-        logger.error("[photo_extract_openai_b64] Missing OpenAI API key")
-        return JSONResponse({"error": "Missing OpenAI API key env", "horses": []}, status_code=500)
+    req_id = getattr(request.state, "req_id", str(uuid.uuid4()))
+    t0 = time.perf_counter()
     
     try:
+        import asyncio
+        from .openai_ocr import run_openai_ocr_on_bytes, decode_data_url_or_b64
+        
+        # Fail fast if OCR disabled
+        ocr_enabled = os.getenv("FINISHLINE_OCR_ENABLED", "true").lower() not in ("false", "0", "no", "off")
+        if not ocr_enabled:
+            log.warning(f"[{req_id}] OCR disabled")
+            raise ApiError(400, "OCR is disabled on this server", "ocr_disabled")
+        
+        # Require OpenAI API key
+        if not (os.getenv("FINISHLINE_OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")):
+            log.error(f"[{req_id}] Missing OpenAI API key")
+            raise ApiError(
+                500,
+                "OpenAI API key not configured. Set FINISHLINE_OPENAI_API_KEY or OPENAI_API_KEY.",
+                "env_missing"
+            )
+        
         filename = body.get("filename", "image.jpg")
         mime = body.get("mime", "image/jpeg")
         data_b64 = body.get("data_b64", "")
         
         if not data_b64:
-            logger.warning("[photo_extract_openai_b64] missing data_b64 in payload")
-            return JSONResponse(
-                {"error": "missing data_b64", "horses": []},
-                status_code=400
-            )
+            log.warning(f"[{req_id}] missing data_b64 in payload")
+            raise ApiError(400, "Missing data_b64 field in request body", "bad_request")
+        
+        # Validate size (max 6MB)
+        validate_base64_size(data_b64, max_mb=6.0)
         
         content = decode_data_url_or_b64(data_b64)
         kb = round(len(content) / 1024, 1)
-        logger.info(f"[photo_extract_openai_b64] file={filename} mime={mime} size={kb}KB")
+        log.info(f"[{req_id}] OCR request: {filename} {mime} {kb}KB")
         
         # Timeout from env var (default 25s to align with client)
         timeout_ms = int(os.getenv("FINISHLINE_PROVIDER_TIMEOUT_MS", "25000"))
-        logger.info(f"[photo_extract_openai_b64] timeout={timeout_ms}ms")
         
         async def _run():
             return await run_openai_ocr_on_bytes(content, filename=filename)
         
-        result = await asyncio.wait_for(_run(), timeout=timeout_ms / 1000.0)
+        try:
+            result = await asyncio.wait_for(_run(), timeout=timeout_ms / 1000.0)
+        except asyncio.TimeoutError:
+            elapsed = int((time.perf_counter() - t0) * 1000)
+            log.error(f"[{req_id}] OCR timeout after {timeout_ms}ms")
+            raise ApiError(
+                504,
+                f"OCR timed out after {timeout_ms/1000:.1f}s. Try a smaller/clearer image.",
+                "timeout",
+                {"timeout_ms": timeout_ms, "elapsed_ms": elapsed}
+            )
         
         if not isinstance(result, dict) or "horses" not in result:
-            logger.warning(f"[photo_extract_openai_b64] bad OCR shape: {type(result)}")
-            return JSONResponse({"error": "Bad OCR shape", "horses": []}, status_code=502)
+            log.warning(f"[{req_id}] Invalid OCR response: {type(result)}")
+            raise ApiError(502, "Invalid OCR response from vision model", "ocr_invalid")
         
         horses = result.get("horses") or []
         if not horses:
-            logger.warning("[photo_extract_openai_b64] OCR returned 0 horses")
+            log.warning(f"[{req_id}] OCR returned 0 horses")
         
-        logger.info(f"[photo_extract_openai_b64] success: {len(horses)} horses")
-        return JSONResponse({"horses": horses}, status_code=200)
+        elapsed_ms = int((time.perf_counter() - t0) * 1000)
+        log.info(f"[{req_id}] OCR success: {len(horses)} horses, {elapsed_ms}ms")
+        
+        return JSONResponse({
+            "ok": True,
+            "horses": horses,
+            "reqId": req_id,
+            "elapsed_ms": elapsed_ms
+        }, status_code=200)
     
-    except asyncio.TimeoutError:
-        logger.error(f"[photo_extract_openai_b64] timeout after {timeout_ms}ms")
-        return JSONResponse({"error": "OCR timed out", "horses": []}, status_code=504)
+    except ApiError:
+        raise  # Re-raise to be handled by middleware
     except Exception as e:
-        logger.exception("[photo_extract_openai_b64] exception")
-        return JSONResponse({"error": str(e), "horses": []}, status_code=500)
+        log.exception(f"[{req_id}] photo_extract_openai_b64 failed")
+        raise ApiError(
+            500,
+            f"OCR extraction failed: {str(e)[:100]}",
+            "ocr_failed"
+        )
 
 @app.post("/api/finishline/research_predict")
 async def research_predict(payload: Dict[str, Any]):

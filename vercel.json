@@ -1,7 +1,10 @@
 {
   "version": 2,
   "functions": {
-    "api/*.py": { "maxDuration": 60 }
+    "api/**/*.py": { 
+      "maxDuration": 60,
+      "memory": 1536
+    }
   },
   "routes": [
     { "src": "^/api/finishline/.*", "dest": "/api/main.py" },
