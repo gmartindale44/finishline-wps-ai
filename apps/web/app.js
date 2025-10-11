@@ -1201,9 +1201,15 @@ document.addEventListener('DOMContentLoaded', function() {
               }
             }
 
-            if (!ok || !data) {
-              const msg = data?.error ? `${status} ${statusText}\n${data.error}` : `${status} ${statusText}\n${raw}`;
-              return alert(`Predict failed.\n\n${msg}`);
+            if (!ok || !data || data.ok === false) {
+              const errMsg = data?.error || `Server error (${status})`;
+              const reqId = data?.reqId ? `\n\nReference: ${data.reqId}` : "";
+              const hint = data?.hint || data?.how_to_fix || "";
+              const hintMsg = hint ? `\n\nHow to fix: ${hint}` : "";
+              console.error("❌ Predict failed:", { status, data });
+              alert(`Predict failed:\n${errMsg}${hintMsg}${reqId}`);
+              resetButton(btnPredict);
+              return;
             }
 
             // Render predictions

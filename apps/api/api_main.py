@@ -36,6 +36,44 @@ app.add_middleware(
     max_age=86400,
 )
 
+
+# Global error handling middleware
+@app.middleware("http")
+async def error_wrapper_middleware(request: Request, call_next):
+    """
+    Global error handler to catch any unhandled exceptions
+    and return structured JSON errors.
+    """
+    req_id = str(uuid.uuid4())
+    request.state.req_id = req_id
+    t0 = time.perf_counter()
+    
+    try:
+        response = await call_next(request)
+        return response
+    except ApiError as e:
+        # Structured API errors
+        log.error(f"[{req_id}] ApiError: {e.status} {e.code} - {e.message}")
+        return json_error(
+            e.status,
+            e.message,
+            e.code,
+            req_id=req_id,
+            elapsed_ms=int((time.perf_counter() - t0) * 1000),
+            **e.extra
+        )
+    except Exception as e:
+        # Unexpected errors
+        log.exception(f"[{req_id}] Unhandled exception")
+        return json_error(
+            500,
+            "Internal server error. Please try again or contact support.",
+            "internal",
+            req_id=req_id,
+            elapsed_ms=int((time.perf_counter() - t0) * 1000),
+            detail=str(e)[:200]  # Truncate for safety
+        )
+
 @app.get("/api/finishline/health")
 async def health_check():
     """Health check endpoint"""
