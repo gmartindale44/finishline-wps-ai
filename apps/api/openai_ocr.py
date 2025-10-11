@@ -181,7 +181,8 @@ def _openai_client() -> OpenAI:
     api_key = _env("FINISHLINE_OPENAI_API_KEY") or _env("OPENAI_API_KEY")
     if not api_key:
         raise RuntimeError("Missing FINISHLINE_OPENAI_API_KEY/OPENAI_API_KEY")
-    return OpenAI(api_key=api_key)
+    # 25s client-side timeout to align with function budget
+    return OpenAI(api_key=api_key, timeout=25.0)
 
 def _model_name() -> str:
     return _env("FINISHLINE_OPENAI_MODEL", "gpt-4o-mini")
@@ -235,7 +236,8 @@ def _openai_client() -> OpenAI:
     api_key = _env("FINISHLINE_OPENAI_API_KEY") or _env("OPENAI_API_KEY")
     if not api_key:
         raise RuntimeError("Missing FINISHLINE_OPENAI_API_KEY/OPENAI_API_KEY")
-    return OpenAI(api_key=api_key)
+    # 25s client-side timeout to align with function budget
+    return OpenAI(api_key=api_key, timeout=25.0)
 
 def _model_name() -> str:
     return _env("FINISHLINE_OPENAI_MODEL", "gpt-4o-mini")
