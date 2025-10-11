@@ -574,15 +574,18 @@ document.addEventListener('DOMContentLoaded', function() {
           return;
         }
 
-        // Expect: { horses: [...] }
-        if (Array.isArray(data?.horses) && data.horses.length) {
-          console.log(`✅ Parsed ${data.horses.length} horses`);
-          populateFormFromParsed(data.horses);
-          toast(`Filled ${data.horses.length} horses`, "success");
-        } else {
-          console.warn("⚠️ No horses parsed from OCR", data);
-          toast("No horses parsed (see console)", "error");
-          alert(`No horses parsed.\nServer response:\n${JSON.stringify(data, null, 2)}`);
+        // Expect: { horses: [...] } - handle both array and stringified JSON
+        {
+          const horses = coerceHorsesArray(data?.horses);
+          if (horses.length) {
+            console.log(`✅ Parsed ${horses.length} horses`);
+            await populateFormFromParsed(horses);
+            toast(`Filled ${horses.length} horses`, "success");
+          } else {
+            console.warn("⚠️ No horses parsed", data);
+            toast("No horses parsed (see console)", "error");
+            alert(`No horses parsed.\n\n${JSON.stringify(data, null, 2)}`);
+          }
         }
       } catch (e) {
         console.error("❌ Extract failed (timeout/network):", e);
