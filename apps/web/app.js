@@ -481,17 +481,20 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Helper: fetch with timeout
+    // Client-side timeout helper with AbortController (hard timeout)
     async function fetchWithTimeout(resource, options = {}, timeoutMs = 25000) {
       const controller = new AbortController();
-      const t = setTimeout(() => controller.abort(), timeoutMs);
+      const id = setTimeout(() => controller.abort(), timeoutMs);
       try {
-        const resp = await fetch(resource, { ...options, signal: controller.signal });
-        clearTimeout(t);
-        return resp;
-      } catch (e) {
-        clearTimeout(t);
-        throw e;
+        return await fetch(resource, { ...options, signal: controller.signal });
+      } finally {
+        clearTimeout(id);
       }
+    }
+    
+    // Alert helper to show raw payload for debugging
+    function alertRaw(title, raw) {
+      alert(`${title}\n\nRAW:\n${raw.substring(0, 4000)}`);
     }
     
     // Guarded Extract function with in-flight protection
@@ -518,26 +521,39 @@ document.addEventListener('DOMContentLoaded', function() {
       }
 
       extractInFlight = true;
+      const originalLabel = btn?.textContent || "Extract from Photos";
       if (btn) {
         btn.disabled = true;
         btn.textContent = "Extracting…";
       }
 
+      console.time("extract_total");
       try {
+        // Step 1: Read file to data URL
+        console.time("read_file");
         const dataURL = await fileToDataURL(f);
-        const payload = { filename: f.name, mime: f.type || "image/png", data_b64: dataURL };
+        console.timeEnd("read_file");
 
+        const payload = { filename: f.name, mime: f.type || "image/png", data_b64: dataURL };
         console.log("📤 OCR upload (b64):", payload.filename, payload.mime);
 
+        // Step 2: Fetch with timeout
+        console.time("fetch_ocr");
         const resp = await fetchWithTimeout("/api/finishline/photo_extract_openai_b64", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify(payload)
         }, 25000);
+        console.timeEnd("fetch_ocr");
 
-        // Read raw text FIRST so we can always see exactly what came back
+        // Step 3: Read response body
+        console.time("read_body");
         const raw = await resp.text();
+        console.timeEnd("read_body");
         console.log("📥 Raw OCR response:", raw);
+
+        // SHOW RAW PAYLOAD FOR DEBUGGING (remove after diagnosis)
+        alertRaw("Server responded", raw);
 
         // Try to parse as JSON
         let data;
@@ -569,14 +585,15 @@ document.addEventListener('DOMContentLoaded', function() {
           alert(`No horses parsed.\nServer response:\n${JSON.stringify(data, null, 2)}`);
         }
       } catch (e) {
-        console.error("❌ Extract failed (timeout or network):", e);
-        toast("Extract timed out or was blocked", "error");
-        alert("Extraction timed out or was blocked. See console for details.");
+        console.error("❌ Extract failed (timeout/network):", e);
+        toast("Extract failed", "error");
+        alert(`Extraction failed: ${String(e?.message || e)}`);
       } finally {
+        console.timeEnd("extract_total");
         extractInFlight = false;
         if (btn) {
           btn.disabled = false;
-          btn.textContent = "Extract from Photos";
+          btn.textContent = originalLabel;
         }
       }
     }
