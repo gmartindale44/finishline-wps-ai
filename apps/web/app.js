@@ -1066,20 +1066,20 @@ document.addEventListener('DOMContentLoaded', function() {
         return { ok: resp.ok, status: resp.status, statusText: resp.statusText, data, raw };
       }
 
-      // Progress helper (works for both Analyze and Predict buttons)
+      // Legacy progress helper (deprecated - use startProgress/finishProgress)
       function updateProgress(pct, btnEl) {
         if (btnEl && pct >= 0 && pct <= 100) {
           const isPredict = btnEl.id && (btnEl.id.includes('Predict') || btnEl.id.includes('predict'));
           const label = isPredict ? 'Predicting' : 'Analyzing';
           btnEl.textContent = `${label} ${pct}%`;
-          btnEl.style.background = `linear-gradient(90deg, rgba(139,92,246,0.5) ${pct}%, transparent ${pct}%)`;
+          btnEl.style.setProperty('--pct', pct + '%');
         }
       }
       
       function clearProgress(btnEl, originalText) {
         if (btnEl) {
           btnEl.textContent = originalText;
-          btnEl.style.background = '';
+          btnEl.style.setProperty('--pct', '0%');
         }
       }
       
@@ -1175,9 +1175,8 @@ document.addEventListener('DOMContentLoaded', function() {
             return alert("Please run 'Analyze Photos with AI' first.\n\nYou'll see a green 'Analysis Ready ✓' badge.");
           }
 
-          const old = btnPredict.textContent;
-          btnPredict.disabled = true;
-          updateProgress(25, btnPredict);  // Initial progress
+          const timeoutMs = 35000;
+          startProgress(btnPredict, 'Predicting', timeoutMs);
 
           // Final pass
           const payload = {
@@ -1190,32 +1189,15 @@ document.addEventListener('DOMContentLoaded', function() {
           };
 
           try {
-            // Start predict call
-            const predictPromise = callResearch(payload);
-            
-            // Simulate progress updates (visual feedback)
-            const progressInterval = setInterval(() => {
-              const now = Date.now();
-              const startTime = Date.now();
-              const elapsed = now - (FL.predictStartTime || startTime);
-              const progress = Math.min(99, 25 + Math.floor((elapsed / (payload.timeout_ms || 35000)) * 74));
-              updateProgress(progress, btnPredict);
-            }, 2000);
-            
-            FL.predictStartTime = Date.now();
-            
-            let { ok, status, statusText, data, raw } = await predictPromise;
-            clearInterval(progressInterval);
-            updateProgress(100, btnPredict);  // Complete
+            let { ok, status, statusText, data, raw } = await callResearch(payload);
             
             // Ask user if we should retry with stub on timeout
             if (!ok && status === 504 && payload.provider === "websearch") {
-              clearProgress(btnPredict, old);
+              resetButton(btnPredict);
               if (confirm("Final pass timed out with websearch. Retry once with stub?")) {
-                updateProgress(25, btnPredict);
+                startProgress(btnPredict, 'Predicting (stub)', 12000);
                 const fallback = { ...payload, provider: "stub", timeout_ms: 12000 };
                 ({ ok, status, statusText, data, raw } = await callResearch(fallback));
-                updateProgress(100, btnPredict);
               }
             }
 
@@ -1227,11 +1209,10 @@ document.addEventListener('DOMContentLoaded', function() {
             // Render predictions
             console.log("✅ Predictions:", data);
             displayResults(data);
+            finishProgress(btnPredict, 'Prediction Complete');
           } catch (e) {
             alert(`Predict errored: ${String(e?.message||e)}`);
-          } finally {
-            btnPredict.disabled = false;
-            clearProgress(btnPredict, old);
+            resetButton(btnPredict);
           }
         });
       }

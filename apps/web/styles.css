@@ -565,16 +565,47 @@ footer strong {
   100% { content: ' '; }
 }
 
-/* ===== PROGRESS FILL FOR ANALYZE/PREDICT BUTTONS ===== */
+/* ===== PROGRESS FILL FOR ANALYZE/PREDICT/EXTRACT BUTTONS ===== */
 
+#btn-extract,
 #btnAnalyze,
 #btnPredict,
 #btn-analyze,
 #btn-predict {
   position: relative;
   overflow: hidden;
-  transition: background 0.12s linear;
+  background-image:
+    linear-gradient(135deg, var(--accent-purple), var(--accent-blue)),
+    linear-gradient(to right, rgba(56,189,248,.30), rgba(56,189,248,.30));
+  background-origin: border-box, border-box;
+  background-clip: padding-box, padding-box;
+  background-repeat: no-repeat, no-repeat;
+  background-size: 100% 100%, var(--pct, 0%) 100%;
+  background-position: 0 0, 0 0;
+  transition: background-size .12s linear, filter .2s ease;
 }
 
-/* Progress bar will be set via inline style with linear-gradient */
-/* Button text will show "Analyzing X%" or "Predicting X%" */
+button.is-working { 
+  filter: saturate(1.1) brightness(1.02); 
+}
+
+button.is-done { 
+  background-image:
+    linear-gradient(135deg, #16a34a, #22c55e), 
+    linear-gradient(to right, #16a34a33, #22c55e33);
+}
+
+button .pct { 
+  opacity: .9; 
+  font-variant-numeric: tabular-nums; 
+}
+
+button .check { 
+  margin-left: .35rem; 
+  font-weight: 800; 
+  color: #fff;
+}
+
+.badge.ok { 
+  color: #22c55e; 
+}
