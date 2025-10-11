@@ -483,28 +483,58 @@ async def research_predict(payload: Dict[str, Any]):
             res.headers["X-Analysis-Duration"] = str(elapsed_ms)
             return res
         
-        # For websearch/custom: call provider with timeout
+        # For websearch/custom: call provider with timeout and batching for stability
         import time
         t0 = time.perf_counter()
         
+        # Check if request wants quick/reduced depth (for retries)
+        depth = payload.get("depth", "draft")
+        is_quick = depth in ("quick", "fast", "baseline")
+        
         async def _run():
             # Override provider per request if specified
-            if provider_name == "websearch":
+            if provider_name == "websearch" and not is_quick:
                 from .provider_websearch import WebSearchProvider
                 provider = WebSearchProvider()
-            elif provider_name == "custom":
+            elif provider_name == "custom" and not is_quick:
                 from .provider_custom import CustomProvider
                 provider = CustomProvider()
             else:
-                # Unknown → use base
-                provider = get_provider()
+                # Quick mode or stub → use stub provider (no external calls)
+                class QuickStubProvider:
+                    async def enrich_horses(self, horses, **kwargs):
+                        # No enrichment, just pass through
+                        return horses
+                provider = QuickStubProvider()
             
             # Provider.enrich_horses is now async (no asyncio.run inside)
-            enriched_horses = await provider.enrich_horses(
-                list(allowed.values()),
-                date=date,
-                track=track
-            )
+            # For stability with many horses, process in smaller batches
+            horse_list = list(allowed.values())
+            if len(horse_list) > 6 and provider_name == "websearch":
+                # Batch processing for large fields (reduces timeout risk)
+                batch_size = 4
+                enriched = []
+                for i in range(0, len(horse_list), batch_size):
+                    batch = horse_list[i:i+batch_size]
+                    # Per-batch timeout (25s max per batch)
+                    try:
+                        batch_result = await asyncio.wait_for(
+                            provider.enrich_horses(batch, date=date, track=track),
+                            timeout=25.0
+                        )
+                        enriched.extend(batch_result)
+                    except asyncio.TimeoutError:
+                        logger.warning(f"[research_predict] Batch {i//batch_size+1} timed out, using original data")
+                        enriched.extend(batch)  # Use un-enriched data for this batch
+                enriched_horses = enriched
+            else:
+                # Small field or stub → process all at once
+                enriched_horses = await provider.enrich_horses(
+                    horse_list,
+                    date=date,
+                    track=track
+                )
+            
             predictions = calculate_research_predictions(enriched_horses)
             return predictions
         

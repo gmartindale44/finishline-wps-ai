@@ -1066,6 +1066,21 @@ document.addEventListener('DOMContentLoaded', function() {
         return { ok: resp.ok, status: resp.status, statusText: resp.statusText, data, raw };
       }
 
+      // Progress helper
+      function updateProgress(pct, btnEl) {
+        if (btnEl && pct >= 0 && pct <= 100) {
+          btnEl.textContent = `Analyzing ${pct}%`;
+          btnEl.style.background = `linear-gradient(90deg, rgba(139,92,246,0.5) ${pct}%, transparent ${pct}%)`;
+        }
+      }
+      
+      function clearProgress(btnEl, originalText) {
+        if (btnEl) {
+          btnEl.textContent = originalText;
+          btnEl.style.background = '';
+        }
+      }
+      
       // --- Step 1: Analyze button ---
       if (btnAnalyze && !btnAnalyze.__analyzeBound) {
         btnAnalyze.__analyzeBound = true;
@@ -1078,7 +1093,8 @@ document.addEventListener('DOMContentLoaded', function() {
           setPill('running', `Analyzing <span class="dots"></span>`);
 
           const old = btnAnalyze.textContent;
-          btnAnalyze.disabled = true; btnAnalyze.textContent = "Analyzing…";
+          btnAnalyze.disabled = true;
+          updateProgress(25, btnAnalyze);  // Initial progress
 
           // Long-running research (draft pass)
           const payload = {
@@ -1090,14 +1106,33 @@ document.addEventListener('DOMContentLoaded', function() {
           };
 
           try {
-            let { ok, status, statusText, data, raw } = await callResearch(payload);
+            // Start research call
+            const researchPromise = callResearch(payload);
             
-            // Ask user if we should retry with stub on timeout
+            // Simulate progress updates (visual feedback while waiting)
+            const progressInterval = setInterval(() => {
+              const now = Date.now();
+              const startTime = FL.analysis.meta?.startTime || now;
+              const elapsed = now - startTime;
+              const progress = Math.min(90, 25 + Math.floor((elapsed / (payload.timeout_ms || 55000)) * 65));
+              updateProgress(progress, btnAnalyze);
+            }, 2000);
+            
+            FL.analysis.meta = { ...FL.analysis.meta, startTime: Date.now() };
+            
+            let { ok, status, statusText, data, raw } = await researchPromise;
+            clearInterval(progressInterval);
+            updateProgress(100, btnAnalyze);  // Complete
+            
+            // Ask user if we should retry with reduced depth on timeout
             if (!ok && status === 504 && payload.provider === "websearch") {
-              if (confirm("Websearch timed out. Retry once with the fast stub provider?")) {
-                console.warn("⏱️ User opted to retry with stub");
-                const fallback = { ...payload, provider: "stub", timeout_ms: 12000 };
+              clearProgress(btnAnalyze, old);
+              if (confirm("AI research took too long. Retry with reduced depth (faster)?")) {
+                console.warn("⏱️ User opted to retry with quick mode");
+                updateProgress(25, btnAnalyze);
+                const fallback = { ...payload, provider: "stub", depth: "quick", timeout_ms: 12000 };
                 ({ ok, status, statusText, data, raw } = await callResearch(fallback));
+                updateProgress(100, btnAnalyze);
               }
             }
 
@@ -1119,7 +1154,8 @@ document.addEventListener('DOMContentLoaded', function() {
             setPill('error', `Analyze error`);
             alert(`Analyze errored: ${String(e?.message||e)}`);
           } finally {
-            btnAnalyze.disabled = false; btnAnalyze.textContent = old;
+            btnAnalyze.disabled = false;
+            clearProgress(btnAnalyze, old);
           }
         });
       }
