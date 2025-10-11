@@ -1197,14 +1197,14 @@ document.addEventListener('DOMContentLoaded', function() {
             return alert("Please run 'Analyze Photos with AI' first.\n\nYou'll see a green 'Analysis Ready ✓' badge.");
           }
 
-          const timeoutMs = 35000;
+          const timeoutMs = 50000;  // INCREASED: 50s for predict verify (was 35s)
           startProgress(btnPredict, 'Predicting', timeoutMs);
 
-          // Final pass
+          // Final pass (predict/verify phase) - INCREASED TIMEOUT
           const payload = {
             horses, race_context: ctx, useResearch: true,
             provider: chosenProvider(),  // Reuse toggle
-            timeout_ms: 35000,           // ~35s final verification window
+            timeout_ms: 50000,           // 50s final verification (increased from 35s)
             phase: "final",
             depth: "final",
             prior_analysis: FL.analysis.result || null
@@ -1213,13 +1213,22 @@ document.addEventListener('DOMContentLoaded', function() {
           try {
             let { ok, status, statusText, data, raw } = await callResearch(payload);
             
-            // Ask user if we should retry with stub on timeout
+            // Auto-retry with reduced verify window on timeout
             if (!ok && status === 504 && payload.provider === "websearch") {
+              console.warn("⏱️ Predict timeout, auto-retry with reduced verify window (35s)...");
               resetButton(btnPredict);
-              if (confirm("Final pass timed out with websearch. Retry once with stub?")) {
-                startProgress(btnPredict, 'Predicting (stub)', 12000);
-                const fallback = { ...payload, provider: "stub", timeout_ms: 12000 };
-                ({ ok, status, statusText, data, raw } = await callResearch(fallback));
+              startProgress(btnPredict, 'Predicting (reduced)', 35000);
+              const reducedPayload = { ...payload, timeout_ms: 35000 };
+              ({ ok, status, statusText, data, raw } = await callResearch(reducedPayload));
+              
+              // If still failing, offer stub fallback
+              if (!ok && status === 504) {
+                resetButton(btnPredict);
+                if (confirm("Reduced verify timed out. Use instant stub fallback?")) {
+                  startProgress(btnPredict, 'Predicting (stub)', 12000);
+                  const fallback = { ...payload, provider: "stub", timeout_ms: 12000 };
+                  ({ ok, status, statusText, data, raw } = await callResearch(fallback));
+                }
               }
             }
 
