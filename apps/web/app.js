@@ -629,11 +629,13 @@ document.addEventListener('DOMContentLoaded', function() {
       return { name, odds, bankroll, kelly, trainer, jockey };
     }
 
-    // Canonical writer using cloning strategy
+    // Canonical writer using cloning strategy with visual feedback
     async function populateFormFromParsed(parsed) {
       const horses = coerceHorsesArray(parsed).filter(h => (h?.name || "").trim());
       if (!horses.length) { console.warn("populateFormFromParsed: empty"); return; }
+
       await ensureRowCountByCloning(horses.length);
+
       for (let i = 0; i < horses.length; i++) {
         const h = horses[i] || {};
         const f = getRowInputsByIndex(i);
@@ -643,8 +645,29 @@ document.addEventListener('DOMContentLoaded', function() {
         if (f.kelly)    f.kelly.value    = (h.kelly_fraction ?? 0.25);
         if (f.trainer)  f.trainer.value  = h.trainer ?? "";
         if (f.jockey)   f.jockey.value   = h.jockey ?? "";
+
+        // Briefly highlight the populated row to draw attention
+        const rowEl = getRowContainers()[i];
+        if (rowEl) {
+          rowEl.classList.add("filled-flash");
+          setTimeout(() => rowEl.classList.remove("filled-flash"), 1000);
+        }
       }
+
       console.log(`📝 Filled ${horses.length} rows via cloning.`);
+
+      // Smooth scroll to the horses section
+      const card = document.getElementById("horse-card");
+      if (card?.scrollIntoView) card.scrollIntoView({ behavior: "smooth", block: "start" });
+
+      // Minimal toast message
+      (function showToast(msg){
+        const el = document.createElement("div");
+        el.textContent = msg;
+        el.style.cssText = `position:fixed;bottom:16px;right:16px;padding:10px 12px;border-radius:10px;
+          background:#2563eb;color:white;z-index:9999;box-shadow:0 6px 20px rgba(0,0,0,.25);font-size:14px`;
+        document.body.appendChild(el); setTimeout(()=>el.remove(), 2200);
+      })(`Filled ${horses.length} horses`);
     }
 
     async function callPhotoExtract(fd){
