@@ -832,19 +832,48 @@ document.addEventListener('DOMContentLoaded', function() {
       
       try {
         const r = await fetch(`${base}/${endpoint}`, { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify(payload) });
+        
+        // Always read raw body first for debugging
+        const raw = await r.text();
+        console.log(`📥 Predict raw (${r.status}):`, raw);
+        
         if (!r.ok) {
-          const text = await r.text().catch(() => "");
-          const preview = text.substring(0, 160);
-          console.error("predict error", r.status, text);
-          toast(`Prediction failed (${r.status}): ${preview}`, "error");
+          // Try to parse as JSON error
+          let errorData = null;
+          try { errorData = JSON.parse(raw); } catch {}
+          
+          if (errorData?.error) {
+            // Structured error from backend
+            const msg = errorData.error;
+            const hint = errorData.hint ? `\n\n💡 ${errorData.hint}` : "";
+            const fix = errorData.how_to_fix ? `\n\n🔧 Fix: ${errorData.how_to_fix}` : "";
+            console.error(`❌ Predict ${r.status}:`, errorData);
+            toast(`Analyze failed (${r.status})`, "error");
+            alert(`Analyze failed (${r.status})\n\n${msg}${hint}${fix}`);
+          } else {
+            // Fallback to raw text
+            const preview = raw.substring(0, 300);
+            console.error("predict error", r.status, raw);
+            toast(`Prediction failed (${r.status})`, "error");
+            alert(`Prediction failed (${r.status})\n\n${preview}`);
+          }
           return;
         }
-        const j = await r.json();
-        console.log(`[FinishLine] ${endpoint} response:`, j);
-        displayResults(j);
+        
+        // Success path
+        let data = null;
+        try { data = JSON.parse(raw); } catch {}
+        if (!data) {
+          alert("Predict returned non-JSON. See console.");
+          return;
+        }
+        
+        console.log(`✅ ${endpoint} response:`, data);
+        displayResults(data);
       } catch (e) {
         console.error(e);
         toast(`Prediction error: ${e.message}`, "error");
+        alert(`Prediction error: ${e.message}`);
       }
     }
     

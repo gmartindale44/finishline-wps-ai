@@ -51,13 +51,23 @@ async def debug_info():
     """
     Debug info endpoint - returns safe runtime configuration (no secrets)
     """
+    provider_name = os.getenv("FINISHLINE_DATA_PROVIDER", "stub").strip().lower()
+    has_tavily = bool(os.getenv("FINISHLINE_TAVILY_API_KEY", "").strip())
+    has_openai = bool(os.getenv("FINISHLINE_OPENAI_API_KEY", "").strip() or os.getenv("OPENAI_API_KEY", "").strip())
+    timeout_ms = int(os.getenv("FINISHLINE_PROVIDER_TIMEOUT_MS", "25000"))
+    
     return {
         "allowed_origins": allow_origins,
-        "provider": os.getenv("FINISHLINE_DATA_PROVIDER", "stub"),
+        "provider": provider_name,
         "ocr_enabled": os.getenv("FINISHLINE_OCR_ENABLED", "true"),
-        "openai_model": os.getenv("FINISHLINE_OPENAI_MODEL", "unset"),
-        "tavily_present": bool(os.getenv("FINISHLINE_TAVILY_API_KEY")),
-        "openai_present": bool(os.getenv("FINISHLINE_OPENAI_API_KEY"))
+        "openai_model": os.getenv("FINISHLINE_OPENAI_MODEL", "gpt-4o-mini"),
+        "tavily_present": has_tavily,
+        "openai_present": has_openai,
+        "provider_timeout_ms": timeout_ms,
+        "websearch_ready": provider_name == "websearch" and has_tavily and has_openai,
+        "hints": {
+            "websearch_provider_needs": ["FINISHLINE_TAVILY_API_KEY", "FINISHLINE_OPENAI_API_KEY"]
+        }
     }
 
 # Explicit OPTIONS handler (belt-and-suspenders with some edge clients)
@@ -326,7 +336,15 @@ async def research_predict(payload: Dict[str, Any]):
     Strictly limited to horses provided in the request (no off-list suggestions).
     """
     import logging
+    import traceback
+    import asyncio
     logger = logging.getLogger("finishline")
+    
+    # Provider prechecks
+    provider_name = os.getenv("FINISHLINE_DATA_PROVIDER", "stub").strip().lower()
+    has_tavily = bool(os.getenv("FINISHLINE_TAVILY_API_KEY", "").strip())
+    has_openai = bool(os.getenv("FINISHLINE_OPENAI_API_KEY", "").strip() or os.getenv("OPENAI_API_KEY", "").strip())
+    timeout_ms = int(os.getenv("FINISHLINE_PROVIDER_TIMEOUT_MS", "25000"))
     
     try:
         horses = payload.get("horses", [])
@@ -335,7 +353,7 @@ async def research_predict(payload: Dict[str, Any]):
         
         if not horses:
             return JSONResponse(
-                {"error": "No horses provided"},
+                {"error": "No horses provided", "hint": "Fill the form first using Extract from Photos or Add Horse."},
                 status_code=400
             )
         
@@ -343,7 +361,24 @@ async def research_predict(payload: Dict[str, Any]):
         allowed = {(h.get("name") or "").strip(): h for h in horses if (h.get("name") or "").strip()}
         if not allowed:
             return JSONResponse(
-                {"error": "No valid horses provided"},
+                {"error": "All horses are missing names", "hint": "Each row needs a horse name."},
+                status_code=400
+            )
+        
+        # Cap list to reasonable size
+        if len(allowed) > 20:
+            logger.warning(f"[research_predict] Capping {len(allowed)} horses to 20")
+            allowed = dict(list(allowed.items())[:20])
+        
+        # Provider-specific validation
+        if use_research and provider_name == "websearch" and not has_tavily:
+            return JSONResponse(
+                {
+                    "error": "Websearch provider requires FINISHLINE_TAVILY_API_KEY",
+                    "provider": provider_name,
+                    "has_tavily_key": False,
+                    "how_to_fix": "Set FINISHLINE_TAVILY_API_KEY in Vercel env or switch FINISHLINE_DATA_PROVIDER=stub"
+                },
                 status_code=400
             )
         
@@ -353,23 +388,22 @@ async def research_predict(payload: Dict[str, Any]):
         surface = race_context.get("surface", "dirt")
         distance = race_context.get("distance", "")
         
-        logger.info(f"[research_predict] horses={list(allowed.keys())} track={track} useResearch={use_research}")
+        logger.info(f"[research_predict] horses={list(allowed.keys())} track={track} provider={provider_name} useResearch={use_research}")
         
-        # Get configured provider
-        provider = get_provider()
+        # Get configured provider with timeout
+        async def _run():
+            provider = get_provider()
+            enriched_horses = provider.enrich_horses(
+                list(allowed.values()),
+                date=date,
+                track=track
+            )
+            predictions = calculate_research_predictions(enriched_horses)
+            return predictions
         
-        # Enrich horses with research data
-        enriched_horses = provider.enrich_horses(
-            horses,
-            date=date,
-            track=track
-        )
-        
-        # Calculate research-enhanced predictions
-        predictions = calculate_research_predictions(enriched_horses)
+        predictions = await asyncio.wait_for(_run(), timeout=timeout_ms / 1000.0)
         
         # CRITICAL: Ensure predictions only reference horses from the allowed list
-        # Filter any off-list suggestions
         win_name = predictions.get("win", {}).get("name", "")
         place_name = predictions.get("place", {}).get("name", "")
         show_name = predictions.get("show", {}).get("name", "")
@@ -398,11 +432,29 @@ async def research_predict(payload: Dict[str, Any]):
             }
         }
     
+    except asyncio.TimeoutError:
+        logger.error(f"[research_predict] timeout after {timeout_ms}ms")
+        return JSONResponse(
+            {
+                "error": "Research timed out",
+                "timeout_ms": timeout_ms,
+                "provider": provider_name
+            },
+            status_code=504
+        )
     except Exception as e:
+        tb = traceback.format_exc()
         logger.exception("[research_predict] exception")
         return JSONResponse(
-            status_code=500, 
-            content={"error": "research_predict_failed", "detail": str(e)}
+            status_code=500,
+            content={
+                "error": "research_predict_failed",
+                "detail": str(e),
+                "traceback": tb.splitlines()[-6:],  # tail for brevity
+                "provider": provider_name,
+                "has_tavily_key": has_tavily,
+                "has_openai_key": has_openai
+            }
         )
 
 if __name__ == "__main__":
