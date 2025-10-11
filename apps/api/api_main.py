@@ -4,6 +4,39 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from typing import List, Dict, Any, Optional
 import json
 import os
+import logging
+import time
+import uuid
+import traceback
+
+# Set up logging
+log = logging.getLogger(__name__)
+
+# Import error utilities (with fallback)
+try:
+    from .error_utils import ApiError, json_error, validate_base64_size
+except ImportError:
+    # Fallback if import fails
+    class ApiError(Exception):
+        def __init__(self, status, message, code="internal", extra=None):
+            self.status = status
+            self.message = message
+            self.code = code
+            self.extra = extra or {}
+            super().__init__(message)
+    
+    def json_error(status, message, code, req_id=None, elapsed_ms=None, **extra):
+        payload = {"ok": False, "error": message, "code": code, **extra}
+        if req_id: payload["reqId"] = req_id
+        if elapsed_ms is not None: payload["elapsed_ms"] = elapsed_ms
+        return JSONResponse(payload, status_code=status)
+    
+    def validate_base64_size(data, max_mb=6.0):
+        size_mb = (len(data) * 3 / 4) / (1024 * 1024)
+        if size_mb > max_mb:
+            raise ApiError(413, f"File too large ({size_mb:.2f}MB). Max {max_mb}MB.", "payload_too_large")
+
+# Import other modules
 from .odds import ml_to_fraction, ml_to_prob
 from .scoring import calculate_predictions
 from .ocr_stub import analyze_photos
