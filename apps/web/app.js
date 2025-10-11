@@ -479,6 +479,24 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     }
 
+    // Ensure a specific row index exists (creates rows one by one as needed)
+    async function ensureRowAtIndex(i) {
+      const addBtn = findAddHorseButton();
+      if (!addBtn) {
+        console.warn("Add Horse button not found; cannot create rows");
+        return;
+      }
+      // Click until we have at least i+1 rows
+      for (let guard = 0; guard < 200; guard++) {
+        const have = countHorseRows();
+        if (have >= i + 1) return;
+        addBtn.click();
+        // small delay for DOM to insert
+        await new Promise(r => setTimeout(r, 30));
+      }
+      console.warn("ensureRowAtIndex: hit guard before creating row", i);
+    }
+
     // Given a row element, return the best-guess inputs
     function pickRowFields(rowEl) {
       const pick = (selArr) => {
@@ -543,24 +561,24 @@ document.addEventListener('DOMContentLoaded', function() {
       };
     }
 
-    // Canonical writer that uses the REAL UI rows
+    // Canonical writer that uses the REAL UI rows (row-by-row creation)
     async function populateFormFromParsed(parsed) {
       const horses = coerceHorsesArray(parsed).filter(h => (h?.name || "").trim());
-      if (!horses.length) { console.warn("populateFormFromParsed: empty list"); return; }
-
-      await ensureUiRowCount(horses.length);
+      if (!horses.length) { console.warn("populateFormFromParsed: empty"); return; }
 
       for (let i = 0; i < horses.length; i++) {
         const h = horses[i] || {};
+        // Create row i on demand (vs trying to create all up front)
+        await ensureRowAtIndex(i);
         const f = getRowInputs(i);
-        if (f.name)  f.name.value  = h.name ?? "";
-        if (f.odds)  f.odds.value  = normalizeFractionalOdds(h.odds ?? h.ml_odds ?? "");
+        if (f.name)    f.name.value    = h.name ?? "";
+        if (f.odds)    f.odds.value    = normalizeFractionalOdds(h.odds ?? h.ml_odds ?? "");
         if (f.trainer) f.trainer.value = h.trainer ?? "";
         if (f.jockey)  f.jockey.value  = h.jockey ?? "";
         if (f.bankroll) f.bankroll.value = h.bankroll ?? 1000;
         if (f.kelly)    f.kelly.value    = h.kelly_fraction ?? 0.25;
       }
-      console.log(`📝 Wrote ${horses.length} rows via placeholders.`);
+      console.log(`📝 Wrote ${horses.length} rows (row-by-row creation).`);
     }
 
     async function callPhotoExtract(fd){
