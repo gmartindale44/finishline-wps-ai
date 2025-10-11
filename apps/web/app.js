@@ -516,7 +516,7 @@ document.addEventListener('DOMContentLoaded', function() {
       return { name, odds, bnkr, kelly, trainer, jockey };
     }
 
-    // Normalize ML odds like "3-1", "3 to 1" → "3/1"
+    // Normalize ML odds like "7-2", "7 to 2", "7:2" -> "7/2"
     function normalizeFractionalOdds(raw) {
       if (!raw) return "";
       let s = String(raw).trim().toUpperCase()
@@ -527,7 +527,7 @@ document.addEventListener('DOMContentLoaded', function() {
       return m ? `${parseInt(m[1],10)}/${parseInt(m[2],10)}` : s;
     }
 
-    // Coerce data.horses to an array (handles stringified JSON)
+    // Coerce horses[] even if backend serialized it as a string
     function coerceHorsesArray(horses) {
       if (Array.isArray(horses)) return horses;
       if (typeof horses === "string") {
@@ -536,49 +536,115 @@ document.addEventListener('DOMContentLoaded', function() {
       return [];
     }
 
-    // Count rows by counting "Horse Name" inputs (uses placeholder as stable selector)
-    function countHorseRows() {
-      return document.querySelectorAll('input[placeholder="Horse Name"]').length;
+    // ---------- Row discovery / cloning ----------
+    // Get the first row's inputs (used as the cloning template)
+    function getFirstRowInputs() {
+      const name = document.querySelector('input[placeholder="Horse Name"]');
+      const odds = document.querySelector('input[placeholder^="ML Odds"]');
+      const bankroll = document.querySelector('input[type="number"][value="1000"]') ||
+                       document.querySelector('input[type="number"]');
+      const kelly = document.querySelector('input[type="number"][value="0.25"]') ||
+                    document.querySelector('input[type="number"]');
+      return { name, odds, bankroll, kelly };
     }
 
-    // Get inputs for a given row index using placeholders (most stable in your markup)
-    function getRowInputs(i) {
-      const names  = Array.from(document.querySelectorAll('input[placeholder="Horse Name"]'));
-      const odds   = Array.from(document.querySelectorAll('input[placeholder^="ML Odds"]'));
-      // Trainer/Jockey placeholders might not exist yet — try common variants
-      const trainers = Array.from(document.querySelectorAll('input[placeholder="Trainer"], input[placeholder*="Trainer" i]'));
-      const jockeys  = Array.from(document.querySelectorAll('input[placeholder="Jockey"], input[placeholder*="Jockey" i]'));
-      const bankrolls = Array.from(document.querySelectorAll('input[type="number"]')).filter(el => /1000/.test(el.value) || /bank/i.test(el.name || ""));
-      const kellys    = Array.from(document.querySelectorAll('input[type="number"]')).filter(el => /0\.25/.test(el.value) || /kelly/i.test(el.name || ""));
-
-      return {
-        name: names[i] || null,
-        odds: odds[i]  || null,
-        trainer: trainers[i] || null,
-        jockey:  jockeys[i]  || null,
-        bankroll: bankrolls[i] || null,
-        kelly:    kellys[i]    || null,
-      };
+    // Find the DOM container that holds one "row" by walking up from the name input
+    function findRowContainerFrom(el) {
+      if (!el) return null;
+      let node = el;
+      for (let i = 0; i < 8 && node; i++) {
+        const hasName = node.querySelector?.('input[placeholder="Horse Name"]');
+        const hasOdds = node.querySelector?.('input[placeholder^="ML Odds"]');
+        const nums = node.querySelectorAll?.('input[type="number"]');
+        if (hasName && hasOdds && nums?.length >= 2) return node;
+        node = node.parentElement;
+      }
+      return null;
     }
 
-    // Canonical writer that uses the REAL UI rows (row-by-row creation)
+    // Where to append new rows? -> directly after the last existing row container
+    function findRowsParent(rowContainer) {
+      return rowContainer?.parentElement || rowContainer;
+    }
+
+    // Count current rows by counting row containers
+    function getRowContainers() {
+      const first = findRowContainerFrom(getFirstRowInputs().name);
+      if (!first) return [];
+      const parent = findRowsParent(first);
+      return Array.from(parent.children).filter(el =>
+        el.querySelector?.('input[placeholder="Horse Name"]') &&
+        el.querySelector?.('input[placeholder^="ML Odds"]')
+      );
+    }
+
+    // Clone the first row container, clear inputs, append after last row
+    function cloneRow() {
+      const firstInputs = getFirstRowInputs();
+      const firstRow = findRowContainerFrom(firstInputs.name);
+      const parent = findRowsParent(firstRow);
+      if (!firstRow || !parent) {
+        console.warn("Could not locate row template/parent for cloning.");
+        return null;
+      }
+      const clone = firstRow.cloneNode(true);
+      // Clear inputs in the clone
+      clone.querySelectorAll("input").forEach(inp => {
+        if (inp.type === "checkbox" || inp.type === "radio") {
+          inp.checked = false;
+        } else if (inp.type === "number") {
+          // keep bankroll/kelly defaults if they look like defaults
+          if (inp.value !== "1000" && inp.value !== "0.25") inp.value = "";
+        } else {
+          inp.value = "";
+        }
+      });
+      parent.appendChild(clone);
+      return clone;
+    }
+
+    // Ensure at least n rows exist by cloning the first row
+    async function ensureRowCountByCloning(n) {
+      for (let guard = 0; guard < 100; guard++) {
+        const rows = getRowContainers();
+        if (rows.length >= n) return;
+        cloneRow();
+        await new Promise(r => setTimeout(r, 10));
+      }
+      console.warn("Row cloning guard hit before reaching desired count:", n);
+    }
+
+    // Retrieve inputs for row i (after cloning)
+    function getRowInputsByIndex(i) {
+      const rows = getRowContainers();
+      const row = rows[i];
+      if (!row) return {};
+      const name     = row.querySelector('input[placeholder="Horse Name"]');
+      const odds     = row.querySelector('input[placeholder^="ML Odds"]');
+      const trainer  = row.querySelector('input[placeholder="Trainer"], input[placeholder*="Trainer" i]') || null;
+      const jockey   = row.querySelector('input[placeholder="Jockey"], input[placeholder*="Jockey" i]') || null;
+      const numbers  = Array.from(row.querySelectorAll('input[type="number"]'));
+      const bankroll = numbers[0] || null;
+      const kelly    = numbers[1] || null;
+      return { name, odds, bankroll, kelly, trainer, jockey };
+    }
+
+    // Canonical writer using cloning strategy
     async function populateFormFromParsed(parsed) {
       const horses = coerceHorsesArray(parsed).filter(h => (h?.name || "").trim());
       if (!horses.length) { console.warn("populateFormFromParsed: empty"); return; }
-
+      await ensureRowCountByCloning(horses.length);
       for (let i = 0; i < horses.length; i++) {
         const h = horses[i] || {};
-        // Create row i on demand (vs trying to create all up front)
-        await ensureRowAtIndex(i);
-        const f = getRowInputs(i);
-        if (f.name)    f.name.value    = h.name ?? "";
-        if (f.odds)    f.odds.value    = normalizeFractionalOdds(h.odds ?? h.ml_odds ?? "");
-        if (f.trainer) f.trainer.value = h.trainer ?? "";
-        if (f.jockey)  f.jockey.value  = h.jockey ?? "";
-        if (f.bankroll) f.bankroll.value = h.bankroll ?? 1000;
-        if (f.kelly)    f.kelly.value    = h.kelly_fraction ?? 0.25;
+        const f = getRowInputsByIndex(i);
+        if (f.name)     f.name.value     = h.name ?? "";
+        if (f.odds)     f.odds.value     = normalizeFractionalOdds(h.odds ?? h.ml_odds ?? "");
+        if (f.bankroll) f.bankroll.value = (h.bankroll ?? 1000);
+        if (f.kelly)    f.kelly.value    = (h.kelly_fraction ?? 0.25);
+        if (f.trainer)  f.trainer.value  = h.trainer ?? "";
+        if (f.jockey)   f.jockey.value   = h.jockey ?? "";
       }
-      console.log(`📝 Wrote ${horses.length} rows (row-by-row creation).`);
+      console.log(`📝 Filled ${horses.length} rows via cloning.`);
     }
 
     async function callPhotoExtract(fd){
