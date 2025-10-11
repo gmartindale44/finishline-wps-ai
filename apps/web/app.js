@@ -466,20 +466,17 @@ document.addEventListener('DOMContentLoaded', function() {
       return nameInput ? [nameInput.closest("tr, .horse-row, [data-horse-row], .row")] : [];
     }
 
-    // Ensure at least n rows exist using the real Add Horse button
+    // Ensure at least n rows exist by clicking Add Horse
     async function ensureUiRowCount(n) {
       const addBtn = findAddHorseButton();
-      for (let safety=0; safety<50; safety++) {
-        const rows = getHorseRows();
-        if (rows.length >= n) return;
-        if (!addBtn) {
-          console.warn("Add Horse button not found; cannot create rows");
-          return;
-        }
-        addBtn.click();
-        await new Promise(r=>setTimeout(r, 30)); // give DOM a tick
+      if (!addBtn) {
+        console.warn("Add Horse button not found; cannot create rows");
+        return;
       }
-      console.warn("Row creation safety loop exited before reaching count:", n);
+      for (let guard = 0; guard < 100 && countHorseRows() < n; guard++) {
+        addBtn.click();
+        await new Promise(r => setTimeout(r, 30)); // allow DOM to inject the row
+      }
     }
 
     // Given a row element, return the best-guess inputs
@@ -521,6 +518,31 @@ document.addEventListener('DOMContentLoaded', function() {
       return [];
     }
 
+    // Count rows by counting "Horse Name" inputs (uses placeholder as stable selector)
+    function countHorseRows() {
+      return document.querySelectorAll('input[placeholder="Horse Name"]').length;
+    }
+
+    // Get inputs for a given row index using placeholders (most stable in your markup)
+    function getRowInputs(i) {
+      const names  = Array.from(document.querySelectorAll('input[placeholder="Horse Name"]'));
+      const odds   = Array.from(document.querySelectorAll('input[placeholder^="ML Odds"]'));
+      // Trainer/Jockey placeholders might not exist yet — try common variants
+      const trainers = Array.from(document.querySelectorAll('input[placeholder="Trainer"], input[placeholder*="Trainer" i]'));
+      const jockeys  = Array.from(document.querySelectorAll('input[placeholder="Jockey"], input[placeholder*="Jockey" i]'));
+      const bankrolls = Array.from(document.querySelectorAll('input[type="number"]')).filter(el => /1000/.test(el.value) || /bank/i.test(el.name || ""));
+      const kellys    = Array.from(document.querySelectorAll('input[type="number"]')).filter(el => /0\.25/.test(el.value) || /kelly/i.test(el.name || ""));
+
+      return {
+        name: names[i] || null,
+        odds: odds[i]  || null,
+        trainer: trainers[i] || null,
+        jockey:  jockeys[i]  || null,
+        bankroll: bankrolls[i] || null,
+        kelly:    kellys[i]    || null,
+      };
+    }
+
     // Canonical writer that uses the REAL UI rows
     async function populateFormFromParsed(parsed) {
       const horses = coerceHorsesArray(parsed).filter(h => (h?.name || "").trim());
@@ -528,22 +550,17 @@ document.addEventListener('DOMContentLoaded', function() {
 
       await ensureUiRowCount(horses.length);
 
-      const rows = Array.from(getHorseRows());
-      for (let i=0; i<horses.length; i++) {
+      for (let i = 0; i < horses.length; i++) {
         const h = horses[i] || {};
-        const row = rows[i];
-        if (!row) continue;
-
-        const f = pickRowFields(row);
+        const f = getRowInputs(i);
         if (f.name)  f.name.value  = h.name ?? "";
         if (f.odds)  f.odds.value  = normalizeFractionalOdds(h.odds ?? h.ml_odds ?? "");
-        if (f.bnkr)  f.bnkr.value  = (h.bankroll ?? 1000);
-        if (f.kelly) f.kelly.value = (h.kelly_fraction ?? 0.25);
         if (f.trainer) f.trainer.value = h.trainer ?? "";
         if (f.jockey)  f.jockey.value  = h.jockey ?? "";
+        if (f.bankroll) f.bankroll.value = h.bankroll ?? 1000;
+        if (f.kelly)    f.kelly.value    = h.kelly_fraction ?? 0.25;
       }
-
-      console.log(`📝 Wrote ${horses.length} rows to the form.`);
+      console.log(`📝 Wrote ${horses.length} rows via placeholders.`);
     }
 
     async function callPhotoExtract(fd){
