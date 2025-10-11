@@ -828,10 +828,11 @@ document.addEventListener('DOMContentLoaded', function() {
         useResearch: endpoint === 'research_predict'
       };
       
-      // For research endpoint, request websearch with longer timeout
+      // For research endpoint - default to stub for stable testing
+      // When ready to use Tavily+OpenAI websearch, change to "websearch" or add UI toggle
       if (endpoint === 'research_predict') {
-        payload.provider = "websearch";
-        payload.timeout_ms = 45000;  // 45s for websearch
+        payload.provider = "stub";     // Fast, deterministic (ranks by odds)
+        payload.timeout_ms = 12000;    // 12s (plenty for stub)
       }
       
       console.log(`[FinishLine] ${endpoint} payload:`, payload);

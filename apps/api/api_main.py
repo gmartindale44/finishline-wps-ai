@@ -424,7 +424,56 @@ async def research_predict(payload: Dict[str, Any]):
         
         logger.info(f"[research_predict] horses={list(allowed.keys())} track={track} provider={provider_name} timeout={timeout_ms}ms useResearch={use_research}")
         
-        # Get configured provider with timeout
+        # If the caller selected the stub provider, short-circuit here with instant result
+        if provider_name == "stub":
+            # Helper: parse fractional odds to implied probability
+            def _norm_frac_odds(s):
+                if not s: return None
+                t = str(s).strip().upper().replace("–","-").replace("—","-").replace(" TO ","/").replace("TO","/").replace(":","/").replace(" ","")
+                for sep in ("/","-"):
+                    if sep in t:
+                        parts = t.split(sep, 1)
+                        if len(parts)==2 and parts[0].isdigit() and parts[1].isdigit():
+                            return (int(parts[0]), int(parts[1]))
+                if t.isdigit():
+                    return (int(t), 1)
+                return None
+            
+            def _implied_prob(odds):
+                fb = _norm_frac_odds(odds)
+                if not fb: return 0.0
+                a, b = fb
+                denom = a + b
+                return (b / denom) if denom > 0 else 0.0
+            
+            # Rank by implied probability (lower ML odds → higher chance)
+            scored = []
+            for h in allowed.values():
+                p = _implied_prob(h.get("odds"))
+                scored.append({**h, "_p": p})
+            scored.sort(key=lambda x: x["_p"], reverse=True)
+            
+            win_pick   = {"name": scored[0]["name"], "prob": scored[0]["_p"]} if len(scored)>0 else {"name": None, "prob": None}
+            place_pick = {"name": scored[1]["name"], "prob": scored[1]["_p"]} if len(scored)>1 else {"name": None, "prob": None}
+            show_pick  = {"name": scored[2]["name"], "prob": scored[2]["_p"]} if len(scored)>2 else {"name": None, "prob": None}
+            
+            logger.info(f"[research_predict] stub: win={win_pick['name']} place={place_pick['name']} show={show_pick['name']}")
+            
+            return {
+                "win": win_pick,
+                "place": place_pick,
+                "show": show_pick,
+                "enrichment_source": "stub",
+                "candidate_pool": list(allowed.keys()),
+                "race_context": {
+                    "date": date,
+                    "track": track,
+                    "surface": surface,
+                    "distance": distance
+                }
+            }
+        
+        # For websearch/custom: call provider with timeout
         async def _run():
             # Override provider per request if specified
             if provider_name == "websearch":
@@ -434,7 +483,7 @@ async def research_predict(payload: Dict[str, Any]):
                 from .provider_custom import CustomProvider
                 provider = CustomProvider()
             else:
-                # stub or unknown → use stub
+                # Unknown → use base
                 provider = get_provider()
             
             # Provider.enrich_horses is now async (no asyncio.run inside)
