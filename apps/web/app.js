@@ -734,15 +734,37 @@ document.addEventListener('DOMContentLoaded', function() {
       const originalLabel = btn?.textContent || "Extract from Photos";
       if (btn) {
         btn.disabled = true;
-        btn.textContent = "Extracting…";
+        btn.textContent = "Compressing…";
       }
 
       console.time("extract_total");
       try {
-        // Step 1: Read file to data URL
-        console.time("read_file");
-        const dataURL = await fileToDataURL(f);
-        console.timeEnd("read_file");
+        // Step 1: Compress image on client to avoid server overload
+        console.log(`📸 Original file: ${f.name} (${(f.size / 1024).toFixed(1)}KB)`);
+        
+        let dataURL;
+        if (window.ImageUtils) {
+          const compressed = await window.ImageUtils.compressImageToBase64(f, {
+            maxWidth: 1400,
+            maxHeight: 1400,
+            quality: 0.8
+          });
+          dataURL = compressed.dataURL;
+          
+          // Validate compressed size (server limit is 6MB)
+          const sizeCheck = window.ImageUtils.validateImageSize(dataURL, 5.5);
+          if (!sizeCheck.valid) {
+            alert(`Image is still too large after compression (${sizeCheck.sizeMB}MB).\n\nPlease use a smaller screenshot or crop the image.`);
+            return;
+          }
+          console.log(`✅ Compressed to ${sizeCheck.sizeMB}MB (${compressed.ratio}% reduction)`);
+        } else {
+          // Fallback if compression utility not loaded
+          console.warn("⚠️ Compression utility not loaded, using uncompressed image");
+          dataURL = await fileToDataURL(f);
+        }
+        
+        if (btn) btn.textContent = "Extracting…";
 
         const payload = { filename: f.name, mime: f.type || "image/png", data_b64: dataURL };
         console.log("📤 OCR upload (b64):", payload.filename, payload.mime);
