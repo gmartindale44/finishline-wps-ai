@@ -812,10 +812,16 @@ document.addEventListener('DOMContentLoaded', function() {
           if (horses.length) {
             console.log(`✅ Parsed ${horses.length} horses`);
             await populateFormFromParsed(horses);
-            toast(`Filled ${horses.length} horses`, "success");
+            
+            // Show success with tooltip on Extract button
+            const extractBtn = document.getElementById("btnExtract") || document.getElementById("btn-extract");
+            if (extractBtn && typeof finishProgress === 'function') {
+              finishProgress(extractBtn, 'Extracted', 'OCR complete');
+            }
+            toast(`✅ Filled ${horses.length} horses`, "success");
           } else {
             console.warn("⚠️ No horses parsed", data);
-            toast("No horses parsed (see console)", "error");
+            toast("OCR returned non-JSON. Try smaller image/PDF.", "error");
             alert(`No horses parsed.\n\n${JSON.stringify(data, null, 2)}`);
           }
         }
@@ -1120,11 +1126,12 @@ document.addEventListener('DOMContentLoaded', function() {
           btnAnalyze.disabled = true;
           updateProgress(25, btnAnalyze);  // Initial progress
 
-          // Long-running research (draft pass)
+          // Long-running research (draft pass) - REDUCED TIMEOUT
+          const ANALYZE_TIMEOUT = 30000;  // 30s (reduced from 55s)
           const payload = {
             horses, race_context: ctx, useResearch: true,
             provider: chosenProvider(),  // User-controlled toggle
-            timeout_ms: 55000,           // ~55s analysis window (vercel maxDuration is 60s)
+            timeout_ms: ANALYZE_TIMEOUT,
             phase: "analyze",
             depth: "draft"
           };
@@ -1148,16 +1155,24 @@ document.addEventListener('DOMContentLoaded', function() {
             clearInterval(progressInterval);
             updateProgress(100, btnAnalyze);  // Complete
             
-            // Ask user if we should retry with reduced depth on timeout
+            // AUTO-RETRY on timeout (silent, no confirmation prompt)
             if (!ok && status === 504 && payload.provider === "websearch") {
-              clearProgress(btnAnalyze, old);
-              if (confirm("AI research took too long. Retry with reduced depth (faster)?")) {
-                console.warn("⏱️ User opted to retry with quick mode");
-                updateProgress(25, btnAnalyze);
-                const fallback = { ...payload, provider: "stub", depth: "quick", timeout_ms: 12000 };
-                ({ ok, status, statusText, data, raw } = await callResearch(fallback));
-                updateProgress(100, btnAnalyze);
+              console.warn("⏱️ Websearch timeout, auto-retrying with 80% budget (24s)...");
+              toast("AI research took too long, retrying faster...", "info");
+              updateProgress(50, btnAnalyze);
+              
+              const reducedTimeout = Math.floor(ANALYZE_TIMEOUT * 0.8);  // 80% of original (24s)
+              const reducedPayload = { ...payload, timeout_ms: reducedTimeout, depth: "quick" };
+              ({ ok, status, statusText, data, raw } = await callResearch(reducedPayload));
+              
+              // If still failing after auto-retry, use stub (silent fallback)
+              if (!ok && status === 504) {
+                console.warn("⏱️ Quick retry also timed out, falling back to stub...");
+                toast("Server busy; using quick local analysis...", "warn");
+                const stubPayload = { ...payload, provider: "stub", timeout_ms: 10000, depth: "quick" };
+                ({ ok, status, statusText, data, raw } = await callResearch(stubPayload));
               }
+              updateProgress(100, btnAnalyze);
             }
 
             if (!ok || !data) {
@@ -1172,6 +1187,12 @@ document.addEventListener('DOMContentLoaded', function() {
             const secs = (data.elapsed_ms ? (data.elapsed_ms/1000).toFixed(1) : "—");
             FL.analysis = { status:'ready', result:data, meta:{ provider:used, elapsed_ms:data.elapsed_ms||null, when:Date.now() } };
             setPill('ready', `Analysis Ready in ${secs}s (${used})`);
+            
+            // Show success with tooltip
+            if (typeof finishProgress === 'function') {
+              finishProgress(btnAnalyze, 'Analysis Ready', 'AI research finished');
+            }
+            toast("✅ Analysis complete", "success");
             console.log("✅ Analysis complete:", data);
           } catch (e) {
             FL.analysis = { status:'error', result:null, meta:{exception: String(e)} };
@@ -1197,14 +1218,14 @@ document.addEventListener('DOMContentLoaded', function() {
             return alert("Please run 'Analyze Photos with AI' first.\n\nYou'll see a green 'Analysis Ready ✓' badge.");
           }
 
-          const timeoutMs = 50000;  // INCREASED: 50s for predict verify (was 35s)
-          startProgress(btnPredict, 'Predicting', timeoutMs);
+          const PREDICT_TIMEOUT = 50000;  // 50s for predict verify
+          startProgress(btnPredict, 'Predicting', PREDICT_TIMEOUT);
 
-          // Final pass (predict/verify phase) - INCREASED TIMEOUT
+          // Final pass (predict/verify phase)
           const payload = {
             horses, race_context: ctx, useResearch: true,
             provider: chosenProvider(),  // Reuse toggle
-            timeout_ms: 50000,           // 50s final verification (increased from 35s)
+            timeout_ms: PREDICT_TIMEOUT,
             phase: "final",
             depth: "final",
             prior_analysis: FL.analysis.result || null
@@ -1213,22 +1234,25 @@ document.addEventListener('DOMContentLoaded', function() {
           try {
             let { ok, status, statusText, data, raw } = await callResearch(payload);
             
-            // Auto-retry with reduced verify window on timeout
+            // AUTO-RETRY on timeout (silent, no confirmation prompt)
             if (!ok && status === 504 && payload.provider === "websearch") {
-              console.warn("⏱️ Predict timeout, auto-retry with reduced verify window (35s)...");
+              console.warn("⏱️ Predict timeout, auto-retrying with 80% budget (40s)...");
+              toast("Prediction took too long, retrying faster...", "info");
               resetButton(btnPredict);
-              startProgress(btnPredict, 'Predicting (reduced)', 35000);
-              const reducedPayload = { ...payload, timeout_ms: 35000 };
+              
+              const reducedTimeout = Math.floor(PREDICT_TIMEOUT * 0.8);  // 80% of original (40s)
+              startProgress(btnPredict, 'Predicting (reduced)', reducedTimeout);
+              const reducedPayload = { ...payload, timeout_ms: reducedTimeout };
               ({ ok, status, statusText, data, raw } = await callResearch(reducedPayload));
               
-              // If still failing, offer stub fallback
+              // If still failing after auto-retry, use stub (silent fallback)
               if (!ok && status === 504) {
+                console.warn("⏱️ Quick retry also timed out, falling back to stub...");
+                toast("Server busy; using quick local prediction...", "warn");
                 resetButton(btnPredict);
-                if (confirm("Reduced verify timed out. Use instant stub fallback?")) {
-                  startProgress(btnPredict, 'Predicting (stub)', 12000);
-                  const fallback = { ...payload, provider: "stub", timeout_ms: 12000 };
-                  ({ ok, status, statusText, data, raw } = await callResearch(fallback));
-                }
+                startProgress(btnPredict, 'Predicting (stub)', 12000);
+                const stubPayload = { ...payload, provider: "stub", timeout_ms: 12000 };
+                ({ ok, status, statusText, data, raw } = await callResearch(stubPayload));
               }
             }
 
@@ -1241,7 +1265,12 @@ document.addEventListener('DOMContentLoaded', function() {
             // Render predictions
             console.log("✅ Predictions:", data);
             displayResults(data);
-            finishProgress(btnPredict, 'Prediction Complete');
+            
+            // Show success with tooltip
+            if (typeof finishProgress === 'function') {
+              finishProgress(btnPredict, 'Prediction Complete', 'Final verification passed');
+            }
+            toast("✅ Prediction verified", "success");
           } catch (e) {
             alert(`Predict errored: ${String(e?.message||e)}`);
             resetButton(btnPredict);
