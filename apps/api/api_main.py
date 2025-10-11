@@ -261,6 +261,22 @@ async def echo_stub():
         ]
     }
 
+@app.post("/api/finishline/research_predict_selftest")
+async def research_predict_selftest():
+    """Quick self-test for research path (does not call provider, just confirms routing)"""
+    provider_name = os.getenv("FINISHLINE_DATA_PROVIDER", "stub").strip().lower()
+    has_tavily = bool(os.getenv("FINISHLINE_TAVILY_API_KEY", "").strip())
+    has_openai = bool(os.getenv("FINISHLINE_OPENAI_API_KEY", "").strip() or os.getenv("OPENAI_API_KEY", "").strip())
+    
+    return {
+        "ok": True,
+        "horses_seen": 1,
+        "provider": provider_name,
+        "has_tavily_key": has_tavily,
+        "has_openai_key": has_openai,
+        "websearch_ready": provider_name == "websearch" and has_tavily and has_openai
+    }
+
 @app.post("/api/finishline/photo_extract_openai_b64")
 async def photo_extract_openai_b64(body: Dict[str, Any]):
     """
@@ -402,6 +418,23 @@ async def research_predict(payload: Dict[str, Any]):
             return predictions
         
         predictions = await asyncio.wait_for(_run(), timeout=timeout_ms / 1000.0)
+        
+        # If the provider already signaled an error, propagate with details
+        if not isinstance(predictions, dict):
+            logger.warning(f"[research_predict] returned non-dict: {type(predictions)}")
+            return JSONResponse(
+                {"error": "Bad provider response", "shape": str(type(predictions)), "provider": provider_name},
+                status_code=502
+            )
+        
+        if "error" in predictions:
+            logger.error(f"[research_predict] provider error: {predictions}")
+            extra = {k: v for k, v in predictions.items() if k != "error"}
+            extra.update({"provider": provider_name, "has_tavily_key": has_tavily, "has_openai_key": has_openai})
+            return JSONResponse(
+                {"error": str(predictions.get("error") or "research_predict_failed"), **extra},
+                status_code=500
+            )
         
         # CRITICAL: Ensure predictions only reference horses from the allowed list
         win_name = predictions.get("win", {}).get("name", "")

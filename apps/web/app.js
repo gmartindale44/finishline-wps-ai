@@ -844,12 +844,20 @@ document.addEventListener('DOMContentLoaded', function() {
           
           if (errorData?.error) {
             // Structured error from backend
-            const msg = errorData.error;
-            const hint = errorData.hint ? `\n\n💡 ${errorData.hint}` : "";
-            const fix = errorData.how_to_fix ? `\n\n🔧 Fix: ${errorData.how_to_fix}` : "";
+            let msg = `${r.status} ${r.statusText}\n\n${errorData.error}`;
+            if (errorData.hint) msg += `\n\n💡 ${errorData.hint}`;
+            if (errorData.how_to_fix) msg += `\n\n🔧 Fix: ${errorData.how_to_fix}`;
+            
+            // Include useful extras if present
+            const extras = ["provider", "has_tavily_key", "has_openai_key", "shape", "exception", "detail"];
+            const found = extras.filter(k => k in errorData);
+            if (found.length) {
+              msg += "\n\n" + found.map(k => `${k}: ${JSON.stringify(errorData[k])}`).join("\n");
+            }
+            
             console.error(`❌ Predict ${r.status}:`, errorData);
             toast(`Analyze failed (${r.status})`, "error");
-            alert(`Analyze failed (${r.status})\n\n${msg}${hint}${fix}`);
+            alert(`Analyze failed:\n${msg}`);
           } else {
             // Fallback to raw text
             const preview = raw.substring(0, 300);
