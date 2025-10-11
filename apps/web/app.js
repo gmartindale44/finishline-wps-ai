@@ -440,24 +440,110 @@ document.addEventListener('DOMContentLoaded', function() {
       return obj;
     }
 
-    function populateFormFromParsed(parsed) {
-      if (!Array.isArray(parsed) || !parsed.length) {
-        console.warn('[FinishLine] populateFormFromParsed: empty or invalid input');
-        return;
+    // === ROBUST OCR → FORM POPULATION HELPERS ===
+    
+    // Find the "Add Horse" button in a resilient way
+    function findAddHorseButton() {
+      return document.querySelector("#add-horse, #addHorse, #add-horse-btn, #btnAddHorse, button[data-add-horse], [data-role='add-horse']")
+          || Array.from(document.querySelectorAll("button")).find(b => /add\s*horse/i.test(b.textContent || ""));
+    }
+
+    // Return a NodeList of current horse rows (works with TR or DIV rows)
+    function getHorseRows() {
+      const candidates = [
+        "[data-horse-row]",
+        "[data-row='horse']",
+        ".horse-row",
+        "#horses tbody tr",
+        ".row-horse"
+      ];
+      for (const sel of candidates) {
+        const list = document.querySelectorAll(sel);
+        if (list && list.length) return list;
       }
-      console.log(`[FinishLine] populateFormFromParsed: ${parsed.length} horses`);
-      const cleaned = parsed.map(splitTrainerJockey);
-      ensureRowCount(cleaned.length);
-      cleaned.forEach((h, i) => {
-        const normalized = {
-          name: (h.name || "").split("\n")[0].trim(),
-          trainer: (h.trainer || "").split("\n")[0].trim(),
-          jockey: (h.jockey || "").split("\n")[0].trim(),
-          odds: (h.ml_odds || h.odds || "").trim(),
-        };
-        writeRow(i, normalized);
-      });
-      console.log(`[FinishLine] populateFormFromParsed: wrote ${cleaned.length} rows`);
+      // Fallback: if there is exactly one visible row with the input set, treat container as a row
+      const nameInput = document.querySelector("input.horse-name, input[name*='name' i]");
+      return nameInput ? [nameInput.closest("tr, .horse-row, [data-horse-row], .row")] : [];
+    }
+
+    // Ensure at least n rows exist using the real Add Horse button
+    async function ensureUiRowCount(n) {
+      const addBtn = findAddHorseButton();
+      for (let safety=0; safety<50; safety++) {
+        const rows = getHorseRows();
+        if (rows.length >= n) return;
+        if (!addBtn) {
+          console.warn("Add Horse button not found; cannot create rows");
+          return;
+        }
+        addBtn.click();
+        await new Promise(r=>setTimeout(r, 30)); // give DOM a tick
+      }
+      console.warn("Row creation safety loop exited before reaching count:", n);
+    }
+
+    // Given a row element, return the best-guess inputs
+    function pickRowFields(rowEl) {
+      const pick = (selArr) => {
+        for (const sel of selArr) {
+          const el = rowEl.querySelector(sel);
+          if (el) return el;
+        }
+        return null;
+      };
+      // Heuristics for field names/classes; extend if needed
+      const name   = pick([".horse-name", ".name", "input[data-field='name']", "input[name*='name' i]"]);
+      const odds   = pick([".horse-odds", ".odds", "input[data-field='odds']", "input[name*='odd' i]"]);
+      const bnkr   = pick([".horse-bankroll", "input[data-field='bankroll']", "input[name*='bank' i]"]);
+      const kelly  = pick([".horse-kelly", "input[data-field='kelly_fraction']", "input[name*='kelly' i]"]);
+      const trainer= pick([".horse-trainer", ".tt", "input[data-field='trainer']", "input[name*='train' i]"]);
+      const jockey = pick([".horse-jockey", ".jj", "input[data-field='jockey']", "input[name*='jock' i]"]);
+      return { name, odds, bnkr, kelly, trainer, jockey };
+    }
+
+    // Normalize ML odds like "3-1", "3 to 1" → "3/1"
+    function normalizeFractionalOdds(raw) {
+      if (!raw) return "";
+      let s = String(raw).trim().toUpperCase()
+        .replaceAll("–","-").replaceAll("—","-")
+        .replaceAll(" TO ","/").replaceAll("TO","/")
+        .replaceAll(":", "/").replace(/\s+/g,"");
+      const m = s.match(/^(\d+)[\/\-](\d+)$/);
+      return m ? `${parseInt(m[1],10)}/${parseInt(m[2],10)}` : s;
+    }
+
+    // Coerce data.horses to an array (handles stringified JSON)
+    function coerceHorsesArray(horses) {
+      if (Array.isArray(horses)) return horses;
+      if (typeof horses === "string") {
+        try { const arr = JSON.parse(horses); if (Array.isArray(arr)) return arr; } catch {}
+      }
+      return [];
+    }
+
+    // Canonical writer that uses the REAL UI rows
+    async function populateFormFromParsed(parsed) {
+      const horses = coerceHorsesArray(parsed).filter(h => (h?.name || "").trim());
+      if (!horses.length) { console.warn("populateFormFromParsed: empty list"); return; }
+
+      await ensureUiRowCount(horses.length);
+
+      const rows = Array.from(getHorseRows());
+      for (let i=0; i<horses.length; i++) {
+        const h = horses[i] || {};
+        const row = rows[i];
+        if (!row) continue;
+
+        const f = pickRowFields(row);
+        if (f.name)  f.name.value  = h.name ?? "";
+        if (f.odds)  f.odds.value  = normalizeFractionalOdds(h.odds ?? h.ml_odds ?? "");
+        if (f.bnkr)  f.bnkr.value  = (h.bankroll ?? 1000);
+        if (f.kelly) f.kelly.value = (h.kelly_fraction ?? 0.25);
+        if (f.trainer) f.trainer.value = h.trainer ?? "";
+        if (f.jockey)  f.jockey.value  = h.jockey ?? "";
+      }
+
+      console.log(`📝 Wrote ${horses.length} rows to the form.`);
     }
 
     async function callPhotoExtract(fd){
