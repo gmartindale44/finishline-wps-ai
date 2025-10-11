@@ -409,7 +409,8 @@ async def research_predict(payload: Dict[str, Any]):
         # Get configured provider with timeout
         async def _run():
             provider = get_provider()
-            enriched_horses = provider.enrich_horses(
+            # Provider.enrich_horses is now async (no asyncio.run inside)
+            enriched_horses = await provider.enrich_horses(
                 list(allowed.values()),
                 date=date,
                 track=track

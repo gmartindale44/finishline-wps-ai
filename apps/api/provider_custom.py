@@ -128,12 +128,7 @@ class CustomProvider:
                 out.append(await self.enrich_one(client, h, date=date, track=track))
         return out
 
-    def enrich_horses(self, horses: List[Dict[str,Any]], *, date: str, track: str) -> List[Dict[str,Any]]:
-        # sync wrapper for FastAPI threadpool safety
-        import asyncio
-        try:
-            return asyncio.run(self.enrich_horses_async(horses, date=date, track=track))
-        except RuntimeError:
-            # already in loop (unit tests) → fallback to simple loop
-            return horses
+    async def enrich_horses(self, horses: List[Dict[str,Any]], *, date: str, track: str) -> List[Dict[str,Any]]:
+        # Async method - called directly from FastAPI endpoint (no asyncio.run needed)
+        return await self.enrich_horses_async(horses, date=date, track=track)
 

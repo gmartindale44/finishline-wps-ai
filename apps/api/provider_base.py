@@ -27,7 +27,8 @@ def get_provider() -> Any:
     
     # Default/stub provider (pass-through)
     class StubProvider:
-        def enrich_horses(self, horses, **kwargs):
+        async def enrich_horses(self, horses, **kwargs):
+            # Async for consistency with other providers (no-op for stub)
             return horses
         
         async def fetch_race_context(self, **kwargs):

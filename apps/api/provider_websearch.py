@@ -125,10 +125,9 @@ class WebSearchProvider:
         bias = data.get("bias") if isinstance(data, dict) else None
         return {"bias": bias or {}, "source":"websearch"}
 
-    def enrich_horses(self, horses: List[Dict[str,Any]], *, date: str, track: str) -> List[Dict[str,Any]]:
-        # Sync wrapper that runs async to fetch web features per horse/trainer/jockey
-        import asyncio
-        return asyncio.run(self._enrich_async(horses, date=date, track=track))
+    async def enrich_horses(self, horses: List[Dict[str,Any]], *, date: str, track: str) -> List[Dict[str,Any]]:
+        # Async method - called directly from FastAPI endpoint (no asyncio.run needed)
+        return await self._enrich_async(horses, date=date, track=track)
 
     async def _enrich_async(self, horses: List[Dict[str,Any]], *, date: str, track: str) -> List[Dict[str,Any]]:
         if not (_TAV and _OAI):
