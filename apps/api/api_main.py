@@ -257,6 +257,7 @@ async def photo_extract_openai_b64(body: Dict[str, Any]):
     Extract horses from base64-encoded image (bypasses multipart upload issues)
     Input: {"filename": "race.png", "mime": "image/png", "data_b64": "base64..."}
     Returns: {"horses": [...]}
+    Server-side timeout: 25s (configurable via FINISHLINE_PROVIDER_TIMEOUT_MS)
     """
     import asyncio
     import logging
@@ -268,9 +269,11 @@ async def photo_extract_openai_b64(body: Dict[str, Any]):
     # Fail fast if OCR disabled or API key missing
     ocr_enabled = os.getenv("FINISHLINE_OCR_ENABLED", "true").lower() not in ("false", "0", "no", "off")
     if not ocr_enabled:
+        logger.warning("[photo_extract_openai_b64] OCR disabled")
         return JSONResponse({"error": "OCR disabled", "horses": []}, status_code=400)
     
     if not (os.getenv("FINISHLINE_OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")):
+        logger.error("[photo_extract_openai_b64] Missing OpenAI API key")
         return JSONResponse({"error": "Missing OpenAI API key env", "horses": []}, status_code=500)
     
     try:
@@ -279,6 +282,7 @@ async def photo_extract_openai_b64(body: Dict[str, Any]):
         data_b64 = body.get("data_b64", "")
         
         if not data_b64:
+            logger.warning("[photo_extract_openai_b64] missing data_b64 in payload")
             return JSONResponse(
                 {"error": "missing data_b64", "horses": []},
                 status_code=400
@@ -288,8 +292,9 @@ async def photo_extract_openai_b64(body: Dict[str, Any]):
         kb = round(len(content) / 1024, 1)
         logger.info(f"[photo_extract_openai_b64] file={filename} mime={mime} size={kb}KB")
         
-        # Timeout from env var (default 25s)
+        # Timeout from env var (default 25s to align with client)
         timeout_ms = int(os.getenv("FINISHLINE_PROVIDER_TIMEOUT_MS", "25000"))
+        logger.info(f"[photo_extract_openai_b64] timeout={timeout_ms}ms")
         
         async def _run():
             return await run_openai_ocr_on_bytes(content, filename=filename)
@@ -302,9 +307,9 @@ async def photo_extract_openai_b64(body: Dict[str, Any]):
         
         horses = result.get("horses") or []
         if not horses:
-            logger.warning("[photo_extract_openai_b64] OCR returned 0 horses after TSV fallback.")
+            logger.warning("[photo_extract_openai_b64] OCR returned 0 horses")
         
-        logger.info(f"[photo_extract_openai_b64] horses={len(horses)}")
+        logger.info(f"[photo_extract_openai_b64] success: {len(horses)} horses")
         return JSONResponse({"horses": horses}, status_code=200)
     
     except asyncio.TimeoutError:

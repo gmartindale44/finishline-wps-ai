@@ -527,13 +527,13 @@ document.addEventListener('DOMContentLoaded', function() {
         const dataURL = await fileToDataURL(f);
         const payload = { filename: f.name, mime: f.type || "image/png", data_b64: dataURL };
 
-        console.log("📤 Uploading for OCR (b64):", payload.filename, payload.mime);
+        console.log("📤 OCR upload (b64):", payload.filename, payload.mime);
 
-        const resp = await fetch("/api/finishline/photo_extract_openai_b64", {
+        const resp = await fetchWithTimeout("/api/finishline/photo_extract_openai_b64", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify(payload)
-        });
+        }, 25000);
 
         // Read raw text FIRST so we can always see exactly what came back
         const raw = await resp.text();
@@ -544,7 +544,7 @@ document.addEventListener('DOMContentLoaded', function() {
         try {
           data = JSON.parse(raw);
         } catch (e) {
-          console.error("❌ OCR returned non-JSON:", e);
+          console.error("❌ Non-JSON:", e);
           toast("OCR returned non-JSON (see console)", "error");
           alert("OCR returned non-JSON. See console for details.");
           return;
@@ -569,9 +569,9 @@ document.addEventListener('DOMContentLoaded', function() {
           alert(`No horses parsed.\nServer response:\n${JSON.stringify(data, null, 2)}`);
         }
       } catch (e) {
-        console.error("❌ Extract failed:", e);
-        toast("Extract failed (console has details)", "error");
-        alert(`Request failed: ${e.message}`);
+        console.error("❌ Extract failed (timeout or network):", e);
+        toast("Extract timed out or was blocked", "error");
+        alert("Extraction timed out or was blocked. See console for details.");
       } finally {
         extractInFlight = false;
         if (btn) {
