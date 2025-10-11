@@ -101,6 +101,13 @@
                                 <button id="btn-extract-url" type="button" class="btn">Extract (URL)</button>
                                 <button id="btn-load-demo" type="button" class="btn">Load Demo DRF</button>
                             </div>
+                            <div style="margin-top:8px;display:flex;align-items:center;gap:8px;">
+                                <label for="provider-select" style="font-size:12px;opacity:.85;color:#9ca3af;">Provider:</label>
+                                <select id="provider-select" style="padding:.4rem .6rem;border-radius:8px;background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(255,255,255,0.2);font-size:12px;">
+                                    <option value="websearch" selected>websearch (slower, better)</option>
+                                    <option value="stub">stub (fast, baseline)</option>
+                                </select>
+                            </div>
                             <small style="display:block; margin-top:6px; color:#9ca3af;">Use a direct image URL to test the server OCR without file upload. "Load Demo DRF" fills the form with a sample list.</small>
                             <pre id="ocr-debug-json" style="white-space:pre-wrap;font-size:0.85rem;background:rgba(0,0,0,0.3);padding:8px;border-radius:6px;margin-top:6px;color:#9ca3af;"></pre>
                         </details>

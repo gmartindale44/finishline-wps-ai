@@ -1046,6 +1046,12 @@ document.addEventListener('DOMContentLoaded', function() {
           distance: document.getElementById("raceDistance")?.value || document.getElementById("distance")?.value || "",
         };
       }
+      
+      const providerSelect = document.getElementById("provider-select");
+      function chosenProvider() {
+        const v = providerSelect?.value || "websearch";
+        return (v === "stub" ? "stub" : "websearch");
+      }
 
       async function callResearch(payload) {
         const resp = await fetch("/api/finishline/research_predict", {
@@ -1055,6 +1061,8 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         const raw = await resp.text();
         let data = null; try { data = JSON.parse(raw); } catch {}
+        const elapsed = resp.headers.get("X-Analysis-Duration");
+        if (data && elapsed && !data.elapsed_ms) data.elapsed_ms = parseInt(elapsed, 10);
         return { ok: resp.ok, status: resp.status, statusText: resp.statusText, data, raw };
       }
 
@@ -1075,8 +1083,8 @@ document.addEventListener('DOMContentLoaded', function() {
           // Long-running research (draft pass)
           const payload = {
             horses, race_context: ctx, useResearch: true,
-            provider: "stub",        // For stable testing; change to "websearch" when ready
-            timeout_ms: 12000,       // Fast for stub
+            provider: chosenProvider(),  // User-controlled toggle
+            timeout_ms: 28000,           // Keep < Vercel function max (30s)
             phase: "analyze",
             depth: "draft"
           };
@@ -1084,11 +1092,13 @@ document.addEventListener('DOMContentLoaded', function() {
           try {
             let { ok, status, statusText, data, raw } = await callResearch(payload);
             
-            // Fallback to stub if websearch times out
+            // Ask user if we should retry with stub on timeout
             if (!ok && status === 504 && payload.provider === "websearch") {
-              console.warn("⏱️ Websearch timed out; retrying with stub");
-              const fallback = { ...payload, provider: "stub", timeout_ms: 12000 };
-              ({ ok, status, statusText, data, raw } = await callResearch(fallback));
+              if (confirm("Websearch timed out. Retry once with the fast stub provider?")) {
+                console.warn("⏱️ User opted to retry with stub");
+                const fallback = { ...payload, provider: "stub", timeout_ms: 12000 };
+                ({ ok, status, statusText, data, raw } = await callResearch(fallback));
+              }
             }
 
             if (!ok || !data) {
@@ -1098,9 +1108,11 @@ document.addEventListener('DOMContentLoaded', function() {
               return alert(`Analyze failed.\n\n${msg}`);
             }
 
-            // Mark "ready" — store analysis blob
-            FL.analysis = { status:'ready', result:data, meta:{ provider:data.provider || payload.provider, when:Date.now() } };
-            setPill('ready', `Analysis Ready ✓`);
+            // Mark "ready" — store analysis blob with timing
+            const used = data.provider_used || data.provider || payload.provider;
+            const secs = (data.elapsed_ms ? (data.elapsed_ms/1000).toFixed(1) : "—");
+            FL.analysis = { status:'ready', result:data, meta:{ provider:used, elapsed_ms:data.elapsed_ms||null, when:Date.now() } };
+            setPill('ready', `Analysis Ready in ${secs}s (${used})`);
             console.log("✅ Analysis complete:", data);
           } catch (e) {
             FL.analysis = { status:'error', result:null, meta:{exception: String(e)} };
@@ -1131,8 +1143,8 @@ document.addEventListener('DOMContentLoaded', function() {
           // Final pass
           const payload = {
             horses, race_context: ctx, useResearch: true,
-            provider: "stub",        // For stable testing
-            timeout_ms: 12000,
+            provider: chosenProvider(),  // Reuse toggle
+            timeout_ms: 28000,           // Keep under server limit
             phase: "final",
             depth: "final",
             prior_analysis: FL.analysis.result || null
@@ -1141,10 +1153,12 @@ document.addEventListener('DOMContentLoaded', function() {
           try {
             let { ok, status, statusText, data, raw } = await callResearch(payload);
             
-            // Fallback to stub if needed
+            // Ask user if we should retry with stub on timeout
             if (!ok && status === 504 && payload.provider === "websearch") {
-              const fallback = { ...payload, provider: "stub", timeout_ms: 12000 };
-              ({ ok, status, statusText, data, raw } = await callResearch(fallback));
+              if (confirm("Final pass timed out with websearch. Retry once with stub?")) {
+                const fallback = { ...payload, provider: "stub", timeout_ms: 12000 };
+                ({ ok, status, statusText, data, raw } = await callResearch(fallback));
+              }
             }
 
             if (!ok || !data) {

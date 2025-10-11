@@ -426,6 +426,9 @@ async def research_predict(payload: Dict[str, Any]):
         
         # If the caller selected the stub provider, short-circuit here with instant result
         if provider_name == "stub":
+            import time
+            t0 = time.perf_counter()
+            
             # Helper: parse fractional odds to implied probability
             def _norm_frac_odds(s):
                 if not s: return None
@@ -457,13 +460,16 @@ async def research_predict(payload: Dict[str, Any]):
             place_pick = {"name": scored[1]["name"], "prob": scored[1]["_p"]} if len(scored)>1 else {"name": None, "prob": None}
             show_pick  = {"name": scored[2]["name"], "prob": scored[2]["_p"]} if len(scored)>2 else {"name": None, "prob": None}
             
-            logger.info(f"[research_predict] stub: win={win_pick['name']} place={place_pick['name']} show={show_pick['name']}")
+            elapsed_ms = int((time.perf_counter() - t0) * 1000)
+            logger.info(f"[research_predict] stub: win={win_pick['name']} place={place_pick['name']} show={show_pick['name']} elapsed={elapsed_ms}ms")
             
-            return {
+            resp_data = {
                 "win": win_pick,
                 "place": place_pick,
                 "show": show_pick,
                 "enrichment_source": "stub",
+                "provider_used": "stub",
+                "elapsed_ms": elapsed_ms,
                 "candidate_pool": list(allowed.keys()),
                 "race_context": {
                     "date": date,
@@ -472,8 +478,14 @@ async def research_predict(payload: Dict[str, Any]):
                     "distance": distance
                 }
             }
+            res = JSONResponse(resp_data, status_code=200)
+            res.headers["X-Analysis-Duration"] = str(elapsed_ms)
+            return res
         
         # For websearch/custom: call provider with timeout
+        import time
+        t0 = time.perf_counter()
+        
         async def _run():
             # Override provider per request if specified
             if provider_name == "websearch":
@@ -496,6 +508,7 @@ async def research_predict(payload: Dict[str, Any]):
             return predictions
         
         predictions = await asyncio.wait_for(_run(), timeout=timeout_ms / 1000.0)
+        elapsed_ms = int((time.perf_counter() - t0) * 1000)
         
         # If the provider already signaled an error, propagate with details
         if not isinstance(predictions, dict):
@@ -529,11 +542,15 @@ async def research_predict(payload: Dict[str, Any]):
             logger.warning(f"[research_predict] Show pick '{show_name}' not in allowed list")
             predictions["show"]["name"] = list(allowed.keys())[min(2, len(allowed)-1)]
         
-        return {
+        logger.info(f"[research_predict] {provider_name}: completed in {elapsed_ms}ms")
+        
+        resp_data = {
             "win": predictions["win"],
             "place": predictions["place"],
             "show": predictions["show"],
             "enrichment_source": predictions.get("enrichment_source", "unknown"),
+            "provider_used": provider_name,
+            "elapsed_ms": elapsed_ms,
             "candidate_pool": list(allowed.keys()),
             "race_context": {
                 "date": date,
@@ -542,6 +559,9 @@ async def research_predict(payload: Dict[str, Any]):
                 "distance": distance
             }
         }
+        res = JSONResponse(resp_data, status_code=200)
+        res.headers["X-Analysis-Duration"] = str(elapsed_ms)
+        return res
     
     except asyncio.TimeoutError:
         logger.error(f"[research_predict] timeout after {timeout_ms}ms (provider={provider_name})")
