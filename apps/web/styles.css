@@ -564,3 +564,17 @@ footer strong {
   75% { content: '···'; }
   100% { content: ' '; }
 }
+
+/* ===== PROGRESS FILL FOR ANALYZE/PREDICT BUTTONS ===== */
+
+#btnAnalyze,
+#btnPredict,
+#btn-analyze,
+#btn-predict {
+  position: relative;
+  overflow: hidden;
+  transition: background 0.12s linear;
+}
+
+/* Progress bar will be set via inline style with linear-gradient */
+/* Button text will show "Analyzing X%" or "Predicting X%" */
