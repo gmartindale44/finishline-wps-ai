@@ -986,23 +986,56 @@ document.addEventListener('DOMContentLoaded', function() {
         pill.innerHTML = text;
       }
 
-      function getRows() {
-        const rows = document.querySelectorAll("#horses tbody tr, #horse-card .row, #horse-card .horse-row, #horse-card .grid-row, #horse-card .stack-row");
-        return Array.from(rows);
-      }
-      
+      // Robust row resolver: anchor to Horse Name inputs, then read siblings within the same row
       function readHorses() {
-        return getRows().map(r => ({
-          name: r.querySelector('input[placeholder="Horse Name"]')?.value.trim(),
-          odds: r.querySelector('input[placeholder^="ML Odds"]')?.value.trim(),
-          trainer: r.querySelector('input[placeholder="Trainer"], input[placeholder*="Trainer" i]')?.value.trim(),
-          jockey: r.querySelector('input[placeholder="Jockey"], input[placeholder*="Jockey" i]')?.value.trim(),
-          bankroll: parseFloat(r.querySelector('input[type="number"]')?.value) || 1000,
-          kelly_fraction: (function() {
-            const nums = r.querySelectorAll('input[type="number"]');
-            return parseFloat(nums[1]?.value) || 0.25;
-          })()
-        })).filter(h => h.name);
+        const nameInputs = document.querySelectorAll(
+          'input[placeholder="Horse Name"], input[placeholder*="Horse Name" i], input[aria-label="Horse Name"]'
+        );
+        const horses = [];
+        nameInputs.forEach((nameEl) => {
+          const name = (nameEl.value || "").trim();
+          if (!name) return; // skip blank rows
+
+          // Heuristic: find a reasonable "row" container for the other fields
+          const row =
+            nameEl.closest("tr, .horse-row, .row, .grid-row, .stack-row, .flex, .grid") ||
+            nameEl.parentElement ||
+            nameEl;
+
+          // Query fields *within the same row*
+          const oddsEl    = row.querySelector('input[placeholder^="ML Odds"], input[aria-label^="ML Odds"]');
+          const trainerEl = row.querySelector('input[placeholder="Trainer"], input[placeholder*="Trainer" i], input[aria-label*="Trainer" i]');
+          const jockeyEl  = row.querySelector('input[placeholder="Jockey"], input[placeholder*="Jockey" i], input[aria-label*="Jockey" i]');
+
+          // For bankroll & kelly, prefer dedicated placeholders/aria; otherwise fall back to first/second numeric in this row
+          const bankrollEl = row.querySelector(
+            'input[placeholder="Bankroll"], input[aria-label="Bankroll"], input[data-field="bankroll"]'
+          );
+          const kellyEl = row.querySelector(
+            'input[placeholder*="Kelly" i], input[aria-label*="Kelly" i], input[data-field="kelly_fraction"]'
+          );
+          let bankroll = parseFloat(bankrollEl?.value);
+          let kelly_fraction = parseFloat(kellyEl?.value);
+          if (Number.isNaN(bankroll) || Number.isNaN(kelly_fraction)) {
+            const nums = row.querySelectorAll('input[type="number"]');
+            // Try to infer: first numeric = bankroll, second numeric = kelly
+            if (Number.isNaN(bankroll))       bankroll = parseFloat(nums[0]?.value);
+            if (Number.isNaN(kelly_fraction)) kelly_fraction = parseFloat(nums[1]?.value);
+          }
+          if (Number.isNaN(bankroll)) bankroll = 1000;
+          if (Number.isNaN(kelly_fraction)) kelly_fraction = 0.25;
+
+          horses.push({
+            name,
+            odds: (oddsEl?.value || "").trim(),
+            trainer: (trainerEl?.value || "").trim(),
+            jockey: (jockeyEl?.value || "").trim(),
+            bankroll,
+            kelly_fraction
+          });
+        });
+        console.log(`🐎 readHorses(): collected ${horses.length} horses`, horses.map(h=>h.name));
+        return horses;
       }
       
       function readContext() {
