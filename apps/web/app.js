@@ -828,49 +828,75 @@ document.addEventListener('DOMContentLoaded', function() {
         useResearch: endpoint === 'research_predict'
       };
       
+      // For research endpoint, request websearch with longer timeout
+      if (endpoint === 'research_predict') {
+        payload.provider = "websearch";
+        payload.timeout_ms = 45000;  // 45s for websearch
+      }
+      
       console.log(`[FinishLine] ${endpoint} payload:`, payload);
       
+      // Helper to call endpoint once
+      const runOnce = async (body) => {
+        const resp = await fetch(`${base}/${endpoint}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body)
+        });
+        const raw = await resp.text();
+        console.log(`📥 Predict raw (${resp.status}):`, raw);
+        let data = null;
+        try { data = JSON.parse(raw); } catch {}
+        return { ok: resp.ok, status: resp.status, statusText: resp.statusText, data, raw };
+      };
+      
       try {
-        const r = await fetch(`${base}/${endpoint}`, { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify(payload) });
+        let { ok, status, statusText, data, raw } = await runOnce(payload);
         
-        // Always read raw body first for debugging
-        const raw = await r.text();
-        console.log(`📥 Predict raw (${r.status}):`, raw);
-        
-        if (!r.ok) {
-          // Try to parse as JSON error
-          let errorData = null;
-          try { errorData = JSON.parse(raw); } catch {}
+        // Auto-retry fallback: if websearch timed out, retry with stub
+        if (!ok && status === 504 && payload.provider === "websearch") {
+          console.warn("⏱️ Websearch timed out; retrying with stub provider");
+          (function showToast(msg){
+            const el = document.createElement("div");
+            el.textContent = msg;
+            el.style.cssText = `position:fixed;bottom:16px;right:16px;padding:10px 12px;border-radius:10px;
+              background:#7c3aed;color:white;z-index:9999;box-shadow:0 6px 20px rgba(0,0,0,.25);font-size:14px`;
+            document.body.appendChild(el); setTimeout(()=>el.remove(), 2500);
+          })(`Websearch timed out — running quick local model…`);
           
-          if (errorData?.error) {
+          const fallback = { ...payload, provider: "stub", timeout_ms: 10000 };
+          ({ ok, status, statusText, data, raw } = await runOnce(fallback));
+        }
+        
+        if (!ok) {
+          // Try to parse as JSON error
+          if (data?.error) {
             // Structured error from backend
-            let msg = `${r.status} ${r.statusText}\n\n${errorData.error}`;
-            if (errorData.hint) msg += `\n\n💡 ${errorData.hint}`;
-            if (errorData.how_to_fix) msg += `\n\n🔧 Fix: ${errorData.how_to_fix}`;
+            let msg = `${status} ${statusText}\n\n${data.error}`;
+            if (data.hint) msg += `\n\n💡 ${data.hint}`;
+            if (data.how_to_fix) msg += `\n\n🔧 Fix: ${data.how_to_fix}`;
             
             // Include useful extras if present
-            const extras = ["provider", "has_tavily_key", "has_openai_key", "shape", "exception", "detail"];
-            const found = extras.filter(k => k in errorData);
+            const extras = ["provider", "has_tavily_key", "has_openai_key", "shape", "exception", "detail", "timeout_ms"];
+            const found = extras.filter(k => k in data);
             if (found.length) {
-              msg += "\n\n" + found.map(k => `${k}: ${JSON.stringify(errorData[k])}`).join("\n");
+              msg += "\n\n" + found.map(k => `${k}: ${JSON.stringify(data[k])}`).join("\n");
             }
             
-            console.error(`❌ Predict ${r.status}:`, errorData);
-            toast(`Analyze failed (${r.status})`, "error");
+            console.error(`❌ Predict ${status}:`, data);
+            toast(`Analyze failed (${status})`, "error");
             alert(`Analyze failed:\n${msg}`);
           } else {
             // Fallback to raw text
             const preview = raw.substring(0, 300);
-            console.error("predict error", r.status, raw);
-            toast(`Prediction failed (${r.status})`, "error");
-            alert(`Prediction failed (${r.status})\n\n${preview}`);
+            console.error("predict error", status, raw);
+            toast(`Prediction failed (${status})`, "error");
+            alert(`Prediction failed (${status})\n\n${preview}`);
           }
           return;
         }
         
         // Success path
-        let data = null;
-        try { data = JSON.parse(raw); } catch {}
         if (!data) {
           alert("Predict returned non-JSON. See console.");
           return;

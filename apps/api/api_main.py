@@ -350,17 +350,35 @@ async def research_predict(payload: Dict[str, Any]):
     """
     Research-enhanced Win/Place/Show predictions using custom data provider.
     Strictly limited to horses provided in the request (no off-list suggestions).
+    Supports per-request provider and timeout overrides.
     """
     import logging
     import traceback
     import asyncio
     logger = logging.getLogger("finishline")
     
-    # Provider prechecks
-    provider_name = os.getenv("FINISHLINE_DATA_PROVIDER", "stub").strip().lower()
+    # Provider prechecks with client override support
+    env_provider = os.getenv("FINISHLINE_DATA_PROVIDER", "stub").strip().lower()
+    env_timeout = int(os.getenv("FINISHLINE_PROVIDER_TIMEOUT_MS", "45000"))
+    
+    # Allow client to override provider and timeout
+    requested_provider = payload.get("provider", env_provider)
+    if requested_provider:
+        requested_provider = str(requested_provider).strip().lower()
+        if requested_provider not in ("websearch", "stub", "custom"):
+            requested_provider = env_provider
+    provider_name = requested_provider or env_provider
+    
+    # Clamp timeout to sane range (2s..90s)
+    requested_timeout = payload.get("timeout_ms", env_timeout)
+    try:
+        timeout_ms = int(requested_timeout)
+        timeout_ms = max(2000, min(90000, timeout_ms))
+    except:
+        timeout_ms = env_timeout
+    
     has_tavily = bool(os.getenv("FINISHLINE_TAVILY_API_KEY", "").strip())
     has_openai = bool(os.getenv("FINISHLINE_OPENAI_API_KEY", "").strip() or os.getenv("OPENAI_API_KEY", "").strip())
-    timeout_ms = int(os.getenv("FINISHLINE_PROVIDER_TIMEOUT_MS", "25000"))
     
     try:
         horses = payload.get("horses", [])
@@ -404,11 +422,21 @@ async def research_predict(payload: Dict[str, Any]):
         surface = race_context.get("surface", "dirt")
         distance = race_context.get("distance", "")
         
-        logger.info(f"[research_predict] horses={list(allowed.keys())} track={track} provider={provider_name} useResearch={use_research}")
+        logger.info(f"[research_predict] horses={list(allowed.keys())} track={track} provider={provider_name} timeout={timeout_ms}ms useResearch={use_research}")
         
         # Get configured provider with timeout
         async def _run():
-            provider = get_provider()
+            # Override provider per request if specified
+            if provider_name == "websearch":
+                from .provider_websearch import WebSearchProvider
+                provider = WebSearchProvider()
+            elif provider_name == "custom":
+                from .provider_custom import CustomProvider
+                provider = CustomProvider()
+            else:
+                # stub or unknown → use stub
+                provider = get_provider()
+            
             # Provider.enrich_horses is now async (no asyncio.run inside)
             enriched_horses = await provider.enrich_horses(
                 list(allowed.values()),
@@ -467,12 +495,13 @@ async def research_predict(payload: Dict[str, Any]):
         }
     
     except asyncio.TimeoutError:
-        logger.error(f"[research_predict] timeout after {timeout_ms}ms")
+        logger.error(f"[research_predict] timeout after {timeout_ms}ms (provider={provider_name})")
         return JSONResponse(
             {
                 "error": "Research timed out",
                 "timeout_ms": timeout_ms,
-                "provider": provider_name
+                "provider": provider_name,
+                "hint": "Try increasing timeout_ms in request or switch to provider=stub for faster results"
             },
             status_code=504
         )
