@@ -369,11 +369,12 @@ async def research_predict(payload: Dict[str, Any]):
             requested_provider = env_provider
     provider_name = requested_provider or env_provider
     
-    # Clamp timeout to sane range (2s..90s)
+    # Respect client timeout_ms when present; clamp to just under platform max
     requested_timeout = payload.get("timeout_ms", env_timeout)
     try:
         timeout_ms = int(requested_timeout)
-        timeout_ms = max(2000, min(90000, timeout_ms))
+        # >=1s, <=58s (keep buffer under vercel maxDuration=60s)
+        timeout_ms = min(max(timeout_ms, 1000), 58000)
     except:
         timeout_ms = env_timeout
     

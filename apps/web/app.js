@@ -1084,7 +1084,7 @@ document.addEventListener('DOMContentLoaded', function() {
           const payload = {
             horses, race_context: ctx, useResearch: true,
             provider: chosenProvider(),  // User-controlled toggle
-            timeout_ms: 28000,           // Keep < Vercel function max (30s)
+            timeout_ms: 55000,           // ~55s analysis window (vercel maxDuration is 60s)
             phase: "analyze",
             depth: "draft"
           };
@@ -1144,7 +1144,7 @@ document.addEventListener('DOMContentLoaded', function() {
           const payload = {
             horses, race_context: ctx, useResearch: true,
             provider: chosenProvider(),  // Reuse toggle
-            timeout_ms: 28000,           // Keep under server limit
+            timeout_ms: 35000,           // ~35s final verification window
             phase: "final",
             depth: "final",
             prior_analysis: FL.analysis.result || null
