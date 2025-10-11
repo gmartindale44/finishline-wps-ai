@@ -494,68 +494,90 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     }
     
+    // Guarded Extract function with in-flight protection
+    let extractInFlight = false;
+    
     async function extractFromPhotos() {
+      if (extractInFlight) {
+        console.warn("⏳ Extract already in flight — ignored duplicate request");
+        return;
+      }
+      
       const input = document.getElementById("photoFiles") || document.getElementById("photo-input");
+      const btn = document.getElementById("btnExtract") || document.getElementById("btn-extract");
+      
       if (!input || !input.files || input.files.length === 0) {
         alert("Choose an image first.");
         return;
       }
 
       const f = input.files[0];
-      // Defensive: only images for now
       if (!/^image\//.test(f.type)) {
         alert("Please upload a PNG or JPG image of the race table.");
         return;
       }
 
-      // Convert to data URL so we can call the b64 JSON endpoint (avoids multipart issues)
-      const dataURL = await fileToDataURL(f);
-      const payload = { filename: f.name, mime: f.type || "image/png", data_b64: dataURL };
+      extractInFlight = true;
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = "Extracting…";
+      }
 
-      console.log("📤 Uploading for OCR:", payload.filename, payload.mime);
-
-      let resp;
       try {
-        resp = await fetch("/api/finishline/photo_extract_openai_b64", {
+        const dataURL = await fileToDataURL(f);
+        const payload = { filename: f.name, mime: f.type || "image/png", data_b64: dataURL };
+
+        console.log("📤 Uploading for OCR (b64):", payload.filename, payload.mime);
+
+        const resp = await fetch("/api/finishline/photo_extract_openai_b64", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify(payload)
         });
+
+        // Read raw text FIRST so we can always see exactly what came back
+        const raw = await resp.text();
+        console.log("📥 Raw OCR response:", raw);
+
+        // Try to parse as JSON
+        let data;
+        try {
+          data = JSON.parse(raw);
+        } catch (e) {
+          console.error("❌ OCR returned non-JSON:", e);
+          toast("OCR returned non-JSON (see console)", "error");
+          alert("OCR returned non-JSON. See console for details.");
+          return;
+        }
+
+        // If server surfaced an error string, show it verbatim
+        if (data?.error) {
+          console.warn("⚠️ OCR error:", data.error);
+          toast(`OCR error: ${data.error}`, "error");
+          alert(`OCR error: ${data.error}`);
+          return;
+        }
+
+        // Expect: { horses: [...] }
+        if (Array.isArray(data?.horses) && data.horses.length) {
+          console.log(`✅ Parsed ${data.horses.length} horses`);
+          populateFormFromParsed(data.horses);
+          toast(`Filled ${data.horses.length} horses`, "success");
+        } else {
+          console.warn("⚠️ No horses parsed from OCR", data);
+          toast("No horses parsed (see console)", "error");
+          alert(`No horses parsed.\nServer response:\n${JSON.stringify(data, null, 2)}`);
+        }
       } catch (e) {
-        console.error("❌ Network/timeout calling OCR endpoint:", e);
-        alert("Request failed (network/timeout). See console for details.");
-        return;
-      }
-
-      // Read raw text FIRST so we can always see exactly what came back
-      const raw = await resp.text();
-      console.log("📥 Raw OCR response:", raw);
-
-      // Try to parse as JSON
-      let data;
-      try {
-        data = JSON.parse(raw);
-      } catch (e) {
-        console.error("❌ OCR returned non-JSON:", e);
-        alert("OCR returned non-JSON. See console for details.");
-        return;
-      }
-
-      // If server surfaced an error string, show it verbatim
-      if (data?.error) {
-        console.warn("⚠️ OCR error:", data.error);
-        alert(`OCR error: ${data.error}`);
-        return;
-      }
-
-      // Expect: { horses: [...] }
-      if (Array.isArray(data?.horses) && data.horses.length) {
-        console.log(`✅ Parsed ${data.horses.length} horses`);
-        // Canonical path that fills ALL rows
-        populateFormFromParsed(data.horses);
-      } else {
-        console.warn("⚠️ No horses parsed from OCR", data);
-        alert(`No horses parsed.\nServer response:\n${JSON.stringify(data, null, 2)}`);
+        console.error("❌ Extract failed:", e);
+        toast("Extract failed (console has details)", "error");
+        alert(`Request failed: ${e.message}`);
+      } finally {
+        extractInFlight = false;
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = "Extract from Photos";
+        }
       }
     }
 
@@ -642,10 +664,28 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     })();
 
-    if (fileInput) fileInput.addEventListener('change', ()=> fileInput.files?.length && extractFromPhotos());
-    if (btnExtract) btnExtract.addEventListener('click', extractFromPhotos);
-    if (btnAnalyze) btnAnalyze.addEventListener('click', ()=> doPredict('research_predict'));
-    if (btnPredict) btnPredict.addEventListener('click', ()=> doPredict('predict'));
+    // Bind extract handler ONCE with guard
+    if (fileInput && !fileInput.__extractBound) {
+      fileInput.__extractBound = true;
+      fileInput.addEventListener('change', () => {
+        if (fileInput.files?.length) extractFromPhotos();
+      });
+    }
+    
+    if (btnExtract && !btnExtract.__extractBound) {
+      btnExtract.__extractBound = true;
+      btnExtract.addEventListener('click', extractFromPhotos);
+    }
+    
+    if (btnAnalyze && !btnAnalyze.__analyzeBound) {
+      btnAnalyze.__analyzeBound = true;
+      btnAnalyze.addEventListener('click', ()=> doPredict('research_predict'));
+    }
+    
+    if (btnPredict && !btnPredict.__predictBound) {
+      btnPredict.__predictBound = true;
+      btnPredict.addEventListener('click', ()=> doPredict('predict'));
+    }
     
     // Helper to safely log and parse JSON responses
     function logAndParseJson(resp) {
@@ -660,47 +700,56 @@ document.addEventListener('DOMContentLoaded', function() {
       });
     }
     
-    // Debug: Extract by URL
+    // Debug: Extract by URL (bind once)
     const btnExtractUrl = document.getElementById("btn-extract-url");
-    if (btnExtractUrl) {
+    if (btnExtractUrl && !btnExtractUrl.__extractUrlBound) {
+      btnExtractUrl.__extractUrlBound = true;
       btnExtractUrl.addEventListener("click", async () => {
         const urlInput = document.getElementById("debug-ocr-url");
         const url = urlInput?.value.trim();
         if (!url) { alert("Paste a direct image URL first."); return; }
 
         console.log("🌐 OCR by URL:", url);
-        let resp;
+        btnExtractUrl.disabled = true;
+        btnExtractUrl.textContent = "Extracting…";
+        
         try {
-          resp = await fetch("/api/finishline/photo_extract_openai_url", {
+          const resp = await fetch("/api/finishline/photo_extract_openai_url", {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({ url })
           });
+
+          const data = await logAndParseJson(resp);
+          if (!data) return;
+          
+          // Display in debug panel
+          const debugEl = document.getElementById('ocr-debug-json');
+          if (debugEl) debugEl.textContent = JSON.stringify(data, null, 2);
+
+          if (Array.isArray(data?.horses) && data.horses.length) {
+            console.log(`✅ Parsed ${data.horses.length} horses from URL`);
+            populateFormFromParsed(data.horses);
+            toast(`Filled ${data.horses.length} horses (URL)`, "success");
+          } else {
+            toast("No horses parsed from URL", "error");
+            alert(`No horses parsed.\nServer response:\n${JSON.stringify(data, null, 2)}`);
+          }
         } catch (e) {
           console.error("❌ Network/timeout calling OCR URL endpoint:", e);
+          toast("Request failed (see console)", "error");
           alert("Request failed (network/timeout). See console.");
-          return;
-        }
-
-        const data = await logAndParseJson(resp);
-        if (!data) return;
-        
-        // Display in debug panel
-        const debugEl = document.getElementById('ocr-debug-json');
-        if (debugEl) debugEl.textContent = JSON.stringify(data, null, 2);
-
-        if (Array.isArray(data?.horses) && data.horses.length) {
-          console.log(`✅ Parsed ${data.horses.length} horses from URL`);
-          populateFormFromParsed(data.horses);
-        } else {
-          alert(`No horses parsed.\nServer response:\n${JSON.stringify(data, null, 2)}`);
+        } finally {
+          btnExtractUrl.disabled = false;
+          btnExtractUrl.textContent = "Extract (URL)";
         }
       });
     }
     
-    // Debug: Load Demo DRF
+    // Debug: Load Demo DRF (bind once)
     const btnLoadDemo = document.getElementById("btn-load-demo");
-    if (btnLoadDemo) {
+    if (btnLoadDemo && !btnLoadDemo.__loadDemoBound) {
+      btnLoadDemo.__loadDemoBound = true;
       btnLoadDemo.addEventListener("click", () => {
         const demo = [
           { name:"Cosmic Connection", odds:"6/1", trainer:"Debbie Schaber", jockey:"Huber Villa-Gomez", bankroll:1000, kelly_fraction:0.25 },
@@ -712,6 +761,7 @@ document.addEventListener('DOMContentLoaded', function() {
         ];
         console.log("🧪 Loading demo DRF list", demo);
         populateFormFromParsed(demo);
+        toast("Loaded 6 demo horses", "success");
       });
     }
     
