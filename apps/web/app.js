@@ -971,15 +971,165 @@ document.addEventListener('DOMContentLoaded', function() {
       btnExtract.addEventListener('click', extractFromPhotos);
     }
     
-    if (btnAnalyze && !btnAnalyze.__analyzeBound) {
-      btnAnalyze.__analyzeBound = true;
-      btnAnalyze.addEventListener('click', ()=> doPredict('research_predict'));
-    }
+    // === 2-STEP WORKFLOW: Analyze (research) → Predict (final) ===
     
-    if (btnPredict && !btnPredict.__predictBound) {
-      btnPredict.__predictBound = true;
-      btnPredict.addEventListener('click', ()=> doPredict('predict'));
-    }
+    (() => {
+      // Global state for this session
+      const FL = (window.FL ||= {});
+      FL.analysis = FL.analysis || { status: 'idle', result: null, meta: null };
+
+      const pill = document.getElementById('analysis-pill');
+      function setPill(status, text) {
+        if (!pill) return;
+        pill.classList.remove('status-idle','status-running','status-ready','status-error');
+        pill.classList.add(`status-${status}`);
+        pill.innerHTML = text;
+      }
+
+      function getRows() {
+        const rows = document.querySelectorAll("#horses tbody tr, #horse-card .row, #horse-card .horse-row, #horse-card .grid-row, #horse-card .stack-row");
+        return Array.from(rows);
+      }
+      
+      function readHorses() {
+        return getRows().map(r => ({
+          name: r.querySelector('input[placeholder="Horse Name"]')?.value.trim(),
+          odds: r.querySelector('input[placeholder^="ML Odds"]')?.value.trim(),
+          trainer: r.querySelector('input[placeholder="Trainer"], input[placeholder*="Trainer" i]')?.value.trim(),
+          jockey: r.querySelector('input[placeholder="Jockey"], input[placeholder*="Jockey" i]')?.value.trim(),
+          bankroll: parseFloat(r.querySelector('input[type="number"]')?.value) || 1000,
+          kelly_fraction: (function() {
+            const nums = r.querySelectorAll('input[type="number"]');
+            return parseFloat(nums[1]?.value) || 0.25;
+          })()
+        })).filter(h => h.name);
+      }
+      
+      function readContext() {
+        return {
+          raceDate: document.getElementById("raceDate")?.value || document.getElementById("race-date")?.value || "",
+          track:    document.getElementById("raceTrack")?.value || document.getElementById("track")?.value || "",
+          surface:  document.getElementById("raceSurface")?.value || document.getElementById("surface")?.value || "",
+          distance: document.getElementById("raceDistance")?.value || document.getElementById("distance")?.value || "",
+        };
+      }
+
+      async function callResearch(payload) {
+        const resp = await fetch("/api/finishline/research_predict", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const raw = await resp.text();
+        let data = null; try { data = JSON.parse(raw); } catch {}
+        return { ok: resp.ok, status: resp.status, statusText: resp.statusText, data, raw };
+      }
+
+      // --- Step 1: Analyze button ---
+      if (btnAnalyze && !btnAnalyze.__analyzeBound) {
+        btnAnalyze.__analyzeBound = true;
+        btnAnalyze.addEventListener("click", async () => {
+          const horses = readHorses();
+          if (!horses.length) return alert("Add horses first.");
+          const ctx = readContext();
+
+          FL.analysis = { status:'running', result:null, meta:null };
+          setPill('running', `Analyzing <span class="dots"></span>`);
+
+          const old = btnAnalyze.textContent;
+          btnAnalyze.disabled = true; btnAnalyze.textContent = "Analyzing…";
+
+          // Long-running research (draft pass)
+          const payload = {
+            horses, race_context: ctx, useResearch: true,
+            provider: "stub",        // For stable testing; change to "websearch" when ready
+            timeout_ms: 12000,       // Fast for stub
+            phase: "analyze",
+            depth: "draft"
+          };
+
+          try {
+            let { ok, status, statusText, data, raw } = await callResearch(payload);
+            
+            // Fallback to stub if websearch times out
+            if (!ok && status === 504 && payload.provider === "websearch") {
+              console.warn("⏱️ Websearch timed out; retrying with stub");
+              const fallback = { ...payload, provider: "stub", timeout_ms: 12000 };
+              ({ ok, status, statusText, data, raw } = await callResearch(fallback));
+            }
+
+            if (!ok || !data) {
+              FL.analysis = { status:'error', result:null, meta:{status, statusText} };
+              setPill('error', `Analyze failed`);
+              const msg = data?.error ? `${status} ${statusText}\n${data.error}` : `${status} ${statusText}\n${raw}`;
+              return alert(`Analyze failed.\n\n${msg}`);
+            }
+
+            // Mark "ready" — store analysis blob
+            FL.analysis = { status:'ready', result:data, meta:{ provider:data.provider || payload.provider, when:Date.now() } };
+            setPill('ready', `Analysis Ready ✓`);
+            console.log("✅ Analysis complete:", data);
+          } catch (e) {
+            FL.analysis = { status:'error', result:null, meta:{exception: String(e)} };
+            setPill('error', `Analyze error`);
+            alert(`Analyze errored: ${String(e?.message||e)}`);
+          } finally {
+            btnAnalyze.disabled = false; btnAnalyze.textContent = old;
+          }
+        });
+      }
+
+      // --- Step 2: Predict button ---
+      if (btnPredict && !btnPredict.__predictBound) {
+        btnPredict.__predictBound = true;
+        btnPredict.addEventListener("click", async () => {
+          const horses = readHorses();
+          if (!horses.length) return alert("Add horses first.");
+          const ctx = readContext();
+
+          // Require analysis ready before predicting
+          if (!FL.analysis || FL.analysis.status !== 'ready') {
+            return alert("Please run 'Analyze Photos with AI' first.\n\nYou'll see a green 'Analysis Ready ✓' badge.");
+          }
+
+          const old = btnPredict.textContent;
+          btnPredict.disabled = true; btnPredict.textContent = "Predicting…";
+
+          // Final pass
+          const payload = {
+            horses, race_context: ctx, useResearch: true,
+            provider: "stub",        // For stable testing
+            timeout_ms: 12000,
+            phase: "final",
+            depth: "final",
+            prior_analysis: FL.analysis.result || null
+          };
+
+          try {
+            let { ok, status, statusText, data, raw } = await callResearch(payload);
+            
+            // Fallback to stub if needed
+            if (!ok && status === 504 && payload.provider === "websearch") {
+              const fallback = { ...payload, provider: "stub", timeout_ms: 12000 };
+              ({ ok, status, statusText, data, raw } = await callResearch(fallback));
+            }
+
+            if (!ok || !data) {
+              const msg = data?.error ? `${status} ${statusText}\n${data.error}` : `${status} ${statusText}\n${raw}`;
+              return alert(`Predict failed.\n\n${msg}`);
+            }
+
+            // Render predictions
+            console.log("✅ Predictions:", data);
+            displayResults(data);
+          } catch (e) {
+            alert(`Predict errored: ${String(e?.message||e)}`);
+          } finally {
+            btnPredict.disabled = false; btnPredict.textContent = old;
+          }
+        });
+      }
+    })();
     
     // Helper to safely log and parse JSON responses
     function logAndParseJson(resp) {

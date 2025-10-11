@@ -532,3 +532,35 @@ footer strong {
     font-size: 1.05rem;
   }
 }
+
+/* ===== STATUS PILL COMPONENT ===== */
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .2px;
+  box-shadow: 0 2px 12px rgba(0,0,0,.25);
+  border: 1px solid transparent;
+}
+.status-idle     { background: #2d1b4e; color: #c7b6ff; border-color:#3a285c; }
+.status-running  { background: #0b3a6e; color: #cde7ff; border-color:#1b5ea7; }
+.status-ready    { background: #064e3b; color: #d1fae5; border-color:#10b981; }
+.status-error    { background: #5b1a1a; color: #ffd3d3; border-color:#ef4444; }
+
+/* tiny spinner dots for running */
+.status-pill .dots::after {
+  content: '⋯';
+  animation: dots 1.2s infinite steps(4,end);
+}
+@keyframes dots {
+  0% { content: ' '; }
+  25% { content: '·'; }
+  50% { content: '··'; }
+  75% { content: '···'; }
+  100% { content: ' '; }
+}
