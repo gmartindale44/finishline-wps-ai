@@ -7,8 +7,7 @@
   },
   "rewrites": [
     { "source": "/api/:path*", "destination": "/api/http.py" },
-    { "source": "/:file(.*\\.(css|js|png|jpg|jpeg|gif|svg|webp|woff2?|ttf))", "destination": "/public/:file" },
-    { "source": "/:path*", "destination": "/public/index.html" }
+    { "source": "/:path*", "destination": "/public/:path*" }
   ],
   "headers": [
     {
