@@ -47,142 +47,149 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 });
 
-// --- File upload state and wiring (improved FormData handling) ---
-const MAX_FILES = 6;
-let selectedFiles = []; // single source of truth
+// Robust upload handler: collects from any file input, sets a valid name, and posts multipart without manual headers.
+// Assumes there is a submit trigger with id="extractBtn" or a form#ocrForm.
+// Works with plain input or custom dropzone widgets that still keep an <input type="file"> in the DOM.
 
-const $fileInput   = document.querySelector('#photoFiles') || document.querySelector('#photo-input') || document.querySelector('#fileInput');
-const $btnExtract  = document.querySelector('#btnExtract') || document.querySelector('#btn-extract') || document.querySelector('#ocr-extract-btn');
-const $btnAnalyze  = document.querySelector('#btnAnalyze') || document.querySelector('#btn-analyze-ai') || document.querySelector('#analyze-photos-btn');
-const $btnPredict  = document.querySelector('#btnPredict') || document.querySelector('#btn-predict') || document.querySelector('#predictBtn');
+(() => {
+  const form = document.getElementById('ocrForm'); // optional
+  const extractBtn = document.getElementById('extractBtn') || document.getElementById('btnExtract') || document.getElementById('ocr-extract-btn'); // primary CTA
+  const fileInputPrimary = document.getElementById('fileInput') || document.getElementById('photoFiles') || document.getElementById('photo-input'); // optional
+  const resultBox = document.getElementById('ocrResult'); // optional UI output
 
-// Helper: disable all action buttons
-function setButtonsBusy(isBusy, label = "Working...") {
-  const buttons = [$btnExtract, $btnAnalyze, $btnPredict].filter(Boolean);
-  buttons.forEach(btn => {
-    if (!btn) return;
-    btn.disabled = isBusy;
-    if (isBusy) {
-      btn.dataset.prev = btn.textContent;
-      btn.textContent = label;
-    } else if (btn.dataset.prev) {
-      btn.textContent = btn.dataset.prev;
-      delete btn.dataset.prev;
+  function setBusy(b) {
+    if (extractBtn) extractBtn.disabled = b;
+    if (form) form.classList.toggle('is-loading', b);
+  }
+
+  function showMessage(text, type = 'info') {
+    const msg = typeof text === 'string' ? text : (text?.message || JSON.stringify(text));
+    if (resultBox) {
+      resultBox.textContent = msg;
+      resultBox.dataset.type = type;
+    } else {
+      (type === 'error' ? console.error : console.log)(msg);
+      if (type === 'error') alert(msg);
     }
-  });
-}
+  }
 
-function setBusy(el, busy = true, labelWhenBusy = 'Working…') {
-  if (!el) return;
-  el.dataset.originalText = el.dataset.originalText || el.textContent;
-  el.disabled = busy;
-  el.textContent = busy ? labelWhenBusy : el.dataset.originalText;
-}
-
-function prettyAlertFromResponse(method, res, rawText) {
-  const safeText = rawText ? rawText.slice(0, 200) : "";
-  alert(`${method} failed (${res.status} ${res.statusText})\n` +
-        (safeText ? `Body: ${safeText}` : "No body"));
-}
-
-async function safeJson(res) {
-  try { return await res.json(); } catch { return null; }
-}
-
-// Convert any thrown error to readable text (no [object Object])
-function toReadableError(err) {
-  if (!err) return "Unknown error";
-  if (typeof err === "string") return err;
-  if (err.message) return err.message;
-  try { return JSON.stringify(err, null, 2); } catch { return String(err); }
-}
-
-// Wire file input to track selections
-if ($fileInput) {
-  $fileInput.addEventListener('change', (e) => {
-    selectedFiles = Array.from(e.target.files || []).slice(0, MAX_FILES);
-    console.log(`[FinishLine] Selected ${selectedFiles.length} files:`, selectedFiles.map(f => f.name));
-  });
-}
-
-// Helper to build FormData with both keys (photos AND files) for backend compatibility
-function buildUploadFormData(files) {
-  const fd = new FormData();
-  files.forEach((f, idx) => {
-    fd.append('files', f, f.name || `file_${idx}`);  // Primary field
-    fd.append('photos', f, f.name || `photo_${idx}`); // Backward compat
-  });
-  return fd;
-}
-
-// Extract button handler (improved FormData + error messaging)
-async function onClickExtract() {
-  try {
-    const files = selectedFiles.length ? selectedFiles : Array.from($fileInput?.files || []);
-    if (!files.length) {
-      alert('Please choose at least one image or PDF first.');
-      return;
+  // Gather files from ANY input[type=file] in the document.
+  function gatherFilesFromDom() {
+    const inputs = Array.from(document.querySelectorAll('input[type="file"]'));
+    const files = [];
+    for (const input of inputs) {
+      // Force multiple + correct name so FormData picks them up properly.
+      if (!input.hasAttribute('multiple')) input.setAttribute('multiple', '');
+      if (!input.name) input.name = 'files'; // ensures FormData(form) compatibility
+      if (input.files && input.files.length) {
+        for (const f of input.files) files.push(f);
+      }
     }
-    
-    setBusy($btnExtract, true, 'Extracting…');
-    const fd = buildUploadFormData(files);
-    
-    // DO NOT set Content-Type manually; let browser add multipart boundaries
-    const res = await fetch('/api/finishline/photo_extract_openai_b64', { 
-      method: 'POST', 
-      body: fd 
-    });
-    
-    // Try to parse JSON no matter what status
-    let payload;
+    return files;
+  }
+
+  async function sendMultipart(files) {
+    const fd = new FormData();
+
+    // Primary field expected by the backend
+    for (const f of files) fd.append('files', f);
+    // Back-compat field also accepted
+    for (const f of files) fd.append('photos', f);
+
+    // DO NOT set Content-Type. Browser will attach boundary.
+    const res = await fetch('/api/photo_extract_openai_b64', { method: 'POST', body: fd });
+
+    let json;
     try {
-      payload = await res.json();
+      json = await res.json();
     } catch {
       throw new Error(`Server returned non-JSON response (HTTP ${res.status}).`);
     }
-    
-    if (!res.ok || payload?.ok === false) {
-      const message = payload?.error?.message || payload?.message || `Upload failed (HTTP ${res.status}).`;
-      throw new Error(message);
-    }
-    
-    console.log('[FinishLine] OCR Success:', payload);
-    
-    // If horses returned, populate form
-    if (payload && payload.horses && payload.horses.length > 0 && typeof populateFormFromParsed === 'function') {
-      await populateFormFromParsed(payload.horses);
-    }
-    
-    // Show green checkmark
-    if ($btnExtract) {
-      $btnExtract.classList.add('is-complete');
-      $btnExtract.innerHTML = $btnExtract.dataset.originalText + ' <span class="check">✓</span>';
-    }
-    
-    if (typeof toast === 'function') {
-      toast(`✅ Extracted ${payload?.horses?.length ?? 0} horses`, 'success');
-    } else {
-      alert(`✅ Extracted ${payload?.horses?.length ?? 0} horses`);
-    }
-  } catch (err) {
-    console.error('[FinishLine] Extract error:', err);
-    const errorMsg = toReadableError(err);
-    if (typeof toast === 'function') {
-      toast(`OCR error: ${errorMsg}`, 'error');
-    } else {
-      alert(`OCR error: ${errorMsg}`);
-    }
-  } finally {
-    setBusy($btnExtract, false);
-  }
-}
 
-// Wire up Extract button
-if ($btnExtract && !$btnExtract.__wired) {
-  $btnExtract.__wired = true;
-  $btnExtract.addEventListener('click', onClickExtract);
-  console.log('[FinishLine] Wired Extract button');
-}
+    if (!res.ok || json?.ok === false) {
+      const m = json?.error?.message || json?.message || `Upload failed (HTTP ${res.status}).`;
+      throw new Error(m);
+    }
+    return json;
+  }
+
+  async function handleExtract(ev) {
+    if (ev) ev.preventDefault();
+    try {
+      setBusy(true);
+
+      // Prefer explicit primary input if present; otherwise collect from all file inputs.
+      let files = [];
+      if (fileInputPrimary?.files?.length) {
+        // Ensure name for safety
+        if (!fileInputPrimary.name) fileInputPrimary.name = 'files';
+        files = Array.from(fileInputPrimary.files);
+      } else {
+        files = gatherFilesFromDom();
+      }
+
+      if (!files.length) {
+        throw new Error('No files selected. Choose images/PDFs or drop them into the box.');
+      }
+
+      console.debug('[FinishLine] Uploading files:', files.map(f => ({ name: f.name, type: f.type, size: f.size })));
+
+      const payload = await sendMultipart(files);
+
+      showMessage('OCR upload successful. Files received by server.', 'info');
+      
+      // If horses returned, populate form
+      if (payload && payload.horses && payload.horses.length > 0 && typeof populateFormFromParsed === 'function') {
+        await populateFormFromParsed(payload.horses);
+      }
+      
+      // Show green checkmark
+      if (extractBtn) {
+        extractBtn.classList.add('is-complete');
+        const origText = extractBtn.dataset.originalText || extractBtn.textContent.replace(' ✓', '');
+        extractBtn.innerHTML = origText + ' <span class="check">✓</span>';
+      }
+      
+      // If you have a pretty JSON box, render here:
+      const pretty = document.getElementById('ocrJson');
+      if (pretty) pretty.textContent = JSON.stringify(payload, null, 2);
+      
+      // Show success message
+      if (typeof toast === 'function') {
+        toast(`✅ Extracted ${payload?.horses?.length ?? 0} horses`, 'success');
+      } else {
+        alert(`✅ Extracted ${payload?.horses?.length ?? 0} horses`);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      showMessage(`OCR error: ${msg}`, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Wire up: button or form submit
+  if (extractBtn) {
+    extractBtn.addEventListener('click', handleExtract);
+    console.log('[FinishLine] Wired Extract button');
+  }
+  if (form) form.addEventListener('submit', handleExtract);
+
+  // Convenience: reflect selected count if you have a badge
+  const countBadge = document.getElementById('photoCount') || document.getElementById('photo-count'); // optional
+  function refreshCount() {
+    const n = gatherFilesFromDom().length;
+    if (countBadge) countBadge.textContent = `${n} / 6 selected`;
+  }
+  document.addEventListener('change', (e) => {
+    const t = e.target;
+    if (t && t.matches?.('input[type="file"]')) {
+      if (!t.name) t.name = 'files';
+      refreshCount();
+    }
+  });
+  refreshCount();
+})();
 
 // --- Photo picker state (keep existing) ---
 window.PICKED_FILES = window.PICKED_FILES || [];
