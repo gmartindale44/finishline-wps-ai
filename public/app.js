@@ -47,14 +47,24 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 });
 
-// FinishLine WPS AI — Upload Interceptor (v2):
-// Guarantees any call to /api/photo_extract_openai_b64 carries actual files in multipart/form-data,
-// even if the caller passes a Request object or sets Content-Type manually.
+// FinishLine WPS AI — Definitive Upload Path (capture-phase handler)
+// Guarantees our handler runs (and others don't) by stopping propagation on the Extract button.
+// Builds a consolidated upload bucket from inputs + drop events and posts multipart with real files.
 
 (() => {
-  const OCR_PATH = '/api/photo_extract_openai_b64';
+  const OCR_ENDPOINT = '/api/photo_extract_openai_b64';
+
+  // ---- UI hooks (IDs can exist or not; code is resilient) ----
+  const form = document.getElementById('ocrForm');
+  const extractBtn = document.getElementById('extractBtn') || document.getElementById('btnExtract') || document.querySelector('[data-action="extract"]');
+  const fileInput = document.getElementById('fileInput') || document.getElementById('photoFiles') || document.querySelector('input[type="file"]');
+  const dropzone = document.getElementById('photoDropzone') || document.getElementById('drop-zone') || document.querySelector('[data-dropzone]');
+  const countBadge = document.getElementById('photoCount') || document.getElementById('photo-count');
   const resultBox = document.getElementById('ocrResult');
-  const countBadge = document.getElementById('photoCount');
+  const extractingBadge = document.getElementById('extractingBadge');
+
+  // ---- State ----
+  const uploadBucket = []; // Array<File>
 
   function showMessage(text, type = 'info') {
     const msg = typeof text === 'string' ? text : (text?.message || JSON.stringify(text));
@@ -67,11 +77,32 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  // Sweep all file inputs on the page (handles hidden inputs used by dropzones).
+  function setBusy(busy) {
+    if (extractBtn) extractBtn.disabled = busy;
+    if (form) form.classList.toggle('is-loading', busy);
+    if (extractingBadge) extractingBadge.style.visibility = busy ? 'visible' : 'hidden';
+  }
+
+  function refreshCount() {
+    const n = uploadBucket.length || gatherFilesFromDom().length;
+    if (countBadge) countBadge.textContent = `${n} / 6 selected`;
+  }
+
+  function addFiles(filesLike) {
+    if (!filesLike) return;
+    for (const f of filesLike) {
+      if (f && typeof f.name === 'string' && typeof f.size === 'number') {
+        uploadBucket.push(f);
+      }
+    }
+    refreshCount();
+  }
+
   function gatherFilesFromDom() {
     const inputs = Array.from(document.querySelectorAll('input[type="file"]'));
     const files = [];
     for (const input of inputs) {
+      // Normalize for FormData compatibility
       if (!input.hasAttribute('multiple')) input.setAttribute('multiple', '');
       if (!input.name) input.name = 'files';
       if (input.files && input.files.length) {
@@ -81,146 +112,83 @@ document.addEventListener('DOMContentLoaded', async () => {
     return files;
   }
 
-  function refreshCount() {
-    if (!countBadge) return;
-    countBadge.textContent = `${gatherFilesFromDom().length} / 6 selected`;
-  }
-
-  function formDataHasFiles(fd) {
-    if (!(fd instanceof FormData)) return false;
-    for (const [k, v] of fd.entries()) {
-      if (v instanceof File) return true;
+  function getAllFilesToSend() {
+    const fromBucket = uploadBucket.slice();
+    const fromDom = gatherFilesFromDom();
+    // Merge (dedupe by name+size)
+    const map = new Map();
+    for (const f of [...fromBucket, ...fromDom]) {
+      map.set(`${f.name}::${f.size}`, f);
     }
-    return false;
+    return Array.from(map.values());
   }
 
-  function buildFormDataWithFiles(files) {
+  async function sendMultipart(files) {
     const fd = new FormData();
-    // Append under both keys for max compatibility
     for (const f of files) fd.append('files', f);
     for (const f of files) fd.append('photos', f);
-    return fd;
-  }
+    // DO NOT set Content-Type; browser adds boundary automatically.
+    const res = await fetch(OCR_ENDPOINT, { method: 'POST', body: fd });
 
-  function stripContentType(headers) {
-    if (!headers) return;
-    if (headers instanceof Headers) {
-      // Remove any content-type to let browser set boundary
-      if (headers.has('content-type')) headers.delete('content-type');
-      if (headers.has('Content-Type')) headers.delete('Content-Type');
-    } else if (typeof headers === 'object') {
-      for (const k of Object.keys(headers)) {
-        if (k.toLowerCase() === 'content-type') delete headers[k];
-      }
+    let json;
+    try { json = await res.json(); } catch { throw new Error(`Server returned non-JSON response (HTTP ${res.status}).`); }
+
+    if (!res.ok || json?.ok === false) {
+      const m = json?.error?.message || json?.message || `Upload failed (HTTP ${res.status}).`;
+      throw new Error(m);
     }
+    return json;
   }
 
-  function toUrl(input) {
-    if (typeof input === 'string') return input;
-    if (input && typeof input.url === 'string') return input.url;
+  async function handleExtract(ev) {
+    if (ev) { ev.preventDefault(); ev.stopImmediatePropagation(); } // block any other listeners
     try {
-      return input instanceof Request ? input.url : '';
-    } catch { return ''; }
+      setBusy(true);
+      const files = getAllFilesToSend();
+      if (!files.length) throw new Error('No files selected. Choose images/PDFs or drop them into the box.');
+
+      console.debug('[FinishLine] Uploading:', files.map(f => ({ name: f.name, size: f.size, type: f.type })));
+
+      const payload = await sendMultipart(files);
+
+      showMessage('OCR upload successful. Files received by server.', 'info');
+      const pretty = document.getElementById('ocrJson');
+      if (pretty) pretty.textContent = JSON.stringify(payload, null, 2);
+      
+      // Show success message
+      if (typeof toast === 'function') {
+        toast(`✅ Upload successful`, 'success');
+      } else {
+        alert(`✅ Upload successful`);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      showMessage(`OCR error: ${msg}`, 'error');
+    } finally {
+      setBusy(false);
+    }
   }
 
-  const originalFetch = window.fetch.bind(window);
+  // ---- Wire up inputs & dropzone ----
+  if (fileInput) {
+    if (!fileInput.name) fileInput.name = 'files';
+    fileInput.addEventListener('change', (e) => addFiles(e.target.files));
+  }
 
-  window.fetch = async function patchedFetch(input, init) {
-    const url = toUrl(input);
-    const isOcr = url.includes(OCR_PATH);
+  if (dropzone) {
+    dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('is-dragover'); });
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('is-dragover'));
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('is-dragover');
+      addFiles(e.dataTransfer?.files);
+    });
+  }
 
-    if (!isOcr) {
-      return originalFetch(input, init);
-    }
+  // **Capture phase** listener takes priority and blocks other handlers
+  if (extractBtn) extractBtn.addEventListener('click', handleExtract, true /* capture */);
+  if (form) form.addEventListener('submit', handleExtract, true /* capture */);
 
-    // Snapshot current selection at call time
-    const files = gatherFilesFromDom();
-    console.debug('[FinishLine] Selected files:', files.map(f => ({ name: f.name, size: f.size, type: f.type })));
-
-    // Normalize into a Request we can safely mutate
-    let req;
-    if (input instanceof Request) {
-      // Clone the incoming Request but we'll override method/body/headers
-      const headers = new Headers(input.headers);
-      stripContentType(headers);
-
-      const opts = {
-        method: 'POST',
-        headers,
-        // Keep caller's credentials/mode/cache where applicable
-        credentials: input.credentials,
-        mode: input.mode,
-        cache: input.cache,
-        redirect: input.redirect,
-        referrer: input.referrer,
-        referrerPolicy: input.referrerPolicy,
-        integrity: input.integrity,
-        keepalive: input.keepalive,
-        signal: init?.signal || input.signal,
-      };
-
-      // Determine body: prefer existing FormData with files, otherwise inject ours
-      let bodyToUse = undefined;
-
-      if (init?.body instanceof FormData && formDataHasFiles(init.body)) {
-        bodyToUse = init.body;
-      } else if (input.body && init?.body instanceof FormData && formDataHasFiles(init.body)) {
-        bodyToUse = init.body;
-      } else if (input.body && !(init?.body)) {
-        // Can't reliably read an existing body; just replace with FormData if we have files
-        if (files.length) bodyToUse = buildFormDataWithFiles(files);
-      } else {
-        if (files.length) bodyToUse = buildFormDataWithFiles(files);
-      }
-
-      if (!bodyToUse) {
-        // No files available; let it go as-is (server will 400 cleanly)
-        req = new Request(input, { ...opts });
-      } else {
-        req = new Request(url, { ...opts, body: bodyToUse });
-      }
-    } else {
-      // String/URL input path
-      const opts = { ...(init || {}) };
-      // Always POST when we control the body
-      if (files.length) {
-        opts.method = 'POST';
-        if (!(opts.body instanceof FormData) || !formDataHasFiles(opts.body)) {
-          opts.body = buildFormDataWithFiles(files);
-        }
-      }
-      // Remove any manual content-type header so browser sets multipart boundary
-      stripContentType(opts.headers);
-      req = new Request(url, opts);
-    }
-
-    const res = await originalFetch(req);
-
-    // Surface clean messages (no [object Object])
-    try {
-      const clone = res.clone();
-      const data = await clone.json().catch(() => null);
-      if (!res.ok || data?.ok === false) {
-        const msg = data?.error?.message || data?.message || `Upload failed (HTTP ${res.status}).`;
-        showMessage(`OCR error: ${msg}`, 'error');
-      } else {
-        showMessage('OCR upload successful. Files received by server.', 'info');
-      }
-    } catch {
-      // Non-JSON response — ignore
-    }
-
-    refreshCount();
-    return res;
-  };
-
-  document.addEventListener('change', (e) => {
-    const t = e.target;
-    if (t && t.matches?.('input[type="file"]')) {
-      if (!t.name) t.name = 'files';
-      refreshCount();
-    }
-  });
   refreshCount();
 })();
 
