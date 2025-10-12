@@ -216,20 +216,31 @@ def _json_schema():
         "strict": True
     }
 
-# Keep PNG; upscale small images a bit; cap max edge ~2048 to maintain text sharpness
-def _prepare_png_bytes(src_bytes: bytes, max_edge=2048) -> Tuple[bytes, str]:
+# Downscale and optimize images to reduce payload size and improve reliability
+def _prepare_png_bytes(src_bytes: bytes, max_edge=1600) -> Tuple[bytes, str]:
+    """
+    Downscale and optimize image for OCR.
+    Reduced max_edge to 1600px for better reliability and faster processing.
+    """
     try:
         img = Image.open(io.BytesIO(src_bytes))
-        # Convert paletted to RGBA if needed, but keep PNG
+        
+        # Convert to RGB (handles various formats)
+        if img.mode not in ('RGB', 'L'):
+            img = img.convert('RGB')
+        
+        # Downscale if needed
         if max(img.size) > max_edge:
             scale = max_edge / float(max(img.size))
-            new_size = (int(img.size[0]*scale), int(img.size[1]*scale))
-            img = img.resize(new_size)
+            new_size = (max(1, int(img.size[0]*scale)), max(1, int(img.size[1]*scale)))
+            img = img.resize(new_size, Image.Resampling.LANCZOS)
+        
+        # Save as JPEG for smaller payload (vs PNG)
         out = io.BytesIO()
-        img.save(out, format="PNG", optimize=True)
-        return out.getvalue(), "image/png"
-    except Exception:
-        # If PIL fails, send original buffer and a best-guess mime
+        img.save(out, format="JPEG", quality=85, optimize=True)
+        return out.getvalue(), "image/jpeg"
+    except Exception as e:
+        logger.warning(f"Image processing failed: {e}, using original")
         return src_bytes, "image/png"
 
 def _openai_client() -> OpenAI:
