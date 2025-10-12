@@ -47,20 +47,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 });
 
-// Robust upload handler: collects from any file input, sets a valid name, and posts multipart without manual headers.
-// Assumes there is a submit trigger with id="extractBtn" or a form#ocrForm.
-// Works with plain input or custom dropzone widgets that still keep an <input type="file"> in the DOM.
+// --- Upload hardening shim for FinishLine WPS AI ---
+// Ensures ANY fetch to /api/photo_extract_openai_b64 carries real files in multipart form.
+// Works alongside existing handlers and does not require HTML changes.
 
 (() => {
-  const form = document.getElementById('ocrForm'); // optional
-  const extractBtn = document.getElementById('extractBtn') || document.getElementById('btnExtract') || document.getElementById('ocr-extract-btn'); // primary CTA
-  const fileInputPrimary = document.getElementById('fileInput') || document.getElementById('photoFiles') || document.getElementById('photo-input'); // optional
-  const resultBox = document.getElementById('ocrResult'); // optional UI output
-
-  function setBusy(b) {
-    if (extractBtn) extractBtn.disabled = b;
-    if (form) form.classList.toggle('is-loading', b);
-  }
+  // Optional UI references (non-breaking if missing)
+  const resultBox = document.getElementById('ocrResult');
+  const countBadge = document.getElementById('photoCount') || document.getElementById('photo-count');
 
   function showMessage(text, type = 'info') {
     const msg = typeof text === 'string' ? text : (text?.message || JSON.stringify(text));
@@ -73,14 +67,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  // Gather files from ANY input[type=file] in the document.
+  // Collect all files from ANY input[type=file] on the page (dropzones/hidden inputs included)
   function gatherFilesFromDom() {
     const inputs = Array.from(document.querySelectorAll('input[type="file"]'));
     const files = [];
     for (const input of inputs) {
-      // Force multiple + correct name so FormData picks them up properly.
+      // Force name/multiple so FormData is well-formed
       if (!input.hasAttribute('multiple')) input.setAttribute('multiple', '');
-      if (!input.name) input.name = 'files'; // ensures FormData(form) compatibility
+      if (!input.name) input.name = 'files';
       if (input.files && input.files.length) {
         for (const f of input.files) files.push(f);
       }
@@ -88,99 +82,85 @@ document.addEventListener('DOMContentLoaded', async () => {
     return files;
   }
 
-  async function sendMultipart(files) {
-    const fd = new FormData();
-
-    // Primary field expected by the backend
-    for (const f of files) fd.append('files', f);
-    // Back-compat field also accepted
-    for (const f of files) fd.append('photos', f);
-
-    // DO NOT set Content-Type. Browser will attach boundary.
-    const res = await fetch('/api/photo_extract_openai_b64', { method: 'POST', body: fd });
-
-    let json;
-    try {
-      json = await res.json();
-    } catch {
-      throw new Error(`Server returned non-JSON response (HTTP ${res.status}).`);
-    }
-
-    if (!res.ok || json?.ok === false) {
-      const m = json?.error?.message || json?.message || `Upload failed (HTTP ${res.status}).`;
-      throw new Error(m);
-    }
-    return json;
-  }
-
-  async function handleExtract(ev) {
-    if (ev) ev.preventDefault();
-    try {
-      setBusy(true);
-
-      // Prefer explicit primary input if present; otherwise collect from all file inputs.
-      let files = [];
-      if (fileInputPrimary?.files?.length) {
-        // Ensure name for safety
-        if (!fileInputPrimary.name) fileInputPrimary.name = 'files';
-        files = Array.from(fileInputPrimary.files);
-      } else {
-        files = gatherFilesFromDom();
-      }
-
-      if (!files.length) {
-        throw new Error('No files selected. Choose images/PDFs or drop them into the box.');
-      }
-
-      console.debug('[FinishLine] Uploading files:', files.map(f => ({ name: f.name, type: f.type, size: f.size })));
-
-      const payload = await sendMultipart(files);
-
-      showMessage('OCR upload successful. Files received by server.', 'info');
-      
-      // If horses returned, populate form
-      if (payload && payload.horses && payload.horses.length > 0 && typeof populateFormFromParsed === 'function') {
-        await populateFormFromParsed(payload.horses);
-      }
-      
-      // Show green checkmark
-      if (extractBtn) {
-        extractBtn.classList.add('is-complete');
-        const origText = extractBtn.dataset.originalText || extractBtn.textContent.replace(' ✓', '');
-        extractBtn.innerHTML = origText + ' <span class="check">✓</span>';
-      }
-      
-      // If you have a pretty JSON box, render here:
-      const pretty = document.getElementById('ocrJson');
-      if (pretty) pretty.textContent = JSON.stringify(payload, null, 2);
-      
-      // Show success message
-      if (typeof toast === 'function') {
-        toast(`✅ Extracted ${payload?.horses?.length ?? 0} horses`, 'success');
-      } else {
-        alert(`✅ Extracted ${payload?.horses?.length ?? 0} horses`);
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      showMessage(`OCR error: ${msg}`, 'error');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  // Wire up: button or form submit
-  if (extractBtn) {
-    extractBtn.addEventListener('click', handleExtract);
-    console.log('[FinishLine] Wired Extract button');
-  }
-  if (form) form.addEventListener('submit', handleExtract);
-
-  // Convenience: reflect selected count if you have a badge
-  const countBadge = document.getElementById('photoCount') || document.getElementById('photo-count'); // optional
   function refreshCount() {
-    const n = gatherFilesFromDom().length;
-    if (countBadge) countBadge.textContent = `${n} / 6 selected`;
+    if (!countBadge) return;
+    countBadge.textContent = `${gatherFilesFromDom().length} / 6 selected`;
   }
+
+  // Helpers to inspect/patch FormData
+  function formDataHasFiles(fd) {
+    if (!(fd instanceof FormData)) return false;
+    for (const [k, v] of fd.entries()) {
+      if ((k === 'files' || k === 'photos') && v instanceof File) return true;
+    }
+    return false;
+  }
+
+  function appendFilesToFormData(fd, files) {
+    for (const f of files) fd.append('files', f);
+    for (const f of files) fd.append('photos', f);
+  }
+
+  // Monkey-patch fetch ONLY for our OCR endpoint
+  const originalFetch = window.fetch.bind(window);
+  window.fetch = async function patchedFetch(input, init = {}) {
+    const url = typeof input === 'string' ? input : input?.url || '';
+    const isOcr = url.includes('/api/photo_extract_openai_b64');
+
+    if (!isOcr) {
+      return originalFetch(input, init);
+    }
+
+    // Always gather current selection at the moment of call
+    const files = gatherFilesFromDom();
+
+    // If caller didn't provide FormData with files, inject our own FormData
+    if (!(init?.body instanceof FormData) || !formDataHasFiles(init.body)) {
+      if (!files.length) {
+        // Let the request proceed, but it will 400 with NO_FILES (we surface it nicely)
+        // Alternatively, we could throw early:
+        // throw new Error('No files selected. Choose images/PDFs or drop them into the box.');
+      } else {
+        const fd = new FormData();
+        appendFilesToFormData(fd, files);
+        init = { ...(init || {}), method: 'POST', body: fd };
+        // Ensure we do NOT force Content-Type; browser sets proper boundary.
+        if (init.headers && typeof init.headers === 'object') {
+          // Normalize header casing handling
+          for (const k of Object.keys(init.headers)) {
+            if (k.toLowerCase() === 'content-type') delete init.headers[k];
+          }
+        }
+      }
+    } else {
+      // Ensure both field names exist for compatibility
+      if (files.length) appendFilesToFormData(init.body, []); // no-op if already present
+    }
+
+    const res = await originalFetch(input, init);
+
+    // Try to present clear errors in UI (no [object Object])
+    try {
+      const clone = res.clone();
+      const data = await clone.json().catch(() => null);
+      if (!res.ok || data?.ok === false) {
+        const msg =
+          data?.error?.message ||
+          data?.message ||
+          `Upload failed (HTTP ${res.status}).`;
+        showMessage(`OCR error: ${msg}`, 'error');
+      } else {
+        showMessage('OCR upload successful. Files received by server.', 'info');
+      }
+    } catch {
+      // Non-JSON response — leave default behavior
+    }
+
+    refreshCount();
+    return res;
+  };
+
+  // Keep the selection badge accurate
   document.addEventListener('change', (e) => {
     const t = e.target;
     if (t && t.matches?.('input[type="file"]')) {
