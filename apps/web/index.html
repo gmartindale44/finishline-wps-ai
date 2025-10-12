@@ -8,7 +8,36 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="/static/css/app.css">
+    
+    <!-- Tailwind CDN fallback if app.css fails to load -->
+    <script>
+    (function(){
+      function ensureCSS(href){
+        var sheets = [].slice.call(document.styleSheets||[]);
+        return sheets.some(function(s){ return (s.href||"").indexOf(href) !== -1; });
+      }
+      var primary = "/static/css/app.css";
+      setTimeout(function(){
+        if(!ensureCSS(primary)) {
+          var cdn = document.createElement("link");
+          cdn.rel = "stylesheet";
+          cdn.href = "https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css";
+          document.head.appendChild(cdn);
+          console.warn("app.css not found; loaded Tailwind CDN fallback");
+        }
+      }, 1500);
+    })();
+    </script>
+    
+    <!-- Script load guard -->
+    <script>
+    window.addEventListener('error', function(e){
+      if ((e.filename||'').includes('/static/js/')) {
+        console.error('Static JS failed to load: ' + (e.filename||'unknown') + ' - UI may not be interactive');
+      }
+    }, true);
+    </script>
 </head>
 <body>
     <div class="container">
@@ -188,12 +217,12 @@
 
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <!-- FinishLine Utilities -->
-    <script src="net.js"></script>
-    <script src="debug-ui.js"></script>
-    <script src="api-client.js"></script>
-    <script src="ui-utils.js"></script>
-    <script src="image-compress.js"></script>
-    <script src="app.js"></script>
-    <script src="extract-handler.js"></script>
+    <script src="/static/js/net.js"></script>
+    <script src="/static/js/debug-ui.js"></script>
+    <script src="/static/js/api-client.js"></script>
+    <script src="/static/js/ui-utils.js"></script>
+    <script src="/static/js/image-compress.js"></script>
+    <script src="/static/js/app.js"></script>
+    <script src="/static/js/extract-handler.js"></script>
 </body>
 </html>

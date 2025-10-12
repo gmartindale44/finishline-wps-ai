@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.staticfiles import StaticFiles
 from typing import List, Dict, Any, Optional
 import json
 import os
@@ -11,6 +12,7 @@ import traceback
 
 # Set up logging
 log = logging.getLogger(__name__)
+logger = logging.getLogger("uvicorn.error")
 
 # Import new schema and middleware
 try:
@@ -119,6 +121,30 @@ app.add_middleware(
     ],
     max_age=86400,
 )
+
+# Mount static files directory
+STATIC_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "public")
+if not os.path.isdir(STATIC_DIR):
+    logger.warning(f"Static directory not found: {STATIC_DIR}")
+    os.makedirs(STATIC_DIR, exist_ok=True)
+    logger.info(f"Created static directory: {STATIC_DIR}")
+else:
+    logger.info(f"Mounting static files from: {STATIC_DIR}")
+
+try:
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+    logger.info("✓ Static files mounted at /static")
+except Exception as e:
+    logger.error(f"Failed to mount static files: {e}")
+
+# Add 404 handler for static file debugging
+@app.exception_handler(404)
+async def not_found_handler(request: Request, exc: Exception):
+    """Log 404s for static files to help debugging."""
+    path = str(request.url.path)
+    if path.startswith("/static/"):
+        logger.warning(f"[static-404] path={path}")
+    return JSONResponse({"detail": "Not Found"}, status_code=404)
 
 
 # Global error handling middleware
