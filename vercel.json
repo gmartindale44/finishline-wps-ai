@@ -9,6 +9,8 @@
   "rewrites": [
     { "source": "/api/finishline/:path*", "destination": "/api/main.py" },
     { "source": "/api/health", "destination": "/api/main.py" },
+    { "source": "/static/css/:path*", "destination": "/public/css/:path*" },
+    { "source": "/static/js/:path*", "destination": "/public/js/:path*" },
     { "source": "/", "destination": "/apps/web/index.html" },
     { "source": "/index.html", "destination": "/apps/web/index.html" }
   ],
@@ -18,6 +20,12 @@
       "headers": [
         { "key": "Content-Type", "value": "application/json" },
         { "key": "X-Content-Type-Options", "value": "nosniff" }
+      ]
+    },
+    {
+      "source": "/static/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
       ]
     }
   ]
