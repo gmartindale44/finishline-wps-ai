@@ -4,27 +4,19 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>FinishLine WPS AI</title>
-  <!-- Important: assets are served from /static -->
   <link rel="stylesheet" href="/static/css/app.css">
 </head>
-<body class="bg-[#0b0b14] text-white">
-  <div id="app" class="max-w-7xl mx-auto p-6">
-    <h1 class="text-3xl font-semibold mb-4">FinishLine WPS AI</h1>
-
-    <div class="rounded-xl bg-[#141426] p-4 shadow">
-      <p class="opacity-80">UI bootstrapped. Replace this with the real bundle later.
-      CSS/JS must be referenced via <code>/static/...</code> to match the FastAPI mount.</p>
-
-      <div class="mt-4 grid gap-3 sm:grid-cols-3">
-        <button id="btn-extract" class="btn">Extract from Photos</button>
-        <button id="btn-analyze" class="btn">Analyze Photos with AI</button>
-        <button id="btn-predict" class="btn">Predict W/P/S</button>
-      </div>
-
-      <div id="status" class="mt-4 text-sm opacity-80"></div>
+<body class="page">
+  <div class="wrap">
+    <h1>FinishLine WPS AI</h1>
+    <p>UI placeholder. If you have a built bundle, place it in /public and keep asset paths under /static.</p>
+    <div class="btns">
+      <button id="btn-extract" class="btn">Extract (smoke)</button>
+      <button id="btn-analyze" class="btn">Analyze (smoke)</button>
+      <button id="btn-predict" class="btn">Predict (smoke)</button>
     </div>
+    <pre id="out" class="out"></pre>
   </div>
-
   <script src="/static/js/app.js" defer></script>
 </body>
 </html>

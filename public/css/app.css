@@ -1,21 +1,5 @@
-/* Minimal dark theme; replace with your real stylesheet */
-*{box-sizing:border-box}
-body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto}
-.bg-\[\#0b0b14\]{background-color:#0b0b14}
-.bg-\[\#141426\]{background-color:#141426}
-.text-white{color:#fff}
-.shadow{box-shadow:0 10px 30px rgba(0,0,0,.35)}
-.rounded-xl{border-radius:1rem}
-.p-4{padding:1rem}.p-6{padding:1.5rem}.mb-4{margin-bottom:1rem}.mt-4{margin-top:1rem}
-.max-w-7xl{max-width:80rem}.mx-auto{margin-left:auto;margin-right:auto}
-.text-3xl{font-size:1.875rem;line-height:2.25rem}.font-semibold{font-weight:600}
-.opacity-80{opacity:.8}
-.grid{display:grid}.gap-3{gap:.75rem}.sm\:grid-cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}
-
-.btn{
-  cursor:pointer; padding:.6rem 1rem; border-radius:.75rem;
-  background:#4f46e5; color:#fff; border:none;
-  transition:filter .2s ease, transform .02s ease-in-out;
-}
-.btn:active{transform:translateY(1px)}
-.btn:hover{filter:brightness(1.1)}
+.page{background:#0b0b14;color:#fff;font-family:system-ui;margin:0;min-height:100vh}
+.wrap{max-width:900px;margin:0 auto;padding:24px}
+.btns{display:flex;gap:8px;margin:12px 0}
+.btn{background:#4f46e5;border:none;color:#fff;padding:.6rem 1rem;border-radius:.6rem;cursor:pointer}
+.out{background:#111824;padding:12px;border-radius:8px;white-space:pre-wrap}

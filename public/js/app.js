@@ -1,26 +1,14 @@
-// Simple smoke test; replace with your real UI wiring.
-const $ = (s)=>document.querySelector(s);
-const statusEl = $('#status');
-
-async function ping(url, label){
-  if (!statusEl) return;
-  statusEl.textContent = `${label}…`;
+const out = document.getElementById('out');
+const run = async (url) => {
+  out.textContent = `POST ${url}…`;
   try {
-    const r = await fetch(url, { method:'POST' });
-    if (r.ok) {
-      statusEl.textContent = `${label}: OK`;
-    } else {
-      statusEl.textContent = `${label}: ${r.status}`;
-    }
+    const r = await fetch(url, {method:'POST'});
+    const t = await r.text();
+    out.textContent = `${r.status} ${r.statusText}\n\n${t}`;
   } catch (e) {
-    statusEl.textContent = `${label}: network error`;
+    out.textContent = `Network error: ${e}`;
   }
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-  $('#btn-extract')?.addEventListener('click', ()=> ping('/api/extract/smoke', 'Extract'));
-  $('#btn-analyze')?.addEventListener('click', ()=> ping('/api/research/smoke', 'Analyze'));
-  $('#btn-predict')?.addEventListener('click', ()=> ping('/api/predict/smoke', 'Predict'));
-  
-  console.log('✓ FinishLine UI loaded');
-});
+};
+document.getElementById('btn-extract').onclick = ()=>run('/api/extract/smoke');
+document.getElementById('btn-analyze').onclick = ()=>run('/api/research/smoke');
+document.getElementById('btn-predict').onclick = ()=>run('/api/predict/smoke');
