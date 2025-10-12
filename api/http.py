@@ -104,23 +104,8 @@ async def not_found_handler(request, exc):
         logger.warning(f"[static-404] {path}")
     return JSONResponse({"detail": "Not Found", "path": path}, status_code=404)
 
-# Import and include existing API routers
-try:
-    from apps.api.api_main import app as api_app
-    
-    # Mount the API routes under /api
-    @app.get("/api/{path:path}")
-    @app.post("/api/{path:path}")
-    async def proxy_to_api(path: str, request):
-        """Proxy API requests to the main API app"""
-        # This is a simple proxy - in production, you might want to use app.mount()
-        # or include_router() depending on your structure
-        pass
-    
-    logger.info("✓ Loaded API routers from apps.api.api_main")
-except ImportError as e:
-    logger.warning(f"Could not import API routers: {e}")
-    logger.warning("API endpoints may not be available")
+# Note: API routes are handled separately by api/main.py via Vercel routing
+# This file only handles UI serving at "/" and static files at "/static"
 
 logger.info("FinishLine WPS AI HTTP server initialized")
 
