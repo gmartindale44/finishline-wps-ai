@@ -9,8 +9,8 @@
   "rewrites": [
     { "source": "/api/finishline/:path*", "destination": "/api/main.py" },
     { "source": "/api/health", "destination": "/api/main.py" },
-    { "source": "/static/css/:path*", "destination": "/public/css/:path*" },
-    { "source": "/static/js/:path*", "destination": "/public/js/:path*" },
+    { "source": "/static/css/app.css", "destination": "/apps/web/styles.css" },
+    { "source": "/static/js/:file", "destination": "/apps/web/:file" },
     { "source": "/", "destination": "/apps/web/index.html" },
     { "source": "/index.html", "destination": "/apps/web/index.html" }
   ],
