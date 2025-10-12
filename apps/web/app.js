@@ -1205,7 +1205,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
       }
 
-      // --- Step 2: Predict button ---
+      // --- Step 2: Predict button (dedicated /api/finishline/predict endpoint) ---
       if (btnPredict && !btnPredict.__predictBound) {
         btnPredict.__predictBound = true;
         btnPredict.addEventListener("click", async () => {
@@ -1218,46 +1218,84 @@ document.addEventListener('DOMContentLoaded', function() {
             return alert("Please run 'Analyze Photos with AI' first.\n\nYou'll see a green 'Analysis Ready ✓' badge.");
           }
 
-          const PREDICT_TIMEOUT = 50000;  // 50s for predict verify
+          const PREDICT_TIMEOUT = 50000;  // 50s max (stays under Vercel 60s limit)
           startProgress(btnPredict, 'Predicting', PREDICT_TIMEOUT);
 
-          // Final pass (predict/verify phase)
+          // Build payload for dedicated predict endpoint
           const payload = {
-            horses, race_context: ctx, useResearch: true,
-            provider: chosenProvider(),  // Reuse toggle
-            timeout_ms: PREDICT_TIMEOUT,
-            phase: "final",
-            depth: "final",
-            prior_analysis: FL.analysis.result || null
+            horses,
+            race_context: ctx,
+            prior_analysis: FL.analysis.result || null,
+            fastMode: false
           };
 
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), PREDICT_TIMEOUT + 2000);
+
           try {
-            let { ok, status, statusText, data, raw } = await callResearch(payload);
+            // Call dedicated predict endpoint (not research_predict)
+            const res = await fetch("/api/finishline/predict", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+              signal: controller.signal
+            });
+
+            clearTimeout(timeoutId);
+
+            const raw = await res.text();
+            let data;
+            try {
+              data = JSON.parse(raw);
+            } catch (parseErr) {
+              console.error("Failed to parse predict response:", parseErr);
+              toast("Server returned invalid JSON", "error");
+              resetButton(btnPredict);
+              return;
+            }
+
+            const ok = res.ok;
+            const status = res.status;
             
-            // AUTO-RETRY on timeout (silent, no confirmation prompt)
-            if (!ok && status === 504 && payload.provider === "websearch") {
-              console.warn("⏱️ Predict timeout, auto-retrying with 80% budget (40s)...");
+            // AUTO-RETRY with fast mode on timeout
+            if (!ok && status === 504) {
+              console.warn("⏱️ Predict timeout, auto-retrying with fast mode...");
               toast("Prediction took too long, retrying faster...", "info");
               resetButton(btnPredict);
               
-              const reducedTimeout = Math.floor(PREDICT_TIMEOUT * 0.8);  // 80% of original (40s)
-              startProgress(btnPredict, 'Predicting (reduced)', reducedTimeout);
-              const reducedPayload = { ...payload, timeout_ms: reducedTimeout };
-              ({ ok, status, statusText, data, raw } = await callResearch(reducedPayload));
+              const fastTimeout = 15000;  // 15s for fast mode
+              startProgress(btnPredict, 'Predicting (fast)', fastTimeout);
               
-              // If still failing after auto-retry, use stub (silent fallback)
-              if (!ok && status === 504) {
-                console.warn("⏱️ Quick retry also timed out, falling back to stub...");
-                toast("Server busy; using quick local prediction...", "warn");
+              const fastPayload = { ...payload, fastMode: true };
+              const fastController = new AbortController();
+              const fastTimeoutId = setTimeout(() => fastController.abort(), fastTimeout + 2000);
+              
+              try {
+                const fastRes = await fetch("/api/finishline/predict", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(fastPayload),
+                  signal: fastController.signal
+                });
+                
+                clearTimeout(fastTimeoutId);
+                const fastRaw = await fastRes.text();
+                data = JSON.parse(fastRaw);
+                ok = fastRes.ok;
+                status = fastRes.status;
+              } catch (fastErr) {
+                clearTimeout(fastTimeoutId);
+                console.error("Fast mode also failed:", fastErr);
+                toast("Fast retry failed", "error");
                 resetButton(btnPredict);
-                startProgress(btnPredict, 'Predicting (stub)', 12000);
-                const stubPayload = { ...payload, provider: "stub", timeout_ms: 12000 };
-                ({ ok, status, statusText, data, raw } = await callResearch(stubPayload));
+                return;
               }
             }
 
             if (!ok || !data || data.ok === false) {
-              finishWithError(btnPredict, data, "Predict");
+              const errMsg = data?.error || `Server error (${status})`;
+              console.error("❌ Predict failed:", data);
+              toast(`Predict failed: ${errMsg}`, "error");
               resetButton(btnPredict);
               return;
             }
@@ -1270,9 +1308,10 @@ document.addEventListener('DOMContentLoaded', function() {
             if (typeof finishProgress === 'function') {
               finishProgress(btnPredict, 'Prediction Complete', 'Final verification passed');
             }
-            toast("✅ Prediction verified", "success");
+            toast("✅ Prediction complete", "success");
           } catch (e) {
-            alert(`Predict errored: ${String(e?.message||e)}`);
+            console.error("Predict error:", e);
+            toast(`Predict error: ${e?.message || e}`, "error");
             resetButton(btnPredict);
           }
         });

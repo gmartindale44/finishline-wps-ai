@@ -171,6 +171,67 @@ async def debug_info():
         }
     }
 
+
+@app.post("/api/finishline/predict")
+async def predict_endpoint(request: Request, body: Dict[str, Any]):
+    """
+    Dedicated prediction endpoint (separate from research_predict).
+    Uses analysis results to generate W/P/S predictions.
+    Max execution time: 50s (stays under Vercel 60s limit)
+    """
+    req_id = getattr(request.state, "req_id", str(uuid.uuid4()))
+    t0 = time.perf_counter()
+    
+    try:
+        horses = body.get("horses", [])
+        race_context = body.get("race_context", {})
+        fast_mode = body.get("fastMode", False)
+        prior_analysis = body.get("prior_analysis")
+        
+        log.info(f"[{req_id}] predict: {len(horses)} horses, fastMode={fast_mode}")
+        
+        if not horses:
+            raise ApiError(400, "No horses provided", "no_horses")
+        
+        # Use enhanced scoring from scoring.py
+        try:
+            from .scoring import score_horses, wps_from_probs
+        except ImportError:
+            from scoring import score_horses, wps_from_probs
+        
+        # Build research context from prior analysis if available
+        research_data = None
+        if prior_analysis and isinstance(prior_analysis, dict):
+            research_data = prior_analysis.get("research") or prior_analysis
+        
+        # Score horses using multi-factor handicapping
+        scored_horses = score_horses(horses, race_context, research_data)
+        
+        # Extract W/P/S predictions
+        predictions = wps_from_probs(scored_horses)
+        
+        elapsed_ms = int((time.perf_counter() - t0) * 1000)
+        log.info(f"[{req_id}] predict success: {elapsed_ms}ms, mode={('fast' if fast_mode else 'full')}")
+        
+        return JSONResponse({
+            "ok": True,
+            "predictions": predictions,
+            "scored": scored_horses[:10],  # Top 10 for display
+            "mode": "fast" if fast_mode else "full",
+            "reqId": req_id,
+            "elapsed_ms": elapsed_ms
+        }, status_code=200)
+    
+    except ApiError:
+        raise  # Re-raise to be handled by middleware
+    except Exception as e:
+        log.exception(f"[{req_id}] predict endpoint failed")
+        raise ApiError(
+            500,
+            f"Prediction failed: {str(e)[:100]}",
+            "predict_failed"
+        )
+
 # Explicit OPTIONS handler (belt-and-suspenders with some edge clients)
 @app.options("/{full_path:path}")
 async def any_options(full_path: str, request: Request):
