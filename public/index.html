@@ -94,11 +94,11 @@
                         <div class="photo-header">
                             <div>
                                 <strong>Photos / PDFs</strong>
-                                <span id="photo-count" class="photo-count">0 / 6 selected</span>
+                                <span id="photoCount" id="photo-count" class="photo-count">0 / 6 selected</span>
                             </div>
                             <div class="photo-actions">
-                                <input id="photoFiles" name="files" type="file" accept=".png,.jpg,.jpeg,.webp,.pdf,image/*,application/pdf" capture="environment" multiple hidden aria-label="Choose Photos or PDF" />
-                                <button id="btnChoosePhotos" type="button" class="btn-secondary">Choose Photos / PDF</button>
+                                <input id="fileInput" id="photoFiles" name="files" type="file" accept=".png,.jpg,.jpeg,.webp,.pdf,image/*,application/pdf" capture="environment" multiple hidden aria-label="Choose Photos or PDF" />
+                                <button id="choosePhotosBtn" id="btnChoosePhotos" type="button" class="btn-secondary">Choose Photos / PDF</button>
                             </div>
                         </div>
 
@@ -111,6 +111,10 @@
                         <!-- Thumbnails -->
                         <div id="thumbs" class="thumbs"></div>
                     </div>
+                    
+                    <!-- OCR Result Display -->
+                    <div id="ocrResult" style="margin-top:12px; padding:12px; border-radius:8px; background:rgba(0,0,0,0.2); display:none;" data-type="info"></div>
+                    <pre id="ocrJson" style="margin-top:12px; padding:12px; border-radius:8px; background:rgba(0,0,0,0.3); color:#9ca3af; font-size:0.85rem; white-space:pre-wrap; display:none;"></pre>
                     
                     <!-- OCR Debug Panel -->
                     <div id="ocr-debug-panel" style="margin-top:12px;">
@@ -139,7 +143,7 @@
                     <div class="action-buttons">
                         <button type="button" id="btnPredict" id="predictBtn" class="btn-primary">🎯 Predict W/P/S</button>
                         <button id="btnAnalyze" id="analyze-photos-btn" type="button" class="btn-primary">📸 Analyze Photos with AI</button>
-                        <button id="btnExtract" id="ocr-extract-btn" type="button" class="btn-secondary">📄 Extract from Photos</button>
+                        <button id="extractBtn" id="btnExtract" id="ocr-extract-btn" type="button" class="btn-secondary">📄 Extract from Photos</button>
                     </div>
                 </form>
             </section>
