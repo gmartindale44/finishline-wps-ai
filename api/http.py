@@ -2,8 +2,26 @@ from fastapi import FastAPI, UploadFile, File, Form, Request
 from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
+import logging
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="FinishLine WPS AI")
+
+# Include API routers
+try:
+    from apps.api.photo_extract_endpoint import router as ocr_router
+    app.include_router(ocr_router)
+    logger.info("✓ Included OCR router")
+except ImportError as e:
+    logger.warning(f"Could not import OCR router: {e}")
+
+try:
+    from apps.api.healthz_endpoint import router as health_router
+    app.include_router(health_router)
+    logger.info("✓ Included health router")
+except ImportError as e:
+    logger.warning(f"Could not import health router: {e}")
 
 # ---- Stable paths for Vercel/CI/local ---------------------------------------
 BASE_DIR = Path(__file__).resolve().parent
@@ -23,59 +41,11 @@ if PUBLIC_DIR.exists():
     except Exception as e:
         print(f"[BOOT] Could not mount /static: {e}", flush=True)
 
-# ---- API Endpoints (matching frontend expectations) -------------------------
-
-@app.post("/api/finishline/photo_extract_openai_b64")
-async def photo_extract_openai_b64(request: Request):
-    """OCR endpoint - always returns JSON"""
-    try:
-        body = await request.json()
-        images_b64 = body.get("images_b64", []) or body.get("images", [])
-        
-        # Placeholder for real OCR logic
-        result_text = f"Simulated OCR extracted {len(images_b64)} images"
-        
-        # Return in expected format
-        return {"ok": True, "horses": [], "result": result_text}
-    except Exception as e:
-        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
-
-@app.post("/api/finishline/research_predict")
-async def research_predict(data: dict):
-    """Analyze/Predict endpoint - always returns JSON"""
-    try:
-        horses = data.get("horses", [])
-        # Simulated prediction response
-        return {
-            "ok": True,
-            "win": {"name": "Simulated Horse 1", "prob": 0.35},
-            "place": {"name": "Simulated Horse 2", "prob": 0.28},
-            "show": {"name": "Simulated Horse 3", "prob": 0.22}
-        }
-    except Exception as e:
-        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
-
-@app.post("/api/finishline/predict")
-async def predict_endpoint(data: dict):
-    """Predict endpoint - always returns JSON"""
-    try:
-        horses = data.get("horses", [])
-        # Simulated prediction response
-        return {
-            "ok": True,
-            "predictions": {
-                "win": {"name": "Simulated Horse 1", "prob": 0.35},
-                "place": {"name": "Simulated Horse 2", "prob": 0.28},
-                "show": {"name": "Simulated Horse 3", "prob": 0.22}
-            }
-        }
-    except Exception as e:
-        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
-
-@app.get("/api/healthz")
-@app.get("/api/finishline/health")
-async def healthz():
-    return {"ok": True, "status": "healthy", "public_exists": PUBLIC_DIR.exists(), "index_exists": INDEX_HTML.exists()}
+# Note: Main API endpoints now handled by imported routers:
+# - /api/finishline/photo_extract_openai_b64 → apps/api/photo_extract_endpoint.py  
+# - /api/healthz → apps/api/healthz_endpoint.py
+# - /api/finishline/research_predict → apps/api/api_main.py (existing)
+# - /api/finishline/predict → apps/api/api_main.py (existing)
 
 # ---- UI Serving --------------------------------------------------------------
 

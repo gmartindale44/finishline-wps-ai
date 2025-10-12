@@ -9,6 +9,44 @@ const SAME_ORIGIN = "";
 const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1";
 const API_BASE = isLocal ? LOCAL_API : SAME_ORIGIN;
 
+// --- Health check and provider detection ---
+let HEALTH = null;
+
+async function getHealth() {
+  try {
+    const r = await fetch('/api/healthz');
+    return await r.json();
+  } catch {
+    return { ok: false };
+  }
+}
+
+// Initialize health check on page load
+document.addEventListener('DOMContentLoaded', async () => {
+  HEALTH = await getHealth();
+  console.log('[FinishLine] Health check:', HEALTH);
+  
+  // Show provider badge if element exists
+  const badge = document.getElementById('provider-badge');
+  if (badge && HEALTH?.ok) {
+    badge.textContent = `${HEALTH.provider}${HEALTH.debug ? ' (debug)' : ''}`;
+    
+    if (HEALTH.provider === 'stub') {
+      badge.classList.add('bg-amber');
+      badge.title = 'Using stub provider (dev only)';
+    }
+    
+    if (HEALTH.env === 'production' && (HEALTH.provider === 'stub' || HEALTH.debug)) {
+      badge.classList.add('bg-red');
+      console.error('[FinishLine] PRODUCTION is using stub provider!');
+      // Optional toast warning
+      if (typeof toast === 'function') {
+        toast('⚠️ Production is using stub provider - OCR disabled!', 'error');
+      }
+    }
+  }
+});
+
 // --- Photo picker state ---
 window.PICKED_FILES = window.PICKED_FILES || [];
 const MAX_FILES = 6;

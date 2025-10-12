@@ -9,5 +9,13 @@
     { "src": "^/api/(.*)$", "dest": "/api/http.py" },
     { "src": "^/(.*\\.(css|js|png|jpg|jpeg|gif|svg|webp|woff2?|ttf))$", "dest": "/public/$1" },
     { "src": "^/(.*)$", "dest": "/public/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Content-Type", "value": "application/json; charset=utf-8" }
+      ]
+    }
   ]
 }
