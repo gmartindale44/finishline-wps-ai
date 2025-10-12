@@ -1209,16 +1209,28 @@ document.addEventListener('DOMContentLoaded', function() {
       if (btnPredict && !btnPredict.__predictBound) {
         btnPredict.__predictBound = true;
         btnPredict.addEventListener("click", async () => {
+          console.log("[Predict] Button clicked");
+          
           const horses = readHorses();
-          if (!horses.length) return alert("Add horses first.");
+          console.log("[Predict] Read horses:", horses.length);
+          if (!horses.length) {
+            console.warn("[Predict] Blocked - no horses");
+            return alert("Add horses first.");
+          }
+          
           const ctx = readContext();
+          console.log("[Predict] Race context:", ctx);
 
           // Require analysis ready before predicting
+          console.log("[Predict] Checking analysis status:", FL.analysis?.status);
           if (!FL.analysis || FL.analysis.status !== 'ready') {
+            console.warn("[Predict] Blocked - analysis not ready");
+            toast("Please run Analyze first (green check appears)", "warn");
             return alert("Please run 'Analyze Photos with AI' first.\n\nYou'll see a green 'Analysis Ready ✓' badge.");
           }
 
           const PREDICT_TIMEOUT = 50000;  // 50s max (stays under Vercel 60s limit)
+          console.log("[Predict] Starting with timeout:", PREDICT_TIMEOUT);
           startProgress(btnPredict, 'Predicting', PREDICT_TIMEOUT);
 
           // Build payload for dedicated predict endpoint
@@ -1234,6 +1246,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
           try {
             // Call dedicated predict endpoint (not research_predict)
+            console.log("[Predict] POST /api/finishline/predict", payload);
+            console.time("predict_request");
+            
             const res = await fetch("/api/finishline/predict", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -1241,6 +1256,8 @@ document.addEventListener('DOMContentLoaded', function() {
               signal: controller.signal
             });
 
+            console.timeEnd("predict_request");
+            console.log("[Predict] Response:", res.status, res.statusText);
             clearTimeout(timeoutId);
 
             const raw = await res.text();
@@ -1301,7 +1318,8 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             // Render predictions
-            console.log("✅ Predictions:", data);
+            console.log("[Predict] ✅ Success! Data:", data);
+            console.log("[Predict] Predictions:", data.predictions);
             displayResults(data);
             
             // Show success with tooltip
@@ -1309,6 +1327,7 @@ document.addEventListener('DOMContentLoaded', function() {
               finishProgress(btnPredict, 'Prediction Complete', 'Final verification passed');
             }
             toast("✅ Prediction complete", "success");
+            console.log("[Predict] Complete - green checkmark shown");
           } catch (e) {
             console.error("Predict error:", e);
             toast(`Predict error: ${e?.message || e}`, "error");
