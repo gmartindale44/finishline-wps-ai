@@ -47,7 +47,96 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 });
 
-// --- Photo picker state ---
+// --- File upload state and wiring ---
+let uploadedFiles = [];
+
+const $fileInput   = document.querySelector('#photoFiles') || document.querySelector('#photo-input');
+const $btnExtract  = document.querySelector('#btnExtract') || document.querySelector('#btn-extract') || document.querySelector('#ocr-extract-btn');
+const $btnAnalyze  = document.querySelector('#btnAnalyze') || document.querySelector('#btn-analyze-ai') || document.querySelector('#analyze-photos-btn');
+const $btnPredict  = document.querySelector('#btnPredict') || document.querySelector('#btn-predict') || document.querySelector('#predictBtn');
+
+if ($fileInput) {
+  $fileInput.addEventListener('change', (e) => {
+    uploadedFiles = Array.from(e.target.files || []);
+    console.log(`[FinishLine] Selected ${uploadedFiles.length} files:`, uploadedFiles.map(f => f.name));
+  });
+}
+
+function setBusy(el, busy = true, labelWhenBusy = 'Working…') {
+  if (!el) return;
+  el.dataset.originalText = el.dataset.originalText || el.textContent;
+  el.disabled = busy;
+  el.textContent = busy ? labelWhenBusy : el.dataset.originalText;
+}
+
+async function postExtract(files) {
+  const fd = new FormData();
+  for (const f of files) fd.append('files', f);
+  const res = await fetch('/api/finishline/photo_extract_openai_b64', { method: 'POST', body: fd });
+  
+  // Try JSON; if non-JSON, bubble a meaningful message
+  let json;
+  try { 
+    json = await res.json(); 
+  } catch { 
+    throw new Error('OCR returned non-JSON. Check server logs.'); 
+  }
+  
+  if (!json.ok) {
+    const msg = json.error?.message || json.error?.detail || JSON.stringify(json.error) || 'OCR failed';
+    throw new Error(msg);
+  }
+  return json;
+}
+
+async function onClickExtract() {
+  try {
+    const files = uploadedFiles.length ? uploadedFiles : Array.from($fileInput?.files || []);
+    if (!files.length) {
+      alert('Please choose at least one image or PDF first.');
+      return;
+    }
+    
+    setBusy($btnExtract, true, 'Extracting…');
+    const result = await postExtract(files);
+    console.log('[FinishLine] OCR Success:', result);
+    
+    // If horses returned, populate form
+    if (result.horses && result.horses.length > 0 && typeof populateFormFromParsed === 'function') {
+      await populateFormFromParsed(result.horses);
+    }
+    
+    // Show green checkmark
+    if ($btnExtract) {
+      $btnExtract.classList.add('is-complete');
+      $btnExtract.innerHTML = $btnExtract.dataset.originalText + ' <span class="check">✓</span>';
+    }
+    
+    if (typeof toast === 'function') {
+      toast(`✅ Extracted ${result.horses?.length ?? 0} horses`, 'success');
+    } else {
+      alert(`✅ Extracted ${result.horses?.length ?? 0} horses`);
+    }
+  } catch (err) {
+    console.error('[FinishLine] Extract error:', err);
+    if (typeof toast === 'function') {
+      toast(`OCR error: ${err.message || err}`, 'error');
+    } else {
+      alert(`OCR error: ${err.message || err}`);
+    }
+  } finally {
+    setBusy($btnExtract, false);
+  }
+}
+
+// Wire up Extract button
+if ($btnExtract && !$btnExtract.__wired) {
+  $btnExtract.__wired = true;
+  $btnExtract.addEventListener('click', onClickExtract);
+  console.log('[FinishLine] Wired Extract button');
+}
+
+// --- Photo picker state (keep existing) ---
 window.PICKED_FILES = window.PICKED_FILES || [];
 const MAX_FILES = 6;
 

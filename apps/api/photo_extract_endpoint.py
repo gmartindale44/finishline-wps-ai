@@ -2,7 +2,7 @@
 OCR endpoint with production safety and proper JSON error handling.
 Never allows stub in production. Always returns structured JSON.
 """
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, UploadFile, File
 from fastapi.responses import JSONResponse
 from typing import List, Any, Dict
 import logging
@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 @router.post("/api/finishline/photo_extract_openai_b64")
-async def photo_extract_openai_b64(request: Request) -> JSONResponse:
+async def photo_extract_openai_b64(files: List[UploadFile] = File(default=[])) -> JSONResponse:
     """
     OCR endpoint - always returns JSON.
     
@@ -38,22 +38,9 @@ async def photo_extract_openai_b64(request: Request) -> JSONResponse:
                 }
             )
         
-        # 2) Get request body
-        try:
-            body = await request.json()
-        except Exception as e:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "ok": False,
-                    "error": {"code": "INVALID_JSON", "message": "Request body is not valid JSON", "detail": str(e)}
-                }
-            )
-        
-        # 3) Validate images
-        images_b64 = body.get("images_b64", []) or body.get("images", [])
-        
-        if not images_b64:
+        # 2) Validate files
+        if not files or len(files) == 0:
+            logger.warning("[OCR] No files provided in multipart upload")
             return JSONResponse(
                 status_code=400,
                 content={
@@ -62,7 +49,10 @@ async def photo_extract_openai_b64(request: Request) -> JSONResponse:
                 }
             )
         
-        if len(images_b64) > settings.MAX_IMAGES:
+        logger.info(f"[OCR] Received {len(files)} files: {[f.filename for f in files]}")
+        
+        # 3) Check file count
+        if len(files) > settings.MAX_IMAGES:
             return JSONResponse(
                 status_code=400,
                 content={
@@ -70,7 +60,7 @@ async def photo_extract_openai_b64(request: Request) -> JSONResponse:
                     "error": {
                         "code": "TOO_MANY_FILES",
                         "message": f"Max {settings.MAX_IMAGES} images allowed.",
-                        "detail": {"count": len(images_b64)}
+                        "detail": {"count": len(files)}
                     }
                 }
             )
@@ -94,21 +84,21 @@ async def photo_extract_openai_b64(request: Request) -> JSONResponse:
         if settings.OCR_PROVIDER == "openai":
             # Import and call real OpenAI OCR
             try:
-                from .openai_ocr import run_openai_ocr_on_bytes, decode_data_url_or_b64
+                from .openai_ocr import run_openai_ocr_on_bytes
                 import asyncio
                 
                 all_horses = []
-                for img_b64 in images_b64:
-                    content = decode_data_url_or_b64(img_b64)
+                for file in files:
+                    content = await file.read()
                     result = await asyncio.wait_for(
-                        run_openai_ocr_on_bytes(content, filename="image.jpg"),
+                        run_openai_ocr_on_bytes(content, filename=file.filename),
                         timeout=25.0
                     )
                     if isinstance(result, dict) and "horses" in result:
                         all_horses.extend(result["horses"])
                 
                 horses = all_horses
-                logger.info(f"[OCR] OpenAI extracted {len(horses)} horses")
+                logger.info(f"[OCR] OpenAI extracted {len(horses)} horses from {len(files)} files")
                 
             except asyncio.TimeoutError:
                 return JSONResponse(
