@@ -1,5 +1,4 @@
-# FastAPI on Vercel: DO NOT prefix routes with "/api" inside the app.
-# Vercel already maps this function to "/api/*".
+# FastAPI on Vercel: routes are mounted without an internal "/api" prefix.
 from fastapi import FastAPI, UploadFile, File, HTTPException, APIRouter, Request
 from fastapi.responses import JSONResponse
 from typing import List, Optional
@@ -68,7 +67,7 @@ async def _extract_payload(request: Request,
             })
     return payload
 
-@router.post("/photo_extract_openai_b64")   # <-- NO /api prefix here
+@router.post("/photo_extract_openai_b64")  # public path is /api/photo_extract_openai_b64 on Vercel
 async def photo_extract_openai_b64(
     request: Request,
     files: Optional[List[UploadFile]] = File(default=None),
@@ -76,8 +75,7 @@ async def photo_extract_openai_b64(
 ):
     try:
         payload = await _extract_payload(request, files, photos)
-
-        # TODO: pass `payload` into your actual OCR pipeline and return that result.
+        # TODO: call actual OCR here with `payload`
         data = {
             "received": [
                 {"filename": p["filename"], "content_type": p["content_type"], "bytes": p["bytes"]}
@@ -91,10 +89,8 @@ async def photo_extract_openai_b64(
     except Exception as e:
         return JSONResponse({"ok": False, "error": {"code":"SERVER_ERROR","message":str(e)}}, status_code=500)
 
-# Optional health check to confirm function wiring
 @router.get("/health")
 def health():
     return {"ok": True}
 
-# Mount router with NO prefix. Public URL will be /api/photo_extract_openai_b64 on Vercel.
 app.include_router(router)

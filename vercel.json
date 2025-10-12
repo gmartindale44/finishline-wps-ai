@@ -1,20 +1,13 @@
 {
+  "version": 2,
   "functions": {
-    "api/**/*.py": {
-      "maxDuration": 60,
-      "memory": 1536
+    "api/index.py": {
+      "runtime": "python3.11",
+      "maxDuration": 30
     }
   },
-  "rewrites": [
-    { "source": "/api/:path*", "destination": "/api/http.py" },
-    { "source": "/:path*", "destination": "/public/:path*" }
-  ],
-  "headers": [
-    {
-      "source": "/api/(.*)",
-      "headers": [
-        { "key": "Content-Type", "value": "application/json; charset=utf-8" }
-      ]
-    }
+  "routes": [
+    { "src": "/api/(.*)", "dest": "api/index.py" },
+    { "src": "/(.*)", "dest": "/public/$1" }
   ]
 }
