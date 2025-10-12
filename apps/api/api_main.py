@@ -195,6 +195,18 @@ async def health_check():
         "version": "1.0.0"
     }, status_code=200)
 
+@app.get("/api/healthz")
+async def healthz():
+    """Health check with filesystem verification"""
+    from pathlib import Path
+    public = Path("public")
+    index = public / "index.html"
+    return {
+        "ok": True,
+        "public_exists": public.exists(),
+        "index_exists": index.exists()
+    }
+
 @app.get("/api/finishline/version")
 async def get_version():
     """Version endpoint"""

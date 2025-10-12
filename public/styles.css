@@ -1,0 +1,630 @@
+/* NovaSpark Collective LLC Branding - Dark Theme with Purple-Blue Gradients */
+
+:root {
+  --bg-dark: #0a0014;
+  --bg-darker: #050008;
+  --accent-purple: #8b5cf6;
+  --accent-blue: #38bdf8;
+  --accent-pink: #ec4899;
+  --text-light: #f8f9fa;
+  --text-muted: #a1a1aa;
+  --card-bg: #1a1124;
+  --card-border: #2d1b4e;
+  --glow-purple: 0 0 10px #8b5cf6, 0 0 20px #7c3aed, 0 0 30px #6d28d9;
+  --glow-blue: 0 0 10px #38bdf8, 0 0 20px #0ea5e9, 0 0 30px #0284c7;
+  --font-main: 'Poppins', sans-serif;
+  --border-radius: 12px;
+  --transition: all 0.3s ease;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-main);
+  background: radial-gradient(circle at top, #0f0020, #000);
+  color: var(--text-light);
+  min-height: 100vh;
+  line-height: 1.6;
+}
+
+.container {
+  width: 90%;
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+}
+
+/* Header Styles */
+header {
+  text-align: center;
+  margin-bottom: 3rem;
+  padding: 2rem 0;
+}
+
+h1 {
+  font-size: 3rem;
+  font-weight: 700;
+  color: var(--accent-purple);
+  text-shadow: var(--glow-purple);
+  margin-bottom: 0.5rem;
+  background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+h2 {
+  font-size: 1.5rem;
+  font-weight: 500;
+  color: var(--accent-blue);
+  text-shadow: var(--glow-blue);
+  margin-bottom: 0.5rem;
+}
+
+.subtitle {
+  color: var(--text-muted);
+  font-size: 1rem;
+  font-weight: 300;
+}
+
+h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--accent-purple);
+  margin-bottom: 1rem;
+  text-shadow: 0 0 5px rgba(139, 92, 246, 0.5);
+}
+
+/* Form Styles */
+.input-section {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--border-radius);
+  padding: 2rem;
+  margin-bottom: 2rem;
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.2);
+  transition: var(--transition);
+}
+
+.input-section:hover {
+  box-shadow: 0 0 30px rgba(139, 92, 246, 0.3);
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+label {
+  font-weight: 500;
+  color: var(--accent-blue);
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+}
+
+input, select {
+  padding: 0.75rem;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  background: var(--bg-darker);
+  color: var(--text-light);
+  font-family: var(--font-main);
+  transition: var(--transition);
+}
+
+input:focus, select:focus {
+  outline: none;
+  border-color: var(--accent-purple);
+  box-shadow: 0 0 10px rgba(139, 92, 246, 0.3);
+}
+
+/* Horse Entry Styles */
+.horse-entry {
+  background: var(--bg-darker);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  transition: var(--transition);
+}
+
+.horse-entry:hover {
+  border-color: var(--accent-purple);
+  box-shadow: 0 0 15px rgba(139, 92, 246, 0.2);
+}
+
+/* Button Styles */
+button {
+  background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue));
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-weight: 600;
+  padding: 0.75rem 1.5rem;
+  cursor: pointer;
+  transition: var(--transition);
+  font-family: var(--font-main);
+  font-size: 0.9rem;
+  box-shadow: 0 4px 15px rgba(139, 92, 246, 0.3);
+}
+
+button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(139, 92, 246, 0.4);
+}
+
+button:active {
+  transform: translateY(0);
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent-purple), var(--accent-pink));
+  font-size: 1rem;
+  padding: 1rem 2rem;
+}
+
+.btn-secondary {
+  background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+  font-size: 0.9rem;
+  padding: 0.6rem 1.2rem;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin-top: 2rem;
+  flex-wrap: wrap;
+}
+
+/* Photo Upload Styles */
+.photo-section {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--border-radius);
+  padding: 2rem;
+  margin-bottom: 2rem;
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.2);
+}
+
+.photo-upload {
+  text-align: center;
+}
+
+.photo-preview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.photo-preview img {
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 2px solid var(--card-border);
+  transition: var(--transition);
+}
+
+.photo-preview img:hover {
+  border-color: var(--accent-purple);
+  box-shadow: 0 0 15px rgba(139, 92, 246, 0.3);
+}
+
+/* Loading Styles */
+.loading-section {
+  text-align: center;
+  padding: 3rem;
+  background: var(--card-bg);
+  border-radius: var(--border-radius);
+  margin-bottom: 2rem;
+}
+
+.loading-spinner {
+  width: 50px;
+  height: 50px;
+  border: 3px solid var(--card-border);
+  border-top: 3px solid var(--accent-purple);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 1rem;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Results Styles */
+.results-section {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--border-radius);
+  padding: 2rem;
+  margin-bottom: 2rem;
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.2);
+}
+
+.results-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+  margin-top: 1rem;
+}
+
+.result-card {
+  background: var(--bg-darker);
+  border: 2px solid var(--card-border);
+  border-radius: var(--border-radius);
+  padding: 1.5rem;
+  transition: var(--transition);
+  position: relative;
+  overflow: hidden;
+}
+
+.result-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--accent-purple), var(--accent-blue));
+}
+
+.result-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 30px rgba(139, 92, 246, 0.3);
+}
+
+.win-card {
+  border-color: #fbbf24;
+}
+
+.win-card::before {
+  background: linear-gradient(90deg, #fbbf24, #f59e0b);
+}
+
+.place-card {
+  border-color: #9ca3af;
+}
+
+.place-card::before {
+  background: linear-gradient(90deg, #9ca3af, #6b7280);
+}
+
+.show-card {
+  border-color: #cd7f32;
+}
+
+.show-card::before {
+  background: linear-gradient(90deg, #cd7f32, #b8860b);
+}
+
+.result-card h4 {
+  font-size: 1.2rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+.horse-info {
+  margin-bottom: 1rem;
+}
+
+.horse-name {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--accent-blue);
+  margin-bottom: 0.5rem;
+}
+
+.horse-odds, .horse-prob, .horse-kelly {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  margin-bottom: 0.25rem;
+}
+
+.rationale {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-style: italic;
+  line-height: 1.4;
+}
+
+/* Error Styles */
+.error-section {
+  background: var(--card-bg);
+  border: 1px solid #ef4444;
+  border-radius: var(--border-radius);
+  padding: 2rem;
+  margin-bottom: 2rem;
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.2);
+}
+
+.error-message {
+  text-align: center;
+}
+
+.error-message h4 {
+  color: #ef4444;
+  margin-bottom: 0.5rem;
+}
+
+/* Footer */
+footer {
+  text-align: center;
+  padding: 2rem 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+footer strong {
+  color: var(--accent-purple);
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { 
+    opacity: 0; 
+    transform: translateY(20px); 
+  }
+  to { 
+    opacity: 1; 
+    transform: translateY(0); 
+  }
+}
+
+.input-section, .results-section, .photo-section {
+  animation: fadeIn 0.6s ease;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .container {
+    width: 95%;
+    padding: 1rem 0.5rem;
+  }
+  
+  h1 {
+    font-size: 2rem;
+  }
+  
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+  
+  .action-buttons {
+    flex-direction: column;
+  }
+  
+  .results-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .input-section, .results-section, .photo-section {
+    padding: 1rem;
+  }
+}
+
+/* Photo uploader */
+.photo-box { background: rgba(255,255,255,0.04); border: 1px solid rgba(139,92,246,0.35); border-radius: 14px; padding: 14px; margin-bottom: 16px; }
+.photo-header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom: 10px; }
+.photo-count { opacity: 0.8; margin-left: 8px; font-size: 0.9rem; }
+.hidden-input { display:none; }
+.drop-zone { border: 1px dashed rgba(139,92,246,0.6); border-radius: 12px; padding: 18px; text-align: center; background: rgba(139,92,246,0.08); transition: 0.15s ease; }
+.drop-zone.dragging { background: rgba(139,92,246,0.18); border-color: rgba(56,189,248,0.7); }
+.drop-zone .hint { opacity: 0.7; font-size: 0.9rem; }
+.thumbs { display:grid; grid-template-columns: repeat(auto-fill,minmax(120px,1fr)); gap: 10px; margin-top: 12px; }
+.thumb { position: relative; background: rgba(255,255,255,0.05); border: 1px solid rgba(139,92,246,0.3); border-radius: 12px; overflow: hidden; }
+.thumb img { width: 100%; height: 90px; object-fit: cover; display:block; }
+.thumb .pdf-badge { height: 90px; display:flex; align-items:center; justify-content:center; font-weight:600; letter-spacing:0.5px; }
+.thumb .thumb-meta { display:flex; justify-content:space-between; align-items:center; padding: 8px; gap: 8px; }
+.thumb .name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size: 0.85rem; opacity: 0.9; }
+.thumb .remove { background: transparent; border: 1px solid rgba(255,255,255,0.25); color: #fff; border-radius: 8px; padding: 2px 6px; cursor: pointer; }
+.thumb .remove:hover { background: rgba(255,255,255,0.08); }
+
+/* OCR Review Panel */
+.ocr-review.hidden { display:none; }
+.ocr-review { margin-top: 12px; padding: 12px; border:1px solid rgba(139,92,246,.35); border-radius: 12px; background: rgba(255,255,255,.04); }
+.ocr-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+.ocr-items { display:grid; gap:8px; }
+.ocr-row { display:grid; grid-template-columns: 24px 1fr 120px; gap:8px; align-items:center; }
+.ocr-row input[type="text"] { width:100%; }
+.btn.sm { padding:6px 10px; font-size:.9rem; }
+.btn.ghost { background: transparent; border:1px solid rgba(139,92,246,.45); }
+
+/* Horse row field sizing tweaks */
+[data-horse-row] .jj, [data-horse-row] .tt {
+  width: 100%;
+}
+@media (min-width: 900px) {
+  [data-horse-row] .form-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1.5fr 1.5fr 1fr 1fr; /* Name, Odds, Jockey, Trainer, Bankroll, Kelly */
+    gap: 10px;
+  }
+}
+
+/* File picker reliability (iOS/Android/desktop) */
+.file-trigger {
+  position: relative;
+  overflow: hidden;
+}
+.file-trigger input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;           /* fully transparent but clickable */
+  cursor: pointer;
+}
+
+.hidden-input { display: none; }  /* keep for any older refs, unused now */
+
+/* Canonical horse-list layout */
+.horse-list { display: grid; gap: 10px; margin-bottom: 12px; }
+.horse-row { display: grid; gap: 10px; }
+@media (min-width: 900px) {
+  .horse-row {
+    grid-template-columns: 2fr 1fr 1.5fr 1.5fr 1fr 1fr; /* Name, Odds, Jockey, Trainer, Bankroll, Kelly */
+    align-items: center;
+  }
+}
+.row-actions { margin-top: 8px; }
+
+/* ===== OCR-FILLED ROW VISIBILITY IMPROVEMENTS ===== */
+
+/* Bigger, clearer horse-row inputs */
+#horse-card input[placeholder="Horse Name"],
+#horse-card input[placeholder^="ML Odds"],
+#horse-card input[type="number"] {
+  font-size: 1rem;            /* bump visibility */
+  padding: 0.7rem 0.8rem;     /* more breathing room */
+  background: #0f0a14;        /* slightly lighter than bg */
+  border: 1px solid #3a285c;
+  color: var(--text-light);
+}
+
+/* Emphasize horse name */
+#horse-card input[placeholder="Horse Name"] {
+  font-weight: 600;
+}
+
+/* Zebra rows & spacing (covers common row container classnames) */
+#horse-card .row,
+#horse-card .horse-row,
+#horse-card .grid-row,
+#horse-card .stack-row {
+  margin-bottom: 8px;
+}
+#horse-card .row:nth-child(odd),
+#horse-card .horse-row:nth-child(odd),
+#horse-card .grid-row:nth-child(odd),
+#horse-card .stack-row:nth-child(odd) {
+  background: rgba(56, 189, 248, 0.05); /* faint blue */
+  border-radius: 10px;
+  padding: 6px;
+}
+
+/* Flash highlight when populated */
+@keyframes filledFlash {
+  0%   { box-shadow: 0 0 0 0 rgba(56,189,248,0.8); }
+  100% { box-shadow: 0 0 0 14px rgba(56,189,248,0); }
+}
+.filled-flash { animation: filledFlash 900ms ease-out 1; border-radius: 10px; }
+
+/* Mobile tweak */
+@media (max-width: 640px) {
+  #horse-card input[placeholder="Horse Name"],
+  #horse-card input[placeholder^="ML Odds"],
+  #horse-card input[type="number"] {
+    font-size: 1.05rem;
+  }
+}
+
+/* ===== STATUS PILL COMPONENT ===== */
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .2px;
+  box-shadow: 0 2px 12px rgba(0,0,0,.25);
+  border: 1px solid transparent;
+}
+.status-idle     { background: #2d1b4e; color: #c7b6ff; border-color:#3a285c; }
+.status-running  { background: #0b3a6e; color: #cde7ff; border-color:#1b5ea7; }
+.status-ready    { background: #064e3b; color: #d1fae5; border-color:#10b981; }
+.status-error    { background: #5b1a1a; color: #ffd3d3; border-color:#ef4444; }
+
+/* tiny spinner dots for running */
+.status-pill .dots::after {
+  content: '⋯';
+  animation: dots 1.2s infinite steps(4,end);
+}
+@keyframes dots {
+  0% { content: ' '; }
+  25% { content: '·'; }
+  50% { content: '··'; }
+  75% { content: '···'; }
+  100% { content: ' '; }
+}
+
+/* ===== PROGRESS FILL FOR ANALYZE/PREDICT/EXTRACT BUTTONS ===== */
+
+#btn-extract,
+#btnAnalyze,
+#btnPredict,
+#btn-analyze,
+#btn-predict {
+  position: relative;
+  overflow: hidden;
+  background-image:
+    linear-gradient(135deg, var(--accent-purple), var(--accent-blue)),
+    linear-gradient(to right, rgba(56,189,248,.30), rgba(56,189,248,.30));
+  background-origin: border-box, border-box;
+  background-clip: padding-box, padding-box;
+  background-repeat: no-repeat, no-repeat;
+  background-size: 100% 100%, var(--pct, 0%) 100%;
+  background-position: 0 0, 0 0;
+  transition: background-size .12s linear, filter .2s ease;
+}
+
+button.is-working { 
+  filter: saturate(1.1) brightness(1.02); 
+}
+
+button.is-done { 
+  background-image:
+    linear-gradient(135deg, #16a34a, #22c55e), 
+    linear-gradient(to right, #16a34a33, #22c55e33);
+}
+
+button .pct { 
+  opacity: .9; 
+  font-variant-numeric: tabular-nums; 
+}
+
+button .countdown {
+  opacity: .95;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: rgba(56, 189, 248, 0.9);
+}
+
+button .check { 
+  margin-left: .35rem; 
+  font-weight: 800; 
+  color: #fff;
+}
+
+.badge.ok { 
+  color: #22c55e; 
+}
+
+/* Progress bar styles */
+.btn { position: relative; }
+.btn .check {
+  position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+  display: none;
+}
+.btn.is-complete .check { display: inline-block; }
+.progress {
+  height: 4px; width: 100%; background: #222; border-radius: 3px; overflow: hidden;
+}
+.progress > div { height: 100%; width: 0%; background: #7c5cff; transition: width .2s ease; }
