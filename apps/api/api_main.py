@@ -144,10 +144,16 @@ async def error_wrapper_middleware(request: Request, call_next):
             detail=str(e)[:200]  # Truncate for safety
         )
 
+@app.get("/api/health")
 @app.get("/api/finishline/health")
 async def health_check():
-    """Health check endpoint"""
-    return {"status": "ok"}
+    """Health check endpoint - always returns JSON"""
+    return JSONResponse({
+        "ok": True,
+        "status": "healthy",
+        "service": "FinishLine WPS AI",
+        "version": "1.0.0"
+    }, status_code=200)
 
 @app.get("/api/finishline/version")
 async def get_version():
@@ -449,92 +455,175 @@ async def research_predict_selftest():
 @app.post("/api/finishline/photo_extract_openai_b64")
 async def photo_extract_openai_b64(request: Request, body: Dict[str, Any]):
     """
-    Extract horses from base64-encoded image (bypasses multipart upload issues)
-    Input: {"filename": "race.png", "mime": "image/png", "data_b64": "base64..."}
-    Returns: {"ok": true, "horses": [...], "reqId": "...", "elapsed_ms": 123}
-    Server-side timeout: 25s (configurable via FINISHLINE_PROVIDER_TIMEOUT_MS)
+    Extract horses from base64-encoded images (bypasses multipart upload issues).
+    ALWAYS returns JSON - never throws HTML errors.
+    
+    Input: {
+        "images_b64": ["data:image/jpeg;base64,..."],  // Max 6 images
+        "prompt": "optional custom prompt"
+    }
+    
+    Returns: {
+        "ok": true,
+        "items": ["extracted text per image"],
+        "horses": [...parsed horses...],
+        "request_id": "abc123",
+        "elapsed_ms": 1234
+    }
+    
+    Max duration: 12s per image (configurable)
     """
-    req_id = getattr(request.state, "req_id", str(uuid.uuid4()))
+    req_id = getattr(request.state, "req_id", str(uuid.uuid4())[:12])
     t0 = time.perf_counter()
     
     try:
         import asyncio
+        import base64
+        import io
+        from PIL import Image
         from .openai_ocr import run_openai_ocr_on_bytes, decode_data_url_or_b64
+        from .timeout_utils import with_timeout
         
-        # Fail fast if OCR disabled
+        # Validate OCR is enabled
         ocr_enabled = os.getenv("FINISHLINE_OCR_ENABLED", "true").lower() not in ("false", "0", "no", "off")
         if not ocr_enabled:
             log.warning(f"[{req_id}] OCR disabled")
-            raise ApiError(400, "OCR is disabled on this server", "ocr_disabled")
+            return json_error(
+                400,
+                "OCR is disabled on this server",
+                "ocr_disabled",
+                req_id=req_id,
+                hint="Set FINISHLINE_OCR_ENABLED=true in environment"
+            )
         
-        # Require OpenAI API key
+        # Validate API key
         if not (os.getenv("FINISHLINE_OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")):
             log.error(f"[{req_id}] Missing OpenAI API key")
-            raise ApiError(
+            return json_error(
                 500,
-                "OpenAI API key not configured. Set FINISHLINE_OPENAI_API_KEY or OPENAI_API_KEY.",
-                "env_missing"
+                "OpenAI API key not configured",
+                "config_error",
+                req_id=req_id,
+                hint="Set FINISHLINE_OPENAI_API_KEY or OPENAI_API_KEY"
             )
         
-        filename = body.get("filename", "image.jpg")
-        mime = body.get("mime", "image/jpeg")
-        data_b64 = body.get("data_b64", "")
+        # Get images from request
+        images_b64 = body.get("images_b64", [])
         
-        if not data_b64:
-            log.warning(f"[{req_id}] missing data_b64 in payload")
-            raise ApiError(400, "Missing data_b64 field in request body", "bad_request")
+        # Also support legacy single-image format
+        if not images_b64 and body.get("data_b64"):
+            images_b64 = [body.get("data_b64")]
         
-        # Validate size (max 6MB)
-        validate_base64_size(data_b64, max_mb=6.0)
-        
-        content = decode_data_url_or_b64(data_b64)
-        kb = round(len(content) / 1024, 1)
-        log.info(f"[{req_id}] OCR request: {filename} {mime} {kb}KB")
-        
-        # Timeout from env var (default 25s to align with client)
-        timeout_ms = int(os.getenv("FINISHLINE_PROVIDER_TIMEOUT_MS", "25000"))
-        
-        async def _run():
-            return await run_openai_ocr_on_bytes(content, filename=filename)
-        
-        try:
-            result = await asyncio.wait_for(_run(), timeout=timeout_ms / 1000.0)
-        except asyncio.TimeoutError:
-            elapsed = int((time.perf_counter() - t0) * 1000)
-            log.error(f"[{req_id}] OCR timeout after {timeout_ms}ms")
-            raise ApiError(
-                504,
-                f"OCR timed out after {timeout_ms/1000:.1f}s. Try a smaller/clearer image.",
-                "timeout",
-                {"timeout_ms": timeout_ms, "elapsed_ms": elapsed}
+        if not images_b64:
+            return json_error(
+                400,
+                "No images provided",
+                "missing_images",
+                req_id=req_id,
+                hint="Provide images_b64 array"
             )
         
-        if not isinstance(result, dict) or "horses" not in result:
-            log.warning(f"[{req_id}] Invalid OCR response: {type(result)}")
-            raise ApiError(502, "Invalid OCR response from vision model", "ocr_invalid")
+        if not isinstance(images_b64, list):
+            return json_error(
+                400,
+                "images_b64 must be an array",
+                "invalid_format",
+                req_id=req_id
+            )
         
-        horses = result.get("horses") or []
-        if not horses:
-            log.warning(f"[{req_id}] OCR returned 0 horses")
+        if len(images_b64) > 6:
+            return json_error(
+                400,
+                f"Too many images ({len(images_b64)}). Maximum is 6.",
+                "too_many_images",
+                req_id=req_id
+            )
+        
+        # Validate total payload size
+        total_size_mb = sum(len(img.split(",")[-1]) * 3 / 4 for img in images_b64) / (1024 * 1024)
+        if total_size_mb > 4.0:
+            return json_error(
+                413,
+                f"Total payload too large ({total_size_mb:.1f}MB). Maximum is 4MB.",
+                "payload_too_large",
+                req_id=req_id,
+                hint="Reduce image size/quality before upload"
+            )
+        
+        # Process each image with timeout
+        timeout_per_image = 12  # seconds
+        all_horses = []
+        items = []
+        
+        for i, img_b64 in enumerate(images_b64):
+            try:
+                # Decode and process image
+                content = decode_data_url_or_b64(img_b64)
+                kb = round(len(content) / 1024, 1)
+                log.info(f"[{req_id}] Processing image {i+1}/{len(images_b64)}: {kb}KB")
+                
+                # Downscale/compress if needed (prevent oversized payloads)
+                img = Image.open(io.BytesIO(content)).convert("RGB")
+                w, h = img.size
+                max_edge = 1400
+                if max(w, h) > max_edge:
+                    scale = max_edge / max(w, h)
+                    img = img.resize((int(w*scale), int(h*scale)), Image.Resampling.LANCZOS)
+                    log.info(f"[{req_id}] Resized image {i+1} from {w}x{h} to {img.size}")
+                
+                # Convert to JPEG bytes
+                buff = io.BytesIO()
+                img.save(buff, format="JPEG", quality=85, optimize=True)
+                content = buff.getvalue()
+                
+                # Call OCR with timeout
+                async def _run_ocr():
+                    return await run_openai_ocr_on_bytes(content, filename=f"image_{i+1}.jpg")
+                
+                result = await with_timeout(
+                    _run_ocr,
+                    timeout_per_image,
+                    fallback={"horses": []},
+                    operation_name=f"OCR image {i+1}"
+                )
+                
+                # Collect results
+                if isinstance(result, dict):
+                    horses = result.get("horses", [])
+                    all_horses.extend(horses)
+                    items.append(f"Extracted {len(horses)} horses")
+                else:
+                    items.append("No horses found")
+                    
+            except Exception as e:
+                log.error(f"[{req_id}] Image {i+1} failed: {e}")
+                items.append(f"Error: {str(e)[:50]}")
         
         elapsed_ms = int((time.perf_counter() - t0) * 1000)
-        log.info(f"[{req_id}] OCR success: {len(horses)} horses, {elapsed_ms}ms")
+        log.info(f"[{req_id}] OCR complete: {len(all_horses)} total horses, {elapsed_ms}ms")
         
-        return JSONResponse({
-            "ok": True,
-            "horses": horses,
-            "reqId": req_id,
-            "elapsed_ms": elapsed_ms
-        }, status_code=200)
+        return json_success(
+            {
+                "items": items,
+                "horses": all_horses,
+                "count": len(all_horses)
+            },
+            req_id=req_id,
+            elapsed_ms=elapsed_ms
+        )
     
     except ApiError:
         raise  # Re-raise to be handled by middleware
     except Exception as e:
-        log.exception(f"[{req_id}] photo_extract_openai_b64 failed")
-        raise ApiError(
+        log.exception(f"[{req_id}] photo_extract_openai_b64 unhandled error")
+        elapsed_ms = int((time.perf_counter() - t0) * 1000)
+        return json_error(
             500,
-            f"OCR extraction failed: {str(e)[:100]}",
-            "ocr_failed"
+            "OCR extraction failed",
+            "ocr_failed",
+            req_id=req_id,
+            elapsed_ms=elapsed_ms,
+            detail=str(e)[:200]
         )
 
 @app.post("/api/finishline/research_predict")

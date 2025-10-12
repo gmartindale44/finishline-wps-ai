@@ -2,14 +2,25 @@
   "version": 2,
   "functions": {
     "api/**/*.py": { 
+      "runtime": "python3.11",
       "maxDuration": 60,
       "memory": 1536
     }
   },
   "routes": [
     { "src": "^/api/finishline/.*", "dest": "/api/main.py" },
+    { "src": "^/api/health$", "dest": "/api/main.py" },
     { "src": "^/$", "dest": "/apps/web/index.html" },
     { "src": "^/index.html$", "dest": "/apps/web/index.html" },
     { "src": "/(.*)", "dest": "/apps/web/$1" }
+  ],
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Content-Type", "value": "application/json" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" }
+      ]
+    }
   ]
 }
