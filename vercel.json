@@ -8,6 +8,14 @@
   },
   "routes": [
     {
+      "src": "^/(favicon\\.ico|robots\\.txt)$",
+      "dest": "/$1"
+    },
+    {
+      "src": "^/(assets|css|js|img|fonts)/(.*)$",
+      "dest": "/static/$1/$2"
+    },
+    {
       "src": "^/static/(.*)$",
       "dest": "/static/$1"
     },

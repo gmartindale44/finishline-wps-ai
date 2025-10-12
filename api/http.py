@@ -1,16 +1,14 @@
 """
 FastAPI HTTP entrypoint for FinishLine WPS AI.
-Serves the UI at "/" and static assets at "/static".
-Imports and includes existing API routers.
+Serves UI at "/" and static assets at "/static" from /public directory.
 """
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import os
 import logging
 
-# Set up logging
 logger = logging.getLogger("uvicorn.error")
 
 app = FastAPI(
@@ -19,93 +17,88 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS configuration
+# CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure as needed
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
     max_age=86400,
 )
 
-# Determine paths
+# Setup paths
 BASE_DIR = os.path.dirname(__file__)
 PUBLIC_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", "public"))
-APPS_WEB_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", "apps", "web"))
 
-# Prefer apps/web if public doesn't exist
-if not os.path.isdir(PUBLIC_DIR) and os.path.isdir(APPS_WEB_DIR):
-    PUBLIC_DIR = APPS_WEB_DIR
-    logger.info(f"Using apps/web as static directory: {PUBLIC_DIR}")
-else:
-    os.makedirs(PUBLIC_DIR, exist_ok=True)
-    logger.info(f"Using public as static directory: {PUBLIC_DIR}")
+# Ensure public directory exists
+os.makedirs(PUBLIC_DIR, exist_ok=True)
+logger.info(f"Public directory: {PUBLIC_DIR}")
 
-# Mount static assets
+# Mount /public as /static
 try:
     app.mount("/static", StaticFiles(directory=PUBLIC_DIR), name="static")
-    logger.info(f"✓ Static files mounted at /static from {PUBLIC_DIR}")
+    logger.info(f"✓ Mounted /public as /static")
 except Exception as e:
     logger.error(f"Failed to mount static files: {e}")
 
-# Determine index.html path
-INDEX_PATH = os.path.join(APPS_WEB_DIR, "index.html") if os.path.isfile(os.path.join(APPS_WEB_DIR, "index.html")) else os.path.join(PUBLIC_DIR, "index.html")
-
-# Create minimal index.html if it doesn't exist
-if not os.path.isfile(INDEX_PATH):
-    logger.warning(f"index.html not found, creating minimal stub at {INDEX_PATH}")
-    with open(INDEX_PATH, "w", encoding="utf-8") as f:
-        f.write("""<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>FinishLine WPS AI</title>
-<link rel="stylesheet" href="/static/css/app.css">
-<script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-gray-900 text-white">
-<div id="app" class="container mx-auto p-6">
-  <h1 class="text-3xl font-bold mb-4">🏇 FinishLine WPS AI</h1>
-  <p class="text-gray-300">Static assets are loading. Replace this file with your real UI bundle.</p>
-  <div class="mt-4 p-4 bg-blue-900 rounded">
-    <p class="text-sm">✓ FastAPI is serving this page</p>
-    <p class="text-sm">✓ Static CSS/JS should load from /static</p>
-  </div>
-  <script defer src="/static/js/app.js"></script>
-</div>
-</body>
-</html>""")
-else:
-    logger.info(f"✓ Found index.html at {INDEX_PATH}")
+# Path to index.html
+INDEX_PATH = os.path.join(PUBLIC_DIR, "index.html")
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    """Serve the static index.html"""
-    return FileResponse(INDEX_PATH, media_type="text/html")
+    """Serve the UI at root"""
+    if os.path.isfile(INDEX_PATH):
+        logger.info(f"Serving index.html from {INDEX_PATH}")
+        return FileResponse(INDEX_PATH, media_type="text/html")
+    
+    # Fallback if index.html is missing
+    logger.warning("index.html not found, serving fallback")
+    html = """<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>FinishLine WPS AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-white">
+    <div class="max-w-4xl mx-auto p-8">
+        <h1 class="text-3xl font-bold mb-4">🏇 FinishLine WPS AI</h1>
+        <div class="bg-gray-800 rounded-lg p-6">
+            <h2 class="text-xl font-semibold mb-2">Setup Required</h2>
+            <p class="text-gray-300">
+                index.html not found in /public directory.<br>
+                Place your UI files in <code class="bg-gray-700 px-2 py-1 rounded">public/</code> 
+                and reference assets as <code class="bg-gray-700 px-2 py-1 rounded">/static/...</code>
+            </p>
+            <div class="mt-4 text-sm text-gray-400">
+                <p>✓ FastAPI is running</p>
+                <p>✓ Static files should be accessible at /static/*</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>"""
+    return HTMLResponse(html)
 
 @app.get("/index.html", response_class=HTMLResponse)
 async def index_html():
-    """Serve the static index.html"""
-    return FileResponse(INDEX_PATH, media_type="text/html")
+    """Serve index.html"""
+    return await root()
 
 @app.get("/health")
 async def health():
-    """Health check endpoint"""
+    """Health check"""
     return {"ok": True, "status": "healthy", "service": "FinishLine WPS AI"}
 
-# Log static 404s to help diagnose path issues
+# Log 404s for static files to help debugging
 @app.exception_handler(404)
 async def not_found_handler(request, exc):
-    """Log 404s for static files to help debugging"""
+    """Log 404s for static files"""
     path = str(request.url.path)
     if path.startswith("/static/"):
         logger.warning(f"[static-404] {path}")
     return JSONResponse({"detail": "Not Found", "path": path}, status_code=404)
 
-# Note: API routes are handled separately by api/main.py via Vercel routing
-# This file only handles UI serving at "/" and static files at "/static"
-
-logger.info("FinishLine WPS AI HTTP server initialized")
-
+logger.info("✓ FinishLine WPS AI HTTP server initialized")
