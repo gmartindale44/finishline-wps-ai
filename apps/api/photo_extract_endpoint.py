@@ -12,7 +12,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 @router.post("/api/finishline/photo_extract_openai_b64")
-async def photo_extract_openai_b64(files: List[UploadFile] = File(default=[])) -> JSONResponse:
+async def photo_extract_openai_b64(
+    photos: List[UploadFile] = File(default=None),
+    files: List[UploadFile] = File(default=None)
+) -> JSONResponse:
     """
     OCR endpoint - always returns JSON.
     
@@ -38,8 +41,10 @@ async def photo_extract_openai_b64(files: List[UploadFile] = File(default=[])) -
                 }
             )
         
-        # 2) Validate files
-        if not files or len(files) == 0:
+        # 2) Merge photos and files (accept both field names)
+        payload_files = (photos or []) + (files or [])
+        
+        if not payload_files:
             logger.warning("[OCR] No files provided in multipart upload")
             return JSONResponse(
                 status_code=400,
@@ -49,10 +54,10 @@ async def photo_extract_openai_b64(files: List[UploadFile] = File(default=[])) -
                 }
             )
         
-        logger.info(f"[OCR] Received {len(files)} files: {[f.filename for f in files]}")
+        logger.info(f"[OCR] Received {len(payload_files)} files: {[f.filename for f in payload_files]}")
         
         # 3) Check file count
-        if len(files) > settings.MAX_IMAGES:
+        if len(payload_files) > settings.MAX_IMAGES:
             return JSONResponse(
                 status_code=400,
                 content={
@@ -60,7 +65,7 @@ async def photo_extract_openai_b64(files: List[UploadFile] = File(default=[])) -
                     "error": {
                         "code": "TOO_MANY_FILES",
                         "message": f"Max {settings.MAX_IMAGES} images allowed.",
-                        "detail": {"count": len(files)}
+                        "detail": {"count": len(payload_files)}
                     }
                 }
             )
@@ -88,7 +93,7 @@ async def photo_extract_openai_b64(files: List[UploadFile] = File(default=[])) -
                 import asyncio
                 
                 all_horses = []
-                for file in files:
+                for file in payload_files:
                     content = await file.read()
                     result = await asyncio.wait_for(
                         run_openai_ocr_on_bytes(content, filename=file.filename),
@@ -98,7 +103,7 @@ async def photo_extract_openai_b64(files: List[UploadFile] = File(default=[])) -
                         all_horses.extend(result["horses"])
                 
                 horses = all_horses
-                logger.info(f"[OCR] OpenAI extracted {len(horses)} horses from {len(files)} files")
+                logger.info(f"[OCR] OpenAI extracted {len(horses)} horses from {len(payload_files)} files")
                 
             except asyncio.TimeoutError:
                 return JSONResponse(

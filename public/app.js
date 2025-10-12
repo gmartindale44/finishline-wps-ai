@@ -48,17 +48,27 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 // --- File upload state and wiring ---
-let uploadedFiles = [];
+const MAX_FILES = 6;
+let selectedFiles = []; // single source of truth
 
-const $fileInput   = document.querySelector('#photoFiles') || document.querySelector('#photo-input');
+const $fileInput   = document.querySelector('#photoFiles') || document.querySelector('#photo-input') || document.querySelector('#fileInput');
 const $btnExtract  = document.querySelector('#btnExtract') || document.querySelector('#btn-extract') || document.querySelector('#ocr-extract-btn');
 const $btnAnalyze  = document.querySelector('#btnAnalyze') || document.querySelector('#btn-analyze-ai') || document.querySelector('#analyze-photos-btn');
 const $btnPredict  = document.querySelector('#btnPredict') || document.querySelector('#btn-predict') || document.querySelector('#predictBtn');
 
-if ($fileInput) {
-  $fileInput.addEventListener('change', (e) => {
-    uploadedFiles = Array.from(e.target.files || []);
-    console.log(`[FinishLine] Selected ${uploadedFiles.length} files:`, uploadedFiles.map(f => f.name));
+// Helper functions for button states
+function setButtonsBusy(isBusy, label = "Working...") {
+  const buttons = [$btnExtract, $btnAnalyze, $btnPredict].filter(Boolean);
+  buttons.forEach(btn => {
+    if (!btn) return;
+    btn.disabled = isBusy;
+    if (isBusy) {
+      btn.dataset.prev = btn.textContent;
+      btn.textContent = label;
+    } else if (btn.dataset.prev) {
+      btn.textContent = btn.dataset.prev;
+      delete btn.dataset.prev;
+    }
   });
 }
 
@@ -69,41 +79,66 @@ function setBusy(el, busy = true, labelWhenBusy = 'Working…') {
   el.textContent = busy ? labelWhenBusy : el.dataset.originalText;
 }
 
-async function postExtract(files) {
-  const fd = new FormData();
-  for (const f of files) fd.append('files', f);
-  const res = await fetch('/api/finishline/photo_extract_openai_b64', { method: 'POST', body: fd });
-  
-  // Try JSON; if non-JSON, bubble a meaningful message
-  let json;
-  try { 
-    json = await res.json(); 
-  } catch { 
-    throw new Error('OCR returned non-JSON. Check server logs.'); 
-  }
-  
-  if (!json.ok) {
-    const msg = json.error?.message || json.error?.detail || JSON.stringify(json.error) || 'OCR failed';
-    throw new Error(msg);
-  }
-  return json;
+function prettyAlertFromResponse(method, res, rawText) {
+  const safeText = rawText ? rawText.slice(0, 200) : "";
+  alert(`${method} failed (${res.status} ${res.statusText})\n` +
+        (safeText ? `Body: ${safeText}` : "No body"));
 }
 
+async function safeJson(res) {
+  try { return await res.json(); } catch { return null; }
+}
+
+// Convert any thrown error to readable text (no [object Object])
+function toReadableError(err) {
+  if (!err) return "Unknown error";
+  if (typeof err === "string") return err;
+  if (err.message) return err.message;
+  try { return JSON.stringify(err, null, 2); } catch { return String(err); }
+}
+
+// Wire file input to track selections
+if ($fileInput) {
+  $fileInput.addEventListener('change', (e) => {
+    selectedFiles = Array.from(e.target.files || []).slice(0, MAX_FILES);
+    console.log(`[FinishLine] Selected ${selectedFiles.length} files:`, selectedFiles.map(f => f.name));
+  });
+}
+
+// Helper to build FormData with both keys (photos AND files) for backend compatibility
+function buildUploadFormData(files) {
+  const fd = new FormData();
+  files.forEach((f, idx) => {
+    fd.append('photos', f, f.name || `photo_${idx}`);
+    fd.append('files', f, f.name || `file_${idx}`);
+  });
+  return fd;
+}
+
+// Extract button handler
 async function onClickExtract() {
   try {
-    const files = uploadedFiles.length ? uploadedFiles : Array.from($fileInput?.files || []);
+    const files = selectedFiles.length ? selectedFiles : Array.from($fileInput?.files || []);
     if (!files.length) {
       alert('Please choose at least one image or PDF first.');
       return;
     }
     
     setBusy($btnExtract, true, 'Extracting…');
-    const result = await postExtract(files);
-    console.log('[FinishLine] OCR Success:', result);
+    const fd = buildUploadFormData(files);
+    const res = await fetch('/api/finishline/photo_extract_openai_b64', { method: 'POST', body: fd });
+    const data = await safeJson(res);
+    
+    if (!res.ok) {
+      prettyAlertFromResponse("Extract", res, data ? JSON.stringify(data) : await res.text().catch(()=> ""));
+      return;
+    }
+    
+    console.log('[FinishLine] OCR Success:', data);
     
     // If horses returned, populate form
-    if (result.horses && result.horses.length > 0 && typeof populateFormFromParsed === 'function') {
-      await populateFormFromParsed(result.horses);
+    if (data && data.horses && data.horses.length > 0 && typeof populateFormFromParsed === 'function') {
+      await populateFormFromParsed(data.horses);
     }
     
     // Show green checkmark
@@ -113,16 +148,17 @@ async function onClickExtract() {
     }
     
     if (typeof toast === 'function') {
-      toast(`✅ Extracted ${result.horses?.length ?? 0} horses`, 'success');
+      toast(`✅ Extracted ${data?.horses?.length ?? 0} horses`, 'success');
     } else {
-      alert(`✅ Extracted ${result.horses?.length ?? 0} horses`);
+      alert(`✅ Extracted ${data?.horses?.length ?? 0} horses`);
     }
   } catch (err) {
     console.error('[FinishLine] Extract error:', err);
+    const errorMsg = toReadableError(err);
     if (typeof toast === 'function') {
-      toast(`OCR error: ${err.message || err}`, 'error');
+      toast(`OCR error: ${errorMsg}`, 'error');
     } else {
-      alert(`OCR error: ${err.message || err}`);
+      alert(`OCR error: ${errorMsg}`);
     }
   } finally {
     setBusy($btnExtract, false);
@@ -138,7 +174,6 @@ if ($btnExtract && !$btnExtract.__wired) {
 
 // --- Photo picker state (keep existing) ---
 window.PICKED_FILES = window.PICKED_FILES || [];
-const MAX_FILES = 6;
 
 function updatePhotoCount() {
   const el = document.getElementById("photo-count");
