@@ -47,211 +47,87 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 });
 
-// FinishLine WPS AI — Transport Guard v3
-// Forces ALL requests (fetch, Request objects, and Axios/XHR) to /api/photo_extract_openai_b64
-// to include real multipart form-data with selected files. Also provides clean UI errors.
+// FinishLine WPS AI — Final Upload Fix (+ Self-Test)
+// If you don't see the self-test log below in DevTools, this file isn't loading on this page build.
 
 (() => {
-  const OCR_PATH = '/api/photo_extract_openai_b64';
+  console.info('[FinishLine UploadFix] app.js loaded ✔');  // <-- SELF-TEST
 
-  // ---- Optional UI elements (safe if missing) ----
-  const resultBox   = document.getElementById('ocrResult');
-  const countBadge  = document.getElementById('photoCount') || document.getElementById('photo-count');
-  const extractBtn  = document.getElementById('extractBtn') || document.getElementById('btnExtract') || document.querySelector('[data-action="extract"]');
-  const fileInput   = document.getElementById('fileInput') || document.getElementById('photoFiles') || document.querySelector('input[type="file"]');
-  const dropzone    = document.getElementById('photoDropzone') || document.getElementById('drop-zone') || document.querySelector('[data-dropzone]');
-  const form        = document.getElementById('ocrForm');
+  const OCR_ENDPOINT = '/api/photo_extract_openai_b64';
 
-  function showMessage(text, type = 'info') {
-    const msg = typeof text === 'string' ? text : (text?.message || JSON.stringify(text));
-    if (resultBox) { resultBox.textContent = msg; resultBox.dataset.type = type; }
-    else { (type === 'error' ? console.error : console.log)(msg); if (type === 'error') alert(msg); }
-  }
+  // ---- Soft selectors (robust to markup changes) ----
+  const form       = document.getElementById('ocrForm') || document.querySelector('form[data-ocr]');
+  const extractBtn = document.getElementById('extractBtn')
+                    || document.querySelector('[data-action="extract"]')
+                    || Array.from(document.querySelectorAll('button, a, input[type="submit"]'))
+                        .find(b => /extract\s*from\s*photos/i.test(b.textContent || b.value || ''));
 
-  // ---- File collection (inputs + dropzone) ----
-  const uploadBucket = []; // preferred source (drop/add)
-  function addFiles(list) {
-    if (!list) return;
-    for (const f of list) if (f?.name && typeof f.size === 'number') uploadBucket.push(f);
-    refreshCount();
-  }
-  function gatherFilesFromDom() {
-    const inputs = Array.from(document.querySelectorAll('input[type="file"]'));
-    const files = [];
-    for (const input of inputs) {
+  const fileInputs = () => Array.from(document.querySelectorAll('input[type="file"]'));
+  const resultBox  = document.getElementById('ocrResult');
+  const countBadge = document.getElementById('photoCount') || document.getElementById('photo-count');
+
+  // ---- Dropzone support (optional) ----
+  const dropzone = document.getElementById('photoDropzone') || document.getElementById('drop-zone') || document.querySelector('[data-dropzone]');
+  const bucket = []; // Files captured via drop
+  const addToBucket = (list) => { if (list) for (const f of list) if (f?.name) bucket.push(f); refreshCount(); };
+
+  // ---- Utilities ----
+  const show = (msg, type='info') => {
+    const text = typeof msg === 'string' ? msg : (msg?.message || JSON.stringify(msg));
+    if (resultBox) { resultBox.textContent = text; resultBox.dataset.type = type; }
+    else { (type === 'error' ? console.error : console.log)(text); if (type === 'error') alert(text); }
+  };
+
+  function gatherAllFiles() {
+    const all = [];
+    for (const input of fileInputs()) {
       if (!input.hasAttribute('multiple')) input.setAttribute('multiple', '');
       if (!input.name) input.name = 'files';
-      if (input.files?.length) for (const f of input.files) files.push(f);
+      if (input.files?.length) for (const f of input.files) all.push(f);
     }
-    return files;
+    for (const f of bucket) all.push(f);
+    // de-dupe by name+size
+    const m = new Map(); for (const f of all) m.set(`${f.name}::${f.size}`, f);
+    return [...m.values()];
   }
-  function getAllFiles() {
-    const merged = new Map();
-    for (const f of [...uploadBucket, ...gatherFilesFromDom()]) merged.set(`${f.name}::${f.size}`, f);
-    return Array.from(merged.values());
-  }
+
   function refreshCount() {
     if (!countBadge) return;
-    countBadge.textContent = `${getAllFiles().length} / 6 selected`;
+    countBadge.textContent = `${gatherAllFiles().length} / 6 selected`;
   }
-  if (fileInput) {
-    if (!fileInput.name) fileInput.name = 'files';
-    fileInput.addEventListener('change', e => addFiles(e.target.files));
-  }
-  if (dropzone) {
-    dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('is-dragover'); });
-    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('is-dragover'));
-    dropzone.addEventListener('drop', e => { e.preventDefault(); dropzone.classList.remove('is-dragover'); addFiles(e.dataTransfer?.files); });
-  }
-  refreshCount();
 
-  // ---- Helpers ----
-  function buildFD(files) {
+  async function uploadNow(ev) {
+    if (ev) { ev.preventDefault(); ev.stopImmediatePropagation(); }
+    const files = gatherAllFiles();
+    console.debug('[FinishLine UploadFix] files →', files.map(f => ({name:f.name,size:f.size,type:f.type})));
+    if (!files.length) { show('No files selected. Choose images/PDFs or drop them in.', 'error'); return; }
+
+    // Build FormData under both keys (server accepts either)
     const fd = new FormData();
     for (const f of files) fd.append('files', f);
     for (const f of files) fd.append('photos', f);
-    return fd;
-  }
-  function stripContentType(headers) {
-    if (!headers) return;
-    if (headers instanceof Headers) { headers.delete('content-type'); headers.delete('Content-Type'); }
-    else if (typeof headers === 'object') for (const k of Object.keys(headers)) if (k.toLowerCase() === 'content-type') delete headers[k];
-  }
-  function toUrl(input) {
-    if (typeof input === 'string') return input;
-    if (input?.url) return input.url;
-    try { return input instanceof Request ? input.url : ''; } catch { return ''; }
-  }
 
-  // ===========================================================
-  // 1) fetch & Request interception
-  // ===========================================================
-  const _fetch = window.fetch.bind(window);
-  window.fetch = async function patchedFetch(input, init) {
-    const url = toUrl(input);
-    if (!url.includes(OCR_PATH)) return _fetch(input, init);
+    // DO NOT set Content-Type; browser adds boundary
+    const res = await fetch(OCR_ENDPOINT, { method: 'POST', body: fd });
+    let json; try { json = await res.json(); } catch { show(`Server returned non-JSON (HTTP ${res.status}).`, 'error'); return; }
 
-    const files = getAllFiles();
-    console.debug('[FinishLine] TransportGuard fetch files:', files.map(f => ({ name: f.name, size: f.size, type: f.type })));
-
-    let req;
-    if (input instanceof Request) {
-      const headers = new Headers(input.headers);
-      stripContentType(headers);
-      const opts = {
-        method: 'POST',
-        headers,
-        credentials: input.credentials,
-        mode: input.mode,
-        cache: input.cache,
-        redirect: input.redirect,
-        referrer: input.referrer,
-        referrerPolicy: input.referrerPolicy,
-        integrity: input.integrity,
-        keepalive: input.keepalive,
-        signal: init?.signal || input.signal,
-        body: files.length ? buildFD(files) : undefined,
-      };
-      req = new Request(input.url, opts);
-    } else {
-      const opts = { ...(init || {}) };
-      stripContentType(opts.headers);
-      if (files.length) { opts.method = 'POST'; opts.body = buildFD(files); }
-      req = new Request(url, opts);
+    if (!res.ok || json?.ok === false) {
+      const m = json?.error?.message || json?.message || `Upload failed (HTTP ${res.status}).`;
+      show(`OCR error: ${m}`, 'error'); return;
     }
-
-    const res = await _fetch(req);
-    try {
-      const clone = res.clone();
-      const data = await clone.json().catch(() => null);
-      if (!res.ok || data?.ok === false) {
-        const msg = data?.error?.message || data?.message || `Upload failed (HTTP ${res.status}).`;
-        showMessage(`OCR error: ${msg}`, 'error');
-      } else {
-        showMessage('OCR upload successful. Files received by server.', 'info');
-      }
-    } catch {}
-    return res;
-  };
-
-  // ===========================================================
-  // 2) Axios / XMLHttpRequest interception
-  // ===========================================================
-  (function patchXHR(){
-    const _open = XMLHttpRequest.prototype.open;
-    const _send = XMLHttpRequest.prototype.send;
-    const _setHeader = XMLHttpRequest.prototype.setRequestHeader;
-
-    XMLHttpRequest.prototype.open = function(method, url, ...rest) {
-      this.__isOcr = typeof url === 'string' && url.includes(OCR_PATH);
-      this.__headers = {};
-      return _open.call(this, method, url, ...rest);
-    };
-
-    XMLHttpRequest.prototype.setRequestHeader = function(k, v) {
-      if (this.__headers) this.__headers[k] = v;
-      return _setHeader.call(this, k, v);
-    };
-
-    XMLHttpRequest.prototype.send = function(body) {
-      if (!this.__isOcr) return _send.call(this, body);
-
-      const files = getAllFiles();
-      console.debug('[FinishLine] TransportGuard XHR files:', files.map(f => ({ name: f.name, size: f.size, type: f.type })));
-
-      // If the caller didn't pass a FormData-with-files, replace with our own FormData.
-      let useBody = body;
-      const needsReplace =
-        !(body instanceof FormData) ||
-        !(() => { try { for (const [, v] of body.entries()) if (v instanceof File) return true; } catch {} return false; })();
-
-      if (files.length && needsReplace) {
-        useBody = buildFD(files);
-        // Remove any caller-set content-type; browser will set correct multipart boundary
-        try {
-          if (this.__headers) {
-            for (const k of Object.keys(this.__headers)) {
-              if (k.toLowerCase() === 'content-type') delete this.__headers[k];
-            }
-          }
-        } catch {}
-      }
-
-      return _send.call(this, useBody);
-    };
-  })();
-
-  // ===========================================================
-  // 3) Guaranteed button path (capture-phase)
-  // ===========================================================
-  async function guaranteedExtract(ev) {
-    if (ev) { ev.preventDefault(); ev.stopImmediatePropagation(); }
-    // Trigger a fetch explicitly; transport guard will ensure FormData is attached.
-    try {
-      const files = getAllFiles();
-      if (!files.length) throw new Error('No files selected. Choose images/PDFs or drop them into the box.');
-      const res = await fetch(OCR_PATH, { method: 'POST' }); // body will be injected by our guards
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok || json?.ok === false) {
-        const msg = json?.error?.message || json?.message || `Upload failed (HTTP ${res.status}).`;
-        throw new Error(msg);
-      }
-      showMessage('OCR upload successful. Files received by server.', 'info');
-      
-      // Show success alert/toast
-      if (typeof toast === 'function') {
-        toast(`✅ Upload successful`, 'success');
-      } else {
-        alert(`✅ Upload successful`);
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      showMessage(`OCR error: ${msg}`, 'error');
-    }
+    show('OCR upload successful. Files received by server.', 'info');
   }
 
-  if (extractBtn) extractBtn.addEventListener('click', guaranteedExtract, true); // capture
-  if (form) form.addEventListener('submit', guaranteedExtract, true);           // capture
+  // ---- Wire up (capture phase beats other listeners) ----
+  if (extractBtn) extractBtn.addEventListener('click', uploadNow, true);
+  if (form)      form.addEventListener('submit', uploadNow, true);
+
+  // Reflect count when user picks files
+  document.addEventListener('change', e => {
+    const t = e.target;
+    if (t?.matches?.('input[type="file"]')) { if (!t.name) t.name = 'files'; refreshCount(); }
+  });
+  refreshCount();
 })();
 
 // --- Photo picker state (keep existing) ---
