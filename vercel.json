@@ -1,32 +1,27 @@
 {
   "version": 2,
   "functions": {
-    "api/**/*.py": { 
+    "api/*.py": {
       "maxDuration": 60,
       "memory": 1536
     }
   },
-  "rewrites": [
-    { "source": "/api/finishline/:path*", "destination": "/api/main.py" },
-    { "source": "/api/health", "destination": "/api/main.py" },
-    { "source": "/static/css/app.css", "destination": "/apps/web/styles.css" },
-    { "source": "/static/js/:file", "destination": "/apps/web/:file" },
-    { "source": "/", "destination": "/apps/web/index.html" },
-    { "source": "/index.html", "destination": "/apps/web/index.html" }
-  ],
-  "headers": [
+  "routes": [
     {
-      "source": "/api/(.*)",
-      "headers": [
-        { "key": "Content-Type", "value": "application/json" },
-        { "key": "X-Content-Type-Options", "value": "nosniff" }
-      ]
+      "src": "^/static/(.*)$",
+      "dest": "/static/$1"
     },
     {
-      "source": "/static/(.*)",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
-      ]
+      "src": "^/api/finishline/.*",
+      "dest": "/api/main.py"
+    },
+    {
+      "src": "^/api/health$",
+      "dest": "/api/main.py"
+    },
+    {
+      "src": "^(?!/api/).*",
+      "dest": "/api/http.py"
     }
   ]
 }
