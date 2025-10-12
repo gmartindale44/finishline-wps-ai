@@ -12,6 +12,15 @@ import traceback
 # Set up logging
 log = logging.getLogger(__name__)
 
+# Import new schema and middleware
+try:
+    from .common.schemas import json_ok, json_err, make_request_id
+    from .common.middleware import install_error_middleware
+    SCHEMA_AVAILABLE = True
+except ImportError:
+    log.warning("New schema/middleware not available, using legacy")
+    SCHEMA_AVAILABLE = False
+
 # Import error utilities (with fallback)
 try:
     from .error_utils import ApiError, json_error, validate_base64_size
@@ -86,6 +95,11 @@ app = FastAPI(
     description="Win/Place/Show horse race prediction API",
     version="1.0.0"
 )
+
+# Install new error middleware (ensures all responses are JSON)
+if SCHEMA_AVAILABLE:
+    install_error_middleware(app)
+    log.info("Installed new error middleware for JSON-only responses")
 
 # CORS: read comma-separated origins or "*" during debug
 raw_origins = os.getenv("FINISHLINE_ALLOWED_ORIGINS", "*").strip()
@@ -452,8 +466,22 @@ async def research_predict_selftest():
         "websearch_ready": provider_name == "websearch" and has_tavily and has_openai
     }
 
+@app.post("/api/finishline/photo_extract_openai_b64_v2")
+async def photo_extract_openai_b64_v2(request: Request, body: Dict[str, Any]):
+    """
+    V2: Hardened OCR endpoint using new schema (ApiOk/ApiErr).
+    Delegates to photo_extract_openai_b64.photo_extract_openai_b64_handler.
+    """
+    try:
+        from .photo_extract_openai_b64 import photo_extract_openai_b64_handler
+        return await photo_extract_openai_b64_handler(request, body)
+    except ImportError:
+        # Fallback to legacy if new handler not available
+        log.warning("V2 OCR handler not available, using legacy")
+        return await photo_extract_openai_b64_legacy(request, body)
+
 @app.post("/api/finishline/photo_extract_openai_b64")
-async def photo_extract_openai_b64(request: Request, body: Dict[str, Any]):
+async def photo_extract_openai_b64_legacy(request: Request, body: Dict[str, Any]):
     """
     Extract horses from base64-encoded images (bypasses multipart upload issues).
     ALWAYS returns JSON - never throws HTML errors.
