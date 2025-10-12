@@ -47,14 +47,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 });
 
-// --- Upload hardening shim for FinishLine WPS AI ---
-// Ensures ANY fetch to /api/photo_extract_openai_b64 carries real files in multipart form.
-// Works alongside existing handlers and does not require HTML changes.
+// FinishLine WPS AI — Upload Interceptor (v2):
+// Guarantees any call to /api/photo_extract_openai_b64 carries actual files in multipart/form-data,
+// even if the caller passes a Request object or sets Content-Type manually.
 
 (() => {
-  // Optional UI references (non-breaking if missing)
+  const OCR_PATH = '/api/photo_extract_openai_b64';
   const resultBox = document.getElementById('ocrResult');
-  const countBadge = document.getElementById('photoCount') || document.getElementById('photo-count');
+  const countBadge = document.getElementById('photoCount');
 
   function showMessage(text, type = 'info') {
     const msg = typeof text === 'string' ? text : (text?.message || JSON.stringify(text));
@@ -67,12 +67,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  // Collect all files from ANY input[type=file] on the page (dropzones/hidden inputs included)
+  // Sweep all file inputs on the page (handles hidden inputs used by dropzones).
   function gatherFilesFromDom() {
     const inputs = Array.from(document.querySelectorAll('input[type="file"]'));
     const files = [];
     for (const input of inputs) {
-      // Force name/multiple so FormData is well-formed
       if (!input.hasAttribute('multiple')) input.setAttribute('multiple', '');
       if (!input.name) input.name = 'files';
       if (input.files && input.files.length) {
@@ -87,80 +86,134 @@ document.addEventListener('DOMContentLoaded', async () => {
     countBadge.textContent = `${gatherFilesFromDom().length} / 6 selected`;
   }
 
-  // Helpers to inspect/patch FormData
   function formDataHasFiles(fd) {
     if (!(fd instanceof FormData)) return false;
     for (const [k, v] of fd.entries()) {
-      if ((k === 'files' || k === 'photos') && v instanceof File) return true;
+      if (v instanceof File) return true;
     }
     return false;
   }
 
-  function appendFilesToFormData(fd, files) {
+  function buildFormDataWithFiles(files) {
+    const fd = new FormData();
+    // Append under both keys for max compatibility
     for (const f of files) fd.append('files', f);
     for (const f of files) fd.append('photos', f);
+    return fd;
   }
 
-  // Monkey-patch fetch ONLY for our OCR endpoint
+  function stripContentType(headers) {
+    if (!headers) return;
+    if (headers instanceof Headers) {
+      // Remove any content-type to let browser set boundary
+      if (headers.has('content-type')) headers.delete('content-type');
+      if (headers.has('Content-Type')) headers.delete('Content-Type');
+    } else if (typeof headers === 'object') {
+      for (const k of Object.keys(headers)) {
+        if (k.toLowerCase() === 'content-type') delete headers[k];
+      }
+    }
+  }
+
+  function toUrl(input) {
+    if (typeof input === 'string') return input;
+    if (input && typeof input.url === 'string') return input.url;
+    try {
+      return input instanceof Request ? input.url : '';
+    } catch { return ''; }
+  }
+
   const originalFetch = window.fetch.bind(window);
-  window.fetch = async function patchedFetch(input, init = {}) {
-    const url = typeof input === 'string' ? input : input?.url || '';
-    const isOcr = url.includes('/api/photo_extract_openai_b64');
+
+  window.fetch = async function patchedFetch(input, init) {
+    const url = toUrl(input);
+    const isOcr = url.includes(OCR_PATH);
 
     if (!isOcr) {
       return originalFetch(input, init);
     }
 
-    // Always gather current selection at the moment of call
+    // Snapshot current selection at call time
     const files = gatherFilesFromDom();
+    console.debug('[FinishLine] Selected files:', files.map(f => ({ name: f.name, size: f.size, type: f.type })));
 
-    // If caller didn't provide FormData with files, inject our own FormData
-    if (!(init?.body instanceof FormData) || !formDataHasFiles(init.body)) {
-      if (!files.length) {
-        // Let the request proceed, but it will 400 with NO_FILES (we surface it nicely)
-        // Alternatively, we could throw early:
-        // throw new Error('No files selected. Choose images/PDFs or drop them into the box.');
+    // Normalize into a Request we can safely mutate
+    let req;
+    if (input instanceof Request) {
+      // Clone the incoming Request but we'll override method/body/headers
+      const headers = new Headers(input.headers);
+      stripContentType(headers);
+
+      const opts = {
+        method: 'POST',
+        headers,
+        // Keep caller's credentials/mode/cache where applicable
+        credentials: input.credentials,
+        mode: input.mode,
+        cache: input.cache,
+        redirect: input.redirect,
+        referrer: input.referrer,
+        referrerPolicy: input.referrerPolicy,
+        integrity: input.integrity,
+        keepalive: input.keepalive,
+        signal: init?.signal || input.signal,
+      };
+
+      // Determine body: prefer existing FormData with files, otherwise inject ours
+      let bodyToUse = undefined;
+
+      if (init?.body instanceof FormData && formDataHasFiles(init.body)) {
+        bodyToUse = init.body;
+      } else if (input.body && init?.body instanceof FormData && formDataHasFiles(init.body)) {
+        bodyToUse = init.body;
+      } else if (input.body && !(init?.body)) {
+        // Can't reliably read an existing body; just replace with FormData if we have files
+        if (files.length) bodyToUse = buildFormDataWithFiles(files);
       } else {
-        const fd = new FormData();
-        appendFilesToFormData(fd, files);
-        init = { ...(init || {}), method: 'POST', body: fd };
-        // Ensure we do NOT force Content-Type; browser sets proper boundary.
-        if (init.headers && typeof init.headers === 'object') {
-          // Normalize header casing handling
-          for (const k of Object.keys(init.headers)) {
-            if (k.toLowerCase() === 'content-type') delete init.headers[k];
-          }
-        }
+        if (files.length) bodyToUse = buildFormDataWithFiles(files);
+      }
+
+      if (!bodyToUse) {
+        // No files available; let it go as-is (server will 400 cleanly)
+        req = new Request(input, { ...opts });
+      } else {
+        req = new Request(url, { ...opts, body: bodyToUse });
       }
     } else {
-      // Ensure both field names exist for compatibility
-      if (files.length) appendFilesToFormData(init.body, []); // no-op if already present
+      // String/URL input path
+      const opts = { ...(init || {}) };
+      // Always POST when we control the body
+      if (files.length) {
+        opts.method = 'POST';
+        if (!(opts.body instanceof FormData) || !formDataHasFiles(opts.body)) {
+          opts.body = buildFormDataWithFiles(files);
+        }
+      }
+      // Remove any manual content-type header so browser sets multipart boundary
+      stripContentType(opts.headers);
+      req = new Request(url, opts);
     }
 
-    const res = await originalFetch(input, init);
+    const res = await originalFetch(req);
 
-    // Try to present clear errors in UI (no [object Object])
+    // Surface clean messages (no [object Object])
     try {
       const clone = res.clone();
       const data = await clone.json().catch(() => null);
       if (!res.ok || data?.ok === false) {
-        const msg =
-          data?.error?.message ||
-          data?.message ||
-          `Upload failed (HTTP ${res.status}).`;
+        const msg = data?.error?.message || data?.message || `Upload failed (HTTP ${res.status}).`;
         showMessage(`OCR error: ${msg}`, 'error');
       } else {
         showMessage('OCR upload successful. Files received by server.', 'info');
       }
     } catch {
-      // Non-JSON response — leave default behavior
+      // Non-JSON response — ignore
     }
 
     refreshCount();
     return res;
   };
 
-  // Keep the selection badge accurate
   document.addEventListener('change', (e) => {
     const t = e.target;
     if (t && t.matches?.('input[type="file"]')) {
