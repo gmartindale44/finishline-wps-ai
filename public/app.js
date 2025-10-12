@@ -47,7 +47,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 });
 
-// --- File upload state and wiring ---
+// --- File upload state and wiring (improved FormData handling) ---
 const MAX_FILES = 6;
 let selectedFiles = []; // single source of truth
 
@@ -56,7 +56,7 @@ const $btnExtract  = document.querySelector('#btnExtract') || document.querySele
 const $btnAnalyze  = document.querySelector('#btnAnalyze') || document.querySelector('#btn-analyze-ai') || document.querySelector('#analyze-photos-btn');
 const $btnPredict  = document.querySelector('#btnPredict') || document.querySelector('#btn-predict') || document.querySelector('#predictBtn');
 
-// Helper functions for button states
+// Helper: disable all action buttons
 function setButtonsBusy(isBusy, label = "Working...") {
   const buttons = [$btnExtract, $btnAnalyze, $btnPredict].filter(Boolean);
   buttons.forEach(btn => {
@@ -109,13 +109,13 @@ if ($fileInput) {
 function buildUploadFormData(files) {
   const fd = new FormData();
   files.forEach((f, idx) => {
-    fd.append('photos', f, f.name || `photo_${idx}`);
-    fd.append('files', f, f.name || `file_${idx}`);
+    fd.append('files', f, f.name || `file_${idx}`);  // Primary field
+    fd.append('photos', f, f.name || `photo_${idx}`); // Backward compat
   });
   return fd;
 }
 
-// Extract button handler
+// Extract button handler (improved FormData + error messaging)
 async function onClickExtract() {
   try {
     const files = selectedFiles.length ? selectedFiles : Array.from($fileInput?.files || []);
@@ -126,19 +126,31 @@ async function onClickExtract() {
     
     setBusy($btnExtract, true, 'Extracting…');
     const fd = buildUploadFormData(files);
-    const res = await fetch('/api/finishline/photo_extract_openai_b64', { method: 'POST', body: fd });
-    const data = await safeJson(res);
     
-    if (!res.ok) {
-      prettyAlertFromResponse("Extract", res, data ? JSON.stringify(data) : await res.text().catch(()=> ""));
-      return;
+    // DO NOT set Content-Type manually; let browser add multipart boundaries
+    const res = await fetch('/api/finishline/photo_extract_openai_b64', { 
+      method: 'POST', 
+      body: fd 
+    });
+    
+    // Try to parse JSON no matter what status
+    let payload;
+    try {
+      payload = await res.json();
+    } catch {
+      throw new Error(`Server returned non-JSON response (HTTP ${res.status}).`);
     }
     
-    console.log('[FinishLine] OCR Success:', data);
+    if (!res.ok || payload?.ok === false) {
+      const message = payload?.error?.message || payload?.message || `Upload failed (HTTP ${res.status}).`;
+      throw new Error(message);
+    }
+    
+    console.log('[FinishLine] OCR Success:', payload);
     
     // If horses returned, populate form
-    if (data && data.horses && data.horses.length > 0 && typeof populateFormFromParsed === 'function') {
-      await populateFormFromParsed(data.horses);
+    if (payload && payload.horses && payload.horses.length > 0 && typeof populateFormFromParsed === 'function') {
+      await populateFormFromParsed(payload.horses);
     }
     
     // Show green checkmark
@@ -148,9 +160,9 @@ async function onClickExtract() {
     }
     
     if (typeof toast === 'function') {
-      toast(`✅ Extracted ${data?.horses?.length ?? 0} horses`, 'success');
+      toast(`✅ Extracted ${payload?.horses?.length ?? 0} horses`, 'success');
     } else {
-      alert(`✅ Extracted ${data?.horses?.length ?? 0} horses`);
+      alert(`✅ Extracted ${payload?.horses?.length ?? 0} horses`);
     }
   } catch (err) {
     console.error('[FinishLine] Extract error:', err);
