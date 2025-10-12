@@ -36,6 +36,7 @@ PROVIDER_PREFS = os.getenv("PROVIDER_PREFS", "openai,tesseract,stub").split(",")
 # Feature flags
 USE_FALLBACK_CHAINS = get_bool_env("USE_FALLBACK_CHAINS", True)
 STRICT_JSON_ONLY = get_bool_env("STRICT_JSON_ONLY", True)
+TICKET_ONLY_MODE = get_bool_env("TICKET_ONLY_MODE", True)  # Default to ticket-only
 
 # Vercel limits
 VERCEL_FUNCTION_MAX_MS = 60000  # Hard 60s limit

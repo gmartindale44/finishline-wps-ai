@@ -36,6 +36,13 @@ except ImportError:
         if size_mb > max_mb:
             raise ApiError(413, f"File too large ({size_mb:.2f}MB). Max {max_mb}MB.", "payload_too_large")
 
+# Import ticket-only prediction router
+try:
+    from .ticket_predict import router as ticket_router
+    app.include_router(ticket_router)
+except ImportError as e:
+    log.warning(f"ticket_predict router not found: {e}")
+
 # Import other modules (with safe fallbacks to prevent startup failures)
 try:
     from .odds import ml_to_fraction, ml_to_prob
