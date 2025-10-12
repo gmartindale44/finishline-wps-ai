@@ -1186,7 +1186,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const used = data.provider_used || data.provider || payload.provider;
             const secs = (data.elapsed_ms ? (data.elapsed_ms/1000).toFixed(1) : "—");
             FL.analysis = { status:'ready', result:data, meta:{ provider:used, elapsed_ms:data.elapsed_ms||null, when:Date.now() } };
-            setPill('ready', `Analysis Ready in ${secs}s (${used})`);
+            setPill('ready', `Analysis complete in ${secs}s`);  // Removed (websearch) suffix
             
             // Show success with tooltip
             if (typeof finishProgress === 'function') {

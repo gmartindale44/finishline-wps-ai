@@ -600,6 +600,13 @@ button .pct {
   font-variant-numeric: tabular-nums; 
 }
 
+button .countdown {
+  opacity: .95;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: rgba(56, 189, 248, 0.9);
+}
+
 button .check { 
   margin-left: .35rem; 
   font-weight: 800; 
