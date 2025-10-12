@@ -7,12 +7,11 @@
       "memory": 1536
     }
   },
-  "routes": [
-    { "src": "^/api/finishline/.*", "dest": "/api/main.py" },
-    { "src": "^/api/health$", "dest": "/api/main.py" },
-    { "src": "^/$", "dest": "/apps/web/index.html" },
-    { "src": "^/index.html$", "dest": "/apps/web/index.html" },
-    { "src": "/(.*)", "dest": "/apps/web/$1" }
+  "rewrites": [
+    { "source": "/api/finishline/:path*", "destination": "/api/main.py" },
+    { "source": "/api/health", "destination": "/api/main.py" },
+    { "source": "/", "destination": "/apps/web/index.html" },
+    { "source": "/index.html", "destination": "/apps/web/index.html" }
   ],
   "headers": [
     {
