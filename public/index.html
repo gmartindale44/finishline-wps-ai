@@ -1,228 +1,30 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <!-- Brand: NovaSpark Collective LLC | App: FinishLine WPS AI -->
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FinishLine WPS AI</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/app.css">
-    
-    <!-- Tailwind CDN fallback if app.css fails to load -->
-    <script>
-    (function(){
-      function ensureCSS(href){
-        var sheets = [].slice.call(document.styleSheets||[]);
-        return sheets.some(function(s){ return (s.href||"").indexOf(href) !== -1; });
-      }
-      var primary = "/static/css/app.css";
-      setTimeout(function(){
-        if(!ensureCSS(primary)) {
-          var cdn = document.createElement("link");
-          cdn.rel = "stylesheet";
-          cdn.href = "https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css";
-          document.head.appendChild(cdn);
-          console.warn("app.css not found; loaded Tailwind CDN fallback");
-        }
-      }, 1500);
-    })();
-    </script>
-    
-    <!-- Script load guard -->
-    <script>
-    window.addEventListener('error', function(e){
-      if ((e.filename||'').includes('/static/js/')) {
-        console.error('Static JS failed to load: ' + (e.filename||'unknown') + ' - UI may not be interactive');
-      }
-    }, true);
-    </script>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>FinishLine WPS AI</title>
+  <!-- Important: assets are served from /static -->
+  <link rel="stylesheet" href="/static/css/app.css">
 </head>
-<body>
-    <div class="container">
-        <header>
-            <h1>🏇 FinishLine WPS AI</h1>
-            <h2>Win / Place / Show Predictor</h2>
-            <p class="subtitle">Advanced horse race prediction powered by NovaSpark Collective.</p>
-        </header>
+<body class="bg-[#0b0b14] text-white">
+  <div id="app" class="max-w-7xl mx-auto p-6">
+    <h1 class="text-3xl font-semibold mb-4">FinishLine WPS AI</h1>
 
-        <main>
-            <!-- Input Form -->
-            <section class="input-section">
-                <h3>Race Information</h3>
-                <form id="raceForm" onsubmit="return false;">
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="raceDate">Race Date</label>
-                            <input type="date" id="raceDate" name="raceDate" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="track">Track</label>
-                            <input type="text" id="raceTrack" id="track" name="track" placeholder="e.g., Churchill Downs" required>
-                        </div>
-                    </div>
-                    
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="surface">Surface</label>
-                            <select id="raceSurface" id="surface" name="surface" required>
-                                <option value="dirt">Dirt</option>
-                                <option value="turf">Turf</option>
-                                <option value="synthetic">Synthetic</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="distance">Distance</label>
-                            <input type="text" id="raceDistance" id="distance" name="distance" placeholder="e.g., 1 1/4 miles" required>
-                        </div>
-                    </div>
+    <div class="rounded-xl bg-[#141426] p-4 shadow">
+      <p class="opacity-80">UI bootstrapped. Replace this with the real bundle later.
+      CSS/JS must be referenced via <code>/static/...</code> to match the FastAPI mount.</p>
 
-                    <div id="analysis-status-wrap" style="display:flex;gap:8px;align-items:center;margin:0 0 10px 0;">
-                        <span id="analysis-pill" class="status-pill status-idle">Idle</span>
-                    </div>
-                    
-                    <h3 id="horse-card">Horse Data</h3>
-                    <div id="horse-list" class="horse-list">
-                        <div class="horse-row" data-row="horse" data-horse-row="0">
-                            <input type="text" class="horse-name name" data-field="name" placeholder="Horse Name" />
-                            <input type="text" class="horse-odds odds" data-field="odds" placeholder="ML Odds (e.g., 5-2)" />
-                            <input type="text" class="horse-jockey jj" data-field="jockey" placeholder="Jockey" />
-                            <input type="text" class="horse-trainer tt" data-field="trainer" placeholder="Trainer" />
-                            <input type="number" class="horse-bankroll" data-field="bankroll" placeholder="Bankroll" value="1000" />
-                            <input type="number" class="horse-kelly" data-field="kelly_fraction" placeholder="Kelly (0.25)" value="0.25" step="0.01" />
-                        </div>
-                    </div>
-                    
-                    <div class="row-actions">
-                        <button id="add-horse-btn" id="add-horse" id="btnAddHorse" type="button" class="btn-secondary" data-add-horse>Add Horse</button>
-                    </div>
-                    
-                    <!-- Photo Upload -->
-                    <div class="photo-box" id="photo-box">
-                        <div class="photo-header">
-                            <div>
-                                <strong>Photos / PDFs</strong>
-                                <span id="photo-count" class="photo-count">0 / 6 selected</span>
-                            </div>
-                            <div class="photo-actions">
-                                <input id="photoFiles" id="photo-input" type="file" accept=".png,.jpg,.jpeg,.webp,.pdf,image/*,application/pdf" capture="environment" multiple hidden aria-label="Choose Photos or PDF" />
-                                <button id="btnChoosePhotos" type="button" class="btn-secondary">Choose Photos / PDF</button>
-                            </div>
-                        </div>
+      <div class="mt-4 grid gap-3 sm:grid-cols-3">
+        <button id="btn-extract" class="btn">Extract from Photos</button>
+        <button id="btn-analyze" class="btn">Analyze Photos with AI</button>
+        <button id="btn-predict" class="btn">Predict W/P/S</button>
+      </div>
 
-                        <!-- Drag & Drop -->
-                        <div id="drop-zone" class="drop-zone">
-                            <p>Drag & drop images or PDFs here, or click <em>Choose Photos / PDF</em>.</p>
-                            <p class="hint">Up to 6 files. Images: PNG/JPG/WebP • PDFs supported.</p>
-                        </div>
-
-                        <!-- Thumbnails -->
-                        <div id="thumbs" class="thumbs"></div>
-                    </div>
-                    
-                    <!-- OCR Debug Panel -->
-                    <div id="ocr-debug-panel" style="margin-top:12px;">
-                        <details>
-                            <summary style="cursor:pointer;user-select:none;color:#9ca3af;">OCR Debug</summary>
-                            <div style="margin-top:8px; display:flex; gap:8px; align-items:center;">
-                                <input id="debug-ocr-url" type="url" placeholder="https://.../drf-table-sample.png" style="flex:1; padding:6px 8px; border-radius:8px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); color:#fff;" />
-                                <button id="btn-extract-url" type="button" class="btn">Extract (URL)</button>
-                                <button id="btn-load-demo" type="button" class="btn">Load Demo DRF</button>
-                            </div>
-                            <div style="margin-top:8px;display:flex;align-items:center;gap:8px;">
-                                <label for="provider-select" style="font-size:12px;opacity:.85;color:#9ca3af;">Provider:</label>
-                                <select id="provider-select" style="padding:.4rem .6rem;border-radius:8px;background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(255,255,255,0.2);font-size:12px;">
-                                    <option value="websearch" selected>websearch (slower, better)</option>
-                                    <option value="stub">stub (fast, baseline)</option>
-                                </select>
-                            </div>
-                            <small style="display:block; margin-top:6px; color:#9ca3af;">Use a direct image URL to test the server OCR without file upload. "Load Demo DRF" fills the form with a sample list.</small>
-                            <pre id="ocr-debug-json" style="white-space:pre-wrap;font-size:0.85rem;background:rgba(0,0,0,0.3);padding:8px;border-radius:6px;margin-top:6px;color:#9ca3af;"></pre>
-                        </details>
-                    </div>
-                    
-                    <!-- Runtime Config -->
-                    <div id="runtime-config" style="margin-top:8px;font-size:0.85rem;color:#9ca3af;"></div>
-                    
-                    <div class="action-buttons">
-                        <button type="button" id="btnPredict" id="predictBtn" class="btn-primary">🎯 Predict W/P/S</button>
-                        <button id="btnAnalyze" id="analyze-photos-btn" type="button" class="btn-primary">📸 Analyze Photos with AI</button>
-                        <button id="btnExtract" id="ocr-extract-btn" type="button" class="btn-secondary">📄 Extract from Photos</button>
-                    </div>
-                </form>
-            </section>
-
-            <!-- Loading Section -->
-            <section class="loading-section" id="loadingSection" style="display: none;">
-                <div class="loading-spinner"></div>
-                <p>Analyzing race data...</p>
-            </section>
-
-            <!-- Results Section -->
-            <section class="results-section" id="resultsSection" style="display: none;">
-                <h3>AI Predictions</h3>
-                <div class="results-grid">
-                    <div class="result-card win-card">
-                        <h4>🏆 WIN</h4>
-                        <div class="horse-info">
-                            <div class="horse-name" id="winName">-</div>
-                            <div class="horse-odds" id="winOdds">-</div>
-                            <div class="horse-prob" id="winProb">-</div>
-                            <div class="horse-kelly" id="winKelly">-</div>
-                        </div>
-                        <div class="rationale" id="winRationale">-</div>
-                    </div>
-                    
-                    <div class="result-card place-card">
-                        <h4>🥈 PLACE</h4>
-                        <div class="horse-info">
-                            <div class="horse-name" id="placeName">-</div>
-                            <div class="horse-odds" id="placeOdds">-</div>
-                            <div class="horse-prob" id="placeProb">-</div>
-                            <div class="horse-kelly" id="placeKelly">-</div>
-                        </div>
-                        <div class="rationale" id="placeRationale">-</div>
-                    </div>
-                    
-                    <div class="result-card show-card">
-                        <h4>🥉 SHOW</h4>
-                        <div class="horse-info">
-                            <div class="horse-name" id="showName">-</div>
-                            <div class="horse-odds" id="showOdds">-</div>
-                            <div class="horse-prob" id="showProb">-</div>
-                            <div class="horse-kelly" id="showKelly">-</div>
-                        </div>
-                        <div class="rationale" id="showRationale">-</div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Error Section -->
-            <section class="error-section" id="errorSection" style="display: none;">
-                <div class="error-message">
-                    <h4>⚠️ Error</h4>
-                    <p id="errorText">Something went wrong. Please try again.</p>
-                </div>
-            </section>
-        </main>
-
-        <footer>
-            <p>© <span id="year"></span> NovaSpark Collective LLC · FinishLine WPS AI</p>
-            <div style="margin-top: 1rem; padding: 1rem; background: rgba(139, 92, 246, 0.1); border-radius: 8px; border: 1px solid rgba(139, 92, 246, 0.3); font-size: 0.85rem; color: var(--text-muted);">
-                <strong>Disclaimer:</strong> This tool is for informational/entertainment purposes only and does not constitute betting advice.
-            </div>
-        </footer>
+      <div id="status" class="mt-4 text-sm opacity-80"></div>
     </div>
+  </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-    <!-- FinishLine Utilities -->
-    <script src="/static/js/net.js"></script>
-    <script src="/static/js/debug-ui.js"></script>
-    <script src="/static/js/api-client.js"></script>
-    <script src="/static/js/ui-utils.js"></script>
-    <script src="/static/js/image-compress.js"></script>
-    <script src="/static/js/app.js"></script>
-    <script src="/static/js/extract-handler.js"></script>
+  <script src="/static/js/app.js" defer></script>
 </body>
 </html>
