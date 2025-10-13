@@ -88,126 +88,109 @@
     return json;
   }
 
-  // === ROBUST ROW SELECTORS (no reliance on duplicate IDs) ===
-  function $all(sel) { return Array.from(document.querySelectorAll(sel)); }
-
-  // Find inputs by placeholder/label text across all rows (case-insensitive).
-  function findByPlaceholderLike(text) {
-    const rx = new RegExp(text, 'i');
-    return $all('input,textarea').filter(el => {
-      const ph = el.getAttribute('placeholder') || '';
-      const lbl = (el.closest('label')?.textContent || '');
+  // === SEQUENTIAL HORSE POPULATION (single-row editor approach) ===
+  
+  // Utility: find an input by flexible label/placeholder/name/id match
+  function findInput(hints) {
+    const list = Array.isArray(hints) ? hints : [hints];
+    const all = Array.from(document.querySelectorAll('input,textarea'));
+    const rxes = list.map(h => (h instanceof RegExp ? h : new RegExp(String(h), 'i')));
+    return all.find(el => {
+      const ph   = el.getAttribute('placeholder') || '';
+      const name = el.getAttribute('name') || '';
+      const id   = el.getAttribute('id') || '';
       const aria = el.getAttribute('aria-label') || '';
-      return rx.test(ph) || rx.test(lbl) || rx.test(aria);
+      const lbl  = el.closest('label')?.textContent || '';
+      const text = [ph, name, id, aria, lbl].join(' ');
+      return rxes.every(rx => rx.test(text));
     });
   }
 
-  // Column lists in DOM order (these return ALL rows in order)
-  function cols_name()    { return findByPlaceholderLike('horse name'); }
-  function cols_odds()    { return findByPlaceholderLike('ml odds|odds'); }
-  function cols_jockey()  { return findByPlaceholderLike('jockey'); }
-  function cols_trainer() { return findByPlaceholderLike('trainer'); }
+  // Stable single-row field getters for the "Horse Data" editor
+  function getHorseNameInput()   { return findInput([/horse/i, /name/i]) || findInput('Horse Name'); }
+  function getMlOddsInput()      { return findInput([/ml/i, /odds/i]) || findInput(/odds/i); }
+  function getJockeyInput()      { return findInput(/jockey/i); }
+  function getTrainerInput()     { return findInput(/trainer/i); }
 
-  // Add rows until we have at least n fields in *each* column.
-  function ensureRows(n) {
-    const addBtn = addHorseBtn || 
-                   document.querySelector('[data-action="add-horse"]') ||
-                   document.querySelector('#AddHorse, .add-horse, button.add-horse, button:has(+ [placeholder*="Jockey" i])');
+  // Find the "Add Horse" button by text or data attribute
+  function getAddHorseBtn() {
+    return addHorseBtn ||
+           document.getElementById('addHorseBtn') ||
+           document.querySelector('[data-action="add-horse"]') ||
+           Array.from(document.querySelectorAll('button, a')).find(b => /add\s*horse/i.test(b.textContent || ''));
+  }
 
+  // Helpers to set value and fire events so app state updates
+  function setVal(el, value) {
+    if (!el || value == null) return;
+    el.value = value;
+    el.dispatchEvent(new Event('input',  { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+  // Sequential population: fill editor, click Add Horse, repeat
+  async function populateHorsesSequential(horses, statusCb) {
+    const addBtn = getAddHorseBtn();
     if (!addBtn) {
-      console.warn('[FinishLine] Add Horse button not found, cannot create rows');
-      return;
+      statusCb?.('Could not find "Add Horse" button');
+      console.warn('[FinishLine] Add Horse button not found');
+      return 0;
     }
+    
+    let count = 0;
+    console.info(`[FinishLine] Starting sequential population of ${horses.length} horses`);
 
-    let guard = 0;
-    while (Math.min(
-      cols_name().length,
-      cols_odds().length,
-      cols_jockey().length,
-      cols_trainer().length
-    ) < n && guard < n + 10) {
-      console.debug(`[FinishLine] Creating row ${guard + 1} for ${n} horses`);
+    for (const h of horses) {
+      // 1) Fill the editor row
+      setVal(getHorseNameInput(), h?.name || '');
+      setVal(getMlOddsInput(),    h?.ml_odds || h?.odds || '');
+      setVal(getJockeyInput(),    h?.jockey || '');
+      setVal(getTrainerInput(),   h?.trainer || '');
+
+      console.debug(`[FinishLine] Filled horse ${count + 1}: ${h?.name || '(unnamed)'}`);
+
+      // Tiny pause to allow reactive validation
+      await sleep(40);
+
+      // 2) Click Add Horse (app should append & clear fields)
       addBtn.click();
-      guard++;
+      count += 1;
+
+      // Allow DOM/state to settle before next horse
+      await sleep(80);
     }
     
-    const currentRows = Math.min(cols_name().length, cols_odds().length, cols_jockey().length, cols_trainer().length);
-    console.info(`[FinishLine] Ensured ${n} horse rows (current: ${currentRows})`);
-  }
-
-  // === FILL FUNCTIONS ===
-  function fillRace(r) {
-    const setValue = (cands, value) => {
-      if (value == null) return;
-      const ids = Array.isArray(cands) ? cands : [cands];
-      for (const id of ids) {
-        const el = document.getElementById(id) ||
-                   document.querySelector(`[name="${id}"]`) ||
-                   document.querySelector(`[data-field="${id}"]`) ||
-                   findByPlaceholderLike(id)[0];
-        if (el) {
-          el.value = value;
-          console.debug(`[FinishLine] Set ${id} = ${value}`);
-          return;
-        }
-      }
-    };
-    
-    if (!r) return;
-    console.info('[FinishLine] Filling race data:', r);
-    setValue(['raceDate','date'], r.date);
-    setValue(['track'], r.track);
-    setValue(['surface'], r.surface);
-    setValue(['distance'], r.distance);
-  }
-
-  function fillHorses(horses) {
-    if (!Array.isArray(horses) || !horses.length) {
-      console.warn('[FinishLine] No horses to fill');
-      return;
-    }
-
-    console.info(`[FinishLine] Filling ${horses.length} horses:`, horses);
-    
-    // 1) Make sure we have enough rows
-    ensureRows(horses.length);
-
-    // 2) Get live NodeLists AFTER rows are added
-    const nameC    = cols_name();
-    const oddsC    = cols_odds();
-    const jockeyC  = cols_jockey();
-    const trainerC = cols_trainer();
-
-    // 3) Assign by index
-    horses.forEach((h, i) => {
-      const n = nameC[i];
-      const o = oddsC[i];
-      const j = jockeyC[i];
-      const t = trainerC[i];
-      
-      if (n && h?.name) {
-        n.value = h.name;
-        console.debug(`[FinishLine] Horse ${i+1} name: ${h.name}`);
-      }
-      if (o && h?.ml_odds) {
-        o.value = h.ml_odds;
-        console.debug(`[FinishLine] Horse ${i+1} odds: ${h.ml_odds}`);
-      }
-      if (j && h?.jockey) {
-        j.value = h.jockey;
-        console.debug(`[FinishLine] Horse ${i+1} jockey: ${h.jockey}`);
-      }
-      if (t && h?.trainer) {
-        t.value = h.trainer;
-        console.debug(`[FinishLine] Horse ${i+1} trainer: ${h.trainer}`);
-      }
-    });
+    statusCb?.(`✅ OCR parsed and populated ${count} horses.`);
+    console.info(`[FinishLine] Sequential population complete: ${count} horses added`);
+    return count;
   }
 
   // === GLOBAL HOOK FOR EXTERNAL CALLS ===
-  window.__finishline_fillFromOCR = function(extracted) {
-    fillRace(extracted?.race);
-    fillHorses(extracted?.horses);
+  window.__finishline_fillFromOCR = async function(extracted) {
+    console.info('[FinishLine] __finishline_fillFromOCR called with:', extracted);
+    
+    // Fill race meta
+    const setRace = (ids, val) => {
+      if (val == null) return;
+      const el = document.getElementById(ids) || 
+                 document.querySelector(`[name="${ids}"]`) || 
+                 document.querySelector(`[data-field="${ids}"]`);
+      if (el) {
+        setVal(el, val);
+        console.debug(`[FinishLine] Set race ${ids} = ${val}`);
+      }
+    };
+    
+    const race = extracted?.race || {};
+    setRace('raceDate', race.date);
+    setRace('track',    race.track);
+    setRace('surface',  race.surface);
+    setRace('distance', race.distance);
+
+    // Populate horses sequentially through single-row editor
+    const horses = Array.isArray(extracted?.horses) ? extracted.horses : [];
+    await populateHorsesSequential(horses, (msg) => show(msg, 'info'));
   };
 
   async function onExtract(ev) {
@@ -228,9 +211,8 @@
       const note = payload?.data?.ocr_error;
       
       if (ex) {
-        // Use global hook for robust filling
-        window.__finishline_fillFromOCR(ex);
-        show(`✅ OCR parsed and populated ${ex.horses?.length || 0} horses.`, 'info');
+        // Use global hook for sequential filling (async)
+        await window.__finishline_fillFromOCR(ex);
       } else if (note) {
         show(`OCR note: ${note}`, 'error');
       } else {
