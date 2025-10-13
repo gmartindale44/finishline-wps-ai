@@ -88,142 +88,253 @@
     return json;
   }
 
-  // === SCOPED SEQUENTIAL HORSE POPULATION (editor container approach) ===
+  // === DOM HELPERS & BUTTON PROGRESS UX ===
   
+  const $  = (s, root=document) => root.querySelector(s);
+  const $$ = (s, root=document) => Array.from(root.querySelectorAll(s));
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const fire  = (el) => { if (!el) return; el.dispatchEvent(new Event('input',{bubbles:true})); el.dispatchEvent(new Event('change',{bubbles:true})); };
+
+  // Status badge (the small "Idle" pill)
+  const badge = $('#statusBadge') || $('[data-status-badge]') || $('.badge.idle') || $('.idle');
+
+  function setBadge(txt, kind='idle') {
+    if (!badge) return;
+    badge.textContent = txt;
+    // normalize classes
+    badge.classList.remove('idle','ready','analyzing','predicting','success','warning','error');
+    badge.classList.add(kind);
+  }
+
+  // Button progress overlay
+  function withButtonProgress(btn, runningLabel, runFn) {
+    if (!btn) return runFn();
+    const orig = btn.textContent.trim();
+        btn.disabled = true;
+    let pct = 0, timer = null;
+
+    function tick(max=95) {
+      pct = Math.min(max, pct + Math.random()*8 + 2);
+      btn.textContent = `${runningLabel} ${Math.floor(pct)}%`;
+    }
+    tick();
+    timer = setInterval(() => tick(), 400);
+
+    const stop = (finalLabel, success=true) => {
+      clearInterval(timer);
+      pct = 100;
+      btn.textContent = `${finalLabel} 100%`;
+      setTimeout(() => {
+          btn.disabled = false;
+        btn.textContent = orig;
+      }, 600);
+    };
+
+    return (async () => {
+      try {
+        const out = await runFn(() => tick(98)); // exposer if needed
+        stop('Done', true);
+        return out;
+      } catch (e) {
+        stop('Failed', false);
+        throw e;
+      }
+    })();
+  }
+
+  // === SCOPED EDITOR DISCOVERY ===
   
-  function fire(el) {
-    if (!el) return;
-    el.dispatchEvent(new Event('input',  { bubbles: true }));
-    el.dispatchEvent(new Event('change', { bubbles: true }));
-  }
-
-  // Find "Horse Name" input (the single-row editor)
   function getHorseNameInput() {
-    // Try common ids/names, then fallback to placeholder text
-    return document.getElementById('horseName')
-        || document.querySelector('input[name="horseName"]')
-        || Array.from(document.querySelectorAll('input,textarea'))
-             .find(el => /horse\s*name/i.test(
-               [el.placeholder || '', el.name || '', el.id || '', el.getAttribute('aria-label') || ''].join(' ')
-             ));
+    // prefer semantic ids/names first
+    return $('#horseName') || $('input[name="horseName"]') ||
+      $$('input,textarea').find(el =>
+        /horse\s*name/i.test([el.placeholder||'', el.name||'', el.id||'', el.getAttribute('aria-label')||''].join(' '))
+      );
   }
-
-  // Scope: nearest container that truly holds the editor row + its Add button
   function getEditorContainer() {
     const nameEl = getHorseNameInput();
     if (!nameEl) return null;
-    // Prefer a section/card/fieldset around the input
     return nameEl.closest('[data-section="horse"], section, fieldset, .card, .panel, .horse-editor, .horse-data') || nameEl.parentElement;
   }
-
-  // Within the editor container, find the *right* "Add Horse"
-  function getAddHorseControl() {
+  function findInEditor(rx) {
     const scope = getEditorContainer() || document;
-    // Prefer an explicit add button inside the editor scope
-    const byText = Array.from(scope.querySelectorAll('button, a, input[type="button"], input[type="submit"]'))
-      .find(el => /^(add\s*horse)$/i.test((el.textContent || el.value || '').trim()));
-    if (byText) return byText;
-
-    // Fallback: any element marked for adding inside the scope
-    return scope.querySelector('[data-action="add-horse"], #addHorseBtn, .add-horse, button.add-horse');
-  }
-
-  // Other editor inputs (ML Odds, Jockey, Trainer) – all resolved inside the editor container
-  function findInEditor(match) {
-    const scope = getEditorContainer() || document;
-    const rx = match instanceof RegExp ? match : new RegExp(String(match), 'i');
-    return Array.from(scope.querySelectorAll('input,textarea')).find(el => {
-      const s = [el.placeholder || '', el.name || '', el.id || '', el.getAttribute('aria-label') || '', el.closest('label')?.textContent || ''].join(' ');
-      return rx.test(s);
+    const re = rx instanceof RegExp ? rx : new RegExp(String(rx), 'i');
+    return $$('input,textarea,select', scope).find(el => {
+      const s = [el.placeholder||'', el.name||'', el.id||'', el.getAttribute('aria-label')||'', el.closest('label')?.textContent||''].join(' ');
+      return re.test(s);
     });
   }
   const getMlOddsInput = () => findInEditor(/(ml\s*odds|odds)/i);
   const getJockeyInput = () => findInEditor(/jockey/i);
   const getTrainerInput= () => findInEditor(/trainer/i);
+  function getAddHorseControl() {
+    const scope = getEditorContainer() || document;
+    // strictly inside the editor container
+    return $$('button, a, input[type="button"], input[type="submit"]', scope)
+      .find(el => /(^|\b)add\s*horse(\b|$)/i.test((el.textContent||el.value||'').trim()))
+      || scope.querySelector('[data-action="add-horse"], #addHorseBtn, .add-horse, button.add-horse');
+  }
 
-  // Add one horse via the editor container only
+  // === OCR → ADD HORSES SEQUENTIALLY VIA EDITOR ===
+  
   async function addOneHorse(h) {
     const nameEl = getHorseNameInput();
     if (!nameEl) return false;
 
-    // Fill fields in the editor
-    if (h?.name)    { nameEl.value = h.name; fire(nameEl); }
+    if (h?.name)   { nameEl.value = h.name; fire(nameEl); }
     const oddsEl = getMlOddsInput();
-    if (oddsEl && (h?.ml_odds || h?.odds)) {
-      oddsEl.value = h.ml_odds || h.odds;
-      fire(oddsEl);
-    }
-    const jEl = getJockeyInput();  if (jEl && h?.jockey)  { jEl.value = h.jockey;   fire(jEl); }
-    const tEl = getTrainerInput(); if (tEl && h?.trainer) { tEl.value = h.trainer;  fire(tEl); }
+    if (oddsEl && (h?.ml_odds || h?.odds)) { oddsEl.value = h.ml_odds || h.odds; fire(oddsEl); }
+    const jEl = getJockeyInput();  if (jEl && h?.jockey)  { jEl.value = h.jockey; fire(jEl); }
+    const tEl = getTrainerInput(); if (tEl && h?.trainer) { tEl.value = h.trainer; fire(tEl); }
 
-    console.debug(`[FinishLine] Filled horse: ${h?.name || '(unnamed)'}`);
-    await sleep(40); // let any masking/validation run
-
-    // Prefer the Add button inside the editor; otherwise submit the editor form
+    await sleep(50);
     const addBtn = getAddHorseControl();
     const form   = nameEl.closest('form');
-    if (addBtn) {
-      console.debug('[FinishLine] Clicking Add Horse button');
-      addBtn.click();
-    } else if (form?.requestSubmit) {
-      console.debug('[FinishLine] Submitting form via requestSubmit()');
-      form.requestSubmit();
-    } else if (form) {
-      console.debug('[FinishLine] Submitting form via submit event');
-      form.dispatchEvent(new Event('submit', { bubbles: true }));
-    } else {
-      console.warn('[FinishLine] No Add button or form found');
-    }
+    if (addBtn) addBtn.click();
+    else if (form?.requestSubmit) form.requestSubmit();
+    else if (form) form.dispatchEvent(new Event('submit', { bubbles:true }));
 
-    await sleep(100); // let the app append & clear the editor
+    await sleep(110); // give your app time to append + clear
     return true;
   }
 
-  // === GLOBAL HOOK FOR EXTERNAL CALLS ===
+  // Public hook used in the OCR success path
   window.__finishline_fillFromOCR = async function(extracted) {
     console.info('[FinishLine] __finishline_fillFromOCR called with:', extracted);
     
-    // Fill race meta (keep generic & tolerant)
-    const setMeta = (selText, val) => {
+    // --- Race meta (tolerant) ---
+    const setMeta = (label, val) => {
       if (val == null) return;
-      const el = document.getElementById(selText)
-             || document.querySelector(`[name="${selText}"]`)
-             || Array.from(document.querySelectorAll('input,select,textarea'))
-                  .find(x => new RegExp(selText, 'i').test(
-                    [x.placeholder || '', x.name || '', x.id || '', x.getAttribute('aria-label') || ''].join(' ')
-                  ));
-      if (el) {
-        el.value = val;
-        fire(el);
-        console.debug(`[FinishLine] Set race ${selText} = ${val}`);
-      }
+      const el = document.getElementById(label)
+        || document.querySelector(`[name="${label}"]`)
+        || $$('input,select,textarea').find(x => new RegExp(label,'i').test(
+             [x.placeholder||'', x.name||'', x.id||'', x.getAttribute('aria-label')||''].join(' ')
+           ));
+      if (el) { el.value = val; fire(el); }
     };
-    
     const race = extracted?.race || {};
     setMeta('raceDate', race.date);
     setMeta('track',    race.track);
     setMeta('surface',  race.surface);
     setMeta('distance', race.distance);
 
-    // Add horses sequentially **inside the editor container**
+    // --- Horses (sequential) ---
     const horses = Array.isArray(extracted?.horses) ? extracted.horses : [];
     let added = 0;
-    console.info(`[FinishLine] Starting scoped sequential population of ${horses.length} horses`);
-    
-    for (const h of horses) {
-      const ok = await addOneHorse(h);
-      if (ok) added++;
-    }
+    for (const h of horses) { if (await addOneHorse(h)) added++; }
 
-    // Status message
-    if (resultBox) {
-      resultBox.textContent = `✅ OCR parsed and populated ${added} horses.`;
-      resultBox.dataset.type = 'info';
-      resultBox.style.display = 'block';
-    }
-    console.info(`[FinishLine] Scoped sequential population complete: ${added} horses added`);
+    if (resultBox) { resultBox.textContent = `✅ OCR parsed and populated ${added} horses.`; resultBox.dataset.type = 'info'; resultBox.style.display = 'block'; }
+
+    // Store for later steps
+    window.__finishline_lastExtracted = extracted;
+
+    // Ready to analyze next
+    setBadge('Ready to analyze', 'ready');
+    console.info(`[FinishLine] OCR complete: ${added} horses added`);
   };
+
+  // === ANALYZE + PREDICT FLOWS (progress UX + badge state) ===
+  
+  const analyzeBtn = $('#analyzeBtn') || $('[data-action="analyze"]') || $$('button').find(b => /analyz/i.test(b.textContent||''));
+  const predictBtn = $('#predictBtn') || $('[data-action="predict"]') || $$('button').find(b => /predict/i.test(b.textContent||''));
+  const listRowsSel = '.horse-list .horse-row, [data-role="horse-row"], .horses .row';
+
+  function readRaceFromForm() {
+    const val = (label) => {
+      const el = document.getElementById(label)
+        || document.querySelector(`[name="${label}"]`)
+        || $$('input,select,textarea').find(x => new RegExp(label,'i').test(
+             [x.placeholder||'', x.name||'', x.id||'', x.getAttribute('aria-label')||''].join(' ')
+           ));
+      return el ? (el.value ?? '').toString().trim() : null;
+    };
+    return {
+      date:     val('raceDate'),
+      track:    val('track'),
+      surface:  val('surface'),
+      distance: val('distance')
+    };
+  }
+
+  function readHorsesFromList() {
+    // Try structured list (preferred)
+    const rows = $$(listRowsSel);
+    if (rows.length) {
+      const pick = (row, rex) => $$('input,textarea', row).find(el => rex.test(
+        [el.placeholder||'', el.name||'', el.id||'', el.getAttribute('aria-label')||'', el.closest('label')?.textContent||''].join(' ')
+      ))?.value?.trim() || '';
+      return rows.map(r => ({
+        name:    pick(r, /name/i),
+        ml_odds: pick(r, /(ml\s*odds|odds)/i),
+        jockey:  pick(r, /jockey/i),
+        trainer: pick(r, /trainer/i),
+      })).filter(h => h.name);
+    }
+    // Fallback to last extracted
+    return Array.isArray(window.__finishline_lastExtracted?.horses) ? window.__finishline_lastExtracted.horses : [];
+  }
+
+  async function callJSON(url, body) {
+    const res = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    let json; try { json = await res.json(); } catch { throw new Error(`Non-JSON from ${url} (HTTP ${res.status})`); }
+    if (!res.ok || json?.ok === false) {
+      throw new Error(json?.error?.message || json?.message || `Request failed (${res.status})`);
+    }
+    return json;
+  }
+
+  // ANALYZE
+  if (analyzeBtn) {
+    analyzeBtn.addEventListener('click', (ev) => {
+      ev.preventDefault(); ev.stopImmediatePropagation();
+      withButtonProgress(analyzeBtn, 'Analyzing…', async () => {
+        setBadge('Analyzing…', 'analyzing');
+        const payload = { race: readRaceFromForm(), horses: readHorsesFromList() };
+        console.info('[FinishLine] Analyze payload:', payload);
+        const out = await callJSON('/api/research_predict', payload);
+        // Store if needed by predict step
+        window.__finishline_lastAnalysis = out?.data || out;
+        setBadge('Ready to predict', 'ready');
+        console.info('[FinishLine] Analyze complete:', out);
+        return out;
+      }).catch(err => {
+        setBadge('Analysis failed', 'error');
+        if (resultBox) { resultBox.textContent = `Analyze error: ${err.message}`; resultBox.dataset.type='error'; resultBox.style.display='block'; }
+        console.error('[FinishLine] Analyze failed:', err);
+      });
+    }, true);
+  }
+
+  // PREDICT
+  if (predictBtn) {
+    predictBtn.addEventListener('click', (ev) => {
+      ev.preventDefault(); ev.stopImmediatePropagation();
+      withButtonProgress(predictBtn, 'Predicting…', async () => {
+        setBadge('Predicting…', 'predicting');
+        const payload = {
+          race: readRaceFromForm(),
+          horses: readHorsesFromList(),
+          analysis: window.__finishline_lastAnalysis || null
+        };
+        console.info('[FinishLine] Predict payload:', payload);
+        // If you have a separate predict endpoint, use it; otherwise reuse research_predict.
+        const out = await callJSON('/api/predict_wps', payload).catch(async () => {
+          // fallback to existing research endpoint if predict not present
+          return callJSON('/api/research_predict', payload);
+        });
+        setBadge('Ready', 'success');
+        console.info('[FinishLine] Predict complete:', out);
+        // (Optionally render predictions to your UI here)
+        return out;
+      }).catch(err => {
+        setBadge('Prediction failed', 'error');
+        if (resultBox) { resultBox.textContent = `Predict error: ${err.message}`; resultBox.dataset.type='error'; resultBox.style.display='block'; }
+        console.error('[FinishLine] Predict failed:', err);
+      });
+    }, true);
+  }
+
+  console.info('[FinishLine] Analyze & Predict flows wired ✔');
 
   async function onExtract(ev) {
     if (ev) {
