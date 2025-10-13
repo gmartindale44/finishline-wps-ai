@@ -67,7 +67,7 @@ async def _extract_payload(request: Request,
             })
     return payload
 
-@router.post("/photo_extract_openai_b64")  # public path is /api/photo_extract_openai_b64 on Vercel
+@router.post("/api/photo_extract_openai_b64")  # Vercel passes full path including /api
 async def photo_extract_openai_b64(
     request: Request,
     files: Optional[List[UploadFile]] = File(default=None),
@@ -89,7 +89,7 @@ async def photo_extract_openai_b64(
     except Exception as e:
         return JSONResponse({"ok": False, "error": {"code":"SERVER_ERROR","message":str(e)}}, status_code=500)
 
-@router.get("/health")
+@router.get("/api/health")  # Vercel passes full path including /api
 def health():
     return JSONResponse({"ok": True, "msg": "FastAPI connected on Vercel"})
 
