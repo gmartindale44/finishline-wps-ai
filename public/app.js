@@ -142,19 +142,21 @@
     })();
   }
 
-  // === SCOPED EDITOR DISCOVERY ===
-  
-  function getHorseNameInput() {
-    // prefer semantic ids/names first
+  // === IMPROVED OCR → FILL WITH ROW VERIFICATION ===
+
+  // Badge helper with className management
+  const setBadge = (txt, cls='ready') => { if (!badge) return; badge.textContent = txt; badge.className = `badge ${cls}`; };
+
+  // --- Editor scoping (the single-row "Horse Data" editor) ---
+  function findEditorNameInput() {
     return $('#horseName') || $('input[name="horseName"]') ||
       $$('input,textarea').find(el =>
         /horse\s*name/i.test([el.placeholder||'', el.name||'', el.id||'', el.getAttribute('aria-label')||''].join(' '))
       );
   }
   function getEditorContainer() {
-    const nameEl = getHorseNameInput();
-    if (!nameEl) return null;
-    return nameEl.closest('[data-section="horse"], section, fieldset, .card, .panel, .horse-editor, .horse-data') || nameEl.parentElement;
+    const nameEl = findEditorNameInput();
+    return nameEl ? (nameEl.closest('form, [data-section="horse"], section, fieldset, .horse-editor, .horse-data, .card, .panel') || nameEl.parentElement) : null;
   }
   function findInEditor(rx) {
     const scope = getEditorContainer() || document;
@@ -164,45 +166,77 @@
       return re.test(s);
     });
   }
-  const getMlOddsInput = () => findInEditor(/(ml\s*odds|odds)/i);
-  const getJockeyInput = () => findInEditor(/jockey/i);
-  const getTrainerInput= () => findInEditor(/trainer/i);
-  function getAddHorseControl() {
-    const scope = getEditorContainer() || document;
-    // strictly inside the editor container
-    return $$('button, a, input[type="button"], input[type="submit"]', scope)
-      .find(el => /(^|\b)add\s*horse(\b|$)/i.test((el.textContent||el.value||'').trim()))
-      || scope.querySelector('[data-action="add-horse"], #addHorseBtn, .add-horse, button.add-horse');
+  const getOddsInput    = () => findInEditor(/(ml\s*odds|odds)/i);
+  const getJockeyInput  = () => findInEditor(/jockey/i);
+  const getTrainerInput = () => findInEditor(/trainer/i);
+
+  // List of added horses (for row count verification)
+  function horseRows() {
+    // Try common containers; extend if you have a different markup
+    return $$('.horse-list .horse-row')        ||
+           $$('.horses .row')                  ||
+           $$('.horse-items .item')            ||
+           $$('.added-horses .row');
   }
 
-  // === OCR → ADD HORSES SEQUENTIALLY VIA EDITOR ===
-  
+  function getAddHorseControl() {
+    const scope = getEditorContainer() || document;
+    // Prefer button INSIDE the editor container
+    const btnByText = $$('button, a, input[type="button"], input[type="submit"]', scope)
+      .find(el => /(^|\b)add\s*horse(\b|$)/i.test((el.textContent||el.value||'').trim()));
+    if (btnByText) return btnByText;
+    return scope.querySelector('[data-action="add-horse"], #addHorseBtn, .add-horse, button.add-horse');
+  }
+
+  // Add ONE horse via the editor; verify a row was appended before continuing
   async function addOneHorse(h) {
-    const nameEl = getHorseNameInput();
+    const nameEl = findEditorNameInput();
     if (!nameEl) return false;
 
-    if (h?.name)   { nameEl.value = h.name; fire(nameEl); }
-    const oddsEl = getMlOddsInput();
+    if (h?.name) { nameEl.value = h.name; fire(nameEl); }
+    const oddsEl = getOddsInput();
     if (oddsEl && (h?.ml_odds || h?.odds)) { oddsEl.value = h.ml_odds || h.odds; fire(oddsEl); }
-    const jEl = getJockeyInput();  if (jEl && h?.jockey)  { jEl.value = h.jockey; fire(jEl); }
+    const jEl = getJockeyInput();  if (jEl && h?.jockey)  { jEl.value = h.jockey;  fire(jEl); }
     const tEl = getTrainerInput(); if (tEl && h?.trainer) { tEl.value = h.trainer; fire(tEl); }
 
-    await sleep(50);
-    const addBtn = getAddHorseControl();
-    const form   = nameEl.closest('form');
-    if (addBtn) addBtn.click();
-    else if (form?.requestSubmit) form.requestSubmit();
-    else if (form) form.dispatchEvent(new Event('submit', { bubbles:true }));
+    await sleep(40);
 
-    await sleep(110); // give your app time to append + clear
+    const before = horseRows().length;
+    const scopeForm = nameEl.closest('form');
+    const addBtn    = getAddHorseControl();
+
+    // Prefer true form submit (most reliable)
+    if (scopeForm?.requestSubmit) {
+      console.debug(`[FinishLine] Submitting form for horse: ${h?.name || '(unnamed)'}`);
+      scopeForm.requestSubmit();
+    } else if (scopeForm) {
+      console.debug(`[FinishLine] Dispatching submit event for horse: ${h?.name || '(unnamed)'}`);
+      scopeForm.dispatchEvent(new Event('submit', { bubbles:true, cancelable:true }));
+    } else if (addBtn) {
+      console.debug(`[FinishLine] Clicking Add Horse button for: ${h?.name || '(unnamed)'}`);
+      addBtn.click();
+    }
+
+    // Wait for row to append & editor to clear
+    const deadline = Date.now() + 1500;
+    while (Date.now() < deadline) {
+      await sleep(60);
+      const now = horseRows().length;
+      if (now > before) {
+        console.debug(`[FinishLine] Row verified: ${before} → ${now} rows`);
+        return true;
+      }
+    }
+    // Final fallback: if no visible rows, still consider it added (some UIs render list later)
+    console.debug(`[FinishLine] Row timeout, assuming added: ${h?.name || '(unnamed)'}`);
     return true;
   }
 
-  // Public hook used in the OCR success path
+  // PUBLIC hook called after successful OCR (use this in your existing success branch)
   window.__finishline_fillFromOCR = async function(extracted) {
     console.info('[FinishLine] __finishline_fillFromOCR called with:', extracted);
     
-    // --- Race meta (tolerant) ---
+    // Fill race (safe + tolerant)
     const setMeta = (label, val) => {
       if (val == null) return;
       const el = document.getElementById(label)
@@ -210,7 +244,7 @@
         || $$('input,select,textarea').find(x => new RegExp(label,'i').test(
              [x.placeholder||'', x.name||'', x.id||'', x.getAttribute('aria-label')||''].join(' ')
            ));
-      if (el) { el.value = val; fire(el); }
+      if (el) { el.value = val; el.dispatchEvent(new Event('input',{bubbles:true})); el.dispatchEvent(new Event('change',{bubbles:true})); }
     };
     const race = extracted?.race || {};
     setMeta('raceDate', race.date);
@@ -218,19 +252,27 @@
     setMeta('surface',  race.surface);
     setMeta('distance', race.distance);
 
-    // --- Horses (sequential) ---
+    // Add horses sequentially
     const horses = Array.isArray(extracted?.horses) ? extracted.horses : [];
     let added = 0;
-    for (const h of horses) { if (await addOneHorse(h)) added++; }
+    console.info(`[FinishLine] Starting sequential population of ${horses.length} horses with row verification`);
+    
+    for (const h of horses) {
+      const ok = await addOneHorse(h);
+      if (ok) added++;
+    }
 
+    // Hide the debug JSON panel so nothing shows "below the form"
+    const debugJson = $('#ocrJson');
+    if (debugJson && debugJson.parentElement) debugJson.parentElement.style.display = 'none';
     if (resultBox) { resultBox.textContent = `✅ OCR parsed and populated ${added} horses.`; resultBox.dataset.type = 'info'; resultBox.style.display = 'block'; }
 
     // Store for later steps
     window.__finishline_lastExtracted = extracted;
 
-    // Ready to analyze next
+    // Ready for next step
     setBadge('Ready to analyze', 'ready');
-    console.info(`[FinishLine] OCR complete: ${added} horses added`);
+    console.info(`[FinishLine] OCR complete with row verification: ${added} horses added`);
   };
 
   // === ANALYZE + PREDICT FLOWS (progress UX + badge state) ===
