@@ -88,109 +88,141 @@
     return json;
   }
 
-  // === SEQUENTIAL HORSE POPULATION (single-row editor approach) ===
+  // === SCOPED SEQUENTIAL HORSE POPULATION (editor container approach) ===
   
-  // Utility: find an input by flexible label/placeholder/name/id match
-  function findInput(hints) {
-    const list = Array.isArray(hints) ? hints : [hints];
-    const all = Array.from(document.querySelectorAll('input,textarea'));
-    const rxes = list.map(h => (h instanceof RegExp ? h : new RegExp(String(h), 'i')));
-    return all.find(el => {
-      const ph   = el.getAttribute('placeholder') || '';
-      const name = el.getAttribute('name') || '';
-      const id   = el.getAttribute('id') || '';
-      const aria = el.getAttribute('aria-label') || '';
-      const lbl  = el.closest('label')?.textContent || '';
-      const text = [ph, name, id, aria, lbl].join(' ');
-      return rxes.every(rx => rx.test(text));
-    });
-  }
-
-  // Stable single-row field getters for the "Horse Data" editor
-  function getHorseNameInput()   { return findInput([/horse/i, /name/i]) || findInput('Horse Name'); }
-  function getMlOddsInput()      { return findInput([/ml/i, /odds/i]) || findInput(/odds/i); }
-  function getJockeyInput()      { return findInput(/jockey/i); }
-  function getTrainerInput()     { return findInput(/trainer/i); }
-
-  // Find the "Add Horse" button by text or data attribute
-  function getAddHorseBtn() {
-    return addHorseBtn ||
-           document.getElementById('addHorseBtn') ||
-           document.querySelector('[data-action="add-horse"]') ||
-           Array.from(document.querySelectorAll('button, a')).find(b => /add\s*horse/i.test(b.textContent || ''));
-  }
-
-  // Helpers to set value and fire events so app state updates
-  function setVal(el, value) {
-    if (!el || value == null) return;
-    el.value = value;
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  
+  function fire(el) {
+    if (!el) return;
     el.dispatchEvent(new Event('input',  { bubbles: true }));
     el.dispatchEvent(new Event('change', { bubbles: true }));
   }
-  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-  // Sequential population: fill editor, click Add Horse, repeat
-  async function populateHorsesSequential(horses, statusCb) {
-    const addBtn = getAddHorseBtn();
-    if (!addBtn) {
-      statusCb?.('Could not find "Add Horse" button');
-      console.warn('[FinishLine] Add Horse button not found');
-      return 0;
+  // Find "Horse Name" input (the single-row editor)
+  function getHorseNameInput() {
+    // Try common ids/names, then fallback to placeholder text
+    return document.getElementById('horseName')
+        || document.querySelector('input[name="horseName"]')
+        || Array.from(document.querySelectorAll('input,textarea'))
+             .find(el => /horse\s*name/i.test(
+               [el.placeholder || '', el.name || '', el.id || '', el.getAttribute('aria-label') || ''].join(' ')
+             ));
+  }
+
+  // Scope: nearest container that truly holds the editor row + its Add button
+  function getEditorContainer() {
+    const nameEl = getHorseNameInput();
+    if (!nameEl) return null;
+    // Prefer a section/card/fieldset around the input
+    return nameEl.closest('[data-section="horse"], section, fieldset, .card, .panel, .horse-editor, .horse-data') || nameEl.parentElement;
+  }
+
+  // Within the editor container, find the *right* "Add Horse"
+  function getAddHorseControl() {
+    const scope = getEditorContainer() || document;
+    // Prefer an explicit add button inside the editor scope
+    const byText = Array.from(scope.querySelectorAll('button, a, input[type="button"], input[type="submit"]'))
+      .find(el => /^(add\s*horse)$/i.test((el.textContent || el.value || '').trim()));
+    if (byText) return byText;
+
+    // Fallback: any element marked for adding inside the scope
+    return scope.querySelector('[data-action="add-horse"], #addHorseBtn, .add-horse, button.add-horse');
+  }
+
+  // Other editor inputs (ML Odds, Jockey, Trainer) – all resolved inside the editor container
+  function findInEditor(match) {
+    const scope = getEditorContainer() || document;
+    const rx = match instanceof RegExp ? match : new RegExp(String(match), 'i');
+    return Array.from(scope.querySelectorAll('input,textarea')).find(el => {
+      const s = [el.placeholder || '', el.name || '', el.id || '', el.getAttribute('aria-label') || '', el.closest('label')?.textContent || ''].join(' ');
+      return rx.test(s);
+    });
+  }
+  const getMlOddsInput = () => findInEditor(/(ml\s*odds|odds)/i);
+  const getJockeyInput = () => findInEditor(/jockey/i);
+  const getTrainerInput= () => findInEditor(/trainer/i);
+
+  // Add one horse via the editor container only
+  async function addOneHorse(h) {
+    const nameEl = getHorseNameInput();
+    if (!nameEl) return false;
+
+    // Fill fields in the editor
+    if (h?.name)    { nameEl.value = h.name; fire(nameEl); }
+    const oddsEl = getMlOddsInput();
+    if (oddsEl && (h?.ml_odds || h?.odds)) {
+      oddsEl.value = h.ml_odds || h.odds;
+      fire(oddsEl);
     }
-    
-    let count = 0;
-    console.info(`[FinishLine] Starting sequential population of ${horses.length} horses`);
+    const jEl = getJockeyInput();  if (jEl && h?.jockey)  { jEl.value = h.jockey;   fire(jEl); }
+    const tEl = getTrainerInput(); if (tEl && h?.trainer) { tEl.value = h.trainer;  fire(tEl); }
 
-    for (const h of horses) {
-      // 1) Fill the editor row
-      setVal(getHorseNameInput(), h?.name || '');
-      setVal(getMlOddsInput(),    h?.ml_odds || h?.odds || '');
-      setVal(getJockeyInput(),    h?.jockey || '');
-      setVal(getTrainerInput(),   h?.trainer || '');
+    console.debug(`[FinishLine] Filled horse: ${h?.name || '(unnamed)'}`);
+    await sleep(40); // let any masking/validation run
 
-      console.debug(`[FinishLine] Filled horse ${count + 1}: ${h?.name || '(unnamed)'}`);
-
-      // Tiny pause to allow reactive validation
-      await sleep(40);
-
-      // 2) Click Add Horse (app should append & clear fields)
+    // Prefer the Add button inside the editor; otherwise submit the editor form
+    const addBtn = getAddHorseControl();
+    const form   = nameEl.closest('form');
+    if (addBtn) {
+      console.debug('[FinishLine] Clicking Add Horse button');
       addBtn.click();
-      count += 1;
-
-      // Allow DOM/state to settle before next horse
-      await sleep(80);
+    } else if (form?.requestSubmit) {
+      console.debug('[FinishLine] Submitting form via requestSubmit()');
+      form.requestSubmit();
+    } else if (form) {
+      console.debug('[FinishLine] Submitting form via submit event');
+      form.dispatchEvent(new Event('submit', { bubbles: true }));
+    } else {
+      console.warn('[FinishLine] No Add button or form found');
     }
-    
-    statusCb?.(`✅ OCR parsed and populated ${count} horses.`);
-    console.info(`[FinishLine] Sequential population complete: ${count} horses added`);
-    return count;
+
+    await sleep(100); // let the app append & clear the editor
+    return true;
   }
 
   // === GLOBAL HOOK FOR EXTERNAL CALLS ===
   window.__finishline_fillFromOCR = async function(extracted) {
     console.info('[FinishLine] __finishline_fillFromOCR called with:', extracted);
     
-    // Fill race meta
-    const setRace = (ids, val) => {
+    // Fill race meta (keep generic & tolerant)
+    const setMeta = (selText, val) => {
       if (val == null) return;
-      const el = document.getElementById(ids) || 
-                 document.querySelector(`[name="${ids}"]`) || 
-                 document.querySelector(`[data-field="${ids}"]`);
+      const el = document.getElementById(selText)
+             || document.querySelector(`[name="${selText}"]`)
+             || Array.from(document.querySelectorAll('input,select,textarea'))
+                  .find(x => new RegExp(selText, 'i').test(
+                    [x.placeholder || '', x.name || '', x.id || '', x.getAttribute('aria-label') || ''].join(' ')
+                  ));
       if (el) {
-        setVal(el, val);
-        console.debug(`[FinishLine] Set race ${ids} = ${val}`);
+        el.value = val;
+        fire(el);
+        console.debug(`[FinishLine] Set race ${selText} = ${val}`);
       }
     };
     
     const race = extracted?.race || {};
-    setRace('raceDate', race.date);
-    setRace('track',    race.track);
-    setRace('surface',  race.surface);
-    setRace('distance', race.distance);
+    setMeta('raceDate', race.date);
+    setMeta('track',    race.track);
+    setMeta('surface',  race.surface);
+    setMeta('distance', race.distance);
 
-    // Populate horses sequentially through single-row editor
+    // Add horses sequentially **inside the editor container**
     const horses = Array.isArray(extracted?.horses) ? extracted.horses : [];
-    await populateHorsesSequential(horses, (msg) => show(msg, 'info'));
+    let added = 0;
+    console.info(`[FinishLine] Starting scoped sequential population of ${horses.length} horses`);
+    
+    for (const h of horses) {
+      const ok = await addOneHorse(h);
+      if (ok) added++;
+    }
+
+    // Status message
+    if (resultBox) {
+      resultBox.textContent = `✅ OCR parsed and populated ${added} horses.`;
+      resultBox.dataset.type = 'info';
+      resultBox.style.display = 'block';
+    }
+    console.info(`[FinishLine] Scoped sequential population complete: ${added} horses added`);
   };
 
   async function onExtract(ev) {
