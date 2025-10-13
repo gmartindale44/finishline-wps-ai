@@ -88,72 +88,97 @@
     return json;
   }
 
-  function setValue(cands, value) {
-    if (value == null) return;
-    const ids = Array.isArray(cands) ? cands : [cands];
-    for (const id of ids) {
-      const el = document.getElementById(id) || document.querySelector(`[name="${id}"]`) || document.querySelector(`[data-field="${id}"]`);
-      if (el) {
-        el.value = value;
-        console.debug(`[FinishLine] Set ${id} = ${value}`);
-        return;
-      }
-    }
+  // === ROBUST ROW SELECTORS (no reliance on duplicate IDs) ===
+  function $all(sel) { return Array.from(document.querySelectorAll(sel)); }
+
+  // Find inputs by placeholder/label text across all rows (case-insensitive).
+  function findByPlaceholderLike(text) {
+    const rx = new RegExp(text, 'i');
+    return $all('input,textarea').filter(el => {
+      const ph = el.getAttribute('placeholder') || '';
+      const lbl = (el.closest('label')?.textContent || '');
+      const aria = el.getAttribute('aria-label') || '';
+      return rx.test(ph) || rx.test(lbl) || rx.test(aria);
+    });
   }
 
-  // Find all horse input columns
-  function $$name()    { return document.querySelectorAll('.horse-row .horse-name, .horse-name, [data-col="name"] input, [data-field="name"], input[placeholder*="Horse Name" i]'); }
-  function $$odds()    { return document.querySelectorAll('.horse-row .horse-odds, .horse-odds, [data-col="odds"] input, [data-field="odds"], input[placeholder*="Odds" i]'); }
-  function $$jockey()  { return document.querySelectorAll('.horse-row .horse-jockey, .horse-jockey, .jj, [data-col="jockey"] input, [data-field="jockey"], input[placeholder*="Jockey" i]'); }
-  function $$trainer() { return document.querySelectorAll('.horse-row .horse-trainer, .horse-trainer, .tt, [data-col="trainer"] input, [data-field="trainer"], input[placeholder*="Trainer" i]'); }
+  // Column lists in DOM order (these return ALL rows in order)
+  function cols_name()    { return findByPlaceholderLike('horse name'); }
+  function cols_odds()    { return findByPlaceholderLike('ml odds|odds'); }
+  function cols_jockey()  { return findByPlaceholderLike('jockey'); }
+  function cols_trainer() { return findByPlaceholderLike('trainer'); }
 
+  // Add rows until we have at least n fields in *each* column.
   function ensureRows(n) {
-    if (!addHorseBtn) {
+    const addBtn = addHorseBtn || 
+                   document.querySelector('[data-action="add-horse"]') ||
+                   document.querySelector('#AddHorse, .add-horse, button.add-horse, button:has(+ [placeholder*="Jockey" i])');
+
+    if (!addBtn) {
       console.warn('[FinishLine] Add Horse button not found, cannot create rows');
-            return;
+      return;
+    }
+
+    let guard = 0;
+    while (Math.min(
+      cols_name().length,
+      cols_odds().length,
+      cols_jockey().length,
+      cols_trainer().length
+    ) < n && guard < n + 10) {
+      console.debug(`[FinishLine] Creating row ${guard + 1} for ${n} horses`);
+      addBtn.click();
+      guard++;
     }
     
-    let tries = 0;
-    const maxTries = n + 10;
-    
-    while (tries < maxTries) {
-      const currentRows = Math.max($$name().length, $$odds().length, $$jockey().length, $$trainer().length);
-      if (currentRows >= n) {
-        console.info(`[FinishLine] Ensured ${n} horse rows (current: ${currentRows})`);
+    const currentRows = Math.min(cols_name().length, cols_odds().length, cols_jockey().length, cols_trainer().length);
+    console.info(`[FinishLine] Ensured ${n} horse rows (current: ${currentRows})`);
+  }
+
+  // === FILL FUNCTIONS ===
+  function fillRace(r) {
+    const setValue = (cands, value) => {
+      if (value == null) return;
+      const ids = Array.isArray(cands) ? cands : [cands];
+      for (const id of ids) {
+        const el = document.getElementById(id) ||
+                   document.querySelector(`[name="${id}"]`) ||
+                   document.querySelector(`[data-field="${id}"]`) ||
+                   findByPlaceholderLike(id)[0];
+        if (el) {
+          el.value = value;
+          console.debug(`[FinishLine] Set ${id} = ${value}`);
           return;
         }
-
-      console.debug(`[FinishLine] Adding row ${currentRows + 1}/${n}`);
-      addHorseBtn.click();
-      tries++;
-    }
+      }
+    };
     
-    console.warn(`[FinishLine] Could not create ${n} rows after ${maxTries} tries`);
-  }
-
-  function fillRace(r) {
     if (!r) return;
     console.info('[FinishLine] Filling race data:', r);
-    setValue(['raceDate','race-date','inputRaceDate'], r.date);
-    setValue(['raceTrack','track','inputTrack'], r.track);
-    setValue(['raceSurface','surface','inputSurface'], r.surface);
-    setValue(['raceDistance','distance','inputDistance'], r.distance);
+    setValue(['raceDate','date'], r.date);
+    setValue(['track'], r.track);
+    setValue(['surface'], r.surface);
+    setValue(['distance'], r.distance);
   }
 
   function fillHorses(horses) {
     if (!Array.isArray(horses) || !horses.length) {
       console.warn('[FinishLine] No horses to fill');
-          return;
-        }
-        
+      return;
+    }
+
     console.info(`[FinishLine] Filling ${horses.length} horses:`, horses);
+    
+    // 1) Make sure we have enough rows
     ensureRows(horses.length);
-    
-    const nameC = $$name();
-    const oddsC = $$odds();
-    const jockeyC = $$jockey();
-    const trainerC = $$trainer();
-    
+
+    // 2) Get live NodeLists AFTER rows are added
+    const nameC    = cols_name();
+    const oddsC    = cols_odds();
+    const jockeyC  = cols_jockey();
+    const trainerC = cols_trainer();
+
+    // 3) Assign by index
     horses.forEach((h, i) => {
       const n = nameC[i];
       const o = oddsC[i];
@@ -179,6 +204,12 @@
     });
   }
 
+  // === GLOBAL HOOK FOR EXTERNAL CALLS ===
+  window.__finishline_fillFromOCR = function(extracted) {
+    fillRace(extracted?.race);
+    fillHorses(extracted?.horses);
+  };
+
   async function onExtract(ev) {
     if (ev) {
       ev.preventDefault();
@@ -197,8 +228,8 @@
       const note = payload?.data?.ocr_error;
       
       if (ex) {
-        fillRace(ex.race);
-        fillHorses(ex.horses);
+        // Use global hook for robust filling
+        window.__finishline_fillFromOCR(ex);
         show(`✅ OCR parsed and populated ${ex.horses?.length || 0} horses.`, 'info');
       } else if (note) {
         show(`OCR note: ${note}`, 'error');
