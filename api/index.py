@@ -1,16 +1,32 @@
-# FinishLine WPS AI — OCR pipeline + tolerant uploads + JSON-only responses
+# FinishLine WPS AI — OCR using existing FINISHLINE_* env vars; tolerant uploads; structured JSON.
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, APIRouter, Request
 from fastapi.responses import JSONResponse
 from typing import List, Optional, Dict, Any
-import base64, re, os
+import base64, re, os, json
 
-# --- OpenAI SDK (>=1.0) ---
-try:
-    from openai import OpenAI
-    _openai_client = OpenAI()
-except Exception:
-    _openai_client = None  # still return clean JSON if SDK/env not present
+def _env_any(names, default=None):
+    for n in names:
+        v = os.getenv(n)
+        if v not in (None, ""):
+            return v
+    return default
+
+def _is_enabled():
+    v = _env_any(["FINISHLINE_OCR_ENABLED"], "1")
+    return str(v).strip().lower() not in ("0", "false", "off", "no")
+
+OPENAI_API_KEY = _env_any(["FINISHLINE_OPENAI_API_KEY", "FINISHLINE_OPENAI_APT_KEY", "OPENAI_API_KEY"])
+OPENAI_MODEL   = _env_any(["FINISHLINE_OPENAI_MODEL", "OPENAI_VISION_MODEL", "FINISHLINE_MODEL"], "gpt-4o-mini")
+
+# OpenAI client (created only if enabled & key present)
+_client = None
+if _is_enabled() and OPENAI_API_KEY:
+    try:
+        from openai import OpenAI
+        _client = OpenAI(api_key=OPENAI_API_KEY)
+    except Exception:
+        _client = None
 
 app = FastAPI()
 router = APIRouter()
@@ -73,48 +89,52 @@ async def _collect_payload(request: Request,
             })
     return payload
 
-def _vision_prompt_json() -> str:
-    # Ask the model for **only** strict JSON covering the fields we have on the form.
+def _prompt_json_schema() -> str:
     return (
-        "You are an OCR+information extractor for U.S. horse-racing programs.\n"
-        "Parse the provided race sheet(s) and return ONLY valid JSON with no commentary.\n"
-        "Target schema:\n"
+        "Extract data from the attached racetrack program images. Return ONLY valid JSON matching this schema:\n"
         "{\n"
-        '  "race": { "date": "mm/dd/yyyy | ISO ok", "track": "string", "surface": "Dirt|Turf|All-Weather|synthetic|other", "distance": "e.g., 1 1/4 miles" },\n'
-        '  "horse": { "name": "string", "ml_odds": "like 5-2", "jockey": "string", "trainer": "string" }\n'
+        '  "race": {\n'
+        '    "date": "mm/dd/yyyy or ISO",\n'
+        '    "track": "string",\n'
+        '    "surface": "Dirt|Turf|Synthetic|All-Weather|Other",\n'
+        '    "distance": "e.g., 1 1/4 miles"\n'
+        "  },\n"
+        '  "horses": [\n'
+        '    { "name": "string", "ml_odds": "e.g., 5-2", "jockey": "string", "trainer": "string" }\n'
+        "  ]\n"
         "}\n"
-        "Fill unknowns with null.\n"
-        "There are never photos of actual horses, only printed sheets.\n"
-        "Output ONLY the JSON object. No markdown."
+        "If something is missing, use null. Output ONLY the JSON object — no markdown."
     )
 
-def _run_openai_vision(payload: List[Dict[str, Any]]) -> Dict[str, Any]:
-    if _openai_client is None:
-        # SDK not available; return echo so frontend still renders
+def _run_vision(payload: List[Dict[str, Any]]) -> Dict[str, Any]:
+    if not _is_enabled():
+        return {"error": "OCR_DISABLED via FINISHLINE_OCR_ENABLED"}
+    if not OPENAI_API_KEY:
+        return {"error": "OPENAI_KEY_MISSING (FINISHLINE_OPENAI_API_KEY/FINISHLINE_OPENAI_APT_KEY/OPENAI_API_KEY)"}
+    if _client is None:
         return {"error": "OPENAI_SDK_UNAVAILABLE"}
 
-    model = os.getenv("OPENAI_VISION_MODEL", "gpt-4o-mini")
-    content: List[Dict[str, Any]] = [{"type": "text", "text": _vision_prompt_json()}]
-    # include up to 6 images
+    content: List[Dict[str, Any]] = [{"type": "text", "text": _prompt_json_schema()}]
     for item in payload[:6]:
         mime = item.get("content_type") or "image/png"
         data_url = f"data:{mime};base64,{item['b64']}"
         content.append({"type": "image_url", "image_url": {"url": data_url}})
 
     try:
-        chat = _openai_client.chat.completions.create(
-            model=model,
+        resp = _client.chat.completions.create(
+            model=OPENAI_MODEL,
             messages=[{"role": "user", "content": content}],
             temperature=0
         )
-        raw = chat.choices[0].message.content or "{}"
-        # The API returns a string; attempt to parse JSON safely.
-        import json
-        # Trim possible code fences if the model added them
-        raw = raw.strip()
+        raw = (resp.choices[0].message.content or "{}").strip()
         if raw.startswith("```"):
             raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.DOTALL)
         data = json.loads(raw)
+        # Normalize to horses[]
+        if not isinstance(data.get("horses"), list):
+            if data.get("horse"): data["horses"] = [data["horse"]]
+            else: data["horses"] = []
+            data.pop("horse", None)
         return {"extracted": data}
     except Exception as e:
         return {"error": f"OCR_FAILED: {e}"}
@@ -127,20 +147,11 @@ async def photo_extract_openai_b64(
 ):
     try:
         payload = await _collect_payload(request, files, photos)
-
-        # Run OCR/IE
-        ocr = _run_openai_vision(payload)
-
-        resp = {
-            "received": [
-                {"filename": p["filename"], "content_type": p["content_type"], "bytes": p["bytes"]}
-                for p in payload
-            ],
-            **({"extracted": ocr.get("extracted")} if "extracted" in ocr else {}),
-            **({"ocr_error": ocr.get("error")} if "error" in ocr else {}),
-        }
-        return JSONResponse({"ok": True, "data": resp}, status_code=200)
-
+        ocr = _run_vision(payload)
+        data = { "received": [ { "filename": p["filename"], "content_type": p["content_type"], "bytes": p["bytes"] } for p in payload ] }
+        if "extracted" in ocr: data["extracted"] = ocr["extracted"]
+        if "error" in ocr:     data["ocr_error"] = ocr["error"]
+        return JSONResponse({"ok": True, "data": data}, status_code=200)
     except HTTPException as he:
         detail = he.detail if isinstance(he.detail, dict) else {"code":"HTTP_ERROR","message":str(he.detail)}
         return JSONResponse({"ok": False, "error": detail}, status_code=he.status_code)
@@ -149,7 +160,6 @@ async def photo_extract_openai_b64(
 
 @router.get("/api/health")
 def health():
-    return JSONResponse({"ok": True, "msg": "FastAPI connected on Vercel"})
+    return {"ok": True, "ocr_enabled": _is_enabled(), "model": OPENAI_MODEL, "has_key": bool(OPENAI_API_KEY)}
 
-# IMPORTANT: On Vercel, routes include /api prefix (Vercel passes full path)
 app.include_router(router)

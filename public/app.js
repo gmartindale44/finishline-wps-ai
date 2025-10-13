@@ -1,39 +1,38 @@
-// Client: submit, render JSON, and FILL the form when OCR returns structured values.
-// NOTE: keep your existing styles and HTML. We only wire IDs safely.
+// Fill form from { race, horses[] } and show any ocr_error note.
 
 (() => {
-  console.info('[FinishLine] app.js loaded with OCR auto-fill ✔');
+  console.info('[FinishLine] app.js loaded with multi-horse OCR ✔');
 
-  const form = document.getElementById('raceForm') || document.getElementById('ocrForm') || document.querySelector('form[data-ocr]');
-  const extractBtn = document.getElementById('extractBtn') || document.getElementById('btnExtract') || document.querySelector('[data-action="extract"]');
-  const chooseBtn  = document.getElementById('choosePhotosBtn') || document.getElementById('btnChoosePhotos') || document.querySelector('[data-action="choose-photos"]');
-  const fileInput  = document.getElementById('fileInput') || document.getElementById('photoFiles') || (() => {
-    const el = document.createElement('input'); el.type = 'file'; el.multiple = true; el.id = 'fileInput'; el.style.display='none';
-    document.body.appendChild(el); return el;
+  const form        = document.getElementById('raceForm') || document.getElementById('ocrForm') || document.querySelector('form[data-ocr]');
+  const extractBtn  = document.getElementById('extractBtn') || document.getElementById('btnExtract') || document.querySelector('[data-action="extract"]');
+  const chooseBtn   = document.getElementById('choosePhotosBtn') || document.getElementById('btnChoosePhotos') || document.querySelector('[data-action="choose-photos"]');
+  const fileInput   = document.getElementById('fileInput') || document.getElementById('photoFiles') || (() => {
+    const el = document.createElement('input'); el.type='file'; el.multiple=true; el.id='fileInput'; el.style.display='none'; document.body.appendChild(el); return el;
   })();
-  const resultBox  = document.getElementById('ocrResult');
-  const prettyBox  = document.getElementById('ocrJson');
-  const countBadge = document.getElementById('photoCount') || document.getElementById('photo-count');
+  const resultBox   = document.getElementById('ocrResult');
+  const prettyBox   = document.getElementById('ocrJson');
+  const countBadge  = document.getElementById('photoCount') || document.getElementById('photo-count');
+  const addHorseBtn = document.getElementById('add-horse-btn') || document.getElementById('addHorseBtn') || document.getElementById('add-horse') || document.getElementById('btnAddHorse') || document.querySelector('[data-action="add-horse"]') || document.querySelector('[data-add-horse]');
 
   const bucket = [];
   
-  const show = (msg, type='info') => {
-    const text = typeof msg === 'string' ? msg : (msg?.message || JSON.stringify(msg));
+  const show = (m, t='info') => {
+    const msg = typeof m === 'string' ? m : (m?.message || JSON.stringify(m));
     if (resultBox) {
-      resultBox.textContent = text;
-      resultBox.dataset.type = type;
+      resultBox.textContent = msg;
+      resultBox.dataset.type = t;
       resultBox.style.display = 'block';
-      resultBox.style.background = type === 'error' ? 'rgba(239,68,68,0.2)' : 'rgba(34,197,94,0.2)';
-      resultBox.style.color = type === 'error' ? '#fca5a5' : '#86efac';
-      resultBox.style.border = type === 'error' ? '1px solid rgba(239,68,68,0.4)' : '1px solid rgba(34,197,94,0.4)';
+      resultBox.style.background = t === 'error' ? 'rgba(239,68,68,0.2)' : 'rgba(34,197,94,0.2)';
+      resultBox.style.color = t === 'error' ? '#fca5a5' : '#86efac';
+      resultBox.style.border = t === 'error' ? '1px solid rgba(239,68,68,0.4)' : '1px solid rgba(34,197,94,0.4)';
     } else {
-      (type==='error'?console.error:console.log)(text);
-      if (type==='error') alert(text);
+      (t==='error'?console.error:console.log)(msg);
+      if (t==='error') alert(msg);
     }
   };
   
   const addFiles = (list) => {
-    if (!list) return;
+  if (!list) return;
     bucket.length = 0; // Clear and refill
     for (const f of list) if (f?.name) bucket.push(f);
     if (countBadge) countBadge.textContent = `${bucket.length} / 6 selected`;
@@ -43,9 +42,9 @@
   if (chooseBtn && fileInput) {
     chooseBtn.addEventListener('click', e => {
       e.preventDefault();
-      fileInput.click();
-    });
-    console.info('[FinishLine] Wired choose button to file input');
+        fileInput.click();
+      });
+    console.info('[FinishLine] Wired choose button');
   }
   
   if (fileInput) {
@@ -53,7 +52,7 @@
     console.info('[FinishLine] File input listener attached');
   }
 
-  // Drag & drop support
+  // Drag & drop
   const dropzone = document.getElementById('drop-zone') || document.getElementById('photoDropzone') || document.querySelector('[data-dropzone]');
   if (dropzone) {
     dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('is-dragover'); });
@@ -63,7 +62,7 @@
       dropzone.classList.remove('is-dragover');
       addFiles(e.dataTransfer?.files);
     });
-    console.info('[FinishLine] Drag & drop listeners attached');
+    console.info('[FinishLine] Drag & drop attached');
   }
 
   async function send() {
@@ -89,10 +88,9 @@
     return json;
   }
 
-  // --- Fill the form from OCR JSON ---
-  function setValue(candidates, value) {
+  function setValue(cands, value) {
     if (value == null) return;
-    const ids = Array.isArray(candidates) ? candidates : [candidates];
+    const ids = Array.isArray(cands) ? cands : [cands];
     for (const id of ids) {
       const el = document.getElementById(id) || document.querySelector(`[name="${id}"]`) || document.querySelector(`[data-field="${id}"]`);
       if (el) {
@@ -103,67 +101,109 @@
     }
   }
 
-  function fillForm(extracted) {
-    if (!extracted) return;
-    
-    console.info('[FinishLine] Auto-filling form from OCR data:', extracted);
-    
-    // Race block
-    const race = extracted.race || {};
-    setValue(['raceDate','race-date','inputRaceDate'], race.date);
-    setValue(['raceTrack','track','inputTrack'], race.track);
-    setValue(['raceSurface','surface','inputSurface'], race.surface);
-    setValue(['raceDistance','distance','inputDistance'], race.distance);
-    
-    // Horse block (single horse for now - can extend to multiple)
-    const horse = extracted.horse || {};
-    
-    // Try to find first empty horse name input, or use the first one
-    const horseNameInputs = Array.from(document.querySelectorAll('input.horse-name, input[data-field="name"], input[placeholder*="Horse Name" i]'));
-    const oddsInputs = Array.from(document.querySelectorAll('input.horse-odds, input[data-field="odds"], input[placeholder*="Odds" i]'));
-    const jockeyInputs = Array.from(document.querySelectorAll('input.horse-jockey, input[data-field="jockey"], input[placeholder*="Jockey" i]'));
-    const trainerInputs = Array.from(document.querySelectorAll('input.horse-trainer, input[data-field="trainer"], input[placeholder*="Trainer" i]'));
-    
-    if (horseNameInputs[0] && horse.name) {
-      horseNameInputs[0].value = horse.name;
-      console.debug(`[FinishLine] Set horse name = ${horse.name}`);
-    }
-    if (oddsInputs[0] && horse.ml_odds) {
-      oddsInputs[0].value = horse.ml_odds;
-      console.debug(`[FinishLine] Set ML odds = ${horse.ml_odds}`);
-    }
-    if (jockeyInputs[0] && horse.jockey) {
-      jockeyInputs[0].value = horse.jockey;
-      console.debug(`[FinishLine] Set jockey = ${horse.jockey}`);
-    }
-    if (trainerInputs[0] && horse.trainer) {
-      trainerInputs[0].value = horse.trainer;
-      console.debug(`[FinishLine] Set trainer = ${horse.trainer}`);
+  // Find all horse input columns
+  function $$name()    { return document.querySelectorAll('.horse-row .horse-name, .horse-name, [data-col="name"] input, [data-field="name"], input[placeholder*="Horse Name" i]'); }
+  function $$odds()    { return document.querySelectorAll('.horse-row .horse-odds, .horse-odds, [data-col="odds"] input, [data-field="odds"], input[placeholder*="Odds" i]'); }
+  function $$jockey()  { return document.querySelectorAll('.horse-row .horse-jockey, .horse-jockey, .jj, [data-col="jockey"] input, [data-field="jockey"], input[placeholder*="Jockey" i]'); }
+  function $$trainer() { return document.querySelectorAll('.horse-row .horse-trainer, .horse-trainer, .tt, [data-col="trainer"] input, [data-field="trainer"], input[placeholder*="Trainer" i]'); }
+
+  function ensureRows(n) {
+    if (!addHorseBtn) {
+      console.warn('[FinishLine] Add Horse button not found, cannot create rows');
+            return;
     }
     
-    show('✅ Form auto-filled from OCR data', 'info');
+    let tries = 0;
+    const maxTries = n + 10;
+    
+    while (tries < maxTries) {
+      const currentRows = Math.max($$name().length, $$odds().length, $$jockey().length, $$trainer().length);
+      if (currentRows >= n) {
+        console.info(`[FinishLine] Ensured ${n} horse rows (current: ${currentRows})`);
+          return;
+        }
+
+      console.debug(`[FinishLine] Adding row ${currentRows + 1}/${n}`);
+      addHorseBtn.click();
+      tries++;
+    }
+    
+    console.warn(`[FinishLine] Could not create ${n} rows after ${maxTries} tries`);
   }
 
-  async function onExtract(ev){
-    if (ev){ ev.preventDefault(); ev.stopImmediatePropagation(); }
+  function fillRace(r) {
+    if (!r) return;
+    console.info('[FinishLine] Filling race data:', r);
+    setValue(['raceDate','race-date','inputRaceDate'], r.date);
+    setValue(['raceTrack','track','inputTrack'], r.track);
+    setValue(['raceSurface','surface','inputSurface'], r.surface);
+    setValue(['raceDistance','distance','inputDistance'], r.distance);
+  }
+
+  function fillHorses(horses) {
+    if (!Array.isArray(horses) || !horses.length) {
+      console.warn('[FinishLine] No horses to fill');
+          return;
+        }
+        
+    console.info(`[FinishLine] Filling ${horses.length} horses:`, horses);
+    ensureRows(horses.length);
+    
+    const nameC = $$name();
+    const oddsC = $$odds();
+    const jockeyC = $$jockey();
+    const trainerC = $$trainer();
+    
+    horses.forEach((h, i) => {
+      const n = nameC[i];
+      const o = oddsC[i];
+      const j = jockeyC[i];
+      const t = trainerC[i];
+      
+      if (n && h?.name) {
+        n.value = h.name;
+        console.debug(`[FinishLine] Horse ${i+1} name: ${h.name}`);
+      }
+      if (o && h?.ml_odds) {
+        o.value = h.ml_odds;
+        console.debug(`[FinishLine] Horse ${i+1} odds: ${h.ml_odds}`);
+      }
+      if (j && h?.jockey) {
+        j.value = h.jockey;
+        console.debug(`[FinishLine] Horse ${i+1} jockey: ${h.jockey}`);
+      }
+      if (t && h?.trainer) {
+        t.value = h.trainer;
+        console.debug(`[FinishLine] Horse ${i+1} trainer: ${h.trainer}`);
+      }
+    });
+  }
+
+  async function onExtract(ev) {
+    if (ev) {
+      ev.preventDefault();
+      ev.stopImmediatePropagation();
+    }
+    
     try {
       const payload = await send();
-      show('OCR upload successful. Files received by server.','info');
       
       if (prettyBox) {
         prettyBox.textContent = JSON.stringify(payload, null, 2);
         prettyBox.style.display = 'block';
       }
 
-      // Try to fill from returned structured data
-      const extracted = payload?.data?.extracted;
-      const ocrErr    = payload?.data?.ocr_error;
+      const ex = payload?.data?.extracted;
+      const note = payload?.data?.ocr_error;
       
-      if (extracted) {
-        fillForm(extracted);
-      }
-      if (!extracted && ocrErr) {
-        show(`OCR note: ${ocrErr}`, 'error');
+      if (ex) {
+        fillRace(ex.race);
+        fillHorses(ex.horses);
+        show(`✅ OCR parsed and populated ${ex.horses?.length || 0} horses.`, 'info');
+      } else if (note) {
+        show(`OCR note: ${note}`, 'error');
+      } else {
+        show('OCR returned no structured data.', 'error');
       }
       
       console.info('[FinishLine] Upload successful:', payload);
@@ -176,16 +216,16 @@
 
   if (extractBtn) {
     extractBtn.addEventListener('click', onExtract, true);
-    console.info('[FinishLine] Extract button listener attached (capture phase)');
+    console.info('[FinishLine] Extract button attached (capture phase)');
   }
   if (form) {
     form.addEventListener('submit', onExtract, true);
-    console.info('[FinishLine] Form submit listener attached (capture phase)');
+    console.info('[FinishLine] Form submit attached (capture phase)');
   }
   
   console.info('[FinishLine] Initialization complete');
-})();
-
+    })();
+    
 // --- Photo picker state (keep existing) ---
 window.PICKED_FILES = window.PICKED_FILES || [];
 
