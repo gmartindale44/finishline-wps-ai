@@ -91,6 +91,6 @@ async def photo_extract_openai_b64(
 
 @router.get("/health")
 def health():
-    return {"ok": True}
+    return JSONResponse({"ok": True, "msg": "FastAPI connected on Vercel"})
 
 app.include_router(router)
