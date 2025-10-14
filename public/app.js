@@ -24,27 +24,26 @@
     }
   };
 
-  // === Bulletproof picker: overlay + emergency bar. Leaves your APIs/logic intact. ===
+  // === FinishLine WPS — Unblock uploads with full-viewport native picker + FAB + hotkey (U). ===
 
-  if (window.__finishline_upload_force_init) return;
-  window.__finishline_upload_force_init = true;
+  // Self-test: if you don't see this in Console after reload, app.js isn't loading on this page.
+  console.info('[FinishLine Upload Failsafe] app.js loaded ✔');
 
-  // Shared bucket for send()
+  if (window.__finishline_picker_init) return;
+  window.__finishline_picker_init = true;
+
+  // Shared bucket and helpers (used by your existing send() code)
   window.__finishline_bucket = window.__finishline_bucket || [];
   window.__finishline_getFiles = () => window.__finishline_bucket;
 
-  function updateSelectedCount() {
+  function onFilesPicked(fs) {
+    const files = Array.from(fs || []);
+    for (const f of files) if (f && f.name) window.__finishline_bucket.push(f);
     const badge = document.getElementById('photoCount') || document.querySelector('[data-photo-count]');
     if (badge) badge.textContent = `${window.__finishline_bucket.length} / 6 selected`;
+    console.info('[FinishLine Upload Failsafe] files added:', files.map(f => ({name:f.name,size:f.size,type:f.type})));
   }
 
-  function onFilesPicked(files) {
-    const arr = Array.from(files || []);
-    for (const f of arr) if (f && f.name) window.__finishline_bucket.push(f);
-    updateSelectedCount();
-  }
-
-  // Create a native input (returned each call to avoid GC of events)
   function makeNativeInput() {
     const inp = document.createElement('input');
     inp.type = 'file';
@@ -52,116 +51,166 @@
     inp.accept = 'image/*,.pdf';
     inp.addEventListener('change', (e) => {
       onFilesPicked(e.target.files);
-      e.target.value = ''; // allow same selection twice
+      e.target.value = ''; // allow re-selecting same file
     });
     return inp;
   }
 
-  // 1) Hard overlay on the Choose button's wrapper; clicks go to the input no matter what
-  function mountOverlay() {
-    // locate the visible "Choose Photos / PDF" control or its parent group
-    const choose =
-      document.getElementById('choosePhotosBtn') ||
-      document.querySelector('[data-action="choose-photos"]') ||
-      Array.from(document.querySelectorAll('button, a, input[type="button"], input[type="submit"]'))
-        .find(el => /^choose\s*photos\s*\/\s*pdf$/i.test((el.textContent || el.value || '').trim()));
-
-    if (!choose) return;
-
-    // Use the button itself as positioning context (or its parent)
-    const host = choose;
-    const cs = getComputedStyle(host);
-    if (cs.position === 'static') host.style.position = 'relative';
-    host.classList.add('finishline-clickable');
-
-    // Already mounted?
-    if (host.querySelector('#finishline-choose-overlay')) return;
+  // --- Full-screen overlay (click anywhere to open picker) ---
+  function mountScreenPicker() {
+    if (document.getElementById('finishline-screen-picker')) return document.getElementById('finishline-screen-picker');
 
     const overlay = document.createElement('div');
-    overlay.id = 'finishline-choose-overlay';
-    overlay.style.position = 'absolute';
-    overlay.style.inset = '0';
-    overlay.style.zIndex = '2147483647'; // max
-    overlay.style.pointerEvents = 'auto';
-    overlay.style.cursor = 'pointer';
+    overlay.id = 'finishline-screen-picker';
+    Object.assign(overlay.style, {
+      position: 'fixed',
+      inset: '0',
+      background: 'rgba(0,0,0,0.35)',
+      backdropFilter: 'blur(2px)',
+      display: 'none',             // toggled by FAB
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: '2147483647',        // max
+    });
 
-    // Put the input inside the overlay so native picker wins
-    const input = makeNativeInput();
-    input.style.position = 'absolute';
-    input.style.inset = '0';
-    input.style.width = '100%';
-    input.style.height = '100%';
-    input.style.opacity = '0';
-    input.style.cursor = 'pointer';
-    input.style.pointerEvents = 'auto';
+    const panel = document.createElement('div');
+    Object.assign(panel.style, {
+      background: 'white',
+      color: '#111',
+      padding: '18px 20px',
+      borderRadius: '12px',
+      boxShadow: '0 12px 40px rgba(0,0,0,.35)',
+      minWidth: '260px',
+      textAlign: 'center',
+      position: 'relative'
+    });
+    panel.innerHTML = `<div style="font-weight:600;margin-bottom:8px">Choose Photos / PDF</div>
+                       <div style="font-size:12px;opacity:.75;margin-bottom:12px">Click anywhere or press <kbd>U</kbd></div>`;
 
-    overlay.appendChild(input);
-    host.appendChild(overlay);
-  }
-
-  // 2) Emergency bottom bar (always available; remove later if you wish)
-  function mountEmergencyBar() {
-    if (document.getElementById('finishline-emergency-picker')) return;
-
-    const bar = document.createElement('div');
-    bar.id = 'finishline-emergency-picker';
-
-    const label = document.createElement('span');
-    label.className = 'hint';
-    label.textContent = 'If the in-form button is blocked, pick files here:';
-
-    const input = makeNativeInput();
-
-    const clear = document.createElement('button');
-    clear.type = 'button';
-    clear.textContent = 'Clear';
-    clear.style.marginLeft = '6px';
-    clear.onclick = () => {
-      window.__finishline_bucket = [];
-      updateSelectedCount();
-    };
+    const inp = makeNativeInput();
+    // Cover the entire overlay so any click opens picker
+    Object.assign(inp.style, {
+      position: 'fixed',
+      inset: '0',
+      width: '100%',
+      height: '100%',
+      opacity: '0',
+      cursor: 'pointer',
+      zIndex: '1'
+    });
 
     const close = document.createElement('button');
     close.type = 'button';
-    close.textContent = 'Hide';
-    close.style.marginLeft = 'auto';
-    close.onclick = () => bar.remove();
+    close.textContent = 'Close';
+    Object.assign(close.style, {
+      position: 'relative',
+      zIndex: '2',
+      padding: '8px 12px',
+      borderRadius: '8px',
+      border: '1px solid #ddd',
+      background: '#f7f7f7',
+      cursor: 'pointer'
+    });
+    close.onclick = () => (overlay.style.display = 'none');
 
-    bar.append(label, input, clear, close);
-    document.body.appendChild(bar);
+    overlay.addEventListener('click', (e) => {
+      // clicking backdrop should also open picker
+      if (e.target === overlay) inp.click();
+    });
+
+    panel.appendChild(close);
+    overlay.append(inp, panel);
+    document.body.appendChild(overlay);
+
+    return overlay;
   }
 
-  // 3) Drop support (if present)
-  (function mountDrop() {
-    const dz = document.getElementById('dropzone') ||
-               document.querySelector('[data-dropzone], .photos-dropzone');
-    if (!dz) return;
-    const stop = e => { e.preventDefault(); e.stopPropagation(); };
-    ['dragenter','dragover','dragleave','drop'].forEach(evt => dz.addEventListener(evt, stop, false));
-    dz.addEventListener('drop', (e) => onFilesPicked(e.dataTransfer?.files), false);
-  })();
+  // --- Floating "Upload" FAB that toggles the overlay ---
+  function mountFAB() {
+    if (document.getElementById('finishline-upload-fab')) return;
+
+    const fab = document.createElement('button');
+    fab.id = 'finishline-upload-fab';
+    fab.type = 'button';
+    fab.textContent = 'Upload';
+    Object.assign(fab.style, {
+      position: 'fixed',
+      right: '14px',
+      bottom: '14px',
+      padding: '10px 14px',
+      borderRadius: '999px',
+      fontSize: '14px',
+      border: 'none',
+      boxShadow: '0 6px 18px rgba(0,0,0,0.25)',
+      cursor: 'pointer',
+      zIndex: '2147483647',
+      background: '#5b8cff',
+      color: '#fff',
+      letterSpacing: '.2px'
+    });
+
+    const overlay = mountScreenPicker();
+    fab.onclick = (e) => {
+      e.preventDefault();
+      overlay.style.display = 'flex'; // show overlay; then user click triggers picker
+    };
+
+    document.body.appendChild(fab);
+    
+    // Hotkey: U key to open overlay
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'u' || e.key === 'U') {
+        // Don't trigger if user is typing in an input/textarea
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+        e.preventDefault();
+        overlay.style.display = 'flex';
+      }
+    });
+
+    return fab;
+  }
+
+  // --- Also try to bind your in-form "Choose Photos / PDF" (when present) ---
+  function bindInlineChoose() {
+    const candidates = Array.from(document.querySelectorAll('button, a, input[type="button"], input[type="submit"]'));
+    const btn =
+      document.getElementById('choosePhotosBtn') ||
+      document.querySelector('[data-action="choose-photos"]') ||
+      candidates.find(el => /^choose\s*photos\s*\/\s*pdf$/i.test((el.textContent || el.value || '').trim()));
+    if (!btn || btn.dataset.finishlineChooseBound === '1') return;
+
+    const inp = makeNativeInput();
+    // Absolute overlay inside the button; captures any click
+    const host = btn;
+    const cs = getComputedStyle(host);
+    if (cs.position === 'static') host.style.position = 'relative';
+    Object.assign(inp.style, {
+      position: 'absolute',
+      inset: '0',
+      width: '100%',
+      height: '100%',
+      opacity: '0',
+      cursor: 'pointer',
+      zIndex: '2147483647'
+    });
+    host.appendChild(inp);
+    btn.dataset.finishlineChooseBound = '1';
+  }
 
   function init() {
-    // Make sure no container disables pointer events
-    document.body.classList.add('finishline-clickable');
-
-    mountOverlay();       // preferred UX (on the actual button)
-    mountEmergencyBar();  // guaranteed fallback
-
-    updateSelectedCount();
+    mountFAB();          // Guaranteed: opens overlay → picker
+    bindInlineChoose();  // Nice-to-have: inline button works too
+    console.info('[FinishLine Upload Failsafe] picker mounted');
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init, { once: true });
-        } else {
-    init();
-  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, { once: true });
+  else init();
 
-  // Re-mount overlay if the DOM re-renders
-  const mo = new MutationObserver(() => mountOverlay());
+  // Rebind inline button on DOM changes
+  const mo = new MutationObserver(() => bindInlineChoose());
   try { mo.observe(document.body, { childList: true, subtree: true }); } catch {}
 
-  // DO NOT hide any containers. If needed, only do:
+  // Hide only the <pre id="ocrJson"> itself (never hide its parent)
   const debugJson = document.getElementById('ocrJson');
   if (debugJson) debugJson.style.display = 'none';
 
