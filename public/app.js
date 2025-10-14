@@ -131,29 +131,18 @@
   }
 
   async function send() {
-    const bucket = window.__finishline_bucket || [];
-    if (!bucket.length) throw new Error('No files selected. Choose images/PDFs first.');
+    const files = window.__finishline_getFiles();
+    if (!files.length) throw new Error('No files selected. Choose images/PDFs first.');
     
-    // Use canonical FormData builder
-    const fd = window.__finishline_buildFormData ? window.__finishline_buildFormData() : (() => {
-      const fd = new FormData();
-      for (const f of bucket) { fd.append('files', f); fd.append('photos', f); }
-      return fd;
-    })();
+    const fd = window.__finishline_buildFormData ? window.__finishline_buildFormData() : new FormData();
     
-    console.debug('[FinishLine] Uploading:', bucket.map(f => ({name:f.name,size:f.size,type:f.type})));
+    console.debug('[FinishLine] Uploading:', files.map(f => ({name:f.name,size:f.size,type:f.type})));
     const res = await fetch('/api/photo_extract_openai_b64', { method: 'POST', body: fd });
     
-    let json;
-    try {
-      json = await res.json();
-    } catch {
-      throw new Error(`Server returned non-JSON (HTTP ${res.status}).`);
-    }
+    const json = await res.json();
     
     if (!res.ok || json?.ok === false) {
-      const m = json?.error?.message || json?.message || `Upload failed (HTTP ${res.status}).`;
-      throw new Error(m);
+      throw new Error(json?.error?.message || `Upload failed (HTTP ${res.status}).`);
     }
     return json;
   }
