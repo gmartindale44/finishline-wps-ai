@@ -123,7 +123,8 @@
   }
 
   // IMPORTANT: don't hide containers; if you hide OCR JSON, hide only the <pre id="ocrJson"> itself.
-  if (prettyBox) prettyBox.style.display = 'none';
+  const debugJson = document.getElementById('ocrJson');
+  if (debugJson) debugJson.style.display = 'none';
 
   async function send() {
     const files = window.__finishline_getFiles();
