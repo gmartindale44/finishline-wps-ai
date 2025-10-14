@@ -24,92 +24,146 @@
     }
   };
 
-  // === Hard swap: turn the "Choose Photos / PDF" button into a real <label><input type="file"> ===
+  // === Bulletproof picker: overlay + emergency bar. Leaves your APIs/logic intact. ===
 
-  if (window.__finishline_hardswap_init) return;
-  window.__finishline_hardswap_init = true;
+  if (window.__finishline_upload_force_init) return;
+  window.__finishline_upload_force_init = true;
 
-  // Shared bucket used by send()
+  // Shared bucket for send()
   window.__finishline_bucket = window.__finishline_bucket || [];
   window.__finishline_getFiles = () => window.__finishline_bucket;
 
-  const updateSelectedCount = () => {
+  function updateSelectedCount() {
     const badge = document.getElementById('photoCount') || document.querySelector('[data-photo-count]');
     if (badge) badge.textContent = `${window.__finishline_bucket.length} / 6 selected`;
-  };
+  }
 
-  function makeLabelButtonLike(btn) {
-    // Clone computed classes/styles so appearance stays the same
-    const lbl = document.createElement('label');
-    lbl.id = 'finishline-file-label';
-    lbl.textContent = (btn.textContent || 'Choose Photos / PDF').trim();
-    lbl.className = btn.className || '';
-    lbl.setAttribute('role','button');
-    lbl.style.cssText = btn.getAttribute('style') || '';
-    lbl.style.position = 'relative';
-    lbl.style.cursor = 'pointer';
+  function onFilesPicked(files) {
+    const arr = Array.from(files || []);
+    for (const f of arr) if (f && f.name) window.__finishline_bucket.push(f);
+    updateSelectedCount();
+  }
 
-    // Native file input fully covers the label (no JS needed)
+  // Create a native input (returned each call to avoid GC of events)
+  function makeNativeInput() {
     const inp = document.createElement('input');
     inp.type = 'file';
     inp.multiple = true;
     inp.accept = 'image/*,.pdf';
-    Object.assign(inp.style, {
-      position: 'absolute',
-      inset: '0',
-      width: '100%',
-      height: '100%',
-      opacity: '0',
-      cursor: 'pointer'
-    });
-
-    // On change, stash files into the shared bucket
     inp.addEventListener('change', (e) => {
-      const files = Array.from(e.target.files || []);
-      for (const f of files) if (f && f.name) window.__finishline_bucket.push(f);
-      e.target.value = ''; // allow same file re-select
-      updateSelectedCount();
+      onFilesPicked(e.target.files);
+      e.target.value = ''; // allow same selection twice
     });
-
-    lbl.appendChild(inp);
-    return lbl;
+    return inp;
   }
 
-  function hardswapChoose() {
-    // Find the button by id/data-action/text
-    const candidates = Array.from(document.querySelectorAll('button, a, input[type="button"], input[type="submit"]'));
-    let btn =
+  // 1) Hard overlay on the Choose button's wrapper; clicks go to the input no matter what
+  function mountOverlay() {
+    // locate the visible "Choose Photos / PDF" control or its parent group
+    const choose =
       document.getElementById('choosePhotosBtn') ||
-      document.querySelector('[data-action="choose-photos"], .choose-photos') ||
-      candidates.find(el => /^choose\s*photos\s*\/\s*pdf$/i.test((el.textContent || el.value || '').trim()));
+      document.querySelector('[data-action="choose-photos"]') ||
+      Array.from(document.querySelectorAll('button, a, input[type="button"], input[type="submit"]'))
+        .find(el => /^choose\s*photos\s*\/\s*pdf$/i.test((el.textContent || el.value || '').trim()));
 
-    if (!btn || btn.dataset.finishlineSwapped === '1') return;
+    if (!choose) return;
 
-    const lbl = makeLabelButtonLike(btn);
+    // Use the button itself as positioning context (or its parent)
+    const host = choose;
+    const cs = getComputedStyle(host);
+    if (cs.position === 'static') host.style.position = 'relative';
+    host.classList.add('finishline-clickable');
 
-    // Replace in DOM, preserving position/size
-    btn.replaceWith(lbl);
-    lbl.dataset.finishlineSwapped = '1';
+    // Already mounted?
+    if (host.querySelector('#finishline-choose-overlay')) return;
+
+    const overlay = document.createElement('div');
+    overlay.id = 'finishline-choose-overlay';
+    overlay.style.position = 'absolute';
+    overlay.style.inset = '0';
+    overlay.style.zIndex = '2147483647'; // max
+    overlay.style.pointerEvents = 'auto';
+    overlay.style.cursor = 'pointer';
+
+    // Put the input inside the overlay so native picker wins
+    const input = makeNativeInput();
+    input.style.position = 'absolute';
+    input.style.inset = '0';
+    input.style.width = '100%';
+    input.style.height = '100%';
+    input.style.opacity = '0';
+    input.style.cursor = 'pointer';
+    input.style.pointerEvents = 'auto';
+
+    overlay.appendChild(input);
+    host.appendChild(overlay);
   }
 
-  // Run now and on DOM mutations (in case the button re-renders)
-  function init() { hardswapChoose(); updateSelectedCount(); }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, { once: true }); else init();
+  // 2) Emergency bottom bar (always available; remove later if you wish)
+  function mountEmergencyBar() {
+    if (document.getElementById('finishline-emergency-picker')) return;
 
-  const mo = new MutationObserver(() => hardswapChoose());
-  try { mo.observe(document.body, { childList: true, subtree: true }); } catch {}
+    const bar = document.createElement('div');
+    bar.id = 'finishline-emergency-picker';
 
-  // (Optional) simple drop support if you already have a dropzone
-  const dz = document.getElementById('dropzone') || document.querySelector('[data-dropzone], .photos-dropzone');
-  if (dz) {
+    const label = document.createElement('span');
+    label.className = 'hint';
+    label.textContent = 'If the in-form button is blocked, pick files here:';
+
+    const input = makeNativeInput();
+
+    const clear = document.createElement('button');
+    clear.type = 'button';
+    clear.textContent = 'Clear';
+    clear.style.marginLeft = '6px';
+    clear.onclick = () => {
+      window.__finishline_bucket = [];
+      updateSelectedCount();
+    };
+
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.textContent = 'Hide';
+    close.style.marginLeft = 'auto';
+    close.onclick = () => bar.remove();
+
+    bar.append(label, input, clear, close);
+    document.body.appendChild(bar);
+  }
+
+  // 3) Drop support (if present)
+  (function mountDrop() {
+    const dz = document.getElementById('dropzone') ||
+               document.querySelector('[data-dropzone], .photos-dropzone');
+    if (!dz) return;
     const stop = e => { e.preventDefault(); e.stopPropagation(); };
     ['dragenter','dragover','dragleave','drop'].forEach(evt => dz.addEventListener(evt, stop, false));
-    dz.addEventListener('drop', (e) => {
-      const files = Array.from(e.dataTransfer?.files || []);
-      for (const f of files) if (f && f.name) window.__finishline_bucket.push(f);
-      updateSelectedCount();
-    }, false);
+    dz.addEventListener('drop', (e) => onFilesPicked(e.dataTransfer?.files), false);
+  })();
+
+  function init() {
+    // Make sure no container disables pointer events
+    document.body.classList.add('finishline-clickable');
+
+    mountOverlay();       // preferred UX (on the actual button)
+    mountEmergencyBar();  // guaranteed fallback
+
+    updateSelectedCount();
   }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init, { once: true });
+        } else {
+    init();
+  }
+
+  // Re-mount overlay if the DOM re-renders
+  const mo = new MutationObserver(() => mountOverlay());
+  try { mo.observe(document.body, { childList: true, subtree: true }); } catch {}
+
+  // DO NOT hide any containers. If needed, only do:
+  const debugJson = document.getElementById('ocrJson');
+  if (debugJson) debugJson.style.display = 'none';
 
   async function send() {
     const files = window.__finishline_getFiles();

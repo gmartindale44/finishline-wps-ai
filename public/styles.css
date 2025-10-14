@@ -628,3 +628,42 @@ button .check {
   height: 4px; width: 100%; background: #222; border-radius: 3px; overflow: hidden;
 }
 .progress > div { height: 100%; width: 0%; background: #7c5cff; transition: width .2s ease; }
+
+/* --- Clicks must never be swallowed --- */
+.finishline-clickable,
+#choosePhotosBtn,
+[data-action="choose-photos"],
+.photos-dropzone,
+#dropzone,
+button,
+a.button,
+input[type="button"],
+input[type="submit"] {
+  pointer-events: auto !important;
+}
+
+/* Emergency picker bar (can be removed later) */
+#finishline-emergency-picker {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 999999 !important;
+  background: rgba(24,24,32,.95);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 10px;
+  padding: 8px 12px;
+  color: #fff;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 8px 28px rgba(0,0,0,.35);
+}
+#finishline-emergency-picker input[type="file"] {
+  background: transparent;
+  color: #fff;
+}
+#finishline-emergency-picker .hint {
+  opacity: .7;
+}
