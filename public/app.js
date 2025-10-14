@@ -5,17 +5,10 @@
 
   const form        = document.getElementById('raceForm') || document.getElementById('ocrForm') || document.querySelector('form[data-ocr]');
   const extractBtn  = document.getElementById('extractBtn') || document.getElementById('btnExtract') || document.querySelector('[data-action="extract"]');
-  const chooseBtn   = document.getElementById('choosePhotosBtn') || document.getElementById('btnChoosePhotos') || document.querySelector('[data-action="choose-photos"]');
-  const fileInput   = document.getElementById('fileInput') || document.getElementById('photoFiles') || (() => {
-    const el = document.createElement('input'); el.type='file'; el.multiple=true; el.id='fileInput'; el.style.display='none'; document.body.appendChild(el); return el;
-  })();
   const resultBox   = document.getElementById('ocrResult');
   const prettyBox   = document.getElementById('ocrJson');
-  const countBadge  = document.getElementById('photoCount') || document.getElementById('photo-count');
   const addHorseBtn = document.getElementById('add-horse-btn') || document.getElementById('addHorseBtn') || document.getElementById('add-horse') || document.getElementById('btnAddHorse') || document.querySelector('[data-action="add-horse"]') || document.querySelector('[data-add-horse]');
 
-  const bucket = [];
-  
   const show = (m, t='info') => {
     const msg = typeof m === 'string' ? m : (m?.message || JSON.stringify(m));
     if (resultBox) {
@@ -30,42 +23,85 @@
       if (t==='error') alert(msg);
     }
   };
-  
-  const addFiles = (list) => {
-  if (!list) return;
-    bucket.length = 0; // Clear and refill
-    for (const f of list) if (f?.name) bucket.push(f);
-    if (countBadge) countBadge.textContent = `${bucket.length} / 6 selected`;
-    console.debug('[FinishLine] Added files:', bucket.map(f => ({name:f.name,size:f.size,type:f.type})));
-  };
-  
-  if (chooseBtn && fileInput) {
-    chooseBtn.addEventListener('click', e => {
-      e.preventDefault();
-        fileInput.click();
+
+  // === SINGLETON FILE INPUT & BUCKET MANAGEMENT ===
+
+  // Singleton file input
+  function ensureFileInput() {
+    let el = document.getElementById('finishline-file-input');
+    if (!el) {
+      el = document.createElement('input');
+      el.type = 'file';
+      el.id = 'finishline-file-input';
+      el.multiple = true;
+      el.accept = 'image/*,.pdf';
+      el.style.display = 'none';
+      document.body.appendChild(el);
+      el.addEventListener('change', (e) => {
+        const files = Array.from(e.target.files || []);
+        if (!window.__finishline_bucket) window.__finishline_bucket = [];
+        for (const f of files) if (f && f.name) window.__finishline_bucket.push(f);
+        updateSelectedCount();
+        console.debug('[FinishLine] Added files:', window.__finishline_bucket.map(f => ({name:f.name,size:f.size,type:f.type})));
       });
-    console.info('[FinishLine] Wired choose button');
-  }
-  
-  if (fileInput) {
-    fileInput.addEventListener('change', e => addFiles(e.target.files));
-    console.info('[FinishLine] File input listener attached');
+    }
+    return el;
   }
 
-  // Drag & drop
-  const dropzone = document.getElementById('drop-zone') || document.getElementById('photoDropzone') || document.querySelector('[data-dropzone]');
+  // Selected count badge
+  function updateSelectedCount() {
+    const badge = document.getElementById('photoCount') || document.querySelector('[data-photo-count]');
+    const n = (window.__finishline_bucket || []).length;
+    if (badge) badge.textContent = `${n} / 6 selected`;
+  }
+
+  // Choose button: event delegation
+  document.addEventListener('click', (ev) => {
+    const target = ev.target.closest('#choosePhotosBtn, [data-action="choose-photos"], .choose-photos, button, a, input[type="button"]');
+    if (!target) return;
+
+    const label = (target.textContent || target.value || '').trim();
+    const looksLikeChoose = /choose\s*photos\s*\/\s*pdf/i.test(label) || target.id === 'choosePhotosBtn' || target.matches('[data-action="choose-photos"]');
+    if (!looksLikeChoose) return;
+
+    ev.preventDefault();
+    ensureFileInput().click();
+    console.debug('[FinishLine] Choose Photos clicked');
+  }, true);
+
+  // Drag & drop support
+  const dropzone = document.getElementById('dropzone') ||
+                   document.getElementById('drop-zone') ||
+                   document.getElementById('photoDropzone') ||
+                   document.querySelector('[data-dropzone], .dropzone, .photos-dropzone');
+
   if (dropzone) {
-    dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('is-dragover'); });
+    const stop = e => { e.preventDefault(); e.stopPropagation(); };
+    ['dragenter','dragover','dragleave','drop'].forEach(evt => dropzone.addEventListener(evt, stop));
+    dropzone.addEventListener('dragover', () => dropzone.classList.add('is-dragover'));
     dropzone.addEventListener('dragleave', () => dropzone.classList.remove('is-dragover'));
-    dropzone.addEventListener('drop', e => {
-      e.preventDefault();
+    dropzone.addEventListener('drop', (e) => {
       dropzone.classList.remove('is-dragover');
-      addFiles(e.dataTransfer?.files);
+      const files = Array.from(e.dataTransfer?.files || []);
+      if (!window.__finishline_bucket) window.__finishline_bucket = [];
+      for (const f of files) if (f && f.name) window.__finishline_bucket.push(f);
+      updateSelectedCount();
+      console.debug('[FinishLine] Dropped files:', window.__finishline_bucket.map(f => ({name:f.name,size:f.size,type:f.type})));
     });
     console.info('[FinishLine] Drag & drop attached');
   }
 
+  // Ensure bucket exists
+  if (!window.__finishline_bucket) window.__finishline_bucket = [];
+
+  // SAFER: only hide the JSON <pre>, never its parent
+  if (prettyBox) prettyBox.style.display = 'none';
+
+  // Getter for the bucket
+  window.__finishline_getFiles = () => (window.__finishline_bucket || []);
+
   async function send() {
+    const bucket = window.__finishline_bucket || [];
     if (!bucket.length) throw new Error('No files selected. Choose images/PDFs first.');
     const fd = new FormData();
     for (const f of bucket) fd.append('files', f);
@@ -262,9 +298,9 @@
       if (ok) added++;
     }
 
-    // Hide the debug JSON panel so nothing shows "below the form"
+    // Hide the debug JSON panel (SAFER: only the element, not parent)
     const debugJson = $('#ocrJson');
-    if (debugJson && debugJson.parentElement) debugJson.parentElement.style.display = 'none';
+    if (debugJson) debugJson.style.display = 'none';
     if (resultBox) { resultBox.textContent = `✅ OCR parsed and populated ${added} horses.`; resultBox.dataset.type = 'info'; resultBox.style.display = 'block'; }
 
     // Store for later steps
