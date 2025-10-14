@@ -24,11 +24,10 @@
     }
   };
 
-  // === Bullet-proof upload: native file input overlays the Choose button ===
+  // === Fail-proof upload: global hidden input + floating fallback button, also binds in-form button when present ===
 
-  // Prevent double init
-  if (window.__finishline_upload_v3_init) return;
-  window.__finishline_upload_v3_init = true;
+  if (window.__finishline_upload_fab_init) return;
+  window.__finishline_upload_fab_init = true;
 
   // Shared bucket used by send()
   window.__finishline_bucket = window.__finishline_bucket || [];
@@ -40,93 +39,80 @@
     if (badge) badge.textContent = `${window.__finishline_bucket.length} / 6 selected`;
   }
 
-  // Create one input and reuse it everywhere
-  function createPicker() {
-    const inp = document.createElement('input');
-    inp.type = 'file';
-    inp.multiple = true;
-    inp.accept = 'image/*,.pdf';
-    // Make it invisible but *clickable*
-    inp.style.opacity = '0';
-    inp.style.cursor = 'pointer';
-    inp.style.position = 'absolute';
-    inp.style.inset = '0';
-    inp.style.width = '100%';
-    inp.style.height = '100%';
-    inp.style.zIndex = '10';
-    inp.addEventListener('change', (e) => {
-      const files = Array.from(e.target.files || []);
-      for (const f of files) if (f && f.name) window.__finishline_bucket.push(f);
-      // reset so picking the same file twice still fires change
-      e.target.value = '';
-      updateSelectedCount();
-    });
+  // Hidden file input (single instance)
+  function ensurePicker() {
+    let inp = document.getElementById('finishline-file-input');
+    if (!inp) {
+      inp = document.createElement('input');
+      inp.type = 'file';
+      inp.id = 'finishline-file-input';
+      inp.multiple = true;
+      inp.accept = 'image/*,.pdf';
+      inp.style.position = 'fixed';
+      inp.style.left = '-9999px';
+      document.body.appendChild(inp);
+      inp.addEventListener('change', (e) => {
+        const files = Array.from(e.target.files || []);
+        for (const f of files) if (f && f.name) window.__finishline_bucket.push(f);
+        e.target.value = ''; // allow selecting same file twice
+        updateSelectedCount();
+      });
+    }
     return inp;
   }
 
-  // Find the real "Choose Photos / PDF" button in this branch
-  function findChooseButton(root=document) {
-    // 1) explicit id or data-action
-    return (
-      root.getElementById?.('choosePhotosBtn') ||
-      root.querySelector?.('[data-action="choose-photos"]') ||
-      root.querySelector?.('.choose-photos') ||
-      // 2) text match fallback
-      Array.from(root.querySelectorAll?.('button, a, input[type="button"], input[type="submit"]') || [])
-        .find(el => /^choose\s*photos\s*\/\s*pdf$/i.test((el.textContent || el.value || '').trim()))
-    );
+  // Floating fallback button (always present; lightweight)
+  function ensureFab() {
+    let fab = document.getElementById('finishline-upload-fab');
+    if (!fab) {
+      fab = document.createElement('button');
+      fab.id = 'finishline-upload-fab';
+      fab.type = 'button';
+      fab.textContent = 'Upload';
+      Object.assign(fab.style, {
+        position: 'fixed',
+        right: '14px',
+        bottom: '14px',
+        padding: '10px 14px',
+        borderRadius: '999px',
+        fontSize: '14px',
+        border: 'none',
+        boxShadow: '0 6px 18px rgba(0,0,0,0.2)',
+        cursor: 'pointer',
+        zIndex: '99999',
+        background: '#5b8cff', color: '#fff', opacity: '0.92'
+      });
+      fab.title = 'Choose Photos / PDF (fallback)';
+      fab.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        ensurePicker().click();
+      });
+      document.body.appendChild(fab);
+    }
+    return fab;
   }
 
-  // Mount the invisible input over the button so native click always opens picker
-  function mountOverlay(button) {
-    if (!button || button.dataset.finishlineOverlayMounted === '1') return;
-    button.dataset.finishlineOverlayMounted = '1';
-
-    // Ensure the button (or its wrapper) is a positioning context
-    const wrapper = button.parentElement || button;
-    const wasStatic = getComputedStyle(wrapper).position === 'static';
-    if (wasStatic) wrapper.style.position = 'relative';
-
-    const picker = createPicker();
-    wrapper.appendChild(picker);
-
-    // Keep overlay sized correctly even if button resizes
-    const ro = new ResizeObserver(() => {
-      // the absolute input uses inset:0; nothing to recompute
-    });
-    try { ro.observe(wrapper); } catch {}
-
-    // In case frameworks re-render the button, remount later
-    const mo = new MutationObserver(() => {
-      if (!wrapper.contains(picker)) mountOverlay(findChooseButton(document));
-    });
-    try { mo.observe(wrapper, { childList: true }); } catch {}
+  // Bind the in-form "Choose Photos / PDF" button if we can find it
+  function bindInlineChoose(root = document) {
+    const candidates = Array.from(root.querySelectorAll('button, a, input[type="button"], input[type="submit"]'));
+    for (const el of candidates) {
+      const label = (el.textContent || el.value || '').replace(/\s+/g, ' ').trim().toLowerCase();
+      if (el.dataset.finishlineChooseBound === '1') continue;
+      if (
+        label.includes('choose photos / pdf') ||
+        el.id === 'choosePhotosBtn' ||
+        el.matches?.('[data-action="choose-photos"], .choose-photos')
+      ) {
+        el.dataset.finishlineChooseBound = '1';
+        el.addEventListener('click', (e) => { e.preventDefault(); ensurePicker().click(); }, true);
+      }
+    }
   }
 
-  function initUpload() {
-    const btn = findChooseButton(document);
-    if (btn) mountOverlay(btn);
-    updateSelectedCount();
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initUpload, { once: true });
-        } else {
-    initUpload();
-  }
-
-  // Also re-scan if DOM changes (branch switches, hot reloads, etc.)
-  const globalMo = new MutationObserver(() => {
-    const btn = findChooseButton(document);
-    if (btn) mountOverlay(btn);
-  });
-  try { globalMo.observe(document.body, { childList: true, subtree: true }); } catch {}
-
-  // Optional: drag & drop on dropzone (if present)
+  // Drag & drop (if a dropzone exists)
   const dropzone = document.getElementById('dropzone') ||
                    document.querySelector('[data-dropzone]') ||
                    document.querySelector('.photos-dropzone');
-
   if (dropzone) {
     const stop = e => { e.preventDefault(); e.stopPropagation(); };
     ['dragenter','dragover','dragleave','drop'].forEach(evt => dropzone.addEventListener(evt, stop, false));
@@ -137,7 +123,21 @@
     }, false);
   }
 
-  // IMPORTANT: never hide containers. If you hide OCR JSON, hide only the <pre id="ocrJson"> itself.
+  // Initialize
+  function init() {
+    ensurePicker();
+    ensureFab();            // <- guaranteed working entry point
+    bindInlineChoose();     // <- binds the in-form button when present
+    updateSelectedCount();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, { once: true });
+  else init();
+
+  // Keep trying to bind inline button if the DOM re-renders
+  const mo = new MutationObserver(() => bindInlineChoose());
+  try { mo.observe(document.body, { childList: true, subtree: true }); } catch {}
+
+  // IMPORTANT: never hide containers; if you hide OCR JSON, hide only the <pre id="ocrJson"> itself.
   const debugJson = document.getElementById('ocrJson');
   if (debugJson) debugJson.style.display = 'none';
 
