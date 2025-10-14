@@ -24,122 +24,92 @@
     }
   };
 
-  // === Fail-proof upload: global hidden input + floating fallback button, also binds in-form button when present ===
+  // === Hard swap: turn the "Choose Photos / PDF" button into a real <label><input type="file"> ===
 
-  if (window.__finishline_upload_fab_init) return;
-  window.__finishline_upload_fab_init = true;
+  if (window.__finishline_hardswap_init) return;
+  window.__finishline_hardswap_init = true;
 
   // Shared bucket used by send()
   window.__finishline_bucket = window.__finishline_bucket || [];
   window.__finishline_getFiles = () => window.__finishline_bucket;
 
-  // Counter badge (optional)
-  function updateSelectedCount() {
+  const updateSelectedCount = () => {
     const badge = document.getElementById('photoCount') || document.querySelector('[data-photo-count]');
     if (badge) badge.textContent = `${window.__finishline_bucket.length} / 6 selected`;
+  };
+
+  function makeLabelButtonLike(btn) {
+    // Clone computed classes/styles so appearance stays the same
+    const lbl = document.createElement('label');
+    lbl.id = 'finishline-file-label';
+    lbl.textContent = (btn.textContent || 'Choose Photos / PDF').trim();
+    lbl.className = btn.className || '';
+    lbl.setAttribute('role','button');
+    lbl.style.cssText = btn.getAttribute('style') || '';
+    lbl.style.position = 'relative';
+    lbl.style.cursor = 'pointer';
+
+    // Native file input fully covers the label (no JS needed)
+    const inp = document.createElement('input');
+    inp.type = 'file';
+    inp.multiple = true;
+    inp.accept = 'image/*,.pdf';
+    Object.assign(inp.style, {
+      position: 'absolute',
+      inset: '0',
+      width: '100%',
+      height: '100%',
+      opacity: '0',
+      cursor: 'pointer'
+    });
+
+    // On change, stash files into the shared bucket
+    inp.addEventListener('change', (e) => {
+      const files = Array.from(e.target.files || []);
+      for (const f of files) if (f && f.name) window.__finishline_bucket.push(f);
+      e.target.value = ''; // allow same file re-select
+      updateSelectedCount();
+    });
+
+    lbl.appendChild(inp);
+    return lbl;
   }
 
-  // Hidden file input (single instance)
-  function ensurePicker() {
-    let inp = document.getElementById('finishline-file-input');
-    if (!inp) {
-      inp = document.createElement('input');
-      inp.type = 'file';
-      inp.id = 'finishline-file-input';
-      inp.multiple = true;
-      inp.accept = 'image/*,.pdf';
-      inp.style.position = 'fixed';
-      inp.style.left = '-9999px';
-      document.body.appendChild(inp);
-      inp.addEventListener('change', (e) => {
-        const files = Array.from(e.target.files || []);
-        for (const f of files) if (f && f.name) window.__finishline_bucket.push(f);
-        e.target.value = ''; // allow selecting same file twice
-        updateSelectedCount();
-      });
-    }
-    return inp;
+  function hardswapChoose() {
+    // Find the button by id/data-action/text
+    const candidates = Array.from(document.querySelectorAll('button, a, input[type="button"], input[type="submit"]'));
+    let btn =
+      document.getElementById('choosePhotosBtn') ||
+      document.querySelector('[data-action="choose-photos"], .choose-photos') ||
+      candidates.find(el => /^choose\s*photos\s*\/\s*pdf$/i.test((el.textContent || el.value || '').trim()));
+
+    if (!btn || btn.dataset.finishlineSwapped === '1') return;
+
+    const lbl = makeLabelButtonLike(btn);
+
+    // Replace in DOM, preserving position/size
+    btn.replaceWith(lbl);
+    lbl.dataset.finishlineSwapped = '1';
   }
 
-  // Floating fallback button (always present; lightweight)
-  function ensureFab() {
-    let fab = document.getElementById('finishline-upload-fab');
-    if (!fab) {
-      fab = document.createElement('button');
-      fab.id = 'finishline-upload-fab';
-      fab.type = 'button';
-      fab.textContent = 'Upload';
-      Object.assign(fab.style, {
-        position: 'fixed',
-        right: '14px',
-        bottom: '14px',
-        padding: '10px 14px',
-        borderRadius: '999px',
-        fontSize: '14px',
-        border: 'none',
-        boxShadow: '0 6px 18px rgba(0,0,0,0.2)',
-        cursor: 'pointer',
-        zIndex: '99999',
-        background: '#5b8cff', color: '#fff', opacity: '0.92'
-      });
-      fab.title = 'Choose Photos / PDF (fallback)';
-      fab.addEventListener('click', (ev) => {
-        ev.preventDefault();
-        ensurePicker().click();
-      });
-      document.body.appendChild(fab);
-    }
-    return fab;
-  }
+  // Run now and on DOM mutations (in case the button re-renders)
+  function init() { hardswapChoose(); updateSelectedCount(); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, { once: true }); else init();
 
-  // Bind the in-form "Choose Photos / PDF" button if we can find it
-  function bindInlineChoose(root = document) {
-    const candidates = Array.from(root.querySelectorAll('button, a, input[type="button"], input[type="submit"]'));
-    for (const el of candidates) {
-      const label = (el.textContent || el.value || '').replace(/\s+/g, ' ').trim().toLowerCase();
-      if (el.dataset.finishlineChooseBound === '1') continue;
-      if (
-        label.includes('choose photos / pdf') ||
-        el.id === 'choosePhotosBtn' ||
-        el.matches?.('[data-action="choose-photos"], .choose-photos')
-      ) {
-        el.dataset.finishlineChooseBound = '1';
-        el.addEventListener('click', (e) => { e.preventDefault(); ensurePicker().click(); }, true);
-      }
-    }
-  }
+  const mo = new MutationObserver(() => hardswapChoose());
+  try { mo.observe(document.body, { childList: true, subtree: true }); } catch {}
 
-  // Drag & drop (if a dropzone exists)
-  const dropzone = document.getElementById('dropzone') ||
-                   document.querySelector('[data-dropzone]') ||
-                   document.querySelector('.photos-dropzone');
-  if (dropzone) {
+  // (Optional) simple drop support if you already have a dropzone
+  const dz = document.getElementById('dropzone') || document.querySelector('[data-dropzone], .photos-dropzone');
+  if (dz) {
     const stop = e => { e.preventDefault(); e.stopPropagation(); };
-    ['dragenter','dragover','dragleave','drop'].forEach(evt => dropzone.addEventListener(evt, stop, false));
-    dropzone.addEventListener('drop', (e) => {
+    ['dragenter','dragover','dragleave','drop'].forEach(evt => dz.addEventListener(evt, stop, false));
+    dz.addEventListener('drop', (e) => {
       const files = Array.from(e.dataTransfer?.files || []);
       for (const f of files) if (f && f.name) window.__finishline_bucket.push(f);
       updateSelectedCount();
     }, false);
   }
-
-  // Initialize
-  function init() {
-    ensurePicker();
-    ensureFab();            // <- guaranteed working entry point
-    bindInlineChoose();     // <- binds the in-form button when present
-    updateSelectedCount();
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, { once: true });
-  else init();
-
-  // Keep trying to bind inline button if the DOM re-renders
-  const mo = new MutationObserver(() => bindInlineChoose());
-  try { mo.observe(document.body, { childList: true, subtree: true }); } catch {}
-
-  // IMPORTANT: never hide containers; if you hide OCR JSON, hide only the <pre id="ocrJson"> itself.
-  const debugJson = document.getElementById('ocrJson');
-  if (debugJson) debugJson.style.display = 'none';
 
   async function send() {
     const files = window.__finishline_getFiles();
