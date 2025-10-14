@@ -24,125 +24,117 @@
     }
   };
 
-  // === ROBUST UPLOAD PLUMBING: ONE HIDDEN INPUT, SHARED BUCKET ===
+  // === UNIVERSAL UPLOAD BINDING (fix Choose Photos / PDF click) ===
 
   // Avoid double init
-  if (!window.__finishline_upload_init) {
-    window.__finishline_upload_init = true;
+  if (window.__finishline_upload_v2_init) return;
+  window.__finishline_upload_v2_init = true;
 
-    // Shared bucket (used by send())
-    if (!window.__finishline_bucket) window.__finishline_bucket = [];
-    window.__finishline_getFiles = () => window.__finishline_bucket;
+  // shared bucket used by send()
+  window.__finishline_bucket = window.__finishline_bucket || [];
+  window.__finishline_getFiles = () => window.__finishline_bucket;
 
-    // UI pieces
-    const chooseBtn =
-      document.getElementById('choosePhotosBtn') ||
-      document.querySelector('[data-action="choose-photos"]') ||
-      document.querySelector('.choose-photos');
+  // optional counter UI
+  function updateSelectedCount() {
+    const badge = document.getElementById('photoCount') || document.querySelector('[data-photo-count]');
+    if (!badge) return;
+    badge.textContent = `${window.__finishline_bucket.length} / 6 selected`;
+  }
 
-    const dropzone =
-      document.getElementById('dropzone') ||
-      document.getElementById('drop-zone') ||
-      document.getElementById('photoDropzone') ||
-      document.querySelector('[data-dropzone]') ||
-      document.querySelector('.photos-dropzone');
+  // single hidden input
+  function ensureFileInput() {
+    let el = document.getElementById('finishline-file-input');
+    if (!el) {
+      el = document.createElement('input');
+      el.type = 'file';
+      el.id = 'finishline-file-input';
+      el.multiple = true;
+      el.accept = 'image/*,.pdf';
+      el.style.position = 'fixed';
+      el.style.left = '-9999px';
+      document.body.appendChild(el);
+      el.addEventListener('change', (e) => {
+        const files = Array.from(e.target.files || []);
+        for (const f of files) if (f && f.name) window.__finishline_bucket.push(f);
+        // reset so same file can be chosen twice
+        e.target.value = '';
+        updateSelectedCount();
+      });
+    }
+    return el;
+  }
 
-    // Counter badge
-    const countBadge =
-      document.getElementById('photoCount') ||
-      document.querySelector('[data-photo-count]');
+  // bind a single element (idempotent)
+  function bindChoose(el) {
+    if (!el || el.dataset.finishlineChooseBound === '1') return;
+    el.dataset.finishlineChooseBound = '1';
+    el.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      ensureFileInput().click();
+    }, true);
+  }
 
-    const updateSelectedCount = () => {
-      if (!countBadge) return;
-      const n = window.__finishline_bucket.length;
-      countBadge.textContent = `${n} / 6 selected`;
-    };
+  // find all possible "Choose Photos / PDF" buttons and bind them
+  function bindAllChooseButtons(root = document) {
+    const candidates = Array.from(root.querySelectorAll('button, a, input[type="button"], input[type="submit"]'));
+    for (const el of candidates) {
+      const label = (el.textContent || el.value || '').trim();
+      if (/^choose\s*photos\s*\/\s*pdf$/i.test(label) || el.id === 'choosePhotosBtn' || el.matches('[data-action="choose-photos"], .choose-photos')) {
+        bindChoose(el);
+      }
+    }
+  }
 
-    // Create a single hidden file input
-    function ensureFileInput() {
-      let el = document.getElementById('finishline-file-input');
-      if (!el) {
-        el = document.createElement('input');
-        el.type = 'file';
-        el.id = 'finishline-file-input';
-        el.multiple = true;
-        el.accept = 'image/*,.pdf';
-        el.style.position = 'fixed';
-        el.style.left = '-9999px';
-        document.body.appendChild(el);
-
-        el.addEventListener('change', (e) => {
-          const files = Array.from(e.target.files || []);
-          for (const f of files) {
-            if (f && f.name) window.__finishline_bucket.push(f);
-          }
-          // reset input so selecting the same file again re-fires change
-          e.target.value = '';
-          updateSelectedCount();
-          console.debug('[FinishLine] Added files:', window.__finishline_bucket.map(f => ({name:f.name,size:f.size,type:f.type})));
+  // observe DOM changes to rebind if the button is re-rendered
+  const mo = new MutationObserver((muts) => {
+    for (const m of muts) {
+      if (m.addedNodes) {
+        m.addedNodes.forEach(n => {
+          if (!(n instanceof HTMLElement)) return;
+          bindAllChooseButtons(n);
         });
       }
-      return el;
     }
+  });
 
-    // Bind the real button only (no global capture)
-    if (chooseBtn) {
-      chooseBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        ensureFileInput().click();
-        console.debug('[FinishLine] Choose Photos clicked');
-      }, true);
-    }
-
-    // Optional: drag & drop just on the dropzone
-    if (dropzone) {
-      const stop = (e) => { e.preventDefault(); e.stopPropagation(); };
-      ['dragenter','dragover','dragleave','drop'].forEach(evt => dropzone.addEventListener(evt, stop, false));
-      dropzone.addEventListener('dragover', () => dropzone.classList.add('is-dragover'), false);
-      dropzone.addEventListener('dragleave', () => dropzone.classList.remove('is-dragover'), false);
-      dropzone.addEventListener('drop', (e) => {
-        dropzone.classList.remove('is-dragover');
-        const files = Array.from(e.dataTransfer?.files || []);
-        for (const f of files) {
-          if (f && f.name) window.__finishline_bucket.push(f);
-        }
-        updateSelectedCount();
-        console.debug('[FinishLine] Dropped files:', window.__finishline_bucket.map(f => ({name:f.name,size:f.size,type:f.type})));
-      }, false);
-      console.info('[FinishLine] Drag & drop attached');
-    }
-
-    // IMPORTANT: do NOT hide any parent container. Only hide the <pre id="ocrJson"> itself.
-    if (prettyBox) prettyBox.style.display = 'none';
-
-    // Canonical FormData builder
-    window.__finishline_buildFormData = () => {
-      const fd = new FormData();
-      const files = window.__finishline_getFiles();
-      for (const f of files) {
-        fd.append('files', f);
-        fd.append('photos', f);
-      }
-      return fd;
-    };
-
-    // Update count now (in case we persisted bucket between navigations)
+  function init() {
+    bindAllChooseButtons(document);
+    try { mo.observe(document.body, { childList: true, subtree: true }); } catch {}
     updateSelectedCount();
   }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init, { once: true });
+        } else {
+    init();
+  }
+
+  // (Optional) dropzone support if present
+  const dropzone = document.getElementById('dropzone') || document.querySelector('[data-dropzone], .photos-dropzone');
+  if (dropzone) {
+    const stop = e => { e.preventDefault(); e.stopPropagation(); };
+    ['dragenter','dragover','dragleave','drop'].forEach(evt => dropzone.addEventListener(evt, stop, false));
+    dropzone.addEventListener('drop', (e) => {
+      const files = Array.from(e.dataTransfer?.files || []);
+      for (const f of files) if (f && f.name) window.__finishline_bucket.push(f);
+      updateSelectedCount();
+    }, false);
+  }
+
+  // IMPORTANT: don't hide containers; if you hide OCR JSON, hide only the <pre id="ocrJson"> itself.
+  if (prettyBox) prettyBox.style.display = 'none';
 
   async function send() {
     const files = window.__finishline_getFiles();
     if (!files.length) throw new Error('No files selected. Choose images/PDFs first.');
-    
-    const fd = window.__finishline_buildFormData ? window.__finishline_buildFormData() : new FormData();
-    
-    console.debug('[FinishLine] Uploading:', files.map(f => ({name:f.name,size:f.size,type:f.type})));
+    const fd = new FormData();
+    for (const f of files) { fd.append('files', f); fd.append('photos', f); }
     const res = await fetch('/api/photo_extract_openai_b64', { method: 'POST', body: fd });
-    
     const json = await res.json();
-    
     if (!res.ok || json?.ok === false) {
-      throw new Error(json?.error?.message || `Upload failed (HTTP ${res.status}).`);
+      const m = json?.error?.message || `Upload failed (HTTP ${res.status}).`;
+      throw new Error(m);
     }
     return json;
   }
