@@ -33,6 +33,105 @@
       console.info('[FinishLine] captured files:', files.map(f => f.name));
     }
   }, true);
+})();
+
+// Make "Choose Photos / PDF" reliably open a native file picker (and capture selections)
+
+(() => {
+  if (window.__finishline_choose_bind_v1) return;
+  window.__finishline_choose_bind_v1 = true;
+
+  const $  = (s, r=document) => r.querySelector(s);
+  const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
+
+  // Shared bucket used by Extract
+  window.__finishline_bucket = window.__finishline_bucket || [];
+  function capture(filesLike) {
+    const files = Array.from(filesLike || []);
+    for (const f of files) if (f && f.name) window.__finishline_bucket.push(f);
+    const badge = $('#photoCount') || $('[data-photo-count]');
+    if (badge) badge.textContent = `${window.__finishline_bucket.length} / 6 selected`;
+  }
+
+  // 1) Locate the native input if it exists; otherwise make one (hidden).
+  function getNativeFileInput() {
+    // Prefer an existing input near your dropzone/controls
+    let inp =
+      $('#photosInput') ||
+      ($('[data-dropzone], .photos-dropzone, #dropzone') || document).querySelector?.('input[type="file"]') ||
+      $$('input[type="file"]').find(i => (i.accept||'').includes('image') || (i.accept||'').includes('pdf'));
+
+    if (!inp) {
+      inp = document.createElement('input');
+      inp.type = 'file';
+      inp.multiple = true;
+      inp.accept = 'image/*,.pdf';
+      inp.id = 'finishline-hidden-file-input';
+      Object.assign(inp.style, { position: 'fixed', left: '-9999px', top: '-9999px' });
+      document.body.appendChild(inp);
+    }
+
+    // Always capture what the user picks
+    if (!inp.dataset.finishlineChangeBound) {
+      inp.dataset.finishlineChangeBound = '1';
+      inp.addEventListener('change', (e) => {
+        capture(e.target.files);
+        // allow re-selecting the same file twice
+        try { e.target.value = ''; } catch {}
+      });
+    }
+    return inp;
+  }
+
+  // 2) Bind the visible "Choose Photos / PDF" control to open the native input
+  function findChooseButton() {
+    return document.getElementById('choosePhotosBtn')
+        || document.querySelector('[data-action="choose-photos"]')
+        || $$('button, a, input[type="button"], input[type="submit"]')
+           .find(el => /^choose\s*photos\s*\/\s*pdf$/i.test((el.textContent || el.value || '').trim()));
+  }
+
+  function bindChoose() {
+    const btn = findChooseButton();
+    if (!btn || btn.dataset.finishlineChooseBound) return;
+
+    btn.dataset.finishlineChooseBound = '1';
+
+    // Make sure clicks aren't swallowed by other handlers: capture phase + stopImmediatePropagation
+    btn.addEventListener('click', (e) => {
+      try { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation?.(); } catch {}
+      const input = getNativeFileInput();
+      // Some sites wrap a <label for=...>. If this is already a label, let the browser do it;
+      // otherwise force the picker.
+      if (btn.tagName !== 'LABEL') input.click();
+    }, true);
+  }
+
+  // 3) Also capture ANY file input anywhere (labels wrapping inputs, etc.)
+  document.addEventListener('change', (e) => {
+    const el = e.target;
+    if (el?.matches?.('input[type="file"]')) capture(el.files);
+  }, true);
+
+  // 4) Initialize and keep bound after re-renders
+  function init() { bindChoose(); }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init, { once: true });
+        } else {
+    init();
+  }
+  new MutationObserver(bindChoose).observe(document.body, { childList: true, subtree: true });
+    })();
+
+// Continue with the rest of the v4 system
+    (() => {
+  if (window.__finishline_bind_v4_continue) return;
+  window.__finishline_bind_v4_continue = true;
+
+  const $  = (s, r=document) => r.querySelector(s);
+  const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const fire  = (el) => { if (!el) return; el.dispatchEvent(new Event('input',{bubbles:true})); el.dispatchEvent(new Event('change',{bubbles:true})); };
 
   // ---- drag & drop (if dropzone exists)
   const dz = $('#dropzone') || document.querySelector('[data-dropzone], .photos-dropzone');
@@ -42,7 +141,8 @@
     dz.addEventListener('drop', (e) => {
       const files = Array.from(e.dataTransfer?.files || []);
       for (const f of files) if (f && f.name) window.__finishline_bucket.push(f);
-      updateSelectedCount();
+      const badge = $('#photoCount') || $('[data-photo-count]');
+      if (badge) badge.textContent = `${window.__finishline_bucket.length} / 6 selected`;
       console.info('[FinishLine] drop files:', files.map(f => f.name));
     }, false);
   }
@@ -209,7 +309,7 @@
         btn.disabled = false;
         const msg = err instanceof Error ? err.message : String(err);
         alert(`OCR error: ${msg}`);
-      } finally {
+    } finally {
         btn.disabled = false;
       }
     }, true);
