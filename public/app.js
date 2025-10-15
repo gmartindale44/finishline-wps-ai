@@ -223,5 +223,88 @@
         extractBtn.disabled = false; if (extractBtn.dataset.label) extractBtn.textContent = extractBtn.dataset.label;
       }
     }, true);
+      }
+    })();
+
+// --- Bind the real "Extract from Photos" button and run the OCR pipeline ---
+    
+    (() => {
+  if (window.__finishline_bind_extract_init) return;
+  window.__finishline_bind_extract_init = true;
+
+  const $ = (s, r=document) => r.querySelector(s);
+  const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
+
+  // Use the shared file bucket created earlier (by the Choose Photos button)
+  function getSelectedFiles() {
+    if (typeof window.__finishline_getFiles === 'function') return window.__finishline_getFiles();
+    return window.__finishline_bucket || [];
   }
+
+  // Find the Extract button by id/data attribute OR label text
+  function findExtractBtn() {
+    return document.getElementById('extractFromPhotosBtn')
+        || document.querySelector('[data-action="extract-photos"]')
+        || $$('button, a, input[type="button"], input[type="submit"]').find(el =>
+             /^(extract\s+from\s+photos|extract\s+photos)/i.test((el.textContent || el.value || '').trim()));
+  }
+
+  async function sendToOCR(files) {
+    if (!files || !files.length) throw new Error('No files selected. Click "Choose Photos / PDF" first.');
+    const fd = new FormData();
+    for (const f of files) { fd.append('files', f); fd.append('photos', f); }
+    const res = await fetch('/api/photo_extract_openai_b64', { method: 'POST', body: fd });
+    let json;
+    try { json = await res.json(); } catch { throw new Error(`Server returned non-JSON (HTTP ${res.status}).`); }
+    if (!res.ok || json?.ok === false) {
+      const m = json?.error?.message || json?.message || `Upload failed (HTTP ${res.status}).`;
+      throw new Error(m);
+    }
+    return json;
+  }
+
+  // Main click handler
+  async function onExtractClick(e) {
+    e?.preventDefault?.();
+    const btn = e?.currentTarget;
+    try {
+      const files = getSelectedFiles();
+      if (!files.length) throw new Error('No files selected.');
+
+      if (btn) { btn.disabled = true; btn.dataset._label = btn.textContent; btn.textContent = 'Extracting…'; }
+
+      const json = await sendToOCR(files);
+
+      // Use the previously added processor; if missing, no-op
+      if (typeof window.finishline_process_ocr === 'function') {
+        await window.finishline_process_ocr(json);
+          } else {
+        console.warn('[FinishLine] finishline_process_ocr() not found; response:', json);
+        alert('OCR upload OK, but parser not found on this page. Check console.');
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[FinishLine][Extract] error:', msg);
+      alert(`OCR error: ${msg}`);
+        } finally {
+      if (btn) { btn.disabled = false; if (btn.dataset._label) btn.textContent = btn.dataset._label; }
+    }
+  }
+
+  // Bind once, and re-bind if the DOM rerenders
+  function bindExtract() {
+    const btn = findExtractBtn();
+    if (btn && !btn.dataset.finishlineBound) {
+      btn.dataset.finishlineBound = '1';
+      btn.addEventListener('click', onExtractClick, true);
+      console.info('[FinishLine] Bound "Extract from Photos" button.');
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bindExtract, { once: true });
+        } else {
+    bindExtract();
+  }
+  new MutationObserver(bindExtract).observe(document.body, { childList: true, subtree: true });
 })();
