@@ -309,8 +309,8 @@
         btn.disabled = false;
         const msg = err instanceof Error ? err.message : String(err);
         alert(`OCR error: ${msg}`);
-    } finally {
-        btn.disabled = false;
+      } finally {
+          btn.disabled = false;
       }
     }, true);
     console.info('[FinishLine] Extract button bound.');
@@ -318,4 +318,202 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bindExtract, { once:true });
   else bindExtract();
   new MutationObserver(bindExtract).observe(document.body, { childList:true, subtree:true });
+    })();
+
+// Wire "Extract from Photos" → collect files from ANY file input → POST → fill ALL horses
+    
+    (() => {
+  if (window.__finishline_extract_bind_v2) return;
+  window.__finishline_extract_bind_v2 = true;
+
+  const $  = (s, r=document) => r.querySelector(s);
+  const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const fire  = (el) => { if (!el) return; el.dispatchEvent(new Event('input',{bubbles:true})); el.dispatchEvent(new Event('change',{bubbles:true})); };
+
+  // Never require a date for OCR
+  const dateField = $('#raceDate') || $('[name="raceDate"]');
+  if (dateField) dateField.removeAttribute('required');
+
+  // ---------- collect files directly from any native file inputs ----------
+  function collectSelectedFiles() {
+    // gather from ALL file inputs present on the page
+    const inputs = $$('input[type="file"]');
+    const files = [];
+    for (const i of inputs) {
+      if (i?.files?.length) files.push(...Array.from(i.files));
+    }
+    // fall back to our shared bucket if you kept it
+    if (!files.length && window.__finishline_bucket?.length) files.push(...window.__finishline_bucket);
+    return files;
+  }
+
+  // ---------- find Extract button by id / data attr / label ----------
+  function findExtractBtn() {
+    return document.getElementById('extractFromPhotosBtn')
+        || document.querySelector('[data-action="extract-photos"]')
+        || $$('button, a, input[type="button"], input[type="submit"]').find(el =>
+             /^(extract\s+from\s+photos|extract\s+photos)/i.test((el.textContent || el.value || '').trim()));
+  }
+
+  // ---------- helpers to interact with the inline "Add Horse" editor ----------
+  function findEditorNameInput() {
+    return $('#horseName') || $('input[name="horseName"]') ||
+      $$('input,textarea').find(el =>
+        /horse\s*name/i.test([el.placeholder||'', el.name||'', el.id||'', el.getAttribute('aria-label')||''].join(' '))
+      );
+  }
+  function getEditorContainer() {
+    const nameEl = findEditorNameInput();
+    return nameEl ? (nameEl.closest('form, [data-section="horse"], section, fieldset, .horse-editor, .horse-data, .card, .panel') || nameEl.parentElement) : null;
+  }
+  function findInEditor(rx) {
+    const scope = getEditorContainer() || document;
+    const re = rx instanceof RegExp ? rx : new RegExp(String(rx), 'i');
+    return $$('input,textarea,select', scope).find(el => {
+      const s = [el.placeholder||'', el.name||'', el.id||'', el.getAttribute('aria-label')||'', el.closest('label')?.textContent||''].join(' ');
+      return re.test(s);
+    });
+  }
+  const getOddsInput    = () => findInEditor(/(ml\s*odds|odds)/i);
+  const getJockeyInput  = () => findInEditor(/jockey/i);
+  const getTrainerInput = () => findInEditor(/trainer/i);
+
+  function horseRowsCount() {
+    return (
+      $$('.horse-list .horse-row').length ||
+      $$('.horses .row').length ||
+      $$('.horse-items .item').length ||
+      $$('.added-horses .row').length ||
+      $$('[data-horse-row], .horse-row, .horse-card').length
+    );
+  }
+  function getAddHorseControl() {
+    const scope = getEditorContainer() || document;
+    const byText = $$('button, a, input[type="button"], input[type="submit"]', scope)
+      .find(el => /(^|\b)add\s*horse(\b|$)/i.test((el.textContent||el.value||'').trim()));
+    return byText || scope.querySelector('[data-action="add-horse"], #addHorseBtn, .add-horse, button.add-horse');
+  }
+
+  async function addOneHorse(h) {
+    const nameEl = findEditorNameInput();
+    if (!nameEl) return false;
+
+    nameEl.value = h?.name || ''; fire(nameEl);
+    const oddsEl = getOddsInput();    if (oddsEl && (h?.ml_odds || h?.odds)) { oddsEl.value = h.ml_odds || h.odds; fire(oddsEl); }
+    const jEl    = getJockeyInput();  if (jEl && h?.jockey)  { jEl.value = h.jockey;  fire(jEl); }
+    const tEl    = getTrainerInput(); if (tEl && h?.trainer) { tEl.value = h.trainer; fire(tEl); }
+
+    await sleep(40);
+
+    const before = horseRowsCount();
+    const form   = nameEl.closest('form');
+    const addBtn = getAddHorseControl();
+
+    if (form?.requestSubmit) form.requestSubmit();
+    else if (form) form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
+    else if (addBtn) addBtn.click();
+
+    // wait for a new row or an editor clear
+    const deadline = Date.now() + 1800;
+    while (Date.now() < deadline) {
+      await sleep(70);
+      if (horseRowsCount() > before) return true;
+      if (findEditorNameInput()?.value === '') return true;
+    }
+    return true; // don't block next horses if UI is slow
+  }
+
+  function setRaceMeta(race) {
+    const setField = (label, val) => {
+      if (val == null || val === '') return;
+      const el = document.getElementById(label)
+        || document.querySelector(`[name="${label}"]`)
+        || $$('input,select,textarea').find(x => new RegExp(label,'i').test(
+            [x.placeholder||'', x.name||'', x.id||'', x.getAttribute('aria-label')||''].join(' ')
+          ));
+      if (el) { el.value = val; fire(el); }
+    };
+    setField('track',    race?.track);
+    setField('surface',  race?.surface);
+    setField('distance', race?.distance);
+    // date is optional by design
+  }
+
+  async function processOCR(json) {
+    const data      = json?.data || json;
+    const extracted = data?.extracted || data?.result || data?.ocr || {};
+    const horses    = Array.isArray(extracted?.horses) ? extracted.horses
+                     : Array.isArray(data?.horses)     ? data.horses : [];
+
+    setRaceMeta(extracted?.race || data?.race || {});
+
+    let added = 0;
+    for (const raw of horses) {
+      const h = {
+        name:    raw.name || raw.horse || raw.title || '',
+        ml_odds: raw.ml_odds || raw.odds || '',
+        jockey:  raw.jockey || '',
+        trainer: raw.trainer || '',
+      };
+      if (!h.name) continue;
+      const ok = await addOneHorse(h);
+      if (ok) added++;
+    }
+
+    const pre = document.getElementById('ocrJson'); if (pre) pre.style.display = 'none';
+    const result = $('#ocrResult') || $('[data-ocr-result]');
+    if (result) { result.textContent = `OCR parsed and populated ${added} horse${added===1?'':'s'}.`; result.dataset.type = 'info'; }
+    const badge = $('#statusBadge') || $('[data-status-badge]') || $('.badge.idle') || $('.idle');
+    if (badge) { badge.textContent = 'Ready to analyze'; badge.className = 'badge ready'; }
+  }
+
+  async function postToOCR(files) {
+    if (!files?.length) throw new Error('No files selected. Click "Choose Photos / PDF" first.');
+    const fd = new FormData();
+    for (const f of files) { fd.append('files', f); fd.append('photos', f); } // tolerant server-side
+    const res  = await fetch('/api/photo_extract_openai_b64', { method: 'POST', body: fd });
+    let json; try { json = await res.json(); } catch { throw new Error(`Server returned non-JSON (HTTP ${res.status}).`); }
+    if (!res.ok || json?.ok === false) {
+      const m = json?.error?.message || json?.message || `Upload failed (HTTP ${res.status}).`;
+      throw new Error(m);
+    }
+    return json;
+  }
+
+  // Bind the real Extract button
+  function bindExtract() {
+    const btn = findExtractBtn();
+    if (!btn || btn.dataset.finishlineExtractBound) return;
+    btn.dataset.finishlineExtractBound = '1';
+    btn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      try {
+        const files = collectSelectedFiles();
+        if (!files.length) throw new Error('No files selected.');
+        const old = btn.textContent; btn.disabled = true; btn.textContent = 'Extracting…';
+        const json = await postToOCR(files);
+        await processOCR(json);
+        btn.textContent = old;
+      } catch (err) {
+        alert(`OCR error: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+        btn.disabled = false;
+      }
+    }, true);
+    console.info('[FinishLine] Extract button bound.');
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bindExtract, { once: true });
+  } else {
+    bindExtract();
+  }
+  new MutationObserver(bindExtract).observe(document.body, { childList: true, subtree: true });
+
+  // Also expose manual trigger (for console testing)
+  window.finishline_extractNow = async () => {
+    const json = await postToOCR(collectSelectedFiles());
+    await processOCR(json);
+  };
 })();
