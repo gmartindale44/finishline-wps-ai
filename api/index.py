@@ -31,6 +31,10 @@ if _is_enabled() and OPENAI_API_KEY:
 app = FastAPI()
 router = APIRouter()
 
+# Import and include the photo extract router
+from .photo_extract_openai_b64 import router as photo_extract_router
+app.include_router(photo_extract_router)
+
 def _strip_data_url(s: str) -> str:
     if isinstance(s, str) and s.startswith('data:'):
         m = re.match(r'^data:.*;base64,(.*)$', s, re.IGNORECASE | re.DOTALL)

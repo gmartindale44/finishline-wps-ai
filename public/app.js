@@ -880,101 +880,81 @@
 // Force-stable upload & auto-extract: hidden input + immediate POST + full form population
 
 (() => {
-  // Guard
-  if (window.__finishline_upload_pipeline_v2) return;
-  window.__finishline_upload_pipeline_v2 = true;
+  if (window.__finishline_upload_pipeline_v3) return;
+  window.__finishline_upload_pipeline_v3 = true;
 
   const $  = (s, r=document) => r.querySelector(s);
   const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   const fire  = (el) => { if (!el) return; el.dispatchEvent(new Event('input',{bubbles:true})); el.dispatchEvent(new Event('change',{bubbles:true})); };
 
-  // 0) Never require date
+  // Never require race date for OCR
   const dateField = $('#raceDate') || $('[name="raceDate"]'); if (dateField) dateField.removeAttribute('required');
 
-  // 1) Ensure there is a single, reliable file input we control
-  function ensurePhotosInput() {
+  function ensurePhotosInput() {            // one input we fully control
     let inp = $('#photosInput');
     if (!inp) {
-      // Inject it into the Photos / PDFs card so it's in the same form context
-      const host = $('#photosCard') || $('[data-photos-card]') || $('.photos-card') || document.body;
+      const host = $('#photosCard') || $('[data-photos-card]') || document.body;
       inp = document.createElement('input');
       inp.type = 'file';
       inp.multiple = true;
       inp.accept   = 'image/*,.pdf';
       inp.id       = 'photosInput';
-      // keep it accessible but not visible
       Object.assign(inp.style, { position:'absolute', opacity:'0', width:'1px', height:'1px', pointerEvents:'none' });
       host.appendChild(inp);
     }
     return inp;
   }
-  const hiddenInput = ensurePhotosInput();
+  const photosInput = ensurePhotosInput();
+  let lastFiles = [];
 
-  // small state
-  let lastPickedFiles = [];
-
-  // 2) Add-horse editor helpers (used after OCR)
+  // --- helpers to interact with the existing "Add Horse" inline editor
   function findEditorNameInput() {
     return $('#horseName') || $('input[name="horseName"]') ||
-      $$('input,textarea').find(el => /horse\s*name/i.test(
-        [el.placeholder||'', el.name||'', el.id||'', el.getAttribute('aria-label')||''].join(' ')
-      ));
+      $$('input,textarea').find(el =>
+        /horse\s*name/i.test([el.placeholder||'', el.name||'', el.id||'', el.getAttribute('aria-label')||''].join(' '))
+      );
   }
-  function getEditorContainer() {
-    const nameEl = findEditorNameInput();
-    return nameEl ? (nameEl.closest('form, [data-section="horse"], section, fieldset, .horse-editor, .horse-data, .card, .panel') || nameEl.parentElement) : null;
+  function editorScope() {
+    const name = findEditorNameInput();
+    return name ? (name.closest('form, [data-section="horse"], section, fieldset, .horse-editor, .horse-data, .card, .panel') || name.parentElement) : document;
   }
   function findInEditor(rx) {
-    const scope = getEditorContainer() || document;
+    const scope = editorScope();
     const re = rx instanceof RegExp ? rx : new RegExp(String(rx), 'i');
     return $$('input,textarea,select', scope).find(el => {
       const s = [el.placeholder||'', el.name||'', el.id||'', el.getAttribute('aria-label')||'', el.closest('label')?.textContent||''].join(' ');
       return re.test(s);
     });
   }
-  const getOddsInput    = () => findInEditor(/(ml\s*odds|odds)/i);
-  const getJockeyInput  = () => findInEditor(/jockey/i);
-  const getTrainerInput = () => findInEditor(/trainer/i);
+  const getOdds    = () => findInEditor(/(ml\s*odds|odds)/i);
+  const getJockey  = () => findInEditor(/jockey/i);
+  const getTrainer = () => findInEditor(/trainer/i);
+  const addBtn = () => {
+    const scope = editorScope();
+    return $$('button, a, input[type="button"], input[type="submit"]', scope)
+      .find(el => /(^|\b)add\s*horse(\b|$)/i.test((el.textContent||el.value||'').trim()))
+      || scope.querySelector('[data-action="add-horse"], #addHorseBtn, .add-horse, button.add-horse');
+  };
+  const rowsCount = () =>
+    $$('.horse-list .horse-row, .horses .row, .horse-items .item, .added-horses .row, [data-horse-row], .horse-row, .horse-card').length;
 
-  function rowsCount() {
-    return (
-      $$('.horse-list .horse-row').length ||
-      $$('.horses .row').length ||
-      $$('.horse-items .item').length ||
-      $$('.added-horses .row').length ||
-      $$('[data-horse-row], .horse-row, .horse-card').length
-    );
-  }
-  function getAddHorseControl() {
-    const scope = getEditorContainer() || document;
-    const byText = $$('button, a, input[type="button"], input[type="submit"]', scope)
-      .find(el => /(^|\b)add\s*horse(\b|$)/i.test((el.textContent||el.value||'').trim()));
-    return byText || scope.querySelector('[data-action="add-horse"], #addHorseBtn, .add-horse, button.add-horse');
-  }
-
-  async function addOneHorse(h) {
-    const nameEl = findEditorNameInput();
-    if (!nameEl) return false;
-
+  async function addHorseRow(h) {
+    const nameEl = findEditorNameInput(); if (!nameEl) return false;
     nameEl.value = h?.name || ''; fire(nameEl);
-    const oddsEl = getOddsInput();    if (oddsEl && (h?.ml_odds || h?.odds)) { oddsEl.value = h.ml_odds || h.odds; fire(oddsEl); }
-    const jEl    = getJockeyInput();  if (jEl && h?.jockey)  { jEl.value = h.jockey;  fire(jEl); }
-    const tEl    = getTrainerInput(); if (tEl && h?.trainer) { tEl.value = h.trainer; fire(tEl); }
-
-    await sleep(40);
-
+    const o = getOdds();    if (o && (h?.ml_odds || h?.odds)) { o.value = h.ml_odds || h.odds; fire(o); }
+    const j = getJockey();  if (j && h?.jockey)  { j.value = h.jockey;  fire(j); }
+    const t = getTrainer(); if (t && h?.trainer) { t.value = h.trainer; fire(t); }
+    await sleep(30);
     const before = rowsCount();
     const form   = nameEl.closest('form');
-    const addBtn = getAddHorseControl();
-
+    const btn    = addBtn();
     if (form?.requestSubmit) form.requestSubmit();
     else if (form) form.dispatchEvent(new Event('submit', { bubbles:true, cancelable:true }));
-    else if (addBtn) addBtn.click();
-
-    const deadline = Date.now() + 1800;
+    else if (btn) btn.click();
+    const deadline = Date.now() + 1500;
     while (Date.now() < deadline) {
-      await sleep(70);
+      await sleep(60);
       if (rowsCount() > before) return true;
       if (findEditorNameInput()?.value === '') return true;
     }
@@ -982,27 +962,23 @@
   }
 
   function setRaceMeta(race) {
-    const setField = (label, val) => {
+    const set = (label, val) => {
       if (val == null || val === '') return;
       const el = document.getElementById(label)
         || document.querySelector(`[name="${label}"]`)
-        || $$('input,select,textarea').find(x => new RegExp(label, 'i').test(
-            [x.placeholder||'', x.name||'', x.id||'', x.getAttribute('aria-label')||''].join(' ')
-          ));
+        || $$('input,select,textarea').find(x => new RegExp(label,'i').test([x.placeholder||'', x.name||'', x.id||'', x.getAttribute('aria-label')||''].join(' ')));
       if (el) { el.value = val; fire(el); }
     };
-    setField('track',    race?.track);
-    setField('surface',  race?.surface);
-    setField('distance', race?.distance);
-    // date optional by design
+    set('track',    race?.track);
+    set('surface',  race?.surface);
+    set('distance', race?.distance);
   }
 
   async function processOCR(json) {
-    const data      = json?.data || json;
+    const data   = json?.data || json;
     const extracted = data?.extracted || data?.result || data?.ocr || {};
-    const horses    = Array.isArray(extracted?.horses) ? extracted.horses
-                     : Array.isArray(data?.horses)     ? data.horses : [];
-
+    const horses = Array.isArray(extracted?.horses) ? extracted.horses
+                   : Array.isArray(data?.horses)     ? data.horses : [];
     setRaceMeta(extracted?.race || data?.race || {});
     let added = 0;
     for (const raw of horses) {
@@ -1013,23 +989,18 @@
         trainer: raw.trainer || '',
       };
       if (!h.name) continue;
-      if (await addOneHorse(h)) added++;
+      if (await addHorseRow(h)) added++;
     }
-
-    const pre = document.getElementById('ocrJson'); if (pre) pre.style.display = 'none';
     const result = $('#ocrResult') || $('[data-ocr-result]'); if (result) { result.textContent = `OCR parsed and populated ${added} horse${added===1?'':'s'}.`; result.dataset.type = 'info'; }
     const badge  = $('#statusBadge') || $('[data-status-badge]') || $('.badge.idle') || $('.idle'); if (badge) { badge.textContent = 'Ready to analyze'; badge.className = 'badge ready'; }
-
-    console.info('[FinishLine] OCR populated', added, 'horses.');
   }
 
-  async function postToOCR(files) {
+  async function callOCR(files) {
     if (!files?.length) throw new Error('No files selected.');
     const fd = new FormData();
-    for (const f of files) { fd.append('files', f); fd.append('photos', f); } // tolerant to both keys
+    for (const f of files) { fd.append('files', f); fd.append('photos', f); }   // tolerate both keys
     const res = await fetch('/api/photo_extract_openai_b64', { method: 'POST', body: fd });
-    let json;
-    try { json = await res.json(); } catch { throw new Error(`Server returned non-JSON (HTTP ${res.status}).`); }
+    let json; try { json = await res.json(); } catch { throw new Error(`Server returned non-JSON (HTTP ${res.status}).`); }
     if (!res.ok || json?.ok === false) {
       const m = json?.error?.message || json?.message || `Upload failed (HTTP ${res.status}).`;
       throw new Error(m);
@@ -1037,54 +1008,71 @@
     return json;
   }
 
-  // 3) Auto-extract whenever our hidden input changes
-  hiddenInput.addEventListener('change', async (e) => {
+  // When our controlled input changes → immediately extract
+  photosInput.addEventListener('change', async (e) => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
-    lastPickedFiles = files; // keep for manual retry
+    lastFiles = files;
+    const badge = $('#statusBadge') || $('[data-status-badge]') || $('.idle');
     try {
-      const json = await postToOCR(files);
+      if (badge) { badge.textContent = 'Extracting…'; badge.className = 'badge extracting'; }
+      const json = await callOCR(files);
       await processOCR(json);
     } catch (err) {
       alert(`OCR error: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
+      if (badge) { badge.textContent = 'Idle'; badge.className = 'badge idle'; }
       try { e.target.value = ''; } catch {}
     }
   });
 
-  // 4) Bind your existing "Choose Photos / PDF" to our hidden input (by id/data/text)
-  function findChooseBtn() {
+  // Bind the visible "Choose Photos / PDF" button to our input
+  function chooseBtn() {
     return document.getElementById('choosePhotosBtn')
         || document.querySelector('[data-action="choose-photos"]')
         || $$('button, a, input[type="button"], input[type="submit"]').find(el =>
              /^choose\s*photos\s*\/\s*pdf$/i.test((el.textContent || el.value || '').trim()));
   }
   function bindChoose() {
-    const btn = findChooseBtn();
+    const btn = chooseBtn();
     if (!btn || btn.dataset.finishlineChooseBound) return;
     btn.dataset.finishlineChooseBound = '1';
-    btn.addEventListener('click', (e) => {
-      e.preventDefault(); e.stopPropagation();
-      hiddenInput.click();
-    }, true);
-    console.info('[FinishLine] Choose Photos / PDF bound to hidden input.');
+    btn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); photosInput.click(); }, true);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bindChoose, { once:true }); else bindChoose();
   new MutationObserver(bindChoose).observe(document.body, { childList:true, subtree:true });
 
-  // 5) Optional: also auto-extract on native inputs (if page has others)
-  document.addEventListener('change', (e) => {
-    const el = e.target;
-    if (el?.matches?.('input[type="file"]') && el !== hiddenInput) {
-      const files = Array.from(el.files || []);
-      if (files.length) hiddenInput.dispatchEvent(new Event('change')); // no-op here; rely on our input
-    }
-  }, true);
+  // Bind "Extract from Photos" button to run with current selection (or prompt)
+  function extractBtn() {
+    return document.getElementById('extractFromPhotosBtn')
+        || document.querySelector('[data-action="extract-photos"]')
+        || $$('button, a, input[type="button"], input[type="submit"]').find(el =>
+             /^extract\s+from\s+photos/i.test((el.textContent || el.value || '').trim()));
+  }
+  function bindExtract() {
+    const btn = extractBtn();
+    if (!btn || btn.dataset.finishlineExtractBound) return;
+    btn.dataset.finishlineExtractBound = '1';
+    btn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      try {
+        let files = lastFiles;
+        if (!files?.length) { photosInput.click(); return; }   // ask user to pick; handler will continue
+        const old = btn.textContent; btn.disabled = true; btn.textContent = 'Extracting…';
+        const json = await callOCR(files);
+        await processOCR(json);
+        btn.textContent = old;
+      } catch (err) {
+        alert(`OCR error: ${err instanceof Error ? err.message : String(err)}`);
+      } finally {
+        btn.disabled = false;
+      }
+    }, true);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bindExtract, { once:true }); else bindExtract();
+  new MutationObserver(bindExtract).observe(document.body, { childList:true, subtree:true });
 
-  // 6) Console helpers for manual retry
-  window.finishline_forcePick     = () => hiddenInput.click();
-  window.finishline_forceExtract  = async () => {
-    if (!lastPickedFiles.length) { alert('No recent files. Run finishline_forcePick() first.'); return; }
-    const json = await postToOCR(lastPickedFiles); await processOCR(json);
-  };
+  // Console helpers (for quick manual checks)
+  window.finishline_pick   = () => photosInput.click();
+  window.finishline_extract= async () => { if (!lastFiles.length) return alert('Pick files first'); const j = await callOCR(lastFiles); await processOCR(j); };
 })();
