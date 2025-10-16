@@ -878,8 +878,8 @@
 })();
 
 (() => {
-  if (window.__finishline_upload_pipeline_v4) return;
-  window.__finishline_upload_pipeline_v4 = true;
+  if (window.__finishline_upload_pipeline_v5) return;
+  window.__finishline_upload_pipeline_v5 = true;
 
   const $  = (s, r=document) => r.querySelector(s);
   const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
@@ -908,6 +908,7 @@
   let lastFiles = [];
   const hud = $('#ocrHud');
   const setHud = (msg) => { if (hud) hud.textContent = msg || ''; };
+  const loud   = (...a) => { console.log('%c[FinishLine]', 'color:#7cf;font-weight:bold', ...a); };
 
   // ---------- Add-Horse helpers ----------
   function findEditorNameInput() {
@@ -978,6 +979,7 @@
     if (!files?.length) throw new Error('No files selected.');
     const fd = new FormData();
     for (const f of files) { fd.append('files', f); fd.append('photos', f); } // accept both keys server-side
+    loud('POST → /api/photo_extract_openai_b64 with', files.length, 'file(s)');
     const res = await fetch('/api/photo_extract_openai_b64', { method:'POST', body:fd });
     let json; try { json = await res.json(); } catch { throw new Error(`Server returned non-JSON (HTTP ${res.status}).`); }
     if (!res.ok || json?.ok === false) {
@@ -1053,6 +1055,51 @@
     if (!btn || btn.dataset.bound) return;
     btn.dataset.bound = '1';
     btn.addEventListener('click', (e) => { e.preventDefault(); photosInput.click(); });
+  })();
+
+  // New: one-click, tool-controlled picker that bypasses ALL page inputs.
+  (function bindInstantUpload(){
+    const btn = $('#instantUploadBtn');
+    if (!btn || btn.dataset.bound) return;
+    btn.dataset.bound = '1';
+    btn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      try {
+        let files = [];
+        if (window.showOpenFilePicker) {
+          // Modern browsers: independent file picker
+          const handles = await window.showOpenFilePicker({
+            multiple: true,
+            types: [
+              { description: 'Images', accept: { 'image/*': ['.png','.jpg','.jpeg','.webp'] } },
+              { description: 'PDF',    accept: { 'application/pdf': ['.pdf'] } },
+            ],
+            excludeAcceptAllOption: false
+          });
+          for (const h of handles) { files.push(await h.getFile()); }
+        } else {
+          // Fallback: use our controlled input
+          photosInput.onchange = null;
+          files = await new Promise((resolve) => {
+            photosInput.addEventListener('change', () => resolve(Array.from(photosInput.files||[])), { once:true });
+            photosInput.click();
+          });
+        }
+        if (!files.length) return;
+        setHud(`Uploading ${files.length} file(s)…`);
+        const old = btn.textContent; btn.disabled = true; btn.textContent = 'Extracting…';
+        const json = await callOCR(files);
+        await processOCR(json);
+        btn.textContent = old;
+        setHud(`Done. Parsed and populated from ${files.length} file(s).`);
+      } catch (err) {
+        const msg = (err instanceof Error ? err.message : String(err));
+        setHud(`OCR error: ${msg}`);
+        alert(`OCR error: ${msg}`);
+      } finally {
+        btn.disabled = false;
+      }
+    });
   })();
 
   // Bind "Extract from Photos" button to run with current selection (or prompt)
