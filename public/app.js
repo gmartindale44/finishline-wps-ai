@@ -878,8 +878,8 @@
 })();
 
 (() => {
-  if (window.__finishline_upload_pipeline_v6) return;
-  window.__finishline_upload_pipeline_v6 = true;
+  if (window.__finishline_upload_pipeline_v7) return;
+  window.__finishline_upload_pipeline_v7 = true;
 
   const $  = (s, r=document) => r.querySelector(s);
   const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
@@ -940,13 +940,44 @@
   const getOdds    = () => findInEditor(/(ml\s*odds|odds)/i);
   const getJockey  = () => findInEditor(/jockey/i);
   const getTrainer = () => findInEditor(/trainer/i);
-  const rowsCount  = () =>
-    $$('.horse-list .horse-row, .horses .row, .horse-items .item, .added-horses .row, [data-horse-row], .horse-row, .horse-card').length;
+  // Count how many horse rows exist (support many DOMs)
+  const rowsCount = () => {
+    const selectors = [
+      '.horse-list .horse-row',
+      '.horses .row',
+      '.horse-items .item',
+      '.added-horses .row',
+      '[data-horse-row]',
+      '.horse-row',
+      '.horse-card',
+      '#horsesList li',
+      '.horse-list li',
+      '.horses li',
+      '[role="list"] [role="listitem"]',
+    ];
+    for (const sel of selectors) {
+      const n = $$(sel).length;
+      if (n) return n;
+    }
+    return 0;
+  };
+
+  // Find the real "Add Horse" control (global search, robust text match)
   const addBtn = () => {
+    const textMatch = (el) => /(^|\b)add\s*horse(\b|$)/i.test((el.textContent||el.value||'').trim());
+    // 1) obvious ids / data-attrs
+    let btn =
+      document.querySelector('[data-action="add-horse"]') ||
+      document.getElementById('addHorseBtn') ||
+      document.querySelector('.add-horse, button.add-horse');
+    if (btn) return btn;
+    // 2) any button or link with the right text
+    btn = $$('button, a, input[type="button"], input[type="submit"]').find(textMatch);
+    if (btn) return btn;
+    // 3) last resort: look in editor scope only
     const scope = editorScope();
-    return $$('button, a, input[type="button"], input[type="submit"]', scope)
-      .find(el => /(^|\b)add\s*horse(\b|$)/i.test((el.textContent||el.value||'').trim()))
-      || scope.querySelector('[data-action="add-horse"], #addHorseBtn, .add-horse, button.add-horse');
+    btn = $$('button, a, input[type="button"], input[type="submit"]', scope).find(textMatch);
+    return btn || null;
   };
   async function addHorseRow(h) {
     const nameEl = findEditorNameInput(); if (!nameEl) return false;
@@ -954,23 +985,52 @@
     const o = getOdds();    if (o && (h?.ml_odds || h?.odds)) { o.value = h.ml_odds || h.odds; fire(o, 'input'); fire(o); }
     const j = getJockey();  if (j && h?.jockey)  { j.value = h.jockey;  fire(j, 'input'); fire(j); }
     const t = getTrainer(); if (t && h?.trainer) { t.value = h.trainer; fire(t, 'input'); fire(t); }
-    await sleep(30);
+    await sleep(50);
+
     const before = rowsCount();
     const form   = nameEl.closest('form');
-    const btn    = addBtn();
+    let   btn    = addBtn();
+
+    // Try the official button first (most UIs)
+    const tryClickAdd = async () => {
+      btn = addBtn();
+      if (!btn) return false;
+      try {
+        btn.scrollIntoView({ block: 'center', inline: 'center' });
+        btn.removeAttribute('disabled');
+      } catch {}
+      btn.click();
+      // wait for DOM to reflect the add
+      const deadline = Date.now() + 1800;
+      while (Date.now() < deadline) {
+        await sleep(60);
+        if (rowsCount() > before) return true;
+        // many UIs clear editor inputs after add:
+        if ((findEditorNameInput()?.value || '').trim() === '') return true;
+      }
+      return false;
+    };
+
+    // Strategy A: click Add
+    if (await tryClickAdd()) return true;
+
+    // Strategy B: submit the form explicitly
     if (form?.requestSubmit) form.requestSubmit();
     else if (form) form.dispatchEvent(new Event('submit', { bubbles:true, cancelable:true }));
-    else if (btn) btn.click();
-    const deadline = Date.now() + 3000;
-    while (Date.now() < deadline) {
-      await sleep(60);
-      // Common UIs clear the editor after successful add:
-      if ((rowsCount() > before) || (findEditorNameInput()?.value === '')) return true;
-    }
-    // Last resort: try clicking button directly again
-    if (btn) btn.click();
     await sleep(200);
-    return true;
+    if (rowsCount() > before || (findEditorNameInput()?.value||'') === '') return true;
+
+    // Strategy C: synthesize Enter key on name field (some UIs bind Enter to add)
+    const enter = (type) => nameEl.dispatchEvent(new KeyboardEvent(type, { bubbles:true, cancelable:true, key:'Enter', code:'Enter' }));
+    enter('keydown'); enter('keypress'); enter('keyup');
+    await sleep(250);
+    if (rowsCount() > before || (findEditorNameInput()?.value||'') === '') return true;
+
+    // Strategy D: try Add again (some UIs need two clicks after programmatic value set)
+    if (await tryClickAdd()) return true;
+
+    // Give up but don't block the sequence
+    return false;
   }
   function setRaceMeta(race) {
     const set = (label, val) => {
