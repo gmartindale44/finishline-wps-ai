@@ -876,3 +876,204 @@
     await processOCR(json);
   };
 })();
+
+// Force-stable upload & auto-extract: hidden input + immediate POST + full form population
+
+(() => {
+  if (window.__finishline_force_upload_v1) return;
+  window.__finishline_force_upload_v1 = true;
+
+  const $  = (s, r=document) => r.querySelector(s);
+  const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const fire  = (el) => { if (!el) return; el.dispatchEvent(new Event('input',{bubbles:true})); el.dispatchEvent(new Event('change',{bubbles:true})); };
+
+  // 0) Never require date
+  const dateField = $('#raceDate') || $('[name="raceDate"]'); if (dateField) dateField.removeAttribute('required');
+
+  // 1) Put our own hidden file input on the page (always accessible)
+  const hiddenInput = document.createElement('input');
+  hiddenInput.type = 'file';
+  hiddenInput.multiple = true;
+  hiddenInput.accept   = 'image/*,.pdf';
+  hiddenInput.id       = 'finishline_hidden_file_input';
+  Object.assign(hiddenInput.style, { position:'fixed', left:'-9999px', top:'-9999px' });
+  document.body.appendChild(hiddenInput);
+
+  // small state
+  let lastPickedFiles = [];
+
+  // 2) Add-horse editor helpers (used after OCR)
+  function findEditorNameInput() {
+    return $('#horseName') || $('input[name="horseName"]') ||
+      $$('input,textarea').find(el => /horse\s*name/i.test(
+        [el.placeholder||'', el.name||'', el.id||'', el.getAttribute('aria-label')||''].join(' ')
+      ));
+  }
+  function getEditorContainer() {
+    const nameEl = findEditorNameInput();
+    return nameEl ? (nameEl.closest('form, [data-section="horse"], section, fieldset, .horse-editor, .horse-data, .card, .panel') || nameEl.parentElement) : null;
+  }
+  function findInEditor(rx) {
+    const scope = getEditorContainer() || document;
+    const re = rx instanceof RegExp ? rx : new RegExp(String(rx), 'i');
+    return $$('input,textarea,select', scope).find(el => {
+      const s = [el.placeholder||'', el.name||'', el.id||'', el.getAttribute('aria-label')||'', el.closest('label')?.textContent||''].join(' ');
+      return re.test(s);
+    });
+  }
+  const getOddsInput    = () => findInEditor(/(ml\s*odds|odds)/i);
+  const getJockeyInput  = () => findInEditor(/jockey/i);
+  const getTrainerInput = () => findInEditor(/trainer/i);
+
+  function rowsCount() {
+    return (
+      $$('.horse-list .horse-row').length ||
+      $$('.horses .row').length ||
+      $$('.horse-items .item').length ||
+      $$('.added-horses .row').length ||
+      $$('[data-horse-row], .horse-row, .horse-card').length
+    );
+  }
+  function getAddHorseControl() {
+    const scope = getEditorContainer() || document;
+    const byText = $$('button, a, input[type="button"], input[type="submit"]', scope)
+      .find(el => /(^|\b)add\s*horse(\b|$)/i.test((el.textContent||el.value||'').trim()));
+    return byText || scope.querySelector('[data-action="add-horse"], #addHorseBtn, .add-horse, button.add-horse');
+  }
+
+  async function addOneHorse(h) {
+    const nameEl = findEditorNameInput();
+    if (!nameEl) return false;
+
+    nameEl.value = h?.name || ''; fire(nameEl);
+    const oddsEl = getOddsInput();    if (oddsEl && (h?.ml_odds || h?.odds)) { oddsEl.value = h.ml_odds || h.odds; fire(oddsEl); }
+    const jEl    = getJockeyInput();  if (jEl && h?.jockey)  { jEl.value = h.jockey;  fire(jEl); }
+    const tEl    = getTrainerInput(); if (tEl && h?.trainer) { tEl.value = h.trainer; fire(tEl); }
+
+    await sleep(40);
+
+    const before = rowsCount();
+    const form   = nameEl.closest('form');
+    const addBtn = getAddHorseControl();
+
+    if (form?.requestSubmit) form.requestSubmit();
+    else if (form) form.dispatchEvent(new Event('submit', { bubbles:true, cancelable:true }));
+    else if (addBtn) addBtn.click();
+
+    const deadline = Date.now() + 1800;
+    while (Date.now() < deadline) {
+      await sleep(70);
+      if (rowsCount() > before) return true;
+      if (findEditorNameInput()?.value === '') return true;
+    }
+    return true;
+  }
+
+  function setRaceMeta(race) {
+    const setField = (label, val) => {
+      if (val == null || val === '') return;
+      const el = document.getElementById(label)
+        || document.querySelector(`[name="${label}"]`)
+        || $$('input,select,textarea').find(x => new RegExp(label, 'i').test(
+            [x.placeholder||'', x.name||'', x.id||'', x.getAttribute('aria-label')||''].join(' ')
+          ));
+      if (el) { el.value = val; fire(el); }
+    };
+    setField('track',    race?.track);
+    setField('surface',  race?.surface);
+    setField('distance', race?.distance);
+    // date optional by design
+  }
+
+  async function processOCR(json) {
+    const data      = json?.data || json;
+    const extracted = data?.extracted || data?.result || data?.ocr || {};
+    const horses    = Array.isArray(extracted?.horses) ? extracted.horses
+                     : Array.isArray(data?.horses)     ? data.horses : [];
+
+    setRaceMeta(extracted?.race || data?.race || {});
+    let added = 0;
+    for (const raw of horses) {
+      const h = {
+        name:    raw.name || raw.horse || raw.title || '',
+        ml_odds: raw.ml_odds || raw.odds || '',
+        jockey:  raw.jockey || '',
+        trainer: raw.trainer || '',
+      };
+      if (!h.name) continue;
+      if (await addOneHorse(h)) added++;
+    }
+
+    const pre = document.getElementById('ocrJson'); if (pre) pre.style.display = 'none';
+    const result = $('#ocrResult') || $('[data-ocr-result]'); if (result) { result.textContent = `OCR parsed and populated ${added} horse${added===1?'':'s'}.`; result.dataset.type = 'info'; }
+    const badge  = $('#statusBadge') || $('[data-status-badge]') || $('.badge.idle') || $('.idle'); if (badge) { badge.textContent = 'Ready to analyze'; badge.className = 'badge ready'; }
+
+    console.info('[FinishLine] OCR populated', added, 'horses.');
+  }
+
+  async function postToOCR(files) {
+    if (!files?.length) throw new Error('No files selected.');
+    const fd = new FormData();
+    for (const f of files) { fd.append('files', f); fd.append('photos', f); } // tolerant to both keys
+    const res = await fetch('/api/photo_extract_openai_b64', { method: 'POST', body: fd });
+    let json;
+    try { json = await res.json(); } catch { throw new Error(`Server returned non-JSON (HTTP ${res.status}).`); }
+    if (!res.ok || json?.ok === false) {
+      const m = json?.error?.message || json?.message || `Upload failed (HTTP ${res.status}).`;
+      throw new Error(m);
+    }
+    return json;
+  }
+
+  // 3) Auto-extract whenever our hidden input changes
+  hiddenInput.addEventListener('change', async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    lastPickedFiles = files; // keep for manual retry
+    try {
+      const json = await postToOCR(files);
+      await processOCR(json);
+    } catch (err) {
+      alert(`OCR error: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      try { e.target.value = ''; } catch {}
+    }
+  });
+
+  // 4) Bind your existing "Choose Photos / PDF" to our hidden input (by id/data/text)
+  function findChooseBtn() {
+    return document.getElementById('choosePhotosBtn')
+        || document.querySelector('[data-action="choose-photos"]')
+        || $$('button, a, input[type="button"], input[type="submit"]').find(el =>
+             /^choose\s*photos\s*\/\s*pdf$/i.test((el.textContent || el.value || '').trim()));
+  }
+  function bindChoose() {
+    const btn = findChooseBtn();
+    if (!btn || btn.dataset.finishlineChooseBound) return;
+    btn.dataset.finishlineChooseBound = '1';
+    btn.addEventListener('click', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      hiddenInput.click();
+    }, true);
+    console.info('[FinishLine] Choose Photos / PDF bound to hidden input.');
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bindChoose, { once:true }); else bindChoose();
+  new MutationObserver(bindChoose).observe(document.body, { childList:true, subtree:true });
+
+  // 5) Optional: also auto-extract on native inputs (if page has others)
+  document.addEventListener('change', (e) => {
+    const el = e.target;
+    if (el?.matches?.('input[type="file"]') && el !== hiddenInput) {
+      const files = Array.from(el.files || []);
+      if (files.length) hiddenInput.dispatchEvent(new Event('change')); // no-op here; rely on our input
+    }
+  }, true);
+
+  // 6) Console helpers for manual retry
+  window.finishline_forcePick     = () => hiddenInput.click();
+  window.finishline_forceExtract  = async () => {
+    if (!lastPickedFiles.length) { alert('No recent files. Run finishline_forcePick() first.'); return; }
+    const json = await postToOCR(lastPickedFiles); await processOCR(json);
+  };
+})();
