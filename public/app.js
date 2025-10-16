@@ -877,38 +877,27 @@
   };
 })();
 
-// Force-stable upload & auto-extract: hidden input + immediate POST + full form population
-
+/**
+ * FinishLine WPS AI — Universal Upload Watcher
+ * - Autodetect ANY <input type="file"> on the page (even if re-rendered)
+ * - Auto-POST to /api/photo_extract_openai_b64 when files are chosen
+ * - Also wires "Extract from Photos" to grab all selected files and POST
+ * - Populates ALL horses via the existing inline Add Horse UI
+ */
 (() => {
-  if (window.__finishline_upload_pipeline_v3) return;
-  window.__finishline_upload_pipeline_v3 = true;
+  if (window.__finishline_universal_upload_v1) return;
+  window.__finishline_universal_upload_v1 = true;
 
   const $  = (s, r=document) => r.querySelector(s);
   const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-  const fire  = (el) => { if (!el) return; el.dispatchEvent(new Event('input',{bubbles:true})); el.dispatchEvent(new Event('change',{bubbles:true})); };
+  const fire  = (el, type) => el?.dispatchEvent(new Event(type || 'change', { bubbles:true }));
 
-  // Never require race date for OCR
-  const dateField = $('#raceDate') || $('[name="raceDate"]'); if (dateField) dateField.removeAttribute('required');
+  // Make race date optional
+  const dateField = $('#raceDate') || $('[name="raceDate"]');
+  if (dateField) dateField.removeAttribute('required');
 
-  function ensurePhotosInput() {            // one input we fully control
-    let inp = $('#photosInput');
-    if (!inp) {
-      const host = $('#photosCard') || $('[data-photos-card]') || document.body;
-      inp = document.createElement('input');
-      inp.type = 'file';
-      inp.multiple = true;
-      inp.accept   = 'image/*,.pdf';
-      inp.id       = 'photosInput';
-      Object.assign(inp.style, { position:'absolute', opacity:'0', width:'1px', height:'1px', pointerEvents:'none' });
-      host.appendChild(inp);
-    }
-    return inp;
-  }
-  const photosInput = ensurePhotosInput();
-  let lastFiles = [];
-
-  // --- helpers to interact with the existing "Add Horse" inline editor
+  // ---------- Add-Horse helpers ----------
   function findEditorNameInput() {
     return $('#horseName') || $('input[name="horseName"]') ||
       $$('input,textarea').find(el =>
@@ -930,21 +919,20 @@
   const getOdds    = () => findInEditor(/(ml\s*odds|odds)/i);
   const getJockey  = () => findInEditor(/jockey/i);
   const getTrainer = () => findInEditor(/trainer/i);
+  const rowsCount  = () =>
+    $$('.horse-list .horse-row, .horses .row, .horse-items .item, .added-horses .row, [data-horse-row], .horse-row, .horse-card').length;
   const addBtn = () => {
     const scope = editorScope();
     return $$('button, a, input[type="button"], input[type="submit"]', scope)
       .find(el => /(^|\b)add\s*horse(\b|$)/i.test((el.textContent||el.value||'').trim()))
       || scope.querySelector('[data-action="add-horse"], #addHorseBtn, .add-horse, button.add-horse');
   };
-  const rowsCount = () =>
-    $$('.horse-list .horse-row, .horses .row, .horse-items .item, .added-horses .row, [data-horse-row], .horse-row, .horse-card').length;
-
   async function addHorseRow(h) {
     const nameEl = findEditorNameInput(); if (!nameEl) return false;
-    nameEl.value = h?.name || ''; fire(nameEl);
-    const o = getOdds();    if (o && (h?.ml_odds || h?.odds)) { o.value = h.ml_odds || h.odds; fire(o); }
-    const j = getJockey();  if (j && h?.jockey)  { j.value = h.jockey;  fire(j); }
-    const t = getTrainer(); if (t && h?.trainer) { t.value = h.trainer; fire(t); }
+    nameEl.value = h?.name || ''; fire(nameEl, 'input'); fire(nameEl);
+    const o = getOdds();    if (o && (h?.ml_odds || h?.odds)) { o.value = h.ml_odds || h.odds; fire(o, 'input'); fire(o); }
+    const j = getJockey();  if (j && h?.jockey)  { j.value = h.jockey;  fire(j, 'input'); fire(j); }
+    const t = getTrainer(); if (t && h?.trainer) { t.value = h.trainer; fire(t, 'input'); fire(t); }
     await sleep(30);
     const before = rowsCount();
     const form   = nameEl.closest('form');
@@ -952,7 +940,7 @@
     if (form?.requestSubmit) form.requestSubmit();
     else if (form) form.dispatchEvent(new Event('submit', { bubbles:true, cancelable:true }));
     else if (btn) btn.click();
-    const deadline = Date.now() + 1500;
+    const deadline = Date.now() + 2000;
     while (Date.now() < deadline) {
       await sleep(60);
       if (rowsCount() > before) return true;
@@ -960,25 +948,37 @@
     }
     return true;
   }
-
   function setRaceMeta(race) {
     const set = (label, val) => {
       if (val == null || val === '') return;
       const el = document.getElementById(label)
         || document.querySelector(`[name="${label}"]`)
         || $$('input,select,textarea').find(x => new RegExp(label,'i').test([x.placeholder||'', x.name||'', x.id||'', x.getAttribute('aria-label')||''].join(' ')));
-      if (el) { el.value = val; fire(el); }
+      if (el) { el.value = val; fire(el, 'input'); fire(el); }
     };
     set('track',    race?.track);
     set('surface',  race?.surface);
     set('distance', race?.distance);
   }
 
+  // ---------- OCR call & populate ----------
+  async function callOCR(files) {
+    if (!files?.length) throw new Error('No files selected.');
+    const fd = new FormData();
+    for (const f of files) { fd.append('files', f); fd.append('photos', f); } // accept both keys server-side
+    const res = await fetch('/api/photo_extract_openai_b64', { method:'POST', body:fd });
+    let json; try { json = await res.json(); } catch { throw new Error(`Server returned non-JSON (HTTP ${res.status}).`); }
+    if (!res.ok || json?.ok === false) {
+      const m = json?.error?.message || json?.message || `Upload failed (HTTP ${res.status}).`;
+      throw new Error(m);
+    }
+    return json;
+  }
   async function processOCR(json) {
     const data   = json?.data || json;
     const extracted = data?.extracted || data?.result || data?.ocr || {};
     const horses = Array.isArray(extracted?.horses) ? extracted.horses
-                   : Array.isArray(data?.horses)     ? data.horses : [];
+                  : Array.isArray(data?.horses)     ? data.horses : [];
     setRaceMeta(extracted?.race || data?.race || {});
     let added = 0;
     for (const raw of horses) {
@@ -991,88 +991,92 @@
       if (!h.name) continue;
       if (await addHorseRow(h)) added++;
     }
-    const result = $('#ocrResult') || $('[data-ocr-result]'); if (result) { result.textContent = `OCR parsed and populated ${added} horse${added===1?'':'s'}.`; result.dataset.type = 'info'; }
-    const badge  = $('#statusBadge') || $('[data-status-badge]') || $('.badge.idle') || $('.idle'); if (badge) { badge.textContent = 'Ready to analyze'; badge.className = 'badge ready'; }
+    const badge  = $('#statusBadge') || $('[data-status-badge]') || $('.badge.idle') || $('.idle');
+    if (badge) { badge.textContent = 'Ready to analyze'; badge.className = 'badge ready'; }
+    const result = $('#ocrResult') || $('[data-ocr-result]');
+    if (result) { result.textContent = `OCR parsed and populated ${added} horse${added===1?'':'s'}.`; result.dataset.type='info'; }
   }
 
-  async function callOCR(files) {
-    if (!files?.length) throw new Error('No files selected.');
-    const fd = new FormData();
-    for (const f of files) { fd.append('files', f); fd.append('photos', f); }   // tolerate both keys
-    const res = await fetch('/api/photo_extract_openai_b64', { method: 'POST', body: fd });
-    let json; try { json = await res.json(); } catch { throw new Error(`Server returned non-JSON (HTTP ${res.status}).`); }
-    if (!res.ok || json?.ok === false) {
-      const m = json?.error?.message || json?.message || `Upload failed (HTTP ${res.status}).`;
-      throw new Error(m);
-    }
-    return json;
-  }
-
-  // When our controlled input changes → immediately extract
-  photosInput.addEventListener('change', async (e) => {
-    const files = Array.from(e.target.files || []);
-    if (!files.length) return;
-    lastFiles = files;
-    const badge = $('#statusBadge') || $('[data-status-badge]') || $('.idle');
+  // ---------- UNIVERSAL FILE INPUT WATCHER ----------
+  // 1) Immediate 'change' listener on ANY file input.
+  document.addEventListener('change', async (e) => {
+    const el = e.target;
+    if (!el?.matches?.('input[type="file"]')) return;
     try {
-      if (badge) { badge.textContent = 'Extracting…'; badge.className = 'badge extracting'; }
+      const files = Array.from(el.files || []);
+      if (!files.length) return;
+      console.info('[FinishLine] Detected file selection via', el);
       const json = await callOCR(files);
       await processOCR(json);
+      // allow the same file to be chosen again
+      try { el.value = ''; } catch {}
     } catch (err) {
       alert(`OCR error: ${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      if (badge) { badge.textContent = 'Idle'; badge.className = 'badge idle'; }
-      try { e.target.value = ''; } catch {}
     }
-  });
+  }, true);
 
-  // Bind the visible "Choose Photos / PDF" button to our input
-  function chooseBtn() {
-    return document.getElementById('choosePhotosBtn')
-        || document.querySelector('[data-action="choose-photos"]')
-        || $$('button, a, input[type="button"], input[type="submit"]').find(el =>
-             /^choose\s*photos\s*\/\s*pdf$/i.test((el.textContent || el.value || '').trim()));
-  }
-  function bindChoose() {
-    const btn = chooseBtn();
-    if (!btn || btn.dataset.finishlineChooseBound) return;
-    btn.dataset.finishlineChooseBound = '1';
-    btn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); photosInput.click(); }, true);
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bindChoose, { once:true }); else bindChoose();
-  new MutationObserver(bindChoose).observe(document.body, { childList:true, subtree:true });
+  // 2) Polling safety net — catches inputs that fire no events or are re-rendered.
+  const lastCounts = new WeakMap();
+  (async function pollInputs() {
+    while (true) {
+      try {
+        const inputs = $$('input[type="file"]');
+        for (const inp of inputs) {
+          const n = inp.files?.length || 0;
+          const prev = lastCounts.get(inp) || 0;
+          if (n > 0 && n !== prev) {
+            lastCounts.set(inp, n);
+            console.info('[FinishLine] Poll detected new files; auto-extracting…');
+            try {
+              const json = await callOCR(Array.from(inp.files));
+              await processOCR(json);
+              try { inp.value = ''; } catch {}
+              lastCounts.set(inp, 0);
+            } catch (err) {
+              alert(`OCR error: ${err instanceof Error ? err.message : String(err)}`);
+            }
+          } else if (n !== prev) {
+            lastCounts.set(inp, n);
+          }
+        }
+      } catch {}
+      await sleep(800);
+    }
+  })();
 
-  // Bind "Extract from Photos" button to run with current selection (or prompt)
-  function extractBtn() {
-    return document.getElementById('extractFromPhotosBtn')
-        || document.querySelector('[data-action="extract-photos"]')
-        || $$('button, a, input[type="button"], input[type="submit"]').find(el =>
-             /^extract\s+from\s+photos/i.test((el.textContent || el.value || '').trim()));
-  }
-  function bindExtract() {
-    const btn = extractBtn();
+  // 3) "Extract from Photos" → collect from ALL file inputs and POST.
+  function bindExtractButton() {
+    const btn = document.getElementById('extractFromPhotosBtn')
+      || document.querySelector('[data-action="extract-photos"]')
+      || $$('button, a, input[type="button"], input[type="submit"]').find(el =>
+            /^extract\s+from\s+photos/i.test((el.textContent || el.value || '').trim()));
     if (!btn || btn.dataset.finishlineExtractBound) return;
     btn.dataset.finishlineExtractBound = '1';
     btn.addEventListener('click', async (e) => {
       e.preventDefault();
+      const allInputs = $$('input[type="file"]');
+      let files = [];
+      allInputs.forEach(i => i?.files?.length && files.push(...Array.from(i.files)));
+      if (!files.length) {
+        // If no files selected, click the first visible input to prompt
+        const first = allInputs[0];
+        if (first) first.click();
+        return;
+      }
+      const old = btn.textContent; btn.disabled = true; btn.textContent = 'Extracting…';
       try {
-        let files = lastFiles;
-        if (!files?.length) { photosInput.click(); return; }   // ask user to pick; handler will continue
-        const old = btn.textContent; btn.disabled = true; btn.textContent = 'Extracting…';
         const json = await callOCR(files);
         await processOCR(json);
-        btn.textContent = old;
       } catch (err) {
         alert(`OCR error: ${err instanceof Error ? err.message : String(err)}`);
       } finally {
-        btn.disabled = false;
+        btn.disabled = false; btn.textContent = old;
       }
     }, true);
   }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bindExtract, { once:true }); else bindExtract();
-  new MutationObserver(bindExtract).observe(document.body, { childList:true, subtree:true });
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bindExtractButton, { once:true }); else bindExtractButton();
+  new MutationObserver(bindExtractButton).observe(document.body, { childList:true, subtree:true });
 
-  // Console helpers (for quick manual checks)
-  window.finishline_pick   = () => photosInput.click();
-  window.finishline_extract= async () => { if (!lastFiles.length) return alert('Pick files first'); const j = await callOCR(lastFiles); await processOCR(j); };
+  // Console helpers
+  window.finishline_scanInputs = () => $$('input[type="file"]').map(i => ({ el:i, count:i.files?.length||0 }));
 })();
