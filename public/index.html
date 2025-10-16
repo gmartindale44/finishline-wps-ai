@@ -106,9 +106,17 @@
                         <div id="drop-zone" class="drop-zone">
                             <p>Drag & drop images or PDFs here, or click <em>Choose Photos / PDF</em>.</p>
                             <p class="hint">Up to 6 files. Images: PNG/JPG/WebP • PDFs supported.</p>
+                          <!-- Always-available fallback button: guaranteed to trigger our controlled input -->
+                          <div style="margin-top:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                            <button id="safeChooseBtn" type="button" class="btn btn-secondary" style="padding:8px 12px;">
+                              Safe Upload (guaranteed)
+                            </button>
+                            <small id="safeUploadHint" style="opacity:.75">Uses a reliable input so extraction always runs.</small>
+                          </div>
                         </div>
                         <!-- Stable, controlled input (hidden). JS will trigger this. -->
                         <input id="photosInput" type="file" accept="image/*,.pdf" multiple style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none" />
+                       <div id="ocrHud" style="margin-top:8px;font-size:12px;opacity:.8;"></div>
 
                         <!-- Thumbnails -->
                         <div id="thumbs" class="thumbs"></div>
