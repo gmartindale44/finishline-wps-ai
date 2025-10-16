@@ -878,17 +878,25 @@
 })();
 
 (() => {
-  if (window.__finishline_upload_pipeline_v5) return;
-  window.__finishline_upload_pipeline_v5 = true;
+  if (window.__finishline_upload_pipeline_v6) return;
+  window.__finishline_upload_pipeline_v6 = true;
 
   const $  = (s, r=document) => r.querySelector(s);
   const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   const fire  = (el, type) => el?.dispatchEvent(new Event(type || 'change', { bubbles:true }));
 
-  // Make race date optional
-  const dateField = $('#raceDate') || $('[name="raceDate"]');
-  if (dateField) dateField.removeAttribute('required');
+  // Relax required inputs: race date / track / distance etc. (no hard requirements)
+  (function relaxAllRequired() {
+    // In case the build sets [required] on race-info fields, remove them at runtime.
+    const raceInfo = document.querySelector('[data-section="race-info"]')
+                  || document.querySelector('#raceInfo')
+                  || document; // fallback to global
+    $$('input[required], select[required], textarea[required]', raceInfo).forEach(el => {
+      el.removeAttribute('required');
+      el.setCustomValidity?.('');
+    });
+  })();
 
   function ensurePhotosInput() {            // one input we fully control
     let inp = $('#photosInput');
@@ -953,12 +961,15 @@
     if (form?.requestSubmit) form.requestSubmit();
     else if (form) form.dispatchEvent(new Event('submit', { bubbles:true, cancelable:true }));
     else if (btn) btn.click();
-    const deadline = Date.now() + 2000;
+    const deadline = Date.now() + 3000;
     while (Date.now() < deadline) {
       await sleep(60);
-      if (rowsCount() > before) return true;
-      if (findEditorNameInput()?.value === '') return true;
+      // Common UIs clear the editor after successful add:
+      if ((rowsCount() > before) || (findEditorNameInput()?.value === '')) return true;
     }
+    // Last resort: try clicking button directly again
+    if (btn) btn.click();
+    await sleep(200);
     return true;
   }
   function setRaceMeta(race) {
@@ -988,23 +999,45 @@
     }
     return json;
   }
+  // Normalize horses from any shape the OCR might return
+  function collectHorses(payload) {
+    const data = payload?.data || payload || {};
+    const extracted = data.extracted || data.result || data.ocr || {};
+    let list = [];
+    // 1) Top-level horses
+    if (Array.isArray(extracted.horses)) list = list.concat(extracted.horses);
+    if (Array.isArray(data.horses))      list = list.concat(data.horses);
+    // 2) Paged horses
+    if (Array.isArray(extracted.pages)) {
+      extracted.pages.forEach(pg => {
+        if (Array.isArray(pg?.horses)) list = list.concat(pg.horses);
+      });
+    }
+    // 3) Alternate keys (defensive)
+    if (Array.isArray(extracted.entries)) {
+      extracted.entries.forEach(e => { if (Array.isArray(e?.horses)) list = list.concat(e.horses); });
+    }
+    // Canonicalize items
+    const mapName = (obj) => obj?.name || obj?.horse || obj?.title || obj?.Horse || obj?.['Horse Name'] || '';
+    const mapOdds = (obj) => obj?.ml_odds || obj?.odds || obj?.['ML Odds'] || obj?.['Odds'] || '';
+    const norm = list
+      .map(h => ({
+        name:    mapName(h)?.toString().trim(),
+        ml_odds: mapOdds(h)?.toString().trim(),
+        jockey:  (h?.jockey || h?.Jockey || h?.['Jockey Name'] || '').toString().trim(),
+        trainer: (h?.trainer|| h?.Trainer|| h?.['Trainer Name']|| '').toString().trim(),
+      }))
+      .filter(h => h.name);
+    return norm;
+  }
+
   async function processOCR(json) {
     const data   = json?.data || json;
     const extracted = data?.extracted || data?.result || data?.ocr || {};
-    const horses = Array.isArray(extracted?.horses) ? extracted.horses
-                  : Array.isArray(data?.horses)     ? data.horses : [];
+    const horses = collectHorses(json);
     setRaceMeta(extracted?.race || data?.race || {});
     let added = 0;
-    for (const raw of horses) {
-      const h = {
-        name:    raw.name || raw.horse || raw.title || '',
-        ml_odds: raw.ml_odds || raw.odds || '',
-        jockey:  raw.jockey || '',
-        trainer: raw.trainer || '',
-      };
-      if (!h.name) continue;
-      if (await addHorseRow(h)) added++;
-    }
+    for (const h of horses) { if (await addHorseRow(h)) added++; }
     const badge  = $('#statusBadge') || $('[data-status-badge]') || $('.badge.idle') || $('.idle');
     if (badge) { badge.textContent = 'Ready to analyze'; badge.className = 'badge ready'; }
     const result = $('#ocrResult') || $('[data-ocr-result]');
