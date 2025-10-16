@@ -880,8 +880,9 @@
 // Force-stable upload & auto-extract: hidden input + immediate POST + full form population
 
 (() => {
-  if (window.__finishline_force_upload_v1) return;
-  window.__finishline_force_upload_v1 = true;
+  // Guard
+  if (window.__finishline_upload_pipeline_v2) return;
+  window.__finishline_upload_pipeline_v2 = true;
 
   const $  = (s, r=document) => r.querySelector(s);
   const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
@@ -891,14 +892,24 @@
   // 0) Never require date
   const dateField = $('#raceDate') || $('[name="raceDate"]'); if (dateField) dateField.removeAttribute('required');
 
-  // 1) Put our own hidden file input on the page (always accessible)
-  const hiddenInput = document.createElement('input');
-  hiddenInput.type = 'file';
-  hiddenInput.multiple = true;
-  hiddenInput.accept   = 'image/*,.pdf';
-  hiddenInput.id       = 'finishline_hidden_file_input';
-  Object.assign(hiddenInput.style, { position:'fixed', left:'-9999px', top:'-9999px' });
-  document.body.appendChild(hiddenInput);
+  // 1) Ensure there is a single, reliable file input we control
+  function ensurePhotosInput() {
+    let inp = $('#photosInput');
+    if (!inp) {
+      // Inject it into the Photos / PDFs card so it's in the same form context
+      const host = $('#photosCard') || $('[data-photos-card]') || $('.photos-card') || document.body;
+      inp = document.createElement('input');
+      inp.type = 'file';
+      inp.multiple = true;
+      inp.accept   = 'image/*,.pdf';
+      inp.id       = 'photosInput';
+      // keep it accessible but not visible
+      Object.assign(inp.style, { position:'absolute', opacity:'0', width:'1px', height:'1px', pointerEvents:'none' });
+      host.appendChild(inp);
+    }
+    return inp;
+  }
+  const hiddenInput = ensurePhotosInput();
 
   // small state
   let lastPickedFiles = [];
