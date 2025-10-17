@@ -969,7 +969,7 @@
     let btn =
       document.querySelector('[data-action="add-horse"]') ||
       document.getElementById('addHorseBtn') ||
-      document.querySelector('.add-horse, button.add-horse');
+      document.querySelector('.add-horse, button.add-horse, button.add-horse-btn, .add-horse-btn, .button.add-horse-btn');
     if (btn) return btn;
     // 2) any button or link with the right text
     btn = $$('button, a, input[type="button"], input[type="submit"]').find(textMatch);
