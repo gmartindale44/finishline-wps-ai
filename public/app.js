@@ -307,6 +307,144 @@
       if (!n) return; // require at least name
       pushHorse({ name:n, ml_odds:o, jockey:j, trainer:t });
       clearEditor();
+      syncToLegacyStore();
+    });
+  })();
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // ANALYZE & PREDICT — progress bars + payload = { race, horses }
+  // ─────────────────────────────────────────────────────────────────────────────
+  const getRaceMetaFromForm = () => {
+    const by = (sel) => document.querySelector(sel)?.value?.trim() || '';
+    return {
+      date: by('#raceDate, [name="raceDate"]') || '',
+      track: by('#track, [name="track"]') || '',
+      surface: by('#surface, [name="surface"]') || '',
+      distance: by('#distance, [name="distance"]') || '',
+    };
+  };
+
+  // Try to read horses from the native list, if the app already renders one
+  const readHorsesFromNativeList = () => {
+    const rows = Array.from(document.querySelectorAll(
+      // common patterns we've seen in your app:
+      '.horse-row, .horses-list .horse-row, [data-horse-row], .horse-list .row'
+    ));
+    const parseCell = (el) => el?.textContent?.trim() || '';
+    const parsed = rows.map(row => {
+      const cells = row.querySelectorAll('div, span, td');
+      // Attempt to map columns: [#, name, odds, jockey, trainer]
+      const name    = parseCell(cells[1]);
+      const ml_odds = parseCell(cells[2]);
+      const jockey  = parseCell(cells[3]);
+      const trainer = parseCell(cells[4]);
+      return normalizeHorse({ name, ml_odds, jockey, trainer });
+    }).filter(Boolean);
+    return parsed;
+  };
+
+  const collectForCompute = () => {
+    // Prefer OCR store; if empty, fall back to native list
+    const a = Array.isArray(state.horses) ? state.horses : [];
+    const b = readHorsesFromNativeList();
+    // Deduplicate by name
+    const map = new Map();
+    [...a, ...b].forEach(h => {
+      if (!h?.name) return;
+      const key = h.name.toLowerCase();
+      if (!map.has(key)) map.set(key, h);
+    });
+    return Array.from(map.values());
+  };
+
+  const postJSON = async (url, body) => {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(()=> '');
+      throw new Error(`${res.status} ${res.statusText}${text ? ` — ${text}` : ''}`);
+    }
+    return res.json();
+  };
+
+  const withProgress = async (btn, labelWorking, task) => {
+    if (!btn) return task();
+    const orig = btn.textContent;
+    btn.disabled = true;
+    let pct = 3;
+    const tick = () => {
+      pct = Math.min(97, pct + Math.random()*9);
+      btn.textContent = `${labelWorking} ${Math.floor(pct)}%`;
+    };
+    const id = setInterval(tick, 220);
+    try {
+      const val = await task();
+      pct = 100; btn.textContent = `${labelWorking} 100%`;
+      return val;
+    } finally {
+      clearInterval(id);
+      setTimeout(()=>{ btn.disabled = false; btn.textContent = orig; }, 350);
+    }
+  };
+
+  const showBadge = (text, cls='ready') => {
+    const badge  = $('#statusBadge') || $('[data-status-badge]') || $('.badge');
+    if (badge) { badge.textContent = text; badge.className = `badge ${cls}`; }
+  };
+
+  const showResultToast = (msg) => {
+    const result = $('#ocrResult') || $('[data-ocr-result]');
+    if (result) { result.textContent = msg; result.dataset.type='info'; }
+    setHud(msg);
+  };
+
+  // Bind analyze
+  (function bindAnalyze(){
+    const btn = Array.from(document.querySelectorAll('button, a'))
+      .find(el => /analyz(e|ing)\s+photos/i.test(el.textContent||''));
+    if (!btn || btn.dataset.bound) return;
+    btn.dataset.bound = '1';
+    btn.addEventListener('click', async () => {
+      const horses = collectForCompute();
+      if (!horses.length) { alert('No horses to analyze yet.'); return; }
+      const race = getRaceMetaFromForm();
+      try {
+        const json = await withProgress(btn, 'Analyzing', () =>
+          postJSON('/api/research_predict', { race, horses })
+        );
+        window.__finishline_last_analysis = json;
+        showResultToast('Analysis complete. Ready to predict.');
+        showBadge('Ready to predict','ready');
+      } catch (err) {
+        alert('Analyze error: ' + (err?.message || String(err)));
+      }
+    });
+  })();
+
+  // Bind predict
+  (function bindPredict(){
+    const btn = Array.from(document.querySelectorAll('button, a'))
+      .find(el => /predict\s*W\/P\/S/i.test(el.textContent||''));
+    if (!btn || btn.dataset.bound) return;
+    btn.dataset.bound = '1';
+    btn.addEventListener('click', async () => {
+      const horses = collectForCompute();
+      if (!horses.length) { alert('No horses to predict yet.'); return; }
+      const race = getRaceMetaFromForm();
+      try {
+        const json = await withProgress(btn, 'Predicting', () =>
+          postJSON('/api/predict_wps', { race, horses, analysis: window.__finishline_last_analysis || null })
+        );
+        window.__finishline_last_prediction = json;
+        // Light-touch render hook (your page can read window.__finishline_last_prediction)
+        showResultToast('Prediction ready. Scroll for results or open the console object: __finishline_last_prediction');
+        showBadge('Prediction ready','ready');
+      } catch (err) {
+        alert('Predict error: ' + (err?.message || String(err)));
+      }
     });
   })();
 })();
