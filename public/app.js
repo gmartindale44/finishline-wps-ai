@@ -118,6 +118,24 @@
     return true;
   };
 
+
+  // 🔁 Inject horses into the original app's dataset so Analyze/Predict works
+  const syncToLegacyStore = () => {
+    try {
+      if (window.FinishLine && Array.isArray(window.FinishLine.horses)) {
+        window.FinishLine.horses = [...state.horses];
+        if (typeof window.FinishLine.updateUI === 'function') window.FinishLine.updateUI();
+      } else if (Array.isArray(window.horseEntries)) {
+        window.horseEntries = [...state.horses];
+      } else {
+        window.horses = [...state.horses];
+      }
+      console.log('%c[FinishLine] Synced horses to main app store:', 'color:#8ff', state.horses);
+    } catch (err) {
+      console.warn('Sync to legacy store failed:', err);
+    }
+  };
+
   // Upload → OCR
   async function callOCR(files) {
     if (!files?.length) throw new Error('No files selected.');
@@ -210,6 +228,7 @@
   async function addHorseRow(h) {
     const ok = pushHorse(h);
     clearEditor();
+    syncToLegacyStore();
     return ok;
   }
 
@@ -226,6 +245,7 @@
     const result = $('#ocrResult') || $('[data-ocr-result]');
     if (result) { result.textContent = `OCR parsed and populated ${added} horse${added===1?'':'s'}.`; result.dataset.type='info'; }
     setHud(`Parsed ${added}/${horses.length} horses.`);
+    syncToLegacyStore(); // ensure prediction engine sees latest data
   }
 
   // Bind single, canonical button
