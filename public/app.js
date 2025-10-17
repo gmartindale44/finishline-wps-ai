@@ -59,18 +59,63 @@
     return 0;
   };
 
-  // Find the real "Add Horse" button (based on your DOM)
-  const addBtn = () => {
-    const textMatch = (el) => /(^|\b)add\s*horse(\b|$)/i.test((el.textContent||el.value||'').trim());
-    let btn =
-      document.querySelector('[data-action="add-horse"]') ||
-      document.getElementById('addHorseBtn') ||
-      document.querySelector('.add-horse, button.add-horse, button.add-horse-btn, .add-horse-btn, .button.add-horse-btn');
-    if (btn) return btn;
-    let fallback = $$('button, a, input[type="button"], input[type="submit"]').find(textMatch);
-    if (fallback) return fallback;
-    const scope = editorScope();
-    return $$('button, a, input[type="button"], input[type="submit"]', scope).find(textMatch) || null;
+  // ──────────────────────────────────────────────────────────────────────────
+  // Horses store + renderer (decoupled from missing legacy handlers)
+  // ──────────────────────────────────────────────────────────────────────────
+  const state = (window.__finishline ||= {});
+  state.horses ||= [];
+
+  const horsesListEl = $('#horsesList');
+  const clearEditor = () => {
+    const n = findEditorNameInput(); if (n) n.value = '';
+    const o = getOdds();            if (o) o.value = '';
+    const j = getJockey();          if (j) j.value = '';
+    const t = getTrainer();         if (t) t.value = '';
+    [findEditorNameInput(), getOdds(), getJockey(), getTrainer()].forEach(fire);
+  };
+
+  const normalizeHorse = (h) => {
+    const name    = (h?.name || h?.horse || h?.title || '').toString().trim();
+    const ml_odds = (h?.ml_odds || h?.odds || h?.['ML Odds'] || '').toString().trim();
+    const jockey  = (h?.jockey || '').toString().trim();
+    const trainer = (h?.trainer|| '').toString().trim();
+    return name ? { name, ml_odds, jockey, trainer } : null;
+  };
+
+  const renderHorses = () => {
+    if (!horsesListEl) return;
+    horsesListEl.innerHTML = '';
+    state.horses.forEach((h, idx) => {
+      const row = document.createElement('div');
+      row.className = 'horse-row';
+      row.style.cssText = 'display:grid;grid-template-columns:2fr 1fr 1.5fr 1.5fr auto;gap:8px;align-items:center;background:rgba(255,255,255,.03);padding:8px;border-radius:10px;';
+      row.innerHTML = `
+        <div><strong>${idx+1}.</strong> ${h.name}</div>
+        <div>${h.ml_odds || ''}</div>
+        <div>${h.jockey || ''}</div>
+        <div>${h.trainer|| ''}</div>
+        <button type="button" class="btn btn-secondary btn-sm" data-remove="${idx}">Remove</button>
+      `;
+      horsesListEl.appendChild(row);
+    });
+    horsesListEl.querySelectorAll('[data-remove]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const i = Number(btn.getAttribute('data-remove'));
+        state.horses.splice(i,1);
+        renderHorses();
+      });
+    });
+  };
+
+  const pushHorse = (h) => {
+    const canon = normalizeHorse(h);
+    if (!canon) return false;
+    // dedupe by name
+    const key = canon.name.toLowerCase();
+    if (state.horses.some(x => x.name.toLowerCase() === key)) return false;
+    state.horses.push(canon);
+    renderHorses();
+    return true;
   };
 
   // Upload → OCR
@@ -161,93 +206,11 @@
     if (dist  && meta.distance){ dist.value  = meta.distance;fire(dist);  }
   }
 
-  // Add one horse via your real UI
+  // Our add function now uses the local store/renderer
   async function addHorseRow(h) {
-    const nameEl = findEditorNameInput(); if (!nameEl) return false;
-    nameEl.value = h?.name || ''; fire(nameEl, 'input'); fire(nameEl);
-    const o = getOdds();    if (o && (h?.ml_odds || h?.odds)) { o.value = h.ml_odds || h.odds; fire(o, 'input'); fire(o); }
-    const j = getJockey();  if (j && h?.jockey)  { j.value = h.jockey;  fire(j, 'input'); fire(j); }
-    const t = getTrainer(); if (t && h?.trainer) { t.value = h.trainer; fire(t, 'input'); fire(t); }
-    await sleep(80);
-
-    const before = rowsCount();
-    const form   = nameEl.closest('form');
-    let   btn    = addBtn();
-
-    const fullUserClick = (el) => {
-      try {
-        el.scrollIntoView({ block: 'center', inline: 'center' });
-        el.removeAttribute('disabled');
-        const ev = (type, opts={}) => el.dispatchEvent(new MouseEvent(type, { bubbles:true, cancelable:true, ...opts }));
-        const pev = (type, opts={}) => el.dispatchEvent(new PointerEvent(type, { bubbles:true, cancelable:true, ...opts }));
-        pev('pointerover'); pev('pointerenter'); pev('pointerdown'); ev('mousedown');
-        el.focus?.(); ev('click'); ev('mouseup'); pev('pointerup'); pev('pointerout'); pev('pointerleave');
-      } catch {}
-    };
-
-    const pressKey = (key) => {
-      ['keydown','keypress','keyup'].forEach(type =>
-        nameEl.dispatchEvent(new KeyboardEvent(type, { bubbles:true, cancelable:true, key, code:key }))
-      );
-    };
-
-    const waitForAdded = async (ms=1600) => {
-      const until = Date.now() + ms;
-      while (Date.now() < until) {
-        await sleep(60);
-        if (rowsCount() > before) return true;
-        // many UIs clear inputs after successful add:
-        if ((findEditorNameInput()?.value || '').trim() === '') return true;
-      }
-      return false;
-    };
-
-    const tryClickAdd = async () => {
-      btn = addBtn();
-      if (!btn) return false;
-      fullUserClick(btn);
-      if (await waitForAdded(1500)) return true;
-      // Fallback: Space/Enter often trigger click handlers
-      nameEl.blur?.(); btn.focus?.();
-      [' ' , 'Enter'].forEach(k => {
-        btn.dispatchEvent(new KeyboardEvent('keydown', { bubbles:true, cancelable:true, key:k, code:k }));
-        btn.dispatchEvent(new KeyboardEvent('keyup',   { bubbles:true, cancelable:true, key:k, code:k }));
-      });
-      if (await waitForAdded(1200)) return true;
-      // Last tiny nudge: direct .click() again
-      btn.click();
-      return await waitForAdded(1200);
-    };
-
-    if (await tryClickAdd()) return true;
-
-    if (form?.requestSubmit) form.requestSubmit();
-    else if (form) form.dispatchEvent(new Event('submit', { bubbles:true, cancelable:true }));
-    if (await waitForAdded(1200)) return true;
-
-    const enter = (type) => nameEl.dispatchEvent(new KeyboardEvent(type, { bubbles:true, cancelable:true, key:'Enter', code:'Enter' }));
-    enter('keydown'); enter('keypress'); enter('keyup');
-    if (await waitForAdded(1000)) return true;
-
-    if (await tryClickAdd()) return true;
-
-    // Ultimate fallback: call a public helper if your app exposes it
-    try {
-      if (window.FinishLine?.addHorse) {
-        await window.FinishLine.addHorse({ name: h.name, odds: h.ml_odds || h.odds, jockey: h.jockey, trainer: h.trainer });
-        if (await waitForAdded(1200)) return true;
-      }
-    } catch {}
-
-    // Prevent overwriting next item: clear editor
-    try {
-      if (findEditorNameInput()) findEditorNameInput().value = '';
-      if (getOdds()) getOdds().value = '';
-      if (getJockey()) getJockey().value = '';
-      if (getTrainer()) getTrainer().value = '';
-      [findEditorNameInput(), getOdds(), getJockey(), getTrainer()].forEach(fire);
-    } catch {}
-    return false;
+    const ok = pushHorse(h);
+    clearEditor();
+    return ok;
   }
 
   // Orchestrate OCR → add all horses
@@ -308,6 +271,22 @@
         setHud(`OCR error: ${msg}`);
         alert(`OCR error: ${msg}`);
       }
+    });
+  })();
+
+  // Bind our own Add Horse button to the store/renderer
+  (function bindAddButton(){
+    const btn = document.querySelector('button.add-horse-btn');
+    if (!btn || btn.dataset.bound) return;
+    btn.dataset.bound = '1';
+    btn.addEventListener('click', () => {
+      const n = findEditorNameInput()?.value?.trim();
+      const o = getOdds()?.value?.trim();
+      const j = getJockey()?.value?.trim();
+      const t = getTrainer()?.value?.trim();
+      if (!n) return; // require at least name
+      pushHorse({ name:n, ml_odds:o, jockey:j, trainer:t });
+      clearEditor();
     });
   })();
 })();
