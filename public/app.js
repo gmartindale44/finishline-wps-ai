@@ -168,36 +168,85 @@
     const o = getOdds();    if (o && (h?.ml_odds || h?.odds)) { o.value = h.ml_odds || h.odds; fire(o, 'input'); fire(o); }
     const j = getJockey();  if (j && h?.jockey)  { j.value = h.jockey;  fire(j, 'input'); fire(j); }
     const t = getTrainer(); if (t && h?.trainer) { t.value = h.trainer; fire(t, 'input'); fire(t); }
-    await sleep(50);
+    await sleep(80);
 
     const before = rowsCount();
     const form   = nameEl.closest('form');
     let   btn    = addBtn();
 
-    const tryClickAdd = async () => {
-      btn = addBtn();
-      if (!btn) return false;
-      try { btn.scrollIntoView({ block: 'center', inline: 'center' }); btn.removeAttribute('disabled'); } catch {}
-      btn.click();
-      const deadline = Date.now() + 1800;
-      while (Date.now() < deadline) {
+    const fullUserClick = (el) => {
+      try {
+        el.scrollIntoView({ block: 'center', inline: 'center' });
+        el.removeAttribute('disabled');
+        const ev = (type, opts={}) => el.dispatchEvent(new MouseEvent(type, { bubbles:true, cancelable:true, ...opts }));
+        const pev = (type, opts={}) => el.dispatchEvent(new PointerEvent(type, { bubbles:true, cancelable:true, ...opts }));
+        pev('pointerover'); pev('pointerenter'); pev('pointerdown'); ev('mousedown');
+        el.focus?.(); ev('click'); ev('mouseup'); pev('pointerup'); pev('pointerout'); pev('pointerleave');
+      } catch {}
+    };
+
+    const pressKey = (key) => {
+      ['keydown','keypress','keyup'].forEach(type =>
+        nameEl.dispatchEvent(new KeyboardEvent(type, { bubbles:true, cancelable:true, key, code:key }))
+      );
+    };
+
+    const waitForAdded = async (ms=1600) => {
+      const until = Date.now() + ms;
+      while (Date.now() < until) {
         await sleep(60);
         if (rowsCount() > before) return true;
+        // many UIs clear inputs after successful add:
         if ((findEditorNameInput()?.value || '').trim() === '') return true;
       }
       return false;
     };
 
+    const tryClickAdd = async () => {
+      btn = addBtn();
+      if (!btn) return false;
+      fullUserClick(btn);
+      if (await waitForAdded(1500)) return true;
+      // Fallback: Space/Enter often trigger click handlers
+      nameEl.blur?.(); btn.focus?.();
+      [' ' , 'Enter'].forEach(k => {
+        btn.dispatchEvent(new KeyboardEvent('keydown', { bubbles:true, cancelable:true, key:k, code:k }));
+        btn.dispatchEvent(new KeyboardEvent('keyup',   { bubbles:true, cancelable:true, key:k, code:k }));
+      });
+      if (await waitForAdded(1200)) return true;
+      // Last tiny nudge: direct .click() again
+      btn.click();
+      return await waitForAdded(1200);
+    };
+
     if (await tryClickAdd()) return true;
+
     if (form?.requestSubmit) form.requestSubmit();
     else if (form) form.dispatchEvent(new Event('submit', { bubbles:true, cancelable:true }));
-    await sleep(200);
-    if (rowsCount() > before || (findEditorNameInput()?.value||'') === '') return true;
+    if (await waitForAdded(1200)) return true;
+
     const enter = (type) => nameEl.dispatchEvent(new KeyboardEvent(type, { bubbles:true, cancelable:true, key:'Enter', code:'Enter' }));
     enter('keydown'); enter('keypress'); enter('keyup');
-    await sleep(250);
-    if (rowsCount() > before || (findEditorNameInput()?.value||'') === '') return true;
+    if (await waitForAdded(1000)) return true;
+
     if (await tryClickAdd()) return true;
+
+    // Ultimate fallback: call a public helper if your app exposes it
+    try {
+      if (window.FinishLine?.addHorse) {
+        await window.FinishLine.addHorse({ name: h.name, odds: h.ml_odds || h.odds, jockey: h.jockey, trainer: h.trainer });
+        if (await waitForAdded(1200)) return true;
+      }
+    } catch {}
+
+    // Prevent overwriting next item: clear editor
+    try {
+      if (findEditorNameInput()) findEditorNameInput().value = '';
+      if (getOdds()) getOdds().value = '';
+      if (getJockey()) getJockey().value = '';
+      if (getTrainer()) getTrainer().value = '';
+      [findEditorNameInput(), getOdds(), getJockey(), getTrainer()].forEach(fire);
+    } catch {}
     return false;
   }
 
