@@ -1,12 +1,7 @@
 {
   "functions": {
     "api/*.py": {
-      "runtime": "python3.9",
       "maxDuration": 30
     }
-  },
-  "env": {
-    "OPENAI_API_KEY": "@finishline_openai_api_key",
-    "FINISHLINE_OPENAI_MODEL": "gpt-4o-mini"
   }
 }
