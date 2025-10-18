@@ -7,16 +7,29 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 from pydantic import BaseModel
-from openai import OpenAI
-from PIL import Image
+
+# Try to import OpenAI and PIL with fallback
+try:
+    from openai import OpenAI
+    OPENAI_AVAILABLE = True
+except ImportError as e:
+    print(f"OpenAI import failed: {e}")
+    OPENAI_AVAILABLE = False
+
+try:
+    from PIL import Image
+    PIL_AVAILABLE = True
+except ImportError as e:
+    print(f"PIL import failed: {e}")
+    PIL_AVAILABLE = False
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 MODEL = os.getenv("FINISHLINE_OPENAI_MODEL", "gpt-4o-mini")
 
-if not OPENAI_API_KEY:
-    raise RuntimeError("OPENAI_API_KEY not set")
-
-client = OpenAI(api_key=OPENAI_API_KEY)
+if OPENAI_AVAILABLE and OPENAI_API_KEY:
+    client = OpenAI(api_key=OPENAI_API_KEY)
+else:
+    client = None
 
 class OCRResponse(BaseModel):
     ok: bool
@@ -27,6 +40,16 @@ async def photo_extract(req: Request):
     try:
         if req.method != "POST":
             return JSONResponse({"ok": False, "error": "POST required"}, 405)
+
+        # Check if dependencies are available
+        if not OPENAI_AVAILABLE:
+            return JSONResponse({"ok": False, "error": "OpenAI library not available"}, 500)
+        
+        if not PIL_AVAILABLE:
+            return JSONResponse({"ok": False, "error": "PIL library not available"}, 500)
+            
+        if not client:
+            return JSONResponse({"ok": False, "error": "OpenAI client not initialized"}, 500)
 
         content_type = req.headers.get("content-type", "")
         data = {}
