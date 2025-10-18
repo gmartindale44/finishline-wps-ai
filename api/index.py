@@ -316,10 +316,12 @@ async def call_openai_json(system: str, user: str, model: str = None, temperatur
 # ---------- Analyze and Predict Endpoints ----------
 @router.post("/api/research_predict")
 async def research_predict(payload: AnalyzeRequest):
-    """Analyze race entries with LLM for handicapping insights"""
+    """Analyze race entries with LLM for handicapping insights - Enhanced Debug Version"""
     try:
+        # Enhanced API key validation with detailed logging
         if not OPENAI_API_KEY:
-            return err("NO_API_KEY", "Missing OpenAI API key")
+            print("[research_predict] Missing API key")
+            return err("NO_KEY", "Missing OpenAI API key. Set FINISHLINE_OPENAI_API_KEY in Vercel.", 400)
         
         entries = payload.entries
         if not entries:
@@ -327,23 +329,16 @@ async def research_predict(payload: AnalyzeRequest):
         
         meta = payload.meta or {}
         
+        print(f"[research_predict] Starting analysis with {len(entries)} entries")
+        print(f"[research_predict] MODEL: {OPENAI_MODEL}")
+        print(f"[research_predict] Meta data: {meta}")
+        
         system_prompt = """
-        You are an assistant that analyzes horse race ENTRY SHEETS (images were already OCR'd).
-        Input (from user) is a JSON with "meta" and "entries".
-        Each entry has: name, odds (string like "5/2" or "10/1"), jockey, trainer.
-        Return strictly JSON:
-        {
-          "analyzed": [
-            {
-              "name": string,
-              "notes": string,
-              "strengths": string[],
-              "risks": string[],
-              "formScore": number  // 0-100 confidence
-            }
-          ],
-          "summary": string
-        }
+        You analyze horse race ENTRY SHEETS (not photos). 
+        Input: JSON {meta, entries}. 
+        Each entry has: name, odds, jockey, trainer. 
+        Return JSON {"analyzed":[{"name":string,"notes":string,"strengths":string[],"risks":string[],"formScore":number}]}.
+        Be concise, scores 0–100.
         """
         
         user_data = {
@@ -351,19 +346,55 @@ async def research_predict(payload: AnalyzeRequest):
             "entries": [entry.dict() for entry in entries]
         }
         
-        out = await call_openai_json(system_prompt, json.dumps(user_data))
-        
-        analyzed = out.get("analyzed", [])
-        if not analyzed:
-            return err("NO_ANALYSIS", "AI returned no analysis", 500)
-        
-        return ok({
-            "analyzed": analyzed,
-            "summary": out.get("summary", "")
-        })
+        # Inline OpenAI call to capture detailed errors
+        import httpx
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {OPENAI_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": OPENAI_MODEL,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": json.dumps(user_data)},
+                    ],
+                    "response_format": {"type": "json_object"},
+                    "temperature": 0.2,
+                }
+            )
+            
+            data = response.json()
+            print(f"[research_predict] OpenAI status: {response.status_code}")
+            
+            if not response.is_success:
+                print(f"[research_predict] OpenAI error: {data}")
+                return err("OPENAI_FAIL", data.get('error', {}).get('message', 'OpenAI request failed'), 500)
+            
+            raw = data.get('choices', [{}])[0].get('message', {}).get('content')
+            print(f"[research_predict] Raw output snippet: {raw[:200] if raw else 'None'}")
+            
+            if not raw:
+                raise Exception("No content returned from OpenAI.")
+            
+            try:
+                parsed = json.loads(raw)
+            except json.JSONDecodeError as e:
+                print(f"[research_predict] Parse error: {raw}")
+                raise Exception("AI response not valid JSON.")
+            
+            analyzed = parsed.get("analyzed", [])
+            if not analyzed:
+                print(f"[research_predict] Empty analyzed array: {parsed}")
+                raise Exception("No analyzed results produced by AI.")
+            
+            print(f"[research_predict] Success with {len(analyzed)} entries.")
+            return ok({"analyzed": analyzed})
     
     except Exception as e:
-        print(f"[research_predict] error: {e}")
+        print(f"[research_predict] Fatal error: {e}")
         return err(
             getattr(e, 'code', 'SERVER_ERROR'),
             getattr(e, 'message', 'Unexpected failure'),
@@ -372,10 +403,12 @@ async def research_predict(payload: AnalyzeRequest):
 
 @router.post("/api/predict_wps")
 async def predict_wps(payload: PredictRequest):
-    """Compute W/P/S picks using heuristic-based ranking with optional LLM rationale"""
+    """Compute W/P/S picks using heuristic-based ranking with optional LLM rationale - Enhanced Debug Version"""
     try:
         entries = payload.entries
         analyzed = payload.analyzed or []
+        
+        print(f"[predict_wps] Starting prediction with {len(entries)} entries and {len(analyzed)} analyzed")
         
         if not entries:
             return err("NO_ENTRIES", "No entries to predict", 422)
@@ -405,6 +438,8 @@ async def predict_wps(payload: PredictRequest):
             # Weight odds probability and normalized form score
             score = 0.55 * odds_prob + 0.45 * (form_score / 100)
             
+            print(f"[predict_wps] {entry.name}: odds={entry.mlOdds} (prob={odds_prob:.3f}), form={form_score}, score={score:.3f}")
+            
             merged.append({
                 "name": entry.name,
                 "odds": entry.mlOdds,
@@ -420,6 +455,7 @@ async def predict_wps(payload: PredictRequest):
         
         # Sort by score (highest first)
         merged.sort(key=lambda x: x["score"], reverse=True)
+        print(f"[predict_wps] Sorted ranking: {[m['name'] + f'({m[\"score\"]:.3f})' for m in merged[:3]]}")
         
         win = merged[0] if merged else None
         place = merged[1] if len(merged) > 1 else None
@@ -432,6 +468,7 @@ async def predict_wps(payload: PredictRequest):
         rationale = ""
         try:
             if OPENAI_API_KEY and win and place and show:
+                print(f"[predict_wps] Generating rationale for top 3: {win['name']}, {place['name']}, {show['name']}")
                 system = "You are a handicapping explainer. Return plain text under 120 words."
                 user = f"Top contenders (sorted): {json.dumps([win, place, show])}.\nExplain succinctly why #1 is the win pick, and how #2/#3 compare."
                 
@@ -439,10 +476,13 @@ async def predict_wps(payload: PredictRequest):
                 rationale = out.get("text", "") or out.get("summary", "") or ""
                 if isinstance(out, str):
                     rationale = out
-        except Exception:
+                print(f"[predict_wps] Generated rationale: {rationale[:100]}...")
+        except Exception as e:
+            print(f"[predict_wps] Rationale generation failed: {e}")
             # Non-fatal - rationale can be empty
             pass
         
+        print(f"[predict_wps] Success: WIN={win['name']}, PLACE={place['name']}, SHOW={show['name']}")
         return ok({
             "ranking": merged,
             "picks": {"win": win, "place": place, "show": show},
