@@ -1,15 +1,149 @@
 (() => {
-  // Single, authoritative initializer
   if (window.__finishline_upload_pipeline_v8) return;
   window.__finishline_upload_pipeline_v8 = true;
 
-  const $  = (s, r=document) => r.querySelector(s);
-  const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
+  const $  = (sel, root=document) => root.querySelector(sel);
+  const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+
+  const state = (window.__finishline ||= {});
+  state.horses ||= [];
+  state.race   ||= { date:'', track:'', surface:'', distance:'' };
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // UI: single-app renderer (replaces legacy static form)
+  // ─────────────────────────────────────────────────────────────────────────────
+  const ui = {
+    root: null,
+    mount() {
+      this.root = $('#finishline-app');
+      if (!this.root) return;
+      this.root.innerHTML = this.template();
+      this.bindStaticHandlers();
+      this.render();
+    },
+    template() {
+      return `
+      <section class="fl-card">
+        <header class="fl-header">
+          <h1 class="fl-title">FinishLine WPS AI</h1>
+          <span id="statusBadge" class="badge idle">Idle</span>
+        </header>
+
+        <div class="fl-grid">
+          <div>
+            <label class="fl-label">Race Date</label>
+            <input id="raceDate" class="fl-input" placeholder="mm/dd/yyyy" value="${state.race.date||''}">
+          </div>
+          <div>
+            <label class="fl-label">Track</label>
+            <input id="track" class="fl-input" placeholder="e.g., Churchill Downs" value="${state.race.track||''}">
+          </div>
+          <div>
+            <label class="fl-label">Surface</label>
+            <select id="surface" class="fl-input">
+              ${['Dirt','Turf','Synthetic'].map(s=>`<option ${state.race.surface===s?'selected':''}>${s}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label class="fl-label">Distance</label>
+            <input id="distance" class="fl-input" placeholder="e.g., 1 1/4 miles" value="${state.race.distance||''}">
+          </div>
+        </div>
+
+        <h2 class="fl-subtitle">Horse Data</h2>
+        <div class="fl-row add-row">
+          <input id="add-name" class="fl-input" placeholder="Horse Name">
+          <input id="add-odds" class="fl-input fl-compact" placeholder="ML Odds (e.g., 5/2)">
+          <input id="add-jockey" class="fl-input" placeholder="Jockey">
+          <input id="add-trainer" class="fl-input" placeholder="Trainer">
+          <button class="fl-btn add-horse-btn">Add Horse</button>
+        </div>
+
+        <div class="fl-table-wrap">
+          <div class="fl-table-head">
+            <div>#</div><div>Horse</div><div>ML Odds</div><div>Jockey</div><div>Trainer</div><div></div>
+          </div>
+          <div id="horseList" class="fl-table-body"></div>
+        </div>
+
+        <div class="fl-actions">
+          <button id="btn-choose" class="fl-btn-secondary">Choose Photos / PDF</button>
+          <button id="btn-analyze" class="fl-btn">Analyze Photos with AI</button>
+          <button id="btn-predict" class="fl-btn accent">Predict W/P/S</button>
+        </div>
+
+        <div class="fl-note" id="ocrResult">Upload a sheet to auto-extract horses.</div>
+      </section>`;
+    },
+    bindStaticHandlers() {
+      // race meta
+      const bind = (id, key) => {
+        const el = $('#'+id);
+        if (el) el.addEventListener('input', () => { state.race[key] = el.value.trim(); });
+      };
+      bind('raceDate','date'); bind('track','track'); bind('surface','surface'); bind('distance','distance');
+
+      // file picker
+      const btnChoose = $('#btn-choose');
+      const fileInput = $('#fl-file-input');
+      if (btnChoose && fileInput) {
+        btnChoose.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', onFilesChosen);
+      }
+      // add horse
+      const addBtn = $('.add-horse-btn');
+      if (addBtn) {
+        addBtn.addEventListener('click', () => {
+          const name = $('#add-name')?.value?.trim();
+          const ml_odds = $('#add-odds')?.value?.trim();
+          const jockey = $('#add-jockey')?.value?.trim();
+          const trainer = $('#add-trainer')?.value?.trim();
+          if (!name) return;
+          pushHorse({name, ml_odds, jockey, trainer});
+          ['add-name','add-odds','add-jockey','add-trainer'].forEach(id=>{ const el=$('#'+id); if(el) el.value=''; });
+        });
+      }
+      // analyze/predict
+      const aBtn = $('#btn-analyze'); const pBtn = $('#btn-predict');
+      if (aBtn && !aBtn.dataset.bound) { aBtn.dataset.bound='1'; aBtn.addEventListener('click', onAnalyze); }
+      if (pBtn && !pBtn.dataset.bound) { pBtn.dataset.bound='1'; pBtn.addEventListener('click', onPredict); }
+    },
+    render() {
+      // horses
+      const list = $('#horseList'); if (!list) return;
+      list.innerHTML = state.horses.map((h, i) => `
+        <div class="fl-row">
+          <div>${i+1}</div>
+          <div>${esc(h.name)}</div>
+          <div>${esc(h.ml_odds||'')}</div>
+          <div>${esc(h.jockey||'')}</div>
+          <div>${esc(h.trainer||'')}</div>
+          <div><button data-rm="${i}" class="fl-mini danger">Remove</button></div>
+        </div>
+      `).join('') || `<div class="fl-empty">No horses yet. Upload a sheet or add manually.</div>`;
+      // remove handlers
+      $$('#horseList button[data-rm]').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+          const idx = +btn.dataset.rm;
+          state.horses.splice(idx,1);
+          ui.render();
+        });
+      });
+    }
+  };
+
+  // Escape html
+  const esc = (s) => (s??'').toString().replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+
+  // Kick UI
+  ui.mount();
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // OCR: helpers (we keep your existing pipeline)
+  // ─────────────────────────────────────────────────────────────────────────────
+  const setHud = (msg) => console.log('[FinishLine]', msg);
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   const fire  = (el) => { if (!el) return; el.dispatchEvent(new Event('input',{bubbles:true})); el.dispatchEvent(new Event('change',{bubbles:true})); };
-  const hud = $('#ocrHud');
-  const setHud = (msg) => { if (hud) hud.textContent = msg || ''; };
-  const loud   = (...a) => { console.log('%c[FinishLine]', 'color:#7cf;font-weight:bold', ...a); };
 
   // Remove "required" on any race-info inputs (no blockers)
   (function relaxAllRequired() {
@@ -59,12 +193,23 @@
     return 0;
   };
 
+  // Find the real "Add Horse" button (based on your DOM)
+  const addBtn = () => {
+    const textMatch = (el) => /(^|\b)add\s*horse(\b|$)/i.test((el.textContent||el.value||'').trim());
+    let btn =
+      document.querySelector('[data-action="add-horse"]') ||
+      document.getElementById('addHorseBtn') ||
+      document.querySelector('.add-horse, button.add-horse, button.add-horse-btn, .add-horse-btn, .button.add-horse-btn');
+    if (btn) return btn;
+    let fallback = $$('button, a, input[type="button"], input[type="submit"]').find(textMatch);
+    if (fallback) return fallback;
+    const scope = editorScope();
+    return $$('button, a, input[type="button"], input[type="submit"]', scope).find(textMatch) || null;
+  };
+
   // ──────────────────────────────────────────────────────────────────────────
   // Horses store + renderer (decoupled from missing legacy handlers)
   // ──────────────────────────────────────────────────────────────────────────
-  const state = (window.__finishline ||= {});
-  state.horses ||= [];
-
   const horsesListEl = $('#horsesList');
   const clearEditor = () => {
     const n = findEditorNameInput(); if (n) n.value = '';
@@ -114,7 +259,7 @@
     const key = canon.name.toLowerCase();
     if (state.horses.some(x => x.name.toLowerCase() === key)) return false;
     state.horses.push(canon);
-    renderHorses();
+    ui.render();
     return true;
   };
 
@@ -240,12 +385,12 @@
     setRaceMeta(extracted?.race || data?.race || {});
     let added = 0;
     for (const h of horses) { if (await addHorseRow(h)) added++; }
-    const badge  = $('#statusBadge') || $('[data-status-badge]') || $('.badge.idle') || $('.idle');
+    const badge  = $('#statusBadge') || $('[data-status-badge]') || $('.badge');
     if (badge) { badge.textContent = 'Ready to analyze'; badge.className = 'badge ready'; }
     const result = $('#ocrResult') || $('[data-ocr-result]');
     if (result) { result.textContent = `OCR parsed and populated ${added} horse${added===1?'':'s'}.`; result.dataset.type='info'; }
     setHud(`Parsed ${added}/${horses.length} horses.`);
-    syncToLegacyStore(); // ensure prediction engine sees latest data
+    // UI now owns the list; legacy sync optional
   }
 
   // Bind single, canonical button
@@ -296,65 +441,22 @@
 
   // Bind our own Add Horse button to the store/renderer
   (function bindAddButton(){
-    const btn = document.querySelector('button.add-horse-btn');
-    if (!btn || btn.dataset.bound) return;
-    btn.dataset.bound = '1';
-    btn.addEventListener('click', () => {
-      const n = findEditorNameInput()?.value?.trim();
-      const o = getOdds()?.value?.trim();
-      const j = getJockey()?.value?.trim();
-      const t = getTrainer()?.value?.trim();
-      if (!n) return; // require at least name
-      pushHorse({ name:n, ml_odds:o, jockey:j, trainer:t });
-      clearEditor();
-      syncToLegacyStore();
-    });
+    // handled by ui.bindStaticHandlers()
   })();
 
   // ─────────────────────────────────────────────────────────────────────────────
   // ANALYZE & PREDICT — progress bars + payload = { race, horses }
+  // (re-using earlier code; now sourced from UI state)
   // ─────────────────────────────────────────────────────────────────────────────
-  const getRaceMetaFromForm = () => {
-    const by = (sel) => document.querySelector(sel)?.value?.trim() || '';
-    return {
-      date: by('#raceDate, [name="raceDate"]') || '',
-      track: by('#track, [name="track"]') || '',
-      surface: by('#surface, [name="surface"]') || '',
-      distance: by('#distance, [name="distance"]') || '',
-    };
-  };
+  const getRaceMetaFromForm = () => ({ ...state.race });
 
-  // Try to read horses from the native list, if the app already renders one
   const readHorsesFromNativeList = () => {
-    const rows = Array.from(document.querySelectorAll(
-      // common patterns we've seen in your app:
-      '.horse-row, .horses-list .horse-row, [data-horse-row], .horse-list .row'
-    ));
-    const parseCell = (el) => el?.textContent?.trim() || '';
-    const parsed = rows.map(row => {
-      const cells = row.querySelectorAll('div, span, td');
-      // Attempt to map columns: [#, name, odds, jockey, trainer]
-      const name    = parseCell(cells[1]);
-      const ml_odds = parseCell(cells[2]);
-      const jockey  = parseCell(cells[3]);
-      const trainer = parseCell(cells[4]);
-      return normalizeHorse({ name, ml_odds, jockey, trainer });
-    }).filter(Boolean);
-    return parsed;
+    // Not needed anymore; UI state is source of truth
+    return [];
   };
 
   const collectForCompute = () => {
-    // Prefer OCR store; if empty, fall back to native list
-    const a = Array.isArray(state.horses) ? state.horses : [];
-    const b = readHorsesFromNativeList();
-    // Deduplicate by name
-    const map = new Map();
-    [...a, ...b].forEach(h => {
-      if (!h?.name) return;
-      const key = h.name.toLowerCase();
-      if (!map.has(key)) map.set(key, h);
-    });
-    return Array.from(map.values());
+    return Array.isArray(state.horses) ? state.horses : [];
   };
 
   const postJSON = async (url, body) => {
@@ -401,50 +503,55 @@
     setHud(msg);
   };
 
-  // Bind analyze
-  (function bindAnalyze(){
-    const btn = Array.from(document.querySelectorAll('button, a'))
-      .find(el => /analyz(e|ing)\s+photos/i.test(el.textContent||''));
-    if (!btn || btn.dataset.bound) return;
-    btn.dataset.bound = '1';
-    btn.addEventListener('click', async () => {
-      const horses = collectForCompute();
-      if (!horses.length) { alert('No horses to analyze yet.'); return; }
-      const race = getRaceMetaFromForm();
-      try {
-        const json = await withProgress(btn, 'Analyzing', () =>
-          postJSON('/api/research_predict', { race, horses })
-        );
-        window.__finishline_last_analysis = json;
-        showResultToast('Analysis complete. Ready to predict.');
-        showBadge('Ready to predict','ready');
-      } catch (err) {
-        alert('Analyze error: ' + (err?.message || String(err)));
-      }
-    });
-  })();
+  async function onAnalyze() {
+    const horses = collectForCompute();
+    if (!horses.length) { alert('No horses to analyze yet.'); return; }
+    const race = getRaceMetaFromForm();
+    const btn = $('#btn-analyze');
+    try {
+      const json = await withProgress(btn, 'Analyzing', () =>
+        postJSON('/api/research_predict', { race, horses })
+      );
+      window.__finishline_last_analysis = json;
+      showResultToast('Analysis complete. Ready to predict.');
+      showBadge('Ready to predict','ready');
+    } catch (err) {
+      alert('Analyze error: ' + (err?.message || String(err)));
+    }
+  }
 
-  // Bind predict
-  (function bindPredict(){
-    const btn = Array.from(document.querySelectorAll('button, a'))
-      .find(el => /predict\s*W\/P\/S/i.test(el.textContent||''));
-    if (!btn || btn.dataset.bound) return;
-    btn.dataset.bound = '1';
-    btn.addEventListener('click', async () => {
-      const horses = collectForCompute();
-      if (!horses.length) { alert('No horses to predict yet.'); return; }
-      const race = getRaceMetaFromForm();
-      try {
-        const json = await withProgress(btn, 'Predicting', () =>
-          postJSON('/api/predict_wps', { race, horses, analysis: window.__finishline_last_analysis || null })
-        );
-        window.__finishline_last_prediction = json;
-        // Light-touch render hook (your page can read window.__finishline_last_prediction)
-        showResultToast('Prediction ready. Scroll for results or open the console object: __finishline_last_prediction');
-        showBadge('Prediction ready','ready');
-      } catch (err) {
-        alert('Predict error: ' + (err?.message || String(err)));
-      }
-    });
-  })();
+  async function onPredict() {
+    const horses = collectForCompute();
+    if (!horses.length) { alert('No horses to predict yet.'); return; }
+    const race = getRaceMetaFromForm();
+    const btn = $('#btn-predict');
+    try {
+      const json = await withProgress(btn, 'Predicting', () =>
+        postJSON('/api/predict_wps', { race, horses, analysis: window.__finishline_last_analysis || null })
+      );
+      window.__finishline_last_prediction = json;
+      showResultToast('Prediction ready. Open console: __finishline_last_prediction');
+      showBadge('Prediction ready','ready');
+    } catch (err) {
+      alert('Predict error: ' + (err?.message || String(err)));
+    }
+  }
+
+  // File selection → auto-extract
+  async function onFilesChosen(e) {
+    const files = Array.from(e.target.files||[]);
+    if (!files.length) return;
+    const fd = new FormData();
+    files.forEach(f => fd.append('files', f, f.name));
+    try {
+      const res = await fetch('/api/photo_extract_openai_b64', { method:'POST', body: fd });
+      const json = await res.json();
+      if (!res.ok || json.ok===false) throw new Error(JSON.stringify(json?.error||json));
+      await processOCR(json);
+    } catch (err) {
+      alert(`Upload/Extract error: ${err?.message||err}`);
+    } finally {
+      e.target.value = ''; // reset input
+    }
+  }
 })();
