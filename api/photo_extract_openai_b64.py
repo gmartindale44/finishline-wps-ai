@@ -1,6 +1,6 @@
 import os, base64, json
 from io import BytesIO
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 
 from starlette.applications import Starlette
 from starlette.requests import Request
@@ -10,70 +10,57 @@ from pydantic import BaseModel
 from openai import OpenAI
 from PIL import Image
 
-# --- Load API Key ---
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 MODEL = os.getenv("FINISHLINE_OPENAI_MODEL", "gpt-4o-mini")
 
 if not OPENAI_API_KEY:
-    raise RuntimeError("OPENAI_API_KEY is not set")
+    raise RuntimeError("OPENAI_API_KEY not set")
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-class ExtractResponse(BaseModel):
+class OCRResponse(BaseModel):
     ok: bool
     horses: List[Dict[str, Any]] = []
-    error: Optional[str] = None
-    meta: Dict[str, Any] = {}
+    error: str = ""
 
-def _error(status: int, msg: str):
-    print(f"[photo_extract] ERROR: {msg}")
-    return JSONResponse({"ok": False, "error": msg}, status_code=status)
-
-async def handler(req: Request):
+async def photo_extract(req: Request):
     try:
         if req.method != "POST":
-            return _error(405, "POST required")
+            return JSONResponse({"ok": False, "error": "POST required"}, 405)
 
-        form_data = {}
         content_type = req.headers.get("content-type", "")
+        data = {}
 
         if "multipart/form-data" in content_type:
             form = await req.form()
-            form_data = dict(form)
+            data = dict(form)
         else:
             try:
-                form_data = await req.json()
+                data = await req.json()
             except Exception:
                 pass
 
-        # Try both multipart and base64
         img_bytes = None
-        if "file" in form_data and hasattr(form_data["file"], "read"):
-            img_bytes = form_data["file"].read()
-        elif "b64" in form_data:
-            b64 = form_data["b64"]
-            if "," in b64:
-                b64 = b64.split(",", 1)[1]
+        if "file" in data and hasattr(data["file"], "read"):
+            img_bytes = data["file"].read()
+        elif "b64" in data:
+            b64 = data["b64"].split(",", 1)[-1]
             img_bytes = base64.b64decode(b64)
 
         if not img_bytes:
-            return _error(400, "No image data received")
+            return JSONResponse({"ok": False, "error": "No image received"}, 400)
 
-        # Validate
         try:
             Image.open(BytesIO(img_bytes)).verify()
         except Exception:
-            print("[photo_extract] Warning: non-image bytes provided; continuing anyway")
+            print("[warn] file validation failed — continuing anyway")
 
-        # ---- OCR Prompt ----
         prompt = (
-            "Extract all horses, odds, jockeys, and trainers from this race program. "
-            "Return only JSON: {\"horses\": [{\"name\":\"Clarita\",\"odds\":\"10/1\",\"jockey\":\"Luis Saez\",\"trainer\":\"Philip Bauer\"}]} "
-            "Do not include explanations."
+            "Extract all horses from this race sheet as JSON with fields "
+            "name, odds, jockey, trainer. Return JSON only."
         )
 
         img_b64 = base64.b64encode(img_bytes).decode("utf-8")
-
         completion = client.chat.completions.create(
             model=MODEL,
             messages=[
@@ -90,7 +77,7 @@ async def handler(req: Request):
                 },
             ],
             temperature=0.2,
-            max_tokens=1000,
+            max_tokens=900,
         )
 
         raw = completion.choices[0].message.content.strip()
@@ -99,22 +86,15 @@ async def handler(req: Request):
             raw = raw[raw.find("\n") + 1 :]
 
         try:
-            parsed = json.loads(raw)
+            horses = json.loads(raw).get("horses", [])
         except Exception:
-            print("[photo_extract] Failed JSON parse, returning raw text")
-            return _error(500, f"OCR returned unparseable data: {raw[:200]}")
+            return JSONResponse({"ok": False, "error": "Bad OCR parse", "raw": raw}, 500)
 
-        horses = parsed.get("horses", [])
-        if not horses:
-            return _error(500, "No horses found in image")
-
-        return JSONResponse(
-            ExtractResponse(ok=True, horses=horses, meta={"model": MODEL}).model_dump(),
-            status_code=200,
-        )
+        return JSONResponse({"ok": True, "horses": horses}, 200)
 
     except Exception as e:
-        return _error(500, f"OCR server crash: {e}")
+        print("photo_extract_openai_b64.py crashed:", e)
+        return JSONResponse({"ok": False, "error": str(e)}, 500)
 
-routes = [Route("/api/photo_extract_openai_b64", handler, methods=["POST"])]
+routes = [Route("/api/photo_extract_openai_b64", photo_extract, methods=["POST"])]
 app = Starlette(routes=routes)
