@@ -1,1 +1,0 @@
-from apps.api.api_main import app  # FastAPI instance exported as `app` for Vercel
