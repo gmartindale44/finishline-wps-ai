@@ -7,16 +7,6 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 from pydantic import BaseModel
-from openai import OpenAI
-from PIL import Image
-
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-MODEL = os.getenv("FINISHLINE_OPENAI_MODEL", "gpt-4o-mini")
-
-if not OPENAI_API_KEY:
-    raise RuntimeError("OPENAI_API_KEY not set")
-
-client = OpenAI(api_key=OPENAI_API_KEY)
 
 class OCRResponse(BaseModel):
     ok: bool
@@ -50,47 +40,13 @@ async def photo_extract(req: Request):
         if not img_bytes:
             return JSONResponse({"ok": False, "error": "No image received"}, 400)
 
-        try:
-            Image.open(BytesIO(img_bytes)).verify()
-        except Exception:
-            print("[warn] file validation failed — continuing anyway")
+        # For now, return a mock response to test the endpoint structure
+        mock_horses = [
+            {"name": "Test Horse 1", "odds": "5-1", "jockey": "Test Jockey", "trainer": "Test Trainer"},
+            {"name": "Test Horse 2", "odds": "3-1", "jockey": "Test Jockey 2", "trainer": "Test Trainer 2"}
+        ]
 
-        prompt = (
-            "Extract all horses from this race sheet as JSON with fields "
-            "name, odds, jockey, trainer. Return JSON only."
-        )
-
-        img_b64 = base64.b64encode(img_bytes).decode("utf-8")
-        completion = client.chat.completions.create(
-            model=MODEL,
-            messages=[
-                {"role": "system", "content": "You are an OCR parser for race sheets."},
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {
-                            "type": "image_url",
-                            "image_url": f"data:image/png;base64,{img_b64}",
-                        },
-                    ],
-                },
-            ],
-            temperature=0.2,
-            max_tokens=900,
-        )
-
-        raw = completion.choices[0].message.content.strip()
-        if raw.startswith("```"):
-            raw = raw.strip("`")
-            raw = raw[raw.find("\n") + 1 :]
-
-        try:
-            horses = json.loads(raw).get("horses", [])
-        except Exception:
-            return JSONResponse({"ok": False, "error": "Bad OCR parse", "raw": raw}, 500)
-
-        return JSONResponse({"ok": True, "horses": horses}, 200)
+        return JSONResponse({"ok": True, "horses": mock_horses}, 200)
 
     except Exception as e:
         print("photo_extract_openai_b64.py crashed:", e)
