@@ -7,21 +7,49 @@ from typing import List, Optional, Dict, Any
 import base64, re, os, json
 
 # ---------- Models ----------
-class HorseIn(BaseModel):
-    name: str
-    odds: Optional[str] = None
-    jockey: Optional[str] = None
-    trainer: Optional[str] = None
-
-class RaceIn(BaseModel):
+class RaceMeta(BaseModel):
     date: Optional[str] = None
     track: Optional[str] = None
     surface: Optional[str] = None
     distance: Optional[str] = None
 
-class AnalyzePredictIn(BaseModel):
-    race: RaceIn
-    horses: List[HorseIn]
+class RaceEntry(BaseModel):
+    name: str
+    mlOdds: Optional[str] = None
+    jockey: Optional[str] = None
+    trainer: Optional[str] = None
+
+class AnalyzeRequest(BaseModel):
+    meta: Optional[RaceMeta] = None
+    entries: List[RaceEntry]
+
+class AnalyzeResult(BaseModel):
+    name: str
+    notes: str
+    strengths: Optional[List[str]] = None
+    risks: Optional[List[str]] = None
+    formScore: Optional[int] = None
+
+class AnalyzeResponse(BaseModel):
+    ok: bool
+    data: Optional[Dict[str, Any]] = None
+    error: Optional[Dict[str, Any]] = None
+
+class PredictRequest(BaseModel):
+    meta: Optional[RaceMeta] = None
+    entries: List[RaceEntry]
+    analyzed: Optional[List[AnalyzeResult]] = None
+
+class Prediction(BaseModel):
+    finishOrder: List[str]
+    winPlaceShow: Dict[str, str]
+    confidence: float
+    rationale: str
+
+class PredictResponse(BaseModel):
+    ok: bool
+    data: Optional[Prediction] = None
+    error: Optional[Dict[str, Any]] = None
 
 # Always reply in this envelope
 def ok(data: Any):
@@ -234,19 +262,145 @@ async def photo_extract_openai_b64(
     except Exception as e:
         return err("SERVER_ERROR", str(e), 500)
 
-# ---------- New tolerant endpoints ----------
+# ---------- Analyze and Predict Endpoints ----------
 @router.post("/api/research_predict")
-async def research_predict(payload: AnalyzePredictIn):
-    # plug into your existing analyzer; this stub returns passthrough
-    # data = await run_research(payload)
-    data = {"status": "analyzed", "horses": [h.dict() for h in payload.horses]}
-    return ok(data)
+async def research_predict(payload: AnalyzeRequest):
+    """Analyze race entries with LLM for handicapping insights"""
+    try:
+        if not OPENAI_API_KEY:
+            return err("NO_API_KEY", "Missing OpenAI API key")
+        
+        entries = payload.entries
+        if not entries:
+            return err("NO_ENTRIES", "No entries to analyze", 422)
+        
+        meta = payload.meta or {}
+        
+        system_prompt = """
+        You analyze horse race *entry sheets* (not animal photos). You receive a list of horses with optional ML odds, jockey, trainer and optional race meta (track/surface/distance/date).
+        Return concise handicapping notes. Do **not** fabricate data beyond the sheet context; when uncertain, keep notes generic.
+        Output JSON with {"analyzed":[{"name":string, "notes":string, "strengths":string[], "risks":string[], "formScore":number}]}.
+        formScore: 0..100 (higher is better). Keep it simple, consistent, and helpful.
+        """
+        
+        user_data = {
+            "meta": meta,
+            "entries": [entry.dict() for entry in entries]
+        }
+        
+        import httpx
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {OPENAI_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": OPENAI_MODEL,
+                    "response_format": {"type": "json_object"},
+                    "temperature": 0.2,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": json.dumps(user_data)},
+                    ],
+                }
+            )
+            
+            if response.status_code != 200:
+                error_data = response.json()
+                return err("LLM_ERROR", error_data.get('error', {}).get('message', 'LLM error'), 500)
+            
+            result = response.json()
+            content = result.get('choices', [{}])[0].get('message', {}).get('content', '{}')
+            
+            try:
+                parsed = json.loads(content)
+            except json.JSONDecodeError:
+                # Handle nested JSON
+                import re
+                match = re.search(r'\{[\s\S]*\}$', content)
+                parsed = json.loads(match.group(0)) if match else {"analyzed": []}
+            
+            analyzed = parsed.get("analyzed", [])
+            
+            return ok({"analyzed": analyzed})
+    
+    except Exception as e:
+        return err("SERVER_ERROR", f"Analyze failed: {str(e)}", 500)
 
 @router.post("/api/predict_wps")
-async def predict_wps(payload: AnalyzePredictIn):
-    # plug into your existing predictor; this stub returns an example ranking
-    ranking = [{"name": h.name, "score": 1.0} for h in payload.horses[:3]]
-    return ok({"ranking": ranking})
+async def predict_wps(payload: PredictRequest):
+    """Compute W/P/S picks with confidence using LLM"""
+    try:
+        if not OPENAI_API_KEY:
+            return err("NO_API_KEY", "Missing OpenAI API key")
+        
+        entries = payload.entries
+        if not entries:
+            return err("NO_ENTRIES", "No entries to predict", 422)
+        
+        meta = payload.meta or {}
+        analyzed = payload.analyzed or []
+        
+        system_prompt = """
+        You are a careful handicapper. Given a race entry sheet and (optionally) prior analysis with form scores, produce a conservative W/P/S prediction.
+        Return JSON only with:
+        {
+          "finishOrder": [name, name, ...],
+          "winPlaceShow": { "win": name, "place": name, "show": name },
+          "confidence": number, // 0..1
+          "rationale": string
+        }
+        If prior analyzed data is available, prefer higher formScore but also respect ML odds patterns.
+        Avoid overconfidence; base confidence on clarity of separation among top 3.
+        """
+        
+        user_data = {
+            "meta": meta,
+            "entries": [entry.dict() for entry in entries],
+            "analyzed": [analysis.dict() for analysis in analyzed]
+        }
+        
+        import httpx
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {OPENAI_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": OPENAI_MODEL,
+                    "response_format": {"type": "json_object"},
+                    "temperature": 0.2,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": json.dumps(user_data)},
+                    ],
+                }
+            )
+            
+            if response.status_code != 200:
+                error_data = response.json()
+                return err("LLM_ERROR", error_data.get('error', {}).get('message', 'LLM error'), 500)
+            
+            result = response.json()
+            content = result.get('choices', [{}])[0].get('message', {}).get('content', '{}')
+            
+            try:
+                parsed = json.loads(content)
+            except json.JSONDecodeError:
+                return err("PARSE_ERROR", "Failed to parse prediction response", 500)
+            
+            # Validate required fields
+            if not parsed.get("finishOrder") or not parsed.get("winPlaceShow"):
+                return err("BAD_SHAPE", "Prediction shape invalid", 500)
+            
+            return ok(parsed)
+    
+    except Exception as e:
+        return err("SERVER_ERROR", f"Predict failed: {str(e)}", 500)
 
 @router.get("/api/health")
 def health():

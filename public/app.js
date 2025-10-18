@@ -133,33 +133,87 @@ function collectForm() {
       trainer: inputs[3].value,
     });
   });
-  return { horses };
+  
+  const meta = {
+    date: document.querySelector('#raceDate')?.value?.trim() || null,
+    track: document.querySelector('#raceTrack')?.value?.trim() || null,
+    surface: document.querySelector('#raceSurface')?.value || null,
+    distance: document.querySelector('#raceDistance')?.value?.trim() || null,
+  };
+  
+  return { entries: horses, meta };
+}
+
+let lastAnalyzed = [];
+
+function setBusy(btn, busy, labelWhenIdle) {
+  if (!btn) return;
+  btn.disabled = busy;
+  btn.textContent = busy ? (btn.dataset.busyLabel || 'Working…') : labelWhenIdle;
 }
 
 async function analyzeWithAI() {
+  const { entries } = collectForm();
+  if (!entries.length) {
+    alert('Please add at least one entry before analyzing.');
+    return;
+  }
+
+  const btn = document.getElementById('analyzeBtn');
+  setBusy(btn, true, 'Analyze Photos with AI');
+  setBadge('Analyzing…');
+
   try {
-    setBadge('Analyzing...');
     const payload = collectForm();
     const res = await callJSON('/api/research_predict', payload);
-    console.log('Analyze results:', res);
+    
+    if (!res.ok) throw res.error || { message: 'Analyze failed' };
+    
+    lastAnalyzed = res.data?.analyzed || [];
+    console.log('Analyze results:', lastAnalyzed);
     setBadge('Ready to predict');
   } catch (e) {
-    alert(`Analyze error: ${e.message}`);
+    const msg = e?.message || e?.detail?.error || 'Analyze failed';
+    alert(`Analyze error: ${msg}`);
     setBadge('Idle');
+  } finally {
+    setBusy(btn, false, 'Analyze Photos with AI');
   }
 }
 
 async function predictWPS() {
+  const { entries } = collectForm();
+  if (!entries.length) {
+    alert('Please add at least one entry before predicting.');
+    return;
+  }
+
+  const btn = document.getElementById('predictBtn');
+  setBusy(btn, true, 'Predict W/P/S');
+  setBadge('Predicting…');
+
   try {
-    setBadge('Predicting...');
     const payload = collectForm();
+    payload.analyzed = lastAnalyzed;
+    
     const res = await callJSON('/api/predict_wps', payload);
-    console.log('Predict results:', res);
-    alert('Prediction complete! See console for results.');
+    
+    if (!res.ok) throw res.error || { message: 'Prediction failed' };
+    
+    const p = res.data;
+    console.log('Predict results:', p);
+    
+    // Show results in alert for now
+    alert(
+      `WIN: ${p.winPlaceShow.win}\nPLACE: ${p.winPlaceShow.place}\nSHOW: ${p.winPlaceShow.show}\n\nConfidence: ${(p.confidence*100).toFixed(0)}%\n\nWhy:\n${p.rationale}`
+    );
     setBadge('Done');
   } catch (e) {
-    alert(`Predict error: ${e.message}`);
-    setBadge('Idle');
+    const msg = e?.message || e?.detail?.error || 'Prediction failed';
+    alert(`Predict error: ${msg}`);
+    setBadge('Ready to predict');
+  } finally {
+    setBusy(btn, false, 'Predict W/P/S');
   }
 }
 
@@ -172,6 +226,13 @@ document.getElementById('predictBtn')?.addEventListener('click', predictWPS);
 window.addEventListener('DOMContentLoaded', () => {
   ensureFilePicker((files) => handleFilesSelected(files));
   setBadge('Idle');
+  
+  // Set busy labels for buttons
+  const analyzeBtn = document.getElementById('analyzeBtn');
+  const predictBtn = document.getElementById('predictBtn');
+  
+  if (analyzeBtn) analyzeBtn.dataset.busyLabel = 'Analyzing… ⏳';
+  if (predictBtn) predictBtn.dataset.busyLabel = 'Predicting… ⏳';
 });
 
 /* ============================================================
