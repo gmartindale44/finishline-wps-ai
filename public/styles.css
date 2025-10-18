@@ -12,22 +12,25 @@
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
 body{background:var(--bg);color:var(--fg);font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif}
-.hero{padding:28px 20px 8px;max-width:1080px;margin:0 auto}
-.logo-row{display:flex;align-items:center;gap:10px}
-.logo-horse{font-size:28px}
+.hero{padding:28px 20px 8px;max-width:1080px;margin:0 auto;text-align:center}
+.logo-row{display:flex;align-items:center;gap:10px;justify-content:center}
+.logo-horse{font-size:28px;text-shadow:0 0 24px rgba(124,55,255,.55), 0 0 10px rgba(29,228,255,.35)}
+h1{font-weight:800;letter-spacing:.3px;color:var(--fg);text-shadow:0 0 24px rgba(124,55,255,.55), 0 0 10px rgba(29,228,255,.35)}
 .subtitle{color:var(--muted);margin:4px 0 0}
-.panel{max-width:1080px;margin:16px auto;padding:20px;background:var(--card);border:1px solid var(--border);border-radius:14px}
+.panel{max-width:1080px;margin:16px auto;padding:20px;background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.35), 0 0 0 1px rgba(124,55,255,.08) inset}
 .panel-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
-.badge{padding:4px 10px;border-radius:999px;background:rgba(124,55,255,.18);color:#d6c6ff}
+.badge{padding:4px 10px;border-radius:999px;background:rgba(124,55,255,.18);color:#d6c6ff;font-weight:600}
 .badge-ok{background:rgba(31,207,122,.15);color:var(--ok)}
 .badge-bad{background:rgba(255,90,122,.15);color:var(--bad)}
+.badge-working{background:rgba(124,55,255,.18);color:#d6c6ff}
 .grid{display:grid;gap:12px}
 .grid-2{grid-template-columns:repeat(2,minmax(0,1fr))}
 .field span{display:block;color:var(--muted);font-size:12px;margin-bottom:6px}
 input,select,button{font:inherit}
 input,select{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:#0f0d1e;color:var(--fg)}
 .horse-form-inline{display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:10px;align-items:center}
-.button{padding:10px 14px;border:0;border-radius:12px;color:#fff;background:linear-gradient(180deg,var(--accent),#5b19f5);cursor:pointer}
+.button{padding:10px 14px;border:0;border-radius:12px;color:#fff;background:linear-gradient(180deg,var(--accent),#5b19f5);cursor:pointer;font-weight:600;transition:.2s transform ease, .2s box-shadow ease;box-shadow:0 8px 18px rgba(124,55,255,.25)}
+.button:hover{transform:translateY(-1px);box-shadow:0 12px 26px rgba(124,55,255,.35)}
 .button.secondary{background:linear-gradient(180deg,#2a2a47,#24223f)}
 .button.success{background:linear-gradient(180deg,#22c37d,#12a766)}
 .button:disabled{opacity:.6;cursor:not-allowed}

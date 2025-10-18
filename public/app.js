@@ -1,3 +1,12 @@
+// ===== Configuration
+const API_BASE = window.__API_BASE__ || import.meta?.env?.VITE_API_BASE || process.env.NEXT_PUBLIC_API_BASE || '';
+
+const ROUTES = {
+  ocr: `${API_BASE}/api/photo_extract_openai_b64`,
+  analyze: `${API_BASE}/api/research_predict`,
+  predict: `${API_BASE}/api/predict_wps`,
+};
+
 // ===== Element lookups
 const $ = (sel) => document.querySelector(sel);
 const photosInput    = $('#photosInput');
@@ -31,6 +40,26 @@ const setBadge = (txt, cls) => {
   ocrBadge.className = 'badge ' + (cls || '');
 };
 
+const toast = (msg) => {
+  alert(msg); // Simple alert for now, can be replaced with toast library
+};
+
+function setButtonProgress(which, pct) {
+  const btn = document.querySelector(which === 'analyze' ? '#analyzeBtn' : '#predictBtn');
+  if (!btn) return;
+  if (pct === 0) btn.dataset.busy = '1';
+  btn.textContent = `${which === 'analyze' ? 'Analyzing' : 'Predicting'}… ${pct}%`;
+  if (pct >= 100) {
+    delete btn.dataset.busy;
+    btn.textContent = which === 'analyze' ? 'Analyze Photos with AI' : 'Predict W/P/S';
+  }
+}
+
+function clearHorseRows() {
+  horses = [];
+  renderHorses();
+}
+
 function renderHorses() {
   if (!horseList) return;
   horseList.innerHTML = '';
@@ -48,18 +77,26 @@ function renderHorses() {
   });
 }
 
-function addHorse(h) {
-  horses.push({
-    name:   h?.name?.trim()   || horseNameInput?.value?.trim() || '',
-    odds:   h?.odds?.trim()   || mlOddsInput?.value?.trim()    || '',
-    jockey: h?.jockey?.trim() || jockeyInput?.value?.trim()    || '',
-    trainer:h?.trainer?.trim()|| trainerInput?.value?.trim()   || '',
-  });
+function addHorseRow(init) {
+  const horse = {
+    name:   init?.name?.trim()   || horseNameInput?.value?.trim() || '',
+    odds:   init?.mlOdds?.trim() || init?.odds?.trim() || mlOddsInput?.value?.trim() || '',
+    jockey: init?.jockey?.trim() || jockeyInput?.value?.trim() || '',
+    trainer:init?.trainer?.trim()|| trainerInput?.value?.trim() || '',
+  };
+  
+  if (!horse.name) return false; // Require at least name
+  
+  horses.push(horse);
+  
+  // Clear form inputs
   if (horseNameInput) horseNameInput.value = '';
   if (mlOddsInput)    mlOddsInput.value = '';
   if (jockeyInput)    jockeyInput.value = '';
   if (trainerInput)   trainerInput.value = '';
+  
   renderHorses();
+  return true;
 }
 
 horseList?.addEventListener('click', (e) => {
@@ -70,101 +107,114 @@ horseList?.addEventListener('click', (e) => {
   renderHorses();
 });
 
-addHorseBtn?.addEventListener('click', () => addHorse());
+addHorseBtn?.addEventListener('click', () => addHorseRow());
 
-// ===== Upload → Auto-extract → Populate horses
+// ===== File Upload → Auto-extract → Populate horses
+async function handleFilesSelected(files) {
+  if (!files || files.length === 0) return;
+
+  setBadge('Extracting...', 'badge-working');
+  try {
+    const form = new FormData();
+    [...files].forEach(f => form.append('files', f));
+
+    const res = await fetch(ROUTES.ocr, {
+      method: 'POST',
+      body: form,
+    });
+
+    // Even if status is 200, you've seen "OCR error". Always parse and inspect:
+    const payload = await res.json();
+    if (!res.ok || payload?.ok === false) {
+      throw new Error(payload?.error?.message || payload?.message || 'OCR failed');
+    }
+
+    const horses = payload?.data?.extracted?.horses || payload?.extracted?.horses || [];
+    if (!Array.isArray(horses) || horses.length === 0) {
+      throw new Error('No horses found in the image(s)');
+    }
+
+    // Replace the list in the UI
+    clearHorseRows();
+    horses.forEach(h => addHorseRow(h));  // This calls the same builder as "Add Horse" button
+
+    setBadge(`Ready to analyze`, 'badge-ok');
+  } catch (err) {
+    console.error('OCR error:', err);
+    setBadge('OCR error', 'badge-bad');
+    toast(`OCR failed: ${err.message ?? err}`);
+  }
+}
+
 choosePhotosBtn?.addEventListener('click', () => photosInput?.click());
 
 photosInput?.addEventListener('change', async (e) => {
   const files = Array.from(e.target.files || []);
   if (!files.length) return;
-  try {
-    setBadge('Extracting…', 'badge-working');
-    const fd = new FormData();
-    files.forEach(f => fd.append('files', f));
-    const res = await fetch('/api/photo_extract_openai_b64', {
-      method: 'POST',
-      body: fd
-    });
-    const data = await res.json();
-    if (!res.ok || !data?.ok) throw new Error(data?.error || 'extract failed');
-    const list = data?.data?.extracted || [];
-    // Normalize and append
-    list.forEach(row => addHorse({
-      name: row?.name || row?.horse || '',
-      odds: row?.odds || row?.ml_odds || '',
-      jockey: row?.jockey || '',
-      trainer: row?.trainer || ''
-    }));
-    setBadge(`OCR parsed and populated ${list.length} horses.`, 'badge-ok');
-  } catch (err) {
-    console.error(err);
-    setBadge('OCR error', 'badge-bad');
-    alert('OCR failed. See console for details.');
-  } finally {
-    // reset file input so same file can be re-selected
-    if (photosInput) photosInput.value = '';
-  }
+  await handleFilesSelected(files);
+  // Reset file input so same file can be re-selected
+  if (photosInput) photosInput.value = '';
 });
 
 // ===== Analyze & Predict
-async function postJSON(url, payload) {
+async function callJSON(url, body) {
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data?.detail || data?.error || `${url} failed`);
+  if (!res.ok) {
+    // This will show the exact "detail" you saw in the alert
+    throw new Error(data?.detail || data?.message || `HTTP ${res.status}`);
+  }
   return data;
 }
 
-analyzeBtn?.addEventListener('click', async () => {
-  if (!horses.length) return alert('Add horses first.');
-  try {
-    analyzeBtn.disabled = true;
-    analyzeBtn.textContent = 'Analyzing…';
-    setBadge('Analyzing…', 'badge-working');
-    const payload = { race: collectRace(), horses };
-    const data = await postJSON('/api/research_predict', payload);
-    console.log('analyze', data);
-    setBadge('Ready to predict', 'badge-ok');
-  } catch (e) {
-    console.error(e);
-    alert(`Analyze error: ${e.message}`);
-    setBadge('Analyze error', 'badge-bad');
-  } finally {
-    analyzeBtn.disabled = false;
-    analyzeBtn.textContent = 'Analyze Photos with AI';
-  }
-});
-
-predictBtn?.addEventListener('click', async () => {
-  if (!horses.length) return alert('Add horses first.');
-  try {
-    predictBtn.disabled = true;
-    predictBtn.textContent = 'Predicting…';
-    setBadge('Predicting…', 'badge-working');
-    const payload = { race: collectRace(), horses };
-    const data = await postJSON('/api/predict_wps', payload);
-    console.log('predict', data);
-    setBadge('Prediction complete', 'badge-ok');
-    // TODO: render predictions UI if needed
-  } catch (e) {
-    console.error(e);
-    alert(`Predict error: ${e.message}`);
-    setBadge('Predict error', 'badge-bad');
-  } finally {
-    predictBtn.disabled = false;
-    predictBtn.textContent = 'Predict W/P/S';
-  }
-});
-
-function collectRace() {
+function collectForm() {
   return {
-    date:    document.querySelector('#raceDate')?.value?.trim() || '',
-    track:   document.querySelector('#raceTrack')?.value?.trim() || '',
-    surface: document.querySelector('#raceSurface')?.value || 'Dirt',
-    distance:document.querySelector('#raceDistance')?.value?.trim() || ''
+    race: {
+      date:    document.querySelector('#raceDate')?.value?.trim() || '',
+      track:   document.querySelector('#raceTrack')?.value?.trim() || '',
+      surface: document.querySelector('#raceSurface')?.value || 'Dirt',
+      distance:document.querySelector('#raceDistance')?.value?.trim() || ''
+    },
+    horses
   };
 }
+
+async function analyzeWithAI() {
+  if (!horses.length) return toast('Add horses first.');
+  try {
+    setBadge('Analyzing...', 'badge-working');
+    setButtonProgress('analyze', 0);
+    const payload = collectForm();
+    const res = await callJSON(ROUTES.analyze, payload);
+    setButtonProgress('analyze', 100);
+    setBadge('Ready to predict', 'badge-ok');
+    console.log('analyze result:', res);
+  } catch (e) {
+    toast(`Analyze error: ${e.message}`);
+    setBadge('Idle');
+  }
+}
+
+async function predictWPS() {
+  if (!horses.length) return toast('Add horses first.');
+  try {
+    setBadge('Predicting...', 'badge-working');
+    setButtonProgress('predict', 0);
+    const payload = collectForm();
+    const res = await callJSON(ROUTES.predict, payload);
+    setButtonProgress('predict', 100);
+    setBadge('Done', 'badge-ok');
+    console.log('predict result:', res);
+    // TODO: showPredictions(res); // render W/P/S results
+  } catch (e) {
+    toast(`Predict error: ${e.message}`);
+    setBadge('Idle');
+  }
+}
+
+analyzeBtn?.addEventListener('click', analyzeWithAI);
+predictBtn?.addEventListener('click', predictWPS);
