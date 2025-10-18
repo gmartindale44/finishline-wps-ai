@@ -9,7 +9,6 @@ const ROUTES = {
 
 // ===== Element lookups
 const $ = (sel) => document.querySelector(sel);
-const photosInput    = $('#photosInput');
 const choosePhotosBtn= $('#choosePhotosBtn');
 const horseList      = $('#horseList');
 const addHorseBtn    = $('#addHorseBtn');
@@ -22,7 +21,7 @@ const predictBtn     = $('#predictBtn');
 const ocrBadge       = $('#ocrStateBadge');
 
 const required = [
-  photosInput, choosePhotosBtn, horseList, addHorseBtn,
+  choosePhotosBtn, horseList, addHorseBtn,
   analyzeBtn, predictBtn, ocrBadge
 ];
 if (required.some(el => !el)) {
@@ -146,15 +145,59 @@ async function handleFilesSelected(files) {
   }
 }
 
-choosePhotosBtn?.addEventListener('click', () => photosInput?.click());
+// --- one-time "self-healing" wiring for the file picker ---
+function ensureFilePicker(onFiles) {
+  let input = document.getElementById('fl-file-input');
 
-photosInput?.addEventListener('change', async (e) => {
-  const files = Array.from(e.target.files || []);
-  if (!files.length) return;
-  await handleFilesSelected(files);
-  // Reset file input so same file can be re-selected
-  if (photosInput) photosInput.value = '';
-});
+  if (!input) {
+    input = document.createElement('input');
+    input.type = 'file';
+    input.id = 'fl-file-input';
+    input.multiple = true;                       // up to 6 images / PDFs
+    input.accept = '.png,.jpg,.jpeg,.webp,.pdf'; // align with your UI text
+    input.style.position = 'fixed';
+    input.style.left = '-9999px';
+    input.style.top = '0';
+    input.style.opacity = '0';
+    document.body.appendChild(input);
+  }
+
+  // always (re)bind change handler
+  input.onchange = () => {
+    if (input?.files && input.files.length) onFiles(input.files);
+    // reset so selecting the same file again still fires
+    if (input) input.value = '';
+  };
+
+  // wire the visible button
+  const btn = document.querySelector('#choosePhotosBtn, button.choose-photos, [data-role="choose-photos"]');
+  if (btn) {
+    btn.type = 'button';
+    btn.onclick = () => input.click();
+    btn.disabled = false;
+  }
+}
+
+// Drag and drop functionality
+function wireDropzone(el) {
+  ['dragenter','dragover'].forEach(evt =>
+    el.addEventListener(evt, e => { e.preventDefault(); el.classList.add('dropping'); })
+  );
+  ['dragleave','drop'].forEach(evt =>
+    el.addEventListener(evt, e => { e.preventDefault(); el.classList.remove('dropping'); })
+  );
+  el.addEventListener('drop', e => {
+    const dt = e.dataTransfer;
+    if (dt?.files?.length) handleFilesSelected(dt.files);
+  });
+}
+
+// Initialize file picker and drag & drop
+ensureFilePicker((files) => handleFilesSelected(files));
+
+// Wire drag and drop zone
+const dz = document.querySelector('#mainPanel, .panel');
+if (dz) wireDropzone(dz);
 
 // ===== Analyze & Predict
 async function callJSON(url, body) {

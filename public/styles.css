@@ -43,3 +43,4 @@ input,select{width:100%;padding:10px 12px;border:1px solid var(--border);border-
 .foot{max-width:1080px;margin:32px auto 48px;padding:0 20px;color:var(--muted)}
 .muted{color:var(--muted)}
 .remove-btn{background:#231b3e;color:#ffb4c2;border:1px solid rgba(255,90,122,.3)}
+.dropping{border:2px dashed var(--accent)!important;background:rgba(124,55,255,.05)!important}
