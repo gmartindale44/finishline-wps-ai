@@ -61,16 +61,16 @@ async function handleFilesSelected(files) {
 
     const payload = await res.json().catch(() => ({}));
     if (!res.ok || payload?.ok === false) {
-      throw new Error(payload?.message || 'OCR failed');
+      throw new Error(payload?.error?.message || payload?.message || 'OCR failed');
     }
 
-    const horses = payload?.data?.extracted || payload?.extracted || [];
-    if (!Array.isArray(horses) || horses.length === 0) {
-      throw new Error('No horses found in the image(s)');
+    const entries = payload?.data?.entries || [];
+    if (!Array.isArray(entries) || entries.length === 0) {
+      throw new Error('No race entries found in the image(s)');
     }
 
     clearHorseRows();
-    horses.forEach((h) => addHorseRow(h));
+    entries.forEach((h) => addHorseRow(h));
 
     setBadge('Ready to analyze');
   } catch (err) {
@@ -173,6 +173,33 @@ window.addEventListener('DOMContentLoaded', () => {
   ensureFilePicker((files) => handleFilesSelected(files));
   setBadge('Idle');
 });
+
+/* ============================================================
+   🌐 GLOBAL HELPER FOR EXTRACTED ENTRIES
+   ============================================================ */
+window.FL_applyExtractedEntries = (entries) => {
+  const list = document.getElementById('horseList');
+  if (!list) return;
+
+  // Clear & populate UI
+  list.innerHTML = '';
+  for (const e of entries) {
+    const row = document.createElement('div');
+    row.className = 'horse-row flex items-center gap-2 mb-1';
+    row.innerHTML = `
+      <input class="horse-name input" placeholder="Horse" value="${e.name || ''}" />
+      <input class="horse-odds input" placeholder="ML Odds" value="${e.mlOdds || ''}" />
+      <input class="horse-jockey input" placeholder="Jockey" value="${e.jockey || ''}" />
+      <input class="horse-trainer input" placeholder="Trainer" value="${e.trainer || ''}" />
+      <button class="btn-remove">Remove</button>
+    `;
+    row.querySelector('.btn-remove')?.addEventListener('click', () => row.remove());
+    list.appendChild(row);
+  }
+
+  const badge = document.getElementById('ocrStateBadge');
+  if (badge) badge.textContent = 'Ready to analyze';
+};
 
 /* ============================================================
    🎨 FINISHLINE DARK NEON STYLE (Tailwind / inline-safe)

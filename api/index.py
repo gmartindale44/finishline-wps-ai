@@ -56,9 +56,7 @@ if _is_enabled() and OPENAI_API_KEY:
 app = FastAPI()
 router = APIRouter()
 
-# Import and include the photo extract router
-from .photo_extract_openai_b64 import router as photo_extract_router
-app.include_router(photo_extract_router)
+# Photo extract router is included below
 
 def _strip_data_url(s: str) -> str:
     if isinstance(s, str) and s.startswith('data:'):
@@ -120,19 +118,25 @@ async def _collect_payload(request: Request,
 
 def _prompt_json_schema() -> str:
     return (
-        "Extract data from the attached racetrack program images. Return ONLY valid JSON matching this schema:\n"
+        "You are an expert at reading horseracing programs, entries, DRF sheets, tote boards, and race-day PDFs.\n\n"
+        "Extract race entries from the provided images. The images may be tables or text lists with columns like:\n"
+        "- Horse Name (may appear as \"Horse\", \"Name\", \"Entry\", or with program number)\n"
+        "- Morning Line Odds (e.g., \"5-2\", \"3/1\", \"10/1\")\n"
+        "- Jockey\n"
+        "- Trainer\n\n"
+        "Output only JSON with this exact schema:\n"
         "{\n"
-        '  "race": {\n'
-        '    "date": "mm/dd/yyyy or ISO",\n'
-        '    "track": "string",\n'
-        '    "surface": "Dirt|Turf|Synthetic|All-Weather|Other",\n'
-        '    "distance": "e.g., 1 1/4 miles"\n'
-        "  },\n"
-        '  "horses": [\n'
-        '    { "name": "string", "ml_odds": "e.g., 5-2", "jockey": "string", "trainer": "string" }\n'
+        '  "entries": [\n'
+        '    { "name": string, "mlOdds": string | null, "jockey": string | null, "trainer": string | null }\n'
         "  ]\n"
-        "}\n"
-        "If something is missing, use null. Output ONLY the JSON object — no markdown."
+        "}\n\n"
+        "Rules:\n"
+        "- Do not include program numbers or post position in the name (if clearly separated)\n"
+        "- Keep odds as the original format (e.g., \"5-2\", \"3/1\", \"10/1\", \"9/5\")\n"
+        "- If a field is missing on the sheet, set it to null\n"
+        "- Ignore headings, footers, scratches, logos, graphics, or decorative text\n"
+        "- This is NOT a photo of animals; it is text/table extraction\n"
+        "- Output ONLY the JSON object — no markdown"
     )
 
 def _run_vision(payload: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -143,7 +147,8 @@ def _run_vision(payload: List[Dict[str, Any]]) -> Dict[str, Any]:
     if _client is None:
         return {"error": "OPENAI_SDK_UNAVAILABLE"}
 
-    content: List[Dict[str, Any]] = [{"type": "text", "text": _prompt_json_schema()}]
+    # Table-first approach
+    content: List[Dict[str, Any]] = [{"type": "text", "text": _prompt_json_schema() + "\n\nLook for a table or structured list with columns similar to:\nHorse | ML Odds | Jockey | Trainer\nReturn entries from top to bottom."}]
     for item in payload[:6]:
         mime = item.get("content_type") or "image/png"
         data_url = f"data:{mime};base64,{item['b64']}"
@@ -153,18 +158,51 @@ def _run_vision(payload: List[Dict[str, Any]]) -> Dict[str, Any]:
         resp = _client.chat.completions.create(
             model=OPENAI_MODEL,
             messages=[{"role": "user", "content": content}],
-            temperature=0
+            temperature=0.1,
+            response_format={"type": "json_object"}
         )
         raw = (resp.choices[0].message.content or "{}").strip()
-        if raw.startswith("```"):
-            raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.DOTALL)
         data = json.loads(raw)
-        # Normalize to horses[]
-        if not isinstance(data.get("horses"), list):
-            if data.get("horse"): data["horses"] = [data["horse"]]
-            else: data["horses"] = []
-            data.pop("horse", None)
-        return {"extracted": data}
+        
+        # Normalize entries
+        entries = data.get("entries", [])
+        if not entries:
+            # Try fallback approach
+            fallback_content = [{"type": "text", "text": _prompt_json_schema() + "\n\nIf no clean table is detected, parse freeform lines.\nCommon patterns:\n- <Horse Name>  <ML Odds>  <Jockey>  <Trainer>\n- <#> <Horse Name> <odds> (Jockey) [Trainer]\n- \"Horse: <Name>\" \"Odds: <odds>\" \"Jockey: <name>\" \"Trainer: <name>\"\n\nReturn what you can; use null for unknown fields."}]
+            for item in payload[:6]:
+                mime = item.get("content_type") or "image/png"
+                data_url = f"data:{mime};base64,{item['b64']}"
+                fallback_content.append({"type": "image_url", "image_url": {"url": data_url}})
+            
+            fallback_resp = _client.chat.completions.create(
+                model=OPENAI_MODEL,
+                messages=[{"role": "user", "content": fallback_content}],
+                temperature=0.1,
+                response_format={"type": "json_object"}
+            )
+            fallback_raw = (fallback_resp.choices[0].message.content or "{}").strip()
+            fallback_data = json.loads(fallback_raw)
+            entries = fallback_data.get("entries", [])
+        
+        if not entries:
+            return {"error": "NO_ENTRIES: No race entries detected in the provided images. Try a sharper crop or a page that shows Horse / Odds / Jockey / Trainer."}
+        
+        # Normalize and clean entries
+        normalized_entries = []
+        for entry in entries:
+            normalized_entry = {
+                "name": (entry.get('name') or '').strip(),
+                "mlOdds": entry.get('mlOdds', '').strip() if entry.get('mlOdds') else None,
+                "jockey": entry.get('jockey', '').strip() if entry.get('jockey') else None,
+                "trainer": entry.get('trainer', '').strip() if entry.get('trainer') else None,
+            }
+            if normalized_entry['name']:
+                normalized_entries.append(normalized_entry)
+        
+        if not normalized_entries:
+            return {"error": "NO_ENTRIES: No valid race entries found after processing"}
+        
+        return {"entries": normalized_entries}
     except Exception as e:
         return {"error": f"OCR_FAILED: {e}"}
 
@@ -177,15 +215,24 @@ async def photo_extract_openai_b64(
     try:
         payload = await _collect_payload(request, files, photos)
         ocr = _run_vision(payload)
-        data = { "received": [ { "filename": p["filename"], "content_type": p["content_type"], "bytes": p["bytes"] } for p in payload ] }
-        if "extracted" in ocr: data["extracted"] = ocr["extracted"]
-        if "error" in ocr:     data["ocr_error"] = ocr["error"]
-        return JSONResponse({"ok": True, "data": data}, status_code=200)
+        
+        if "error" in ocr:
+            return err("OCR_FAILED", ocr["error"])
+        
+        if "entries" not in ocr:
+            return err("NO_ENTRIES", "No race entries found in the provided images")
+        
+        data = {
+            "received": [{"filename": p["filename"], "content_type": p["content_type"], "bytes": p["bytes"]} for p in payload],
+            "entries": ocr["entries"]
+        }
+        
+        return ok(data)
     except HTTPException as he:
         detail = he.detail if isinstance(he.detail, dict) else {"code":"HTTP_ERROR","message":str(he.detail)}
-        return JSONResponse({"ok": False, "error": detail}, status_code=he.status_code)
+        return err("HTTP_ERROR", str(he.detail), he.status_code)
     except Exception as e:
-        return JSONResponse({"ok": False, "error": {"code":"SERVER_ERROR","message":str(e)}}, status_code=500)
+        return err("SERVER_ERROR", str(e), 500)
 
 # ---------- New tolerant endpoints ----------
 @router.post("/api/research_predict")
