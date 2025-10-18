@@ -2,8 +2,33 @@
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, APIRouter, Request
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import base64, re, os, json
+
+# ---------- Models ----------
+class HorseIn(BaseModel):
+    name: str
+    odds: Optional[str] = None
+    jockey: Optional[str] = None
+    trainer: Optional[str] = None
+
+class RaceIn(BaseModel):
+    date: Optional[str] = None
+    track: Optional[str] = None
+    surface: Optional[str] = None
+    distance: Optional[str] = None
+
+class AnalyzePredictIn(BaseModel):
+    race: RaceIn
+    horses: List[HorseIn]
+
+# Always reply in this envelope
+def ok(data: Any):
+    return JSONResponse({"ok": True, "data": data})
+
+def err(code: str, message: str, status: int = 400):
+    return JSONResponse({"ok": False, "error": {"code": code, "message": message}, "detail": []}, status_code=status)
 
 def _env_any(names, default=None):
     for n in names:
@@ -161,6 +186,20 @@ async def photo_extract_openai_b64(
         return JSONResponse({"ok": False, "error": detail}, status_code=he.status_code)
     except Exception as e:
         return JSONResponse({"ok": False, "error": {"code":"SERVER_ERROR","message":str(e)}}, status_code=500)
+
+# ---------- New tolerant endpoints ----------
+@router.post("/api/research_predict")
+async def research_predict(payload: AnalyzePredictIn):
+    # plug into your existing analyzer; this stub returns passthrough
+    # data = await run_research(payload)
+    data = {"status": "analyzed", "horses": [h.dict() for h in payload.horses]}
+    return ok(data)
+
+@router.post("/api/predict_wps")
+async def predict_wps(payload: AnalyzePredictIn):
+    # plug into your existing predictor; this stub returns an example ranking
+    ranking = [{"name": h.name, "score": 1.0} for h in payload.horses[:3]]
+    return ok({"ranking": ranking})
 
 @router.get("/api/health")
 def health():
