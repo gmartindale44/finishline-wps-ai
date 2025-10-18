@@ -1,60 +1,73 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <!-- Brand: NovaSpark Collective LLC | App: FinishLine WPS AI -->
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FinishLine WPS AI</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/styles.css">
-    
-    <!-- Tailwind CDN fallback if styles.css fails to load -->
-    <script>
-    (function(){
-      function ensureCSS(href){
-        var sheets = [].slice.call(document.styleSheets||[]);
-        return sheets.some(function(s){ return (s.href||"").indexOf(href) !== -1; });
-      }
-      var primary = "/styles.css";
-      setTimeout(function(){
-        if(!ensureCSS(primary)) {
-          var cdn = document.createElement("link");
-          cdn.rel = "stylesheet";
-          cdn.href = "https://cdn.tailwindcss.com";
-          document.head.appendChild(cdn);
-          console.warn("styles.css not found; loaded Tailwind CDN fallback");
-        }
-      }, 1500);
-    })();
-    </script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FinishLine WPS AI</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <script defer src="./app.js"></script>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>🏇 FinishLine WPS AI</h1>
-            <h2>Win / Place / Show Predictor</h2>
-            <p class="subtitle">Advanced horse race prediction powered by NovaSpark Collective.</p>
-        </header>
+  <header class="hero">
+    <div class="logo-row">
+      <span class="logo-horse">🐎</span>
+      <h1>FinishLine WPS AI</h1>
+    </div>
+    <p class="subtitle">Win / Place / Show Predictor</p>
+  </header>
 
-        <main id="page-root">
-            <!-- Single unified app root -->
-            <div id="finishline-app"></div>
-            <!-- Hidden file input used by "Choose Photos / PDF" -->
-            <input id="fl-file-input" type="file" accept="image/*,application/pdf" multiple hidden />
-        </main>
-
-        <footer>
-            <p>© <span id="year"></span> NovaSpark Collective LLC · FinishLine WPS AI</p>
-            <div style="margin-top: 1rem; padding: 1rem; background: rgba(139, 92, 246, 0.1); border-radius: 8px; border: 1px solid rgba(139, 92, 246, 0.3); font-size: 0.85rem; color: var(--text-muted);">
-                <strong>Disclaimer:</strong> This tool is for informational/entertainment purposes only and does not constitute betting advice.
-            </div>
-        </footer>
+  <!-- Main Panel (single canonical form) -->
+  <section class="panel panel-main" id="mainPanel">
+    <div class="panel-header">
+      <h2>Race Information</h2>
+      <span class="badge" id="ocrStateBadge">Idle</span>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-    <!-- FinishLine Utilities -->
-    <script src="/app.js"></script>
+    <div class="grid grid-2">
+      <label class="field">
+        <span>Race Date</span>
+        <input id="raceDate" type="text" placeholder="mm/dd/yyyy" />
+      </label>
+      <label class="field">
+        <span>Track</span>
+        <input id="raceTrack" type="text" placeholder="e.g., Churchill Downs" />
+      </label>
+      <label class="field">
+        <span>Surface</span>
+        <select id="raceSurface">
+          <option value="Dirt" selected>Dirt</option>
+          <option value="Turf">Turf</option>
+          <option value="Synthetic">Synthetic</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Distance</span>
+        <input id="raceDistance" type="text" placeholder="e.g., 1 1/4 miles" />
+      </label>
+    </div>
+
+    <h3 class="mt-4">Horse Data</h3>
+    <div class="horse-form-inline">
+      <input id="horseNameInput" type="text" placeholder="Horse Name" />
+      <input id="mlOddsInput"   type="text" placeholder="ML Odds (e.g., 5-2)" />
+      <input id="jockeyInput"   type="text" placeholder="Jockey" />
+      <input id="trainerInput"  type="text" placeholder="Trainer" />
+      <button class="button" id="addHorseBtn">Add Horse</button>
+    </div>
+
+    <ul id="horseList" class="horse-list"></ul>
+
+    <div class="panel actions mt-4">
+      <input id="photosInput" type="file" multiple accept=".png,.jpg,.jpeg,.webp,.pdf" style="display:none" />
+      <button class="button" id="choosePhotosBtn">Choose Photos / PDF</button>
+      <button class="button secondary" id="analyzeBtn">Analyze Photos with AI</button>
+      <button class="button success" id="predictBtn">Predict W/P/S</button>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <p>© NovaSpark Collective LLC · FinishLine WPS AI</p>
+    <p class="muted">Disclaimer: This tool is for informational/entertainment purposes only and does not constitute betting advice.</p>
+  </footer>
 </body>
 </html>
