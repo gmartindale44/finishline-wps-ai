@@ -236,7 +236,7 @@ def _run_vision(payload: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 @router.post("/api/photo_extract_openai_b64")
 async def photo_extract_openai_b64(request: Request):
-    """Extract race entries from images using OpenAI Vision API - Enhanced Debug Version"""
+    """Extract race entries from images using OpenAI Vision API - Simplified Robust Version"""
     try:
         # Enhanced API key validation
         if not OPENAI_API_KEY:
@@ -253,19 +253,13 @@ async def photo_extract_openai_b64(request: Request):
         base64 = body.get("imageBase64")
         
         if not base64 or not base64.startswith("data:image"):
-            print("[photo_extract] Invalid or missing base64 data")
-            return err("NO_IMAGE", "No valid image provided", 400)
+            print("[photo_extract] No valid base64 image received")
+            return err("NO_IMAGE", "Invalid image data", 400)
         
         print("[photo_extract] Starting OCR via OpenAI Vision…")
         
-        # Enhanced system prompt for race entry extraction
-        prompt = """
-        You are an OCR parser for horse racing entry sheets.
-        Extract a JSON array of horses, each with:
-        { "name": string, "odds": string, "jockey": string, "trainer": string }
-        The image is not of horses but a printed program or DRF listing.
-        Return only strict JSON: { "entries": [ ... ] } with no extra text.
-        """
+        # Simplified system prompt for race entry extraction
+        prompt = "Extract horses from this race program image. Return JSON: { entries: [{ name, odds, jockey, trainer }] }"
         
         # Direct OpenAI Vision API call with enhanced error handling
         import httpx
@@ -280,16 +274,9 @@ async def photo_extract_openai_b64(request: Request):
                     "model": "gpt-4o-mini",
                     "messages": [
                         {"role": "system", "content": prompt},
-                        {
-                            "role": "user",
-                            "content": [
-                                {"type": "text", "text": "Extract structured data from this image:"},
-                                {"type": "image_url", "image_url": base64},
-                            ],
-                        },
+                        {"role": "user", "content": [{"type": "image_url", "image_url": base64}]},
                     ],
                     "temperature": 0.1,
-                    "max_tokens": 1200,
                 }
             )
             
@@ -297,31 +284,31 @@ async def photo_extract_openai_b64(request: Request):
             print(f"[photo_extract] OpenAI status: {response.status_code}")
             
             if not response.is_success:
-                print(f"[photo_extract] OpenAI API Error: {data}")
-                return err("OPENAI_FAIL", f"OpenAI request failed: {data.get('error', {}).get('message', 'Unknown')}", 500)
+                print(f"[photo_extract] API error: {data}")
+                return err("OPENAI_FAIL", data.get('error', {}).get('message', 'OpenAI request failed'), 500)
             
-            raw = data.get('choices', [{}])[0].get('message', {}).get('content')
-            print(f"[photo_extract] Raw OCR output snippet: {raw[:200] if raw else 'None'}")
+            text = data.get('choices', [{}])[0].get('message', {}).get('content')
+            print(f"[photo_extract] Raw OCR output snippet: {text[:200] if text else 'None'}")
             
-            if not raw:
-                raise Exception("No OCR output received.")
+            if not text:
+                raise Exception("No OCR text returned.")
             
             try:
-                parsed = json.loads(raw)
+                parsed = json.loads(text)
             except json.JSONDecodeError as e:
-                print(f"[photo_extract] Parse error: {raw}")
-                raise Exception("OCR output not valid JSON.")
+                print(f"[photo_extract] Parse fail: {text}")
+                raise Exception("OCR output not valid JSON")
             
             entries = parsed.get("entries", [])
             if not entries:
                 print(f"[photo_extract] Empty entries array: {parsed}")
-                raise Exception("No entries found in image.")
+                raise Exception("No horses found in image.")
             
-            print(f"[photo_extract] Extracted {len(entries)} horses.")
+            print(f"[photo_extract] ✅ Extracted {len(entries)} horses")
             return ok({"entries": entries})
     
     except Exception as e:
-        print(f"[photo_extract] Fatal OCR error: {e}")
+        print(f"[photo_extract] Fatal: {e}")
         return err(
             getattr(e, 'code', 'OCR_FAILED'),
             getattr(e, 'message', 'OCR failed'),
