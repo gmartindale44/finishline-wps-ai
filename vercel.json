@@ -1,13 +1,12 @@
 {
-  "version": 2,
   "functions": {
-    "api/**/*.py": {
-      "maxDuration": 30,
-      "memory": 1024
+    "api/*.py": {
+      "runtime": "vercel-python@3.9",
+      "maxDuration": 30
     }
   },
-  "routes": [
-    { "src": "/api/(.*)", "dest": "api/index.py" },
-    { "src": "/(.*)", "dest": "/public/$1" }
-  ]
+  "env": {
+    "OPENAI_API_KEY": "@finishline_openai_api_key",
+    "FINISHLINE_OPENAI_MODEL": "gpt-4o-mini"
+  }
 }

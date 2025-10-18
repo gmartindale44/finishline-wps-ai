@@ -44,40 +44,52 @@ function ensureFilePicker(onFiles) {
 }
 
 /* ============================================================
-   🧠 AUTO EXTRACT AFTER CHOOSE
+   🧠 AUTO EXTRACT AFTER CHOOSE - ROBUST OCR FLOW
    ============================================================ */
+async function uploadAndExtract(file) {
+  const fd = new FormData();
+  fd.append("file", file);
+
+  setBadge("Extracting…");
+
+  try {
+    const res = await fetch("/api/photo_extract_openai_b64", { method: "POST", body: fd });
+    const data = await res.json();
+
+    if (!res.ok || !data?.ok) {
+      const msg = data?.error || `OCR failed (${res.status})`;
+      console.error("OCR error:", msg);
+      alert(msg);
+      setBadge("OCR error");
+      return;
+    }
+
+    const horses = Array.isArray(data.horses) ? data.horses : [];
+    // IMPORTANT: Add rows using the existing "Add Horse" button logic / function,
+    // not by printing JSON below the form.
+    clearHorseRows();
+    for (const h of horses) {
+      addHorseRow({
+        name: h.name ?? "",
+        mlOdds: h.odds ?? "",
+        jockey: h.jockey ?? "",
+        trainer: h.trainer ?? "",
+      });
+    }
+
+    setBadge(`Parsed ${horses.length} horses.`);
+    setBadge("Ready to analyze");
+  } catch (err) {
+    console.error("Network error:", err);
+    alert("Network error while extracting");
+    setBadge("OCR error");
+  }
+}
+
 async function handleFilesSelected(files) {
   if (!files || files.length === 0) return;
-
-  setBadge('Extracting...');
-  try {
-    const form = new FormData();
-    [...files].forEach((f) => form.append('files', f));
-
-    const res = await fetch('/api/photo_extract_openai_b64', {
-      method: 'POST',
-      body: form,
-    });
-
-    const payload = await res.json().catch(() => ({}));
-    if (!res.ok || payload?.ok === false) {
-      throw new Error(payload?.error?.message || payload?.message || 'OCR failed');
-    }
-
-    const entries = payload?.data?.entries || [];
-    if (!Array.isArray(entries) || entries.length === 0) {
-      throw new Error('No race entries found in the image(s)');
-    }
-
-    clearHorseRows();
-    entries.forEach((h) => addHorseRow(h));
-
-    setBadge('Ready to analyze');
-  } catch (err) {
-    console.error('OCR error:', err);
-    setBadge('OCR error');
-    alert(`OCR failed: ${err.message ?? err}`);
-  }
+  // Use the first file for OCR
+  await uploadAndExtract(files[0]);
 }
 
 /* ============================================================
@@ -144,7 +156,82 @@ function collectForm() {
   return { entries: horses, meta };
 }
 
-// Analyze and Predict functionality is now handled by finishline-client.js
+// Analyze and Predict functionality
+async function analyzePhotosWithAI() {
+  setBadge("Analyzing…");
+  
+  try {
+    const { entries, meta } = collectForm();
+    if (!entries.length) {
+      alert("No horses found on the form.");
+      return;
+    }
+
+    const res = await fetch("/api/research_predict", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ entries, meta }),
+    });
+    const data = await res.json();
+    
+    if (!res.ok || !data?.ok) {
+      console.error("Analyze failed:", data);
+      alert(`Analyze error: ${data?.error || res.statusText}`);
+      setBadge("Analyze error");
+      return;
+    }
+    
+    // Store analyzed data for predict step
+    window.__FL_ANALYZED__ = data.features || [];
+    setBadge("Ready to predict");
+    
+  } catch (e) {
+    console.error("Analyze error:", e);
+    alert("Analyze error — see console for details.");
+    setBadge("Analyze error");
+  }
+}
+
+async function predictWPS() {
+  setBadge("Predicting…");
+  
+  try {
+    const { entries, meta } = collectForm();
+    if (!entries.length) {
+      alert("No horses found on the form.");
+      return;
+    }
+    
+    const analyzed = window.__FL_ANALYZED__;
+    if (!analyzed) {
+      alert("Please analyze first.");
+      return;
+    }
+
+    const res = await fetch("/api/predict_wps", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ entries, meta, analyzed }),
+    });
+    const data = await res.json();
+    
+    if (!res.ok || !data?.ok) {
+      console.error("Predict failed:", data);
+      alert(`Predict error: ${data?.error || res.statusText}`);
+      setBadge("Predict error");
+      return;
+    }
+
+    setBadge("Done");
+    // TODO: render predictions; keep your prior UI
+    alert("Prediction complete! Check console for details.");
+    
+  } catch (e) {
+    console.error("Predict error:", e);
+    alert("Predict error — see console for details.");
+    setBadge("Predict error");
+  }
+}
 
 /* ============================================================
    🚀 INITIALIZE EVERYTHING
@@ -153,12 +240,18 @@ window.addEventListener('DOMContentLoaded', () => {
   ensureFilePicker((files) => handleFilesSelected(files));
   setBadge('Idle');
   
-  // Set busy labels for buttons
+  // Wire analyze and predict buttons
   const analyzeBtn = document.getElementById('analyzeBtn');
   const predictBtn = document.getElementById('predictBtn');
   
-  if (analyzeBtn) analyzeBtn.dataset.busyLabel = 'Analyzing… ⏳';
-  if (predictBtn) predictBtn.dataset.busyLabel = 'Predicting… ⏳';
+  if (analyzeBtn) {
+    analyzeBtn.addEventListener('click', analyzePhotosWithAI);
+    analyzeBtn.dataset.busyLabel = 'Analyzing… ⏳';
+  }
+  if (predictBtn) {
+    predictBtn.addEventListener('click', predictWPS);
+    predictBtn.dataset.busyLabel = 'Predicting… ⏳';
+  }
 });
 
 /* ============================================================
