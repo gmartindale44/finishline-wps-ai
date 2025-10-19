@@ -1,3 +1,11 @@
+if request.query_params.get("__debug") == "1":
+    return JSONResponse({
+        "ok": True,
+        "handler": "photo_extract_openai_b64.py",
+        "handler_version": "v-debug-3",
+        "commit": os.getenv("VERCEL_GIT_COMMIT_SHA")
+    })
+
 import os, json, base64, traceback, inspect
 from typing import Optional, Tuple
 from io import BytesIO
