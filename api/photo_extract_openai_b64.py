@@ -1,5 +1,7 @@
+from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse
+from starlette.routing import Route
 
 async def handler(request: Request):
     try:
@@ -29,5 +31,7 @@ async def handler(request: Request):
             "error": str(e)
         }, status_code=500)
 
-# Export name expected by Vercel
-app = handler
+# Create Starlette app for Vercel
+app = Starlette(routes=[
+    Route("/api/photo_extract_openai_b64", handler, methods=["GET", "POST", "PUT"])
+])
