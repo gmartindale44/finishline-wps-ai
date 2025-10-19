@@ -1,82 +1,66 @@
-import os, base64, json
+import os
+import json
+import base64
+import traceback
 from io import BytesIO
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
-from starlette.applications import Starlette
-from starlette.requests import Request
-from starlette.responses import JSONResponse
-from starlette.routing import Route
+from fastapi import FastAPI, Request, UploadFile, File, Form
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from PIL import Image
+from openai import OpenAI
 
-# Try to import OpenAI and PIL with fallback
-try:
-    from openai import OpenAI
-    OPENAI_AVAILABLE = True
-except ImportError as e:
-    print(f"OpenAI import failed: {e}")
-    OPENAI_AVAILABLE = False
-
-try:
-    from PIL import Image
-    PIL_AVAILABLE = True
-except ImportError as e:
-    print(f"PIL import failed: {e}")
-    PIL_AVAILABLE = False
-
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+# Try both possible env var names
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or os.getenv("finishline_openai_api_key")
 MODEL = os.getenv("FINISHLINE_OPENAI_MODEL", "gpt-4o-mini")
 
-if OPENAI_AVAILABLE and OPENAI_API_KEY:
-    client = OpenAI(api_key=OPENAI_API_KEY)
-else:
-    client = None
+app = FastAPI(title="FinishLine WPS AI")
+
+def _error(status: int, msg: str, extra: Optional[dict] = None):
+    body = {"ok": False, "error": msg}
+    if extra:
+        body.update(extra)
+    return JSONResponse(body, status_code=status)
+
+@app.get("/api/healthz")
+def healthz():
+    return {
+        "ok": True,
+        "runtime": "python-3.11",
+        "has_key": bool(OPENAI_API_KEY),
+        "model": MODEL,
+        "key_prefix": OPENAI_API_KEY[:6] + "..." if OPENAI_API_KEY else None,
+    }
 
 class OCRResponse(BaseModel):
     ok: bool
     horses: List[Dict[str, Any]] = []
     error: str = ""
 
-async def photo_extract(req: Request):
+@app.post("/api/photo_extract_openai_b64")
+async def photo_extract(file: UploadFile = File(None), b64: str = Form(None)):
     try:
-        if req.method != "POST":
-            return JSONResponse({"ok": False, "error": "POST required"}, 405)
+        if not OPENAI_API_KEY:
+            return _error(500, "OpenAI API key not configured", {"debug": "No API key found"})
 
-        # Check if dependencies are available
-        if not OPENAI_AVAILABLE:
-            return JSONResponse({"ok": False, "error": "OpenAI library not available"}, 500)
-        
-        if not PIL_AVAILABLE:
-            return JSONResponse({"ok": False, "error": "PIL library not available"}, 500)
-            
-        if not client:
-            return JSONResponse({"ok": False, "error": "OpenAI client not initialized"}, 500)
-
-        content_type = req.headers.get("content-type", "")
-        data = {}
-
-        if "multipart/form-data" in content_type:
-            form = await req.form()
-            data = dict(form)
-        else:
-            try:
-                data = await req.json()
-            except Exception:
-                pass
+        client = OpenAI(api_key=OPENAI_API_KEY)
 
         img_bytes = None
-        if "file" in data and hasattr(data["file"], "read"):
-            img_bytes = data["file"].read()
-        elif "b64" in data:
-            b64 = data["b64"].split(",", 1)[-1]
+        if file:
+            img_bytes = await file.read()
+        elif b64:
+            if "," in b64:
+                b64 = b64.split(",", 1)[-1]
             img_bytes = base64.b64decode(b64)
 
         if not img_bytes:
-            return JSONResponse({"ok": False, "error": "No image received"}, 400)
+            return _error(400, "No image received")
 
         try:
             Image.open(BytesIO(img_bytes)).verify()
-        except Exception:
-            print("[warn] file validation failed — continuing anyway")
+        except Exception as e:
+            print(f"[warn] file validation failed: {e}")
 
         prompt = (
             "Extract all horses from this race sheet as JSON with fields "
@@ -110,14 +94,12 @@ async def photo_extract(req: Request):
 
         try:
             horses = json.loads(raw).get("horses", [])
-        except Exception:
-            return JSONResponse({"ok": False, "error": "Bad OCR parse", "raw": raw}, 500)
+        except Exception as e:
+            return _error(500, "Bad OCR parse", {"raw": raw, "parse_error": str(e)})
 
         return JSONResponse({"ok": True, "horses": horses}, 200)
 
     except Exception as e:
-        print("photo_extract_openai_b64.py crashed:", e)
-        return JSONResponse({"ok": False, "error": str(e)}, 500)
-
-routes = [Route("/api/photo_extract_openai_b64", photo_extract, methods=["POST"])]
-app = Starlette(routes=routes)
+        print(f"photo_extract_openai_b64.py crashed: {e}")
+        print(traceback.format_exc())
+        return _error(500, f"OCR server error: {str(e)}")
