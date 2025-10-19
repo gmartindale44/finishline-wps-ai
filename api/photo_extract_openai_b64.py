@@ -7,6 +7,8 @@ from openai import AsyncOpenAI
 from PIL import Image
 from io import BytesIO
 
+# Updated: 2024-01-20 - Async Starlette OCR handler with proper error handling
+
 def _to_b64_str(image_bytes: bytes) -> str:
     return base64.b64encode(image_bytes).decode("ascii")
 
