@@ -3,7 +3,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
-async def handler(request: Request):
+async def photo_extract_handler(request: Request):
     try:
         # lightweight debug GET probe
         if request.method == "GET":
@@ -32,6 +32,5 @@ async def handler(request: Request):
         }, status_code=500)
 
 # Create Starlette app for Vercel
-app = Starlette(routes=[
-    Route("/api/photo_extract_openai_b64", handler, methods=["GET", "POST", "PUT"])
-])
+routes = [Route("/api/photo_extract_openai_b64", endpoint=photo_extract_handler, methods=["GET", "POST", "PUT"])]
+app = Starlette(routes=routes)
