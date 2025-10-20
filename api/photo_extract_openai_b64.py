@@ -1,3 +1,4 @@
+# Updated: 2024-01-20 - Enhanced OCR handler with OpenAI Vision API integration
 from typing import Optional, Tuple, Dict, Any
 import base64, io, re, os, traceback, json
 from starlette.requests import Request
