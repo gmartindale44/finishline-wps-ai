@@ -281,6 +281,168 @@ window.FL_applyExtractedEntries = (entries) => {
   if (badge) badge.textContent = 'Ready to analyze';
 };
 
+// ===========================
+// OCR Upload & Auto-Extract
+// ===========================
+(function initFinishLineOCR() {
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+
+  // File input (prefer explicit selectors; fallback to any file input)
+  const fileInput =
+    $('#photoInput') ||
+    $('[data-photo-input]') ||
+    ($('[data-photos-area]') && $('[data-photos-area] input[type="file"]')) ||
+    $('#fl-file-input') ||
+    $('input[type="file"]');
+
+  // Status badge (use existing or create a minimal one)
+  let badge = $('#ocrStatus') || $('[data-ocr-badge]') || $('#status-badge');
+  if (!badge) {
+    badge = document.createElement('span');
+    badge.id = 'ocrStatus';
+    badge.textContent = 'Idle';
+    badge.style.cssText = 'margin-left:8px;padding:2px 8px;border-radius:10px;background:#3b3b5c;color:#cfc7ff;font-size:12px;';
+    const host = $('h1, header, .brand, .app-title') || document.body;
+    host.appendChild(badge);
+  }
+
+  // Add Horse button
+  const addHorseBtn =
+    $('[data-add-horse]') ||
+    $('#addHorseBtn') ||
+    $$('button, a').find((el) => /add\s*horse/i.test(el.textContent || ''));
+
+  function setBadge(text, tone = 'info') {
+    const theme = {
+      info: ['#3b3b5c', '#cfc7ff'],
+      ok: ['#1f5131', '#b7f7c5'],
+      warn: ['#5a4a1a', '#ffe59c'],
+      err: ['#5b1f24', '#ffb7c0'],
+      busy: ['#2a3758', '#bcd2ff'],
+    };
+    const [bg, fg] = theme[tone] || theme.info;
+    badge.textContent = text;
+    badge.style.background = bg;
+    badge.style.color = fg;
+  }
+
+  async function apiExtract(file) {
+    const form = new FormData();
+    form.append('file', file, file.name || 'upload');
+
+    const res = await fetch('/api/photo_extract_openai_b64', {
+      method: 'POST',
+      body: form,
+    });
+
+    const ct = res.headers.get('content-type') || '';
+    if (!res.ok) {
+      let msg = `${res.status} ${res.statusText}`;
+      try {
+        msg = ct.includes('application/json') ? (await res.json()).error || (await res.json()).message || msg : await res.text();
+      } catch {}
+      throw new Error(msg);
+    }
+
+    return ct.includes('application/json') ? await res.json() : { ok: true, raw: await res.text() };
+  }
+
+  function getHorseRows() {
+    // Preferred: explicit row wrappers
+    const rows = $$('.horse-row, .horse-line, .horse-item, .row, .horse');
+    if (rows.length) return rows;
+
+    // Fallback: find Horse Data block and group inputs by 4
+    const container =
+      $$('section, .card, .panel, .box').find((el) => /Horse\s*Data/i.test(el.textContent || '')) || document;
+    const visibleInputs = $$('input', container).filter((el) => el.offsetParent !== null);
+    const groups = [];
+    for (let i = 0; i + 3 < visibleInputs.length; i += 4) {
+      const group = visibleInputs.slice(i, i + 4);
+      const wrap = group[0].closest('.horse-row, .row, .horse-item, .grid, div') || group[0].parentElement;
+      groups.push(wrap);
+    }
+    return groups;
+  }
+
+  function ensureRows(count) {
+    if (!addHorseBtn) return;
+    let rows = getHorseRows();
+    while (rows.length < count) {
+      addHorseBtn.click();
+      rows = getHorseRows();
+    }
+  }
+
+  function fillRow(rowEl, horse) {
+    // Inputs in expected order: Horse, ML Odds, Jockey, Trainer
+    const inputs = $$('input', rowEl).filter((el) => el.offsetParent !== null);
+    if (inputs[0]) inputs[0].value = horse.name ?? horse.horse ?? '';
+    if (inputs[1]) inputs[1].value = horse.odds ?? horse.ml_odds ?? horse.mlOdds ?? '';
+    if (inputs[2]) inputs[2].value = horse.jockey ?? '';
+    if (inputs[3]) inputs[3].value = horse.trainer ?? '';
+    inputs.forEach((el) => el.dispatchEvent(new Event('input', { bubbles: true })));
+  }
+
+  function populateForm(parsed) {
+    const horses =
+      parsed?.horses ||
+      parsed?.data?.horses ||
+      parsed?.entries ||
+      parsed?.rows ||
+      (Array.isArray(parsed) ? parsed : []);
+
+    if (!horses.length) return 0;
+    ensureRows(horses.length);
+    const rows = getHorseRows();
+    horses.forEach((h, i) => rows[i] && fillRow(rows[i], h));
+    return horses.length;
+  }
+
+  async function handleFile(file) {
+    try {
+      setBadge('Extracting…', 'busy');
+      const data = await apiExtract(file);
+
+      if (data?.ok === false) throw new Error(data.error || data.message || 'OCR failed');
+
+      let parsed = data?.parsed ?? data?.data ?? data;
+      if (typeof parsed === 'string') {
+        try { parsed = JSON.parse(parsed); } catch {}
+      }
+
+      const n = populateForm(parsed);
+      setBadge(n > 0 ? `Parsed ${n} horses` : 'No horses detected', n > 0 ? 'ok' : 'warn');
+    } catch (err) {
+      console.error('Extract error:', err);
+      setBadge('OCR error', 'err');
+      alert(`Analyze error: ${err.message || err}`);
+    }
+  }
+
+  // Wire file input
+  if (fileInput) {
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (file) handleFile(file);
+    });
+  }
+
+  // Also wire the "Analyze Photos with AI" button, so it uses the same flow or opens the picker
+  const analyzeBtn = $$('button, a').find((el) => /Analyze\s+Photos/i.test(el.textContent || ''));
+  if (analyzeBtn && fileInput) {
+    analyzeBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const f = fileInput.files && fileInput.files[0];
+      if (f) handleFile(f);
+      else fileInput.click();
+    });
+  }
+
+  setBadge('Idle', 'info');
+})();
+
 /* ============================================================
    🎨 FINISHLINE DARK NEON STYLE (Tailwind / inline-safe)
    ============================================================ */
