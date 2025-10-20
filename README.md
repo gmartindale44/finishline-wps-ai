@@ -2,7 +2,7 @@
 
 **Advanced horse race prediction system for Win/Place/Show betting**
 
-A self-contained FastAPI + Static Web App that predicts horse race outcomes using simulated data and optional multi-image analysis. Built with NovaSpark AI branding and hosted on Vercel.
+A self-contained FastAPI + Static Web App that predicts horse race outcomes using simulated data and optional multi-image analysis. Built with NovaSpark Collective LLC branding and hosted on Vercel.
 
 ## 🏇 Features
 
@@ -55,12 +55,77 @@ python -m http.server 3000
 
 ## Environment Variables (prefix all with FINISHLINE_)
 
+### Core Settings
 ```
 FINISHLINE_MODEL=stub
 FINISHLINE_OCR_ENABLED=false
 FINISHLINE_ALLOWED_ORIGINS=https://<your-vercel>.vercel.app
 FINISHLINE_LOG_LEVEL=info
 ```
+
+### Research API Provider - Custom (Optional)
+```
+FINISHLINE_DATA_PROVIDER=custom
+FINISHLINE_RESEARCH_API_URL=https://api.your-domain.tld
+FINISHLINE_RESEARCH_API_KEY=your-api-key-here
+FINISHLINE_PROVIDER_TIMEOUT_MS=4000
+FINISHLINE_PROVIDER_CACHE_SECONDS=900
+FINISHLINE_PROVIDER_DEBUG=false
+```
+
+**Expected API Endpoints:**
+- `GET /horse?name={name}&track={track}&date={date}`
+- `GET /trainer?name={name}`
+- `GET /jockey?name={name}`
+- `GET /track?name={name}&date={date}&surface={surface}&distance={distance}`
+
+**Response Fields (customize mapping in `provider_custom.py`):**
+- Horse: `last_speed_fig`, `pace_style`, `form_delta`, `days_since`
+- Trainer/Jockey: `win_pct`, `trainer_win_pct`, `jockey_win_pct`
+- Track: `bias` (object with track bias data)
+
+### Research API Provider - WebSearch (Optional)
+```
+FINISHLINE_DATA_PROVIDER=websearch
+FINISHLINE_TAVILY_API_KEY=tvly-xxxxx
+FINISHLINE_OPENAI_API_KEY=sk-xxxxx
+FINISHLINE_PROVIDER_TIMEOUT_MS=7000
+FINISHLINE_PROVIDER_CACHE_SECONDS=900
+FINISHLINE_PROVIDER_DEBUG=false
+FINISHLINE_OPENAI_MODEL=gpt-4o-mini
+```
+
+### Photo OCR - OpenAI Vision (Optional)
+```
+FINISHLINE_OPENAI_API_KEY=sk-xxxxx
+FINISHLINE_OPENAI_MODEL=gpt-4o-mini
+```
+
+**How it works:**
+- When `FINISHLINE_OPENAI_API_KEY` is set, "Extract from Photos" uses GPT-4 Vision
+- Extracts ALL horses from race tables/programs with high accuracy
+- Falls back to stub OCR if OpenAI key not set
+- Independent of research provider settings
+- Supports multiple images (up to 6)
+- Returns: name, trainer, jockey, ml_odds for each horse
+
+**How it works:**
+- Uses Tavily API to search for public racing information
+- Extracts structured features from web pages using OpenAI
+- No database required - pure web research
+- TTL cache (15 min default) controls costs and latency
+- Graceful fallback if API keys are missing
+
+**Cost Considerations:**
+- Tavily: ~$0.005 per search (3 results/horse × 3 entities = ~$0.05 per race)
+- OpenAI: gpt-4o-mini ~$0.15 per 1M input tokens (~$0.02 per race)
+- Cache hits eliminate costs for repeat queries
+- Total: ~$0.07 per uncached race prediction
+
+**Latency:**
+- First request: 5-8 seconds (web search + OpenAI extraction)
+- Cached request: <100ms
+- Timeout: 7 seconds default (configurable)
 
 ## Endpoints
 
@@ -69,6 +134,7 @@ FINISHLINE_LOG_LEVEL=info
 - POST `/api/finishline/predict` (JSON entries + textarea flow)
 - POST `/api/finishline/photo_predict` (multipart; files<=6)
 - POST `/api/finishline/csv_predict` (multipart "file" OR "csv_text")
+- POST `/api/finishline/research_predict` (JSON with research enrichment)
 
 ## Isolation Rules
 
@@ -235,7 +301,7 @@ window.FINISHLINE_DEBUG = true;
 
 ## 📝 License
 
-This project is part of the NovaSpark AI ecosystem. All rights reserved.
+This project is part of the NovaSpark Collective LLC ecosystem. All rights reserved.
 
 ## 🤝 Contributing
 
@@ -251,7 +317,7 @@ For issues and questions:
 - Check the troubleshooting section
 - Review API documentation
 - Test with provided examples
-- Contact NovaSpark AI support
+- Contact NovaSpark Collective LLC support
 
 ## Deployment (GitHub + Vercel)
 1) **GitHub**  
@@ -282,4 +348,4 @@ For issues and questions:
 
 ---
 
-**Built with ❤️ by NovaSpark AI**
+**Built with ❤️ by NovaSpark Collective LLC**

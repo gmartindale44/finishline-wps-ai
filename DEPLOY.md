@@ -39,3 +39,5 @@ If deployment issues occur:
 2. Push to main: `git push origin main`
 3. Vercel auto redeploys from the reverted commit
 4. Monitor Vercel deployment logs for success
+
+<!-- redeploy nudge -->

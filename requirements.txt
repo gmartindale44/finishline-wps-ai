@@ -1,5 +1,6 @@
-fastapi==0.115.0
-uvicorn==0.30.6
-pydantic==2.9.2
-python-multipart==0.0.9
-vercel-asgi==3.1.9
+fastapi>=0.100.0
+openai>=1.0.0,<2.0.0
+starlette>=0.20.0
+pydantic>=1.8.0,<2.0.0
+python-multipart>=0.0.5
+Pillow>=8.0.0

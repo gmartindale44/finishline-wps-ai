@@ -1,0 +1,315 @@
+/* ============================================================
+   🏇 FinishLine WPS AI — Stable File Picker + Auto Extract
+   Restores full Choose → Auto Extract → Populate flow
+   ============================================================ */
+
+function setBadge(text) {
+  const badge = document.getElementById('ocrStateBadge');
+  if (badge) badge.textContent = text;
+}
+
+/* ============================================================
+   ✅ UNIVERSAL FILE PICKER (never breaks after reload)
+   ============================================================ */
+function ensureFilePicker(onFiles) {
+  let input = document.getElementById('fl-file-input');
+
+  if (!input) {
+    input = document.createElement('input');
+    input.type = 'file';
+    input.id = 'fl-file-input';
+    input.multiple = true;
+    input.accept = '.png,.jpg,.jpeg,.webp,.pdf';
+    input.style.position = 'fixed';
+    input.style.left = '-9999px';
+    input.style.top = '0';
+    input.style.opacity = '0';
+    document.body.appendChild(input);
+  }
+
+  input.onchange = () => {
+    if (input?.files?.length) onFiles(input.files);
+    input.value = ''; // allow reselection of same file
+  };
+
+  const btn =
+    document.querySelector('#choosePhotosBtn') ??
+    document.querySelector('button.choose-photos,[data-role="choose-photos"]');
+
+  if (btn) {
+    btn.type = 'button';
+    btn.disabled = false;
+    btn.onclick = () => input.click();
+  }
+}
+
+/* ============================================================
+   🧠 AUTO EXTRACT AFTER CHOOSE - ROBUST OCR FLOW
+   ============================================================ */
+async function uploadAndExtract(file) {
+  const fd = new FormData();
+  fd.append("file", file);
+
+  setBadge("Extracting…");
+
+  try {
+    const res = await fetch("/api/photo_extract_openai_b64", { method: "POST", body: fd });
+    const data = await res.json();
+
+    if (!res.ok || !data?.ok) {
+      const msg = data?.error || `OCR failed (${res.status})`;
+      console.error("OCR error:", msg);
+      alert(msg);
+      setBadge("OCR error");
+      return;
+    }
+
+    const horses = Array.isArray(data.horses) ? data.horses : [];
+    // IMPORTANT: Add rows using the existing "Add Horse" button logic / function,
+    // not by printing JSON below the form.
+    clearHorseRows();
+    for (const h of horses) {
+      addHorseRow({
+        name: h.name ?? "",
+        mlOdds: h.odds ?? "",
+        jockey: h.jockey ?? "",
+        trainer: h.trainer ?? "",
+      });
+    }
+
+    setBadge(`Parsed ${horses.length} horses.`);
+    setBadge("Ready to analyze");
+  } catch (err) {
+    console.error("Network error:", err);
+    alert("Network error while extracting");
+    setBadge("OCR error");
+  }
+}
+
+async function handleFilesSelected(files) {
+  if (!files || files.length === 0) return;
+  // Use the first file for OCR
+  await uploadAndExtract(files[0]);
+}
+
+/* ============================================================
+   🏇 HORSE ROW BUILDER
+   ============================================================ */
+function clearHorseRows() {
+  const list = document.getElementById('horseList');
+  if (list) list.innerHTML = '';
+}
+
+function addHorseRow(init) {
+  const list = document.getElementById('horseList');
+  if (!list) return;
+
+  const row = document.createElement('div');
+  row.className = 'horse-row flex items-center gap-2 mb-1';
+  row.innerHTML = `
+    <input class="horse-name input" placeholder="Horse" value="${init?.name || ''}" />
+    <input class="horse-odds input" placeholder="ML Odds" value="${init?.mlOdds || ''}" />
+    <input class="horse-jockey input" placeholder="Jockey" value="${init?.jockey || ''}" />
+    <input class="horse-trainer input" placeholder="Trainer" value="${init?.trainer || ''}" />
+    <button class="btn-remove">Remove</button>
+  `;
+
+  row.querySelector('.btn-remove')?.addEventListener('click', () => row.remove());
+  list.appendChild(row);
+}
+
+document.getElementById('addHorseBtn')?.addEventListener('click', () => addHorseRow());
+
+/* ============================================================
+   🧩 ANALYZE + PREDICT
+   ============================================================ */
+async function callJSON(url, body) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.detail || data?.message || `HTTP ${res.status}`);
+  return data;
+}
+
+function collectForm() {
+  const horses = [];
+  document.querySelectorAll('.horse-row').forEach((r) => {
+    const inputs = r.querySelectorAll('input');
+    horses.push({
+      name: inputs[0].value,
+      mlOdds: inputs[1].value,
+      jockey: inputs[2].value,
+      trainer: inputs[3].value,
+    });
+  });
+  
+  const meta = {
+    date: document.querySelector('#raceDate')?.value?.trim() || null,
+    track: document.querySelector('#raceTrack')?.value?.trim() || null,
+    surface: document.querySelector('#raceSurface')?.value || null,
+    distance: document.querySelector('#raceDistance')?.value?.trim() || null,
+  };
+  
+  return { entries: horses, meta };
+}
+
+// Analyze and Predict functionality
+async function analyzePhotosWithAI() {
+  setBadge("Analyzing…");
+  
+  try {
+    const { entries, meta } = collectForm();
+    if (!entries.length) {
+      alert("No horses found on the form.");
+      return;
+    }
+
+    const res = await fetch("/api/research_predict", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ entries, meta }),
+    });
+    const data = await res.json();
+    
+    if (!res.ok || !data?.ok) {
+      console.error("Analyze failed:", data);
+      alert(`Analyze error: ${data?.error || res.statusText}`);
+      setBadge("Analyze error");
+      return;
+    }
+    
+    // Store analyzed data for predict step
+    window.__FL_ANALYZED__ = data.features || [];
+    setBadge("Ready to predict");
+    
+  } catch (e) {
+    console.error("Analyze error:", e);
+    alert("Analyze error — see console for details.");
+    setBadge("Analyze error");
+  }
+}
+
+async function predictWPS() {
+  setBadge("Predicting…");
+  
+  try {
+    const { entries, meta } = collectForm();
+    if (!entries.length) {
+      alert("No horses found on the form.");
+      return;
+    }
+    
+    const analyzed = window.__FL_ANALYZED__;
+    if (!analyzed) {
+      alert("Please analyze first.");
+      return;
+    }
+
+    const res = await fetch("/api/predict_wps", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ entries, meta, analyzed }),
+    });
+    const data = await res.json();
+    
+    if (!res.ok || !data?.ok) {
+      console.error("Predict failed:", data);
+      alert(`Predict error: ${data?.error || res.statusText}`);
+      setBadge("Predict error");
+      return;
+    }
+
+    setBadge("Done");
+    // TODO: render predictions; keep your prior UI
+    alert("Prediction complete! Check console for details.");
+    
+  } catch (e) {
+    console.error("Predict error:", e);
+    alert("Predict error — see console for details.");
+    setBadge("Predict error");
+  }
+}
+
+/* ============================================================
+   🚀 INITIALIZE EVERYTHING
+   ============================================================ */
+window.addEventListener('DOMContentLoaded', () => {
+  ensureFilePicker((files) => handleFilesSelected(files));
+  setBadge('Idle');
+  
+  // Wire analyze and predict buttons
+  const analyzeBtn = document.getElementById('analyzeBtn');
+  const predictBtn = document.getElementById('predictBtn');
+  
+  if (analyzeBtn) {
+    analyzeBtn.addEventListener('click', analyzePhotosWithAI);
+    analyzeBtn.dataset.busyLabel = 'Analyzing… ⏳';
+  }
+  if (predictBtn) {
+    predictBtn.addEventListener('click', predictWPS);
+    predictBtn.dataset.busyLabel = 'Predicting… ⏳';
+  }
+});
+
+/* ============================================================
+   🌐 GLOBAL HELPER FOR EXTRACTED ENTRIES
+   ============================================================ */
+window.FL_applyExtractedEntries = (entries) => {
+  const list = document.getElementById('horseList');
+  if (!list) return;
+
+  // Clear & populate UI
+  list.innerHTML = '';
+  for (const e of entries) {
+    const row = document.createElement('div');
+    row.className = 'horse-row flex items-center gap-2 mb-1';
+    row.innerHTML = `
+      <input class="horse-name input" placeholder="Horse" value="${e.name || ''}" />
+      <input class="horse-odds input" placeholder="ML Odds" value="${e.mlOdds || ''}" />
+      <input class="horse-jockey input" placeholder="Jockey" value="${e.jockey || ''}" />
+      <input class="horse-trainer input" placeholder="Trainer" value="${e.trainer || ''}" />
+      <button class="btn-remove">Remove</button>
+    `;
+    row.querySelector('.btn-remove')?.addEventListener('click', () => row.remove());
+    list.appendChild(row);
+  }
+
+  const badge = document.getElementById('ocrStateBadge');
+  if (badge) badge.textContent = 'Ready to analyze';
+};
+
+/* ============================================================
+   🎨 FINISHLINE DARK NEON STYLE (Tailwind / inline-safe)
+   ============================================================ */
+const style = document.createElement('style');
+style.textContent = `
+body {
+  background: radial-gradient(circle at top, #0a0018 0%, #000000 100%);
+  color: #d5cfff;
+  font-family: 'Poppins', sans-serif;
+}
+.btn-primary, .btn, button {
+  background: linear-gradient(90deg, #a855f7 0%, #3b82f6 100%);
+  border: none;
+  border-radius: 6px;
+  padding: 8px 14px;
+  color: white;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+.btn-primary:hover, .btn:hover { transform: scale(1.03); }
+.input {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 4px;
+  color: #e0dfff;
+  padding: 4px 8px;
+  width: 160px;
+}
+.horse-row { animation: fadeIn 0.3s ease; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+`;
+document.head.appendChild(style);
