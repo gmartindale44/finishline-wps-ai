@@ -21,3 +21,6 @@ async def photo_extract_openai_b64(file: UploadFile = File(...)):
         })
     except Exception as e:
         return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
+# Export the app for Vercel
+handler = app
