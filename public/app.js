@@ -61,7 +61,7 @@ async function uploadAndExtract(file) {
       console.error("OCR error:", msg);
       alert(msg);
       setBadge("OCR error");
-      return;
+    return;
     }
 
     const horses = Array.isArray(data.horses) ? data.horses : [];
@@ -106,7 +106,7 @@ function addHorseRow(init) {
 
   const row = document.createElement('div');
   row.className = 'horse-row flex items-center gap-2 mb-1';
-  row.innerHTML = `
+    row.innerHTML = `
     <input class="horse-name input" placeholder="Horse" value="${init?.name || ''}" />
     <input class="horse-odds input" placeholder="ML Odds" value="${init?.mlOdds || ''}" />
     <input class="horse-jockey input" placeholder="Jockey" value="${init?.jockey || ''}" />
@@ -164,7 +164,7 @@ async function analyzePhotosWithAI() {
     const { entries, meta } = collectForm();
     if (!entries.length) {
       alert("No horses found on the form.");
-      return;
+        return;
     }
 
     const res = await fetch("/api/research_predict", {
@@ -199,14 +199,14 @@ async function predictWPS() {
     const { entries, meta } = collectForm();
     if (!entries.length) {
       alert("No horses found on the form.");
-      return;
-    }
-    
+        return;
+      }
+      
     const analyzed = window.__FL_ANALYZED__;
     if (!analyzed) {
       alert("Please analyze first.");
-      return;
-    }
+        return;
+      }
 
     const res = await fetch("/api/predict_wps", {
       method: "POST",
@@ -219,14 +219,14 @@ async function predictWPS() {
       console.error("Predict failed:", data);
       alert(`Predict error: ${data?.error || res.statusText}`);
       setBadge("Predict error");
-      return;
+            return;
     }
 
     setBadge("Done");
     // TODO: render predictions; keep your prior UI
     alert("Prediction complete! Check console for details.");
     
-  } catch (e) {
+        } catch (e) {
     console.error("Predict error:", e);
     alert("Predict error — see console for details.");
     setBadge("Predict error");
@@ -314,17 +314,12 @@ function fillFormFromExtraction(payload) {
   console.log('Detected form fields:', raceFields);
 
   Object.entries(raceFields).forEach(([k, el]) => {
-    if (el) {
-      el.value = r[k] ?? '';
-      console.log(`Set ${k} to:`, r[k] ?? '');
-    } else {
-      console.warn(`Missing element for race field: ${k}`);
-    }
+    if (el) el.value = r[k] ?? '';
+    else console.warn(`Missing element for race field: ${k}`);
   });
 
   const horses = Array.isArray(payload?.horses) ? payload.horses : [];
-  const list = document.querySelector('#horse-list') || document.querySelector('#horseList') || document.querySelector('.horse-list') || document.querySelector('.horseData');
-  console.log('Horse list container:', list);
+  const list = document.querySelector('#horseList') || document.querySelector('.horse-list') || document.querySelector('.horseData');
   if (!list) console.warn('Horse list container not found.');
 
   horses.forEach((h, i) => {
@@ -588,14 +583,14 @@ window.FL_applyExtractedEntries = (entries) => {
       if (!input || !input.files || !input.files[0]) {
         alert('Pick a photo or PDF first.');
         setBadge('Idle');
-        return;
-      }
-
+            return;
+        }
+        
       const form = new FormData();
       form.append('file', input.files[0]);
 
       const res = await fetch('/api/photo_extract_openai_b64', {
-        method: 'POST',
+            method: 'POST',
         body: form
       });
 
