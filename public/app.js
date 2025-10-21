@@ -264,7 +264,7 @@ document.addEventListener('DOMContentLoaded', () => {
 async function analyzeWithAI() {
   setBadge('Analyzing…');
   try {
-    const input = qs('#fileInput');
+    const input = document.querySelector('#fileInput');
     if (!input || !input.files || !input.files[0]) {
       setBadge('Idle');
       return alert('Choose a photo or PDF first.');
@@ -275,17 +275,18 @@ async function analyzeWithAI() {
 
     const res = await fetch('/api/photo_extract_openai_b64', { method: 'POST', body: form });
     const text = await res.text();
-
-    console.group('/api/photo_extract_openai_b64');
-    console.log('status', res.status, res.statusText);
-    console.log('raw response', text);
+    console.group('AI Extraction Response');
+    console.log('Raw text:', text);
     console.groupEnd();
 
     let data = {};
     try { data = JSON.parse(text); } catch (e) {
       setBadge('Idle');
-      return alert('Server did not return valid JSON.');
+      return alert('Response not JSON - check server logs.');
     }
+
+    console.table(data?.race || {});
+    console.table(data?.horses || []);
 
     if (!data.ok) {
       setBadge('Idle');
@@ -303,24 +304,34 @@ async function analyzeWithAI() {
 
 function fillFormFromExtraction(payload) {
   const r = payload?.race ?? {};
-  setVal('#raceDate', r.date);
-  setVal('#raceTrack', r.track);
-  setVal('#raceSurface', r.surface);
-  setVal('#raceDistance', r.distance);
+  const raceFields = {
+    date: document.querySelector('#raceDate'),
+    track: document.querySelector('#raceTrack'),
+    surface: document.querySelector('#raceSurface'),
+    distance: document.querySelector('#raceDistance')
+  };
+
+  console.log('Detected form fields:', raceFields);
+
+  Object.entries(raceFields).forEach(([k, el]) => {
+    if (el) el.value = r[k] ?? '';
+    else console.warn(`Missing element for race field: ${k}`);
+  });
 
   const horses = Array.isArray(payload?.horses) ? payload.horses : [];
-  clearHorseRows();
+  const list = document.querySelector('#horseList') || document.querySelector('.horse-list') || document.querySelector('.horseData');
+  if (!list) console.warn('Horse list container not found.');
 
-  for (const h of horses) {
-    const row = {
-      name: (h.name ?? '').trim(),
-      odds: (h.odds ?? '').trim(),
-      jockey: (h.jockey ?? '').trim(),
-      trainer: (h.trainer ?? '').trim()
-    };
-    if (typeof createHorseRow === 'function') createHorseRow(row);
-    else pushHorseRowFallback(row);
-  }
+  horses.forEach((h, i) => {
+    const entry = `${i + 1}. ${h.name} | ${h.odds} | ${h.jockey} | ${h.trainer}`;
+    console.log('Horse', entry);
+    if (list) {
+      const div = document.createElement('div');
+      div.className = 'horse-row';
+      div.textContent = entry;
+      list.appendChild(div);
+    }
+  });
 }
 
 // Helper utilities
