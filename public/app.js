@@ -319,17 +319,28 @@ function fillFormFromExtraction(payload) {
   });
 
   const horses = Array.isArray(payload?.horses) ? payload.horses : [];
-  const list = document.querySelector('#horseList') || document.querySelector('.horse-list') || document.querySelector('.horseData');
+  const list = document.querySelector('#horse-list') || document.querySelector('[data-horse-list]') || document.querySelector('.horse-list');
   if (!list) console.warn('Horse list container not found.');
+
+  // Clear existing horse rows
+  if (list) {
+    const tbody = list.querySelector('tbody') || list;
+    tbody.innerHTML = '';
+  }
 
   horses.forEach((h, i) => {
     const entry = `${i + 1}. ${h.name} | ${h.odds} | ${h.jockey} | ${h.trainer}`;
     console.log('Horse', entry);
     if (list) {
-      const div = document.createElement('div');
-      div.className = 'horse-row';
-      div.textContent = entry;
-      list.appendChild(div);
+      const tbody = list.querySelector('tbody') || list;
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td>${h.name || ''}</td>
+        <td>${h.odds || ''}</td>
+        <td>${h.jockey || ''}</td>
+        <td>${h.trainer || ''}</td>
+      `;
+      tbody.appendChild(row);
     }
   });
 }
