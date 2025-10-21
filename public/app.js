@@ -314,12 +314,17 @@ function fillFormFromExtraction(payload) {
   console.log('Detected form fields:', raceFields);
 
   Object.entries(raceFields).forEach(([k, el]) => {
-    if (el) el.value = r[k] ?? '';
-    else console.warn(`Missing element for race field: ${k}`);
+    if (el) {
+      el.value = r[k] ?? '';
+      console.log(`Set ${k} to:`, r[k] ?? '');
+    } else {
+      console.warn(`Missing element for race field: ${k}`);
+    }
   });
 
   const horses = Array.isArray(payload?.horses) ? payload.horses : [];
-  const list = document.querySelector('#horseList') || document.querySelector('.horse-list') || document.querySelector('.horseData');
+  const list = document.querySelector('#horse-list') || document.querySelector('#horseList') || document.querySelector('.horse-list') || document.querySelector('.horseData');
+  console.log('Horse list container:', list);
   if (!list) console.warn('Horse list container not found.');
 
   horses.forEach((h, i) => {
