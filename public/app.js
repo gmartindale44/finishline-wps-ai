@@ -236,7 +236,14 @@ async function predictWPS() {
 /* ============================================================
    🚀 INITIALIZE EVERYTHING
    ============================================================ */
-window.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', () => {
+  const btnChoose  = qs('#btnChoose');
+  const btnAnalyze = qs('#btnAnalyze');
+
+  if (btnChoose)  btnChoose.addEventListener('click', () => qs('#fileInput')?.click());
+  if (btnAnalyze) btnAnalyze.addEventListener('click', analyzeWithAI);
+  
+  // Keep existing functionality
   ensureFilePicker((files) => handleFilesSelected(files));
   setBadge('Idle');
   
@@ -253,6 +260,88 @@ window.addEventListener('DOMContentLoaded', () => {
     predictBtn.dataset.busyLabel = 'Predicting… ⏳';
   }
 });
+
+async function analyzeWithAI() {
+  setBadge('Analyzing…');
+  try {
+    const input = qs('#fileInput');
+    if (!input || !input.files || !input.files[0]) {
+      setBadge('Idle');
+      return alert('Choose a photo or PDF first.');
+    }
+
+    const form = new FormData();
+    form.append('file', input.files[0]);
+
+    const res = await fetch('/api/photo_extract_openai_b64', { method: 'POST', body: form });
+    const text = await res.text();
+
+    console.group('/api/photo_extract_openai_b64');
+    console.log('status', res.status, res.statusText);
+    console.log('raw response', text);
+    console.groupEnd();
+
+    let data = {};
+    try { data = JSON.parse(text); } catch (e) {
+      setBadge('Idle');
+      return alert('Server did not return valid JSON.');
+    }
+
+    if (!data.ok) {
+      setBadge('Idle');
+      return alert(`Analyze error: ${data.error || 'Unknown error'}`);
+    }
+
+    fillFormFromExtraction(data);
+    setBadge('Ready to predict');
+  } catch (err) {
+    console.error(err);
+    setBadge('Idle');
+    alert(`Analyze error: ${err.message || err}`);
+  }
+}
+
+function fillFormFromExtraction(payload) {
+  const r = payload?.race ?? {};
+  setVal('#raceDate', r.date);
+  setVal('#raceTrack', r.track);
+  setVal('#raceSurface', r.surface);
+  setVal('#raceDistance', r.distance);
+
+  const horses = Array.isArray(payload?.horses) ? payload.horses : [];
+  clearHorseRows();
+
+  for (const h of horses) {
+    const row = {
+      name: (h.name ?? '').trim(),
+      odds: (h.odds ?? '').trim(),
+      jockey: (h.jockey ?? '').trim(),
+      trainer: (h.trainer ?? '').trim()
+    };
+    if (typeof createHorseRow === 'function') createHorseRow(row);
+    else pushHorseRowFallback(row);
+  }
+}
+
+// Helper utilities
+function qs(sel) { return document.querySelector(sel); }
+function setVal(sel, v) { const el = qs(sel); if (el) el.value = v ?? ''; }
+function setBadge(txt) {
+  const b = document.querySelector('[data-badge]') || qs('#statusBadge');
+  if (b) b.textContent = txt;
+}
+function clearHorseRows() {
+  const wrap = qs('#horseList');
+  if (wrap) wrap.innerHTML = '';
+}
+function pushHorseRowFallback({ name, odds, jockey, trainer }) {
+  const wrap = qs('#horseList');
+  if (!wrap) return;
+  const div = document.createElement('div');
+  div.className = 'horse-row';
+  div.textContent = `${name} | ${odds} | ${jockey} | ${trainer}`;
+  wrap.appendChild(div);
+}
 
 /* ============================================================
    🌐 GLOBAL HELPER FOR EXTRACTED ENTRIES
