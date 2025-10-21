@@ -407,18 +407,52 @@ window.FL_applyExtractedEntries = (entries) => {
 
       if (data?.ok === false) throw new Error(data.error || data.message || 'OCR failed');
 
-      let parsed = data?.parsed ?? data?.data ?? data;
-      if (typeof parsed === 'string') {
-        try { parsed = JSON.parse(parsed); } catch {}
-      }
-
-      const n = populateForm(parsed);
-      setBadge(n > 0 ? `Parsed ${n} horses` : 'No horses detected', n > 0 ? 'ok' : 'warn');
+      // Use the new API response format
+      fillFormFromExtraction(data);
+      const horseCount = data?.horses?.length || 0;
+      setBadge(horseCount > 0 ? `Parsed ${horseCount} horses` : 'No horses detected', horseCount > 0 ? 'ok' : 'warn');
     } catch (err) {
       console.error('Extract error:', err);
       setBadge('OCR error', 'err');
       alert(`Analyze error: ${err.message || err}`);
     }
+  }
+
+  // Map API response into inputs
+  function fillFormFromExtraction(payload) {
+    const r = payload.race || {};
+    setVal('#raceDate', r.date);
+    setVal('#raceTrack', r.track);
+    setVal('#raceSurface', r.surface);
+    setVal('#raceDistance', r.distance);
+
+    const horses = Array.isArray(payload.horses) ? payload.horses : [];
+    // Clear existing rows if you maintain a list
+    clearHorseRows();
+
+    for (const h of horses) {
+      addHorseRow({
+        name: (h.name || '').trim(),
+        odds: (h.odds || '').trim(),
+        jockey: (h.jockey || '').trim(),
+        trainer: (h.trainer || '').trim(),
+      });
+    }
+  }
+
+  // tiny helpers (adapt if your app uses different ids/utilities)
+  function setVal(sel, v) {
+    const el = document.querySelector(sel);
+    if (el) el.value = v || '';
+  }
+  function clearHorseRows() {
+    // implement according to your UI – e.g., empty the list/table
+    const wrap = document.querySelector('#horse-list');
+    if (wrap) wrap.innerHTML = '';
+  }
+  function addHorseRow({ name, odds, jockey, trainer }) {
+    // Use existing addHorseRow function
+    window.addHorseRow({ name, odds, jockey, trainer });
   }
 
   // Wire file input
@@ -439,6 +473,46 @@ window.FL_applyExtractedEntries = (entries) => {
       else fileInput.click();
     });
   }
+
+  // Main analyze function for external use
+  async function analyzeWithAI() {
+    try {
+      setBadge('Analyzing…'); // your existing badge helper
+
+      const input = document.querySelector('#fl-file-input'); // hidden file input tied to "Choose Photos / PDF"
+      if (!input || !input.files || !input.files[0]) {
+        alert('Pick a photo or PDF first.');
+        setBadge('Idle');
+        return;
+      }
+
+      const form = new FormData();
+      form.append('file', input.files[0]);
+
+      const res = await fetch('/api/photo_extract_openai_b64', {
+        method: 'POST',
+        body: form
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        console.error('Analyze failed:', data);
+        alert(`Analyze error: ${data?.error || res.statusText}`);
+        setBadge('Idle');
+        return;
+      }
+
+      fillFormFromExtraction(data);
+      setBadge('Ready to predict'); // shows success
+    } catch (err) {
+      console.error(err);
+      alert(`Analyze error: ${err.message || err}`);
+      setBadge('Idle');
+    }
+  }
+
+  // Make analyzeWithAI available globally
+  window.analyzeWithAI = analyzeWithAI;
 
   setBadge('Idle', 'info');
 })();
