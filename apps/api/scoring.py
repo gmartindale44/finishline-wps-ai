@@ -156,9 +156,9 @@ def score_horses(
 def wps_from_probs(scored: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Extract W/P/S predictions from scored horses."""
     ranked = sorted(scored, key=lambda x: x.get('model_prob', 0), reverse=True)
-    return {
+        return {
         'win': ranked[0] if len(ranked) > 0 else None,
         'place': ranked[1] if len(ranked) > 1 else None,
         'show': ranked[2] if len(ranked) > 2 else None,
         'ranked': ranked
-    }
+        }
