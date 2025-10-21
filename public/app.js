@@ -234,7 +234,7 @@ async function predictWPS() {
 }
 
 /* ============================================================
-   🚀 INITIALIZE EVERYTHING
+   🚀 INITIALIZE EVERYTHING - Updated for debugging
    ============================================================ */
 document.addEventListener('DOMContentLoaded', () => {
   const btnChoose  = qs('#btnChoose');
