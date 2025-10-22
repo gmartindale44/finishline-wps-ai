@@ -58,7 +58,11 @@
       <button type="button" class="button" id="addHorseBtn" data-add-horse>Add Horse</button>
     </div>
 
-    <div id="horse-list" class="horse-list">
+    <!-- Horse rows container for parsed OCR results -->
+    <div id="horseRows" class="space-y-1 mt-2"></div>
+
+    <!-- Hide existing debug containers -->
+    <div id="horse-list" class="horse-list" style="display:none">
       <table>
         <thead>
           <tr>
@@ -75,7 +79,10 @@
     </div>
 
     <!-- Additional horse list container for robust rendering -->
-    <div id="horseList" class="horse-list"></div>
+    <div id="horseList" class="horse-list" style="display:none"></div>
+
+    <!-- Debug output area (hidden by default) -->
+    <div id="analysisOutput" style="display:none"></div>
 
     <div class="panel actions mt-4">
       <button class="button" id="chooseBtn" data-photo-input>Choose Photos / PDF</button>
