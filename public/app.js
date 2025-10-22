@@ -1,11 +1,24 @@
 (function () {
-  // Utilities
-  const $ = (sel) => document.querySelector(sel);
-  const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+  const $ = (s) => document.querySelector(s);
+  const $$ = (s) => Array.from(document.querySelectorAll(s));
+
+  function log(...args) { console.log('[WPS]', ...args); }
+  function warn(...args) { console.warn('[WPS]', ...args); }
+  function err(...args) { console.error('[WPS]', ...args); }
 
   function setBadge(text) {
     const b = $('#statusBadge');
     if (b) b.textContent = text;
+  }
+
+  async function healthCheck() {
+    try {
+      const r = await fetch('/api/health');
+      const t = await r.text();
+      log('Health:', r.status, t);
+    } catch (e) {
+      warn('Health check failed:', e);
+    }
   }
 
   function attachHandlers() {
@@ -15,7 +28,23 @@
     const fileInput = $('#fileInput');
 
     if (chooseBtn && fileInput) {
-      chooseBtn.addEventListener('click', () => fileInput.click());
+      chooseBtn.addEventListener('click', () => {
+        log('Choose clicked -> opening file dialog');
+        fileInput.click();
+      });
+    }
+    
+    if (fileInput) {
+      fileInput.addEventListener('change', () => {
+        const f = fileInput.files?.[0];
+        log('File selected:', !!f, f ? { name: f.name, type: f.type, size: f.size } : null);
+        if (f) {
+          // Auto-run analyze as soon as a file is chosen
+          analyzeWithAI();
+        } else {
+          warn('No file selected');
+        }
+      });
     }
 
     if (analyzeBtn) {
@@ -25,62 +54,56 @@
     if (predictBtn) {
       predictBtn.addEventListener('click', predictWPS);
     }
+
+    // Prevent Enter key from trying to submit a form and reloading page
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') e.preventDefault();
+    });
   }
 
   async function analyzeWithAI() {
-    try {
-      const fileInput = $('#fileInput');
-      if (!fileInput || !fileInput.files || !fileInput.files[0]) {
-        alert('Choose a photo or PDF first.');
+    const fileInput = $('#fileInput');
+    const file = fileInput?.files?.[0];
+    if (!file) {
+      alert('Please choose a photo or PDF first.');
         return;
       }
-
+      
+    try {
       setBadge('Analyzing...');
       const form = new FormData();
-      form.append('file', fileInput.files[0]);
+      form.append('file', file);
+      log('Posting to /api/photo_extract_openai_b64 with file:', { name: file.name, type: file.type, size: file.size });
 
-      // POST to server
       const res = await fetch('/api/photo_extract_openai_b64', { method: 'POST', body: form });
-
-      // Be robust to non-JSON (debug text)
       const raw = await res.text();
-      console.group('AI Extraction Response');
-      console.log('Raw response:', raw);
-      console.groupEnd();
+      log('Raw response:', res.status, raw);
 
-      let payload;
-      try {
-        payload = JSON.parse(raw);
-      } catch {
-        // fallback: if backend printed debug text instead of JSON
-        payload = { ok: false, error: 'Non-JSON response', raw };
-      }
+        let data;
+      try { data = JSON.parse(raw); } catch { data = { ok: false, error: 'Non-JSON response', raw }; }
 
       if (!res.ok) {
-        const msg = payload?.error || `${res.status} ${res.statusText}`;
         setBadge('Idle');
-        return alert(`Analyze error: ${msg}`);
+        return alert(`Analyze failed: ${data?.error || res.statusText}`);
+      }
+      if (data?.ok !== true) {
+        setBadge('Idle');
+        return alert(`Analyze error: ${data?.error || 'Unknown backend error'}`);
       }
 
-      // Some stubs return ok: true with sample race/horses
-      if (payload?.ok !== true) {
-        setBadge('Idle');
-        return alert(`Analyze error: ${payload?.error || 'Unknown backend error'}`);
-      }
-
-      // Fill the form & list
-      fillFormFromExtraction(payload);
+      fillFormFromExtraction(data);
       setBadge('Ready to predict');
-    } catch (err) {
-      console.error(err);
+      } catch (e) {
+      err('Analyze exception:', e);
       setBadge('Idle');
-      alert(`Analyze error: ${err?.message || err}`);
+      alert(`Analyze error: ${e?.message || e}`);
     }
   }
 
   function fillFormFromExtraction(payload) {
     const race = payload?.race ?? {};
     const horses = Array.isArray(payload?.horses) ? payload.horses : [];
+    log('Filling form with:', { race, horsesCount: horses.length });
 
     const fields = {
       date: $('#raceDate'),
@@ -88,10 +111,7 @@
       surface: $('#raceSurface'),
       distance: $('#raceDistance'),
     };
-
-    console.group('Detected form fields');
-    console.log(fields);
-    console.groupEnd();
+    log('Detected fields:', fields);
 
     if (fields.date) fields.date.value = race.date ?? '';
     if (fields.track) fields.track.value = race.track ?? '';
@@ -99,18 +119,11 @@
     if (fields.distance) fields.distance.value = race.distance ?? '';
 
     const list = $('#horseList');
-    if (!list) {
-      console.warn('No #horseList container found.');
-      return;
-    }
-    list.innerHTML = ''; // clear previous entries
-
+    if (!list) return warn('No #horseList');
+    list.innerHTML = '';
     horses.forEach((h, i) => {
       const row = document.createElement('div');
-      row.className = 'horse-row flex items-center justify-between py-1';
-      row.dataset.index = i.toString();
-
-      // Build a small row. You can replace with inputs if needed.
+      row.className = 'horse-row py-1 flex items-center justify-between';
       row.innerHTML = `
         <div class="truncate">${i + 1}. <strong>${h.name || ''}</strong></div>
         <div class="opacity-80">${h.odds || ''}</div>
@@ -119,64 +132,46 @@
       `;
       list.appendChild(row);
     });
-
-    console.table(race);
-    console.table(horses);
   }
 
   async function predictWPS() {
     setBadge('Predicting...');
     try {
-      const body = collectCurrentFormAsJSON();
+      const body = {
+        race: {
+          date: $('#raceDate')?.value || '',
+          track: $('#raceTrack')?.value || '',
+          surface: $('#raceSurface')?.value || '',
+          distance: $('#raceDistance')?.value || '',
+        },
+        horses: $$('#horseList .horse-row').map((r) => ({ text: r.textContent.trim() })),
+      };
+      log('Predict request body:', body);
       const res = await fetch('/api/predict_wps', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
-      });
-      const data = await res.json().catch(() => ({}));
-      console.group('Predict WPS');
-      console.log('Request:', body);
-      console.log('Response:', data);
-      console.groupEnd();
-
-      if (!res.ok) {
+        });
+        const data = await res.json().catch(() => ({}));
+      log('Predict response:', res.status, data);
+        
+        if (!res.ok) {
         setBadge('Idle');
         return alert(`Predict error: ${data?.error || res.statusText}`);
       }
-
       alert(data?.msg || 'Prediction complete (stub).');
       setBadge('Idle');
-    } catch (err) {
-      console.error(err);
+    } catch (e) {
+      err('Predict exception:', e);
       setBadge('Idle');
-      alert(`Predict error: ${err?.message || err}`);
+      alert(`Predict error: ${e?.message || e}`);
     }
   }
 
-  function collectCurrentFormAsJSON() {
-    const horses = [];
-    // If you later switch to editable rows, read from inputs.
-    $$('#horseList .horse-row').forEach((row) => {
-      const parts = row.textContent.split('|').map((s) => s.trim());
-      // Simple shape; feel free to improve parsing.
-      horses.push({ raw: row.textContent, parts });
-    });
-
-    return {
-      race: {
-        date: $('#raceDate')?.value || '',
-        track: $('#raceTrack')?.value || '',
-        surface: $('#raceSurface')?.value || '',
-        distance: $('#raceDistance')?.value || '',
-      },
-      horses,
-    };
-  }
-
-  // Boot once DOM is ready
   document.addEventListener('DOMContentLoaded', () => {
+    log('DOMContentLoaded: attaching handlers');
     attachHandlers();
     setBadge('Idle');
-    console.info('FinishLine WPS AI: handlers attached');
+    healthCheck();
   });
 })();
