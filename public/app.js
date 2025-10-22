@@ -1,55 +1,91 @@
 (function () {
-  // ---------- Small helpers ----------
-  const $ = (s) => document.querySelector(s);
+  // ---------- DOM helpers ----------
+  const $  = (s) => document.querySelector(s);
   const $$ = (s) => Array.from(document.querySelectorAll(s));
   const log = (...a) => console.log('[WPS]', ...a);
   const warn = (...a) => console.warn('[WPS]', ...a);
   const err = (...a) => console.error('[WPS]', ...a);
 
-  function setBadge(t) { const b = $('#statusBadge'); if (b) b.textContent = t; }
+  function ensureHorseRowsContainer() {
+    let rows = $('#horseRows');
+    if (rows) return rows;
 
-  // ---------- Parsing helpers (fallback when API returns a text blob) ----------
+    // Find the Add Horse button's row; insert right after it
+    const addRow = $('#horseRows') || document.querySelector('#addHorse')?.closest?.('div');
+    const host = addRow?.parentElement || document.querySelector('section,div') // fallback
+    rows = document.createElement('div');
+    rows.id = 'horseRows';
+    rows.className = 'space-y-1 mt-2';
+    // Insert before the button row? or right after single-row inputs:
+    const horseDataBlock = document.querySelector('#horseRows')?.parentElement
+      || document.querySelector('#horse-data, .horse-data, .horse-block') 
+      || host;
+    (horseDataBlock || document.body).insertBefore(rows, (document.querySelector('#chooseBtn') || document.querySelector('#analyzeBtn')));
+    return rows;
+  }
+
+  function hideLegacyDump() {
+    const junk = $('#legacyDump') || document.querySelector('#analysisOutput, #output, #result, textarea, pre');
+    if (junk) junk.style.display = 'none';
+  }
+
+  function setBadge(text) {
+    const b = $('#statusBadge');
+    if (b) b.textContent = text;
+  }
+
+  // ---------- Robust fallback parsers ----------
   function parseRaceFromText(text) {
-    // Naive extraction from OCR text; adjust patterns as needed
-    const date = (text.match(/\b(\d{1,2}\/\d{1,2}\/\d{2,4})\b/i) || [,''])[1];
-    const track = (text.match(/\b(Churchill Downs|Saratoga|Belmont|Keeneland|Santa Anita|Del Mar)\b/i) || [,''])[1];
-    const surface = (text.match(/\b(Dirt|Turf|Synthetic)\b/i) || [,''])[1];
+    const date     = (text.match(/\b(\d{1,2}\/\d{1,2}\/\d{2,4})\b/i) || [,''])[1];
+    const track    = (text.match(/\b(Churchill Downs|Saratoga|Belmont|Keeneland|Santa Anita|Del Mar)\b/i) || [,''])[1];
+    const surface  = (text.match(/\b(Dirt|Turf|Synthetic)\b/i) || [,''])[1];
     const distance = (text.match(/\b(\d+\s*\/\s*\d+\s*miles|\d+\s*miles|\d+\s*\/\s*\d+\s*mi|\d+\s*mi)\b/i) || [,''])[1];
     return { date, track, surface, distance };
   }
 
+  // Fallback horse parser that ALWAYS produces rows for "1. Name" lines.
+  // Odds/jockey/trainer are best-effort.
   function parseHorsesFromText(text) {
-    // Look for lines like "1. Clarita" and try to collect name/odds/jockey/trainer from nearby lines
     const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-    const horses = [];
+  const horses = [];
     let cur = null;
 
-    for (const ln of lines) {
-      const m = ln.match(/^(\d+)\.\s*(.+)$/);  // e.g. "1. Clarita"
-  if (m) {
-        if (cur) horses.push(cur);
-        cur = { name: m[2] || '' };
+    const pushCur = () => { if (cur && cur.name) horses.push(cur); cur = null; };
+
+    for (let i = 0; i < lines.length; i++) {
+      const ln = lines[i];
+      const m = ln.match(/^(\d+)\.\s*(.+)$/);  // "1. Clarita"
+      if (m) {
+        pushCur();
+        cur = { name: m[2], odds: '', jockey: '', trainer: '' };
         continue;
       }
       if (!cur) continue;
-      // naive heuristics for odds / jockey / trainer
-      if (/^\d+\/\d+$/.test(ln) || /^\d+\/\d+\s*-\s*\d+\/\d+$/.test(ln) || /^\d+\/\d+(\s*\(\d+\))?$/.test(ln)) {
-        cur.odds = cur.odds || ln;
-      } else if (/jockey|jock|luis|ortiz|saez|smith|prat|gall/i.test(ln) && !cur.jockey) {
-        cur.jockey = ln;
-      } else if (/trainer|pletcher|baffert|brown|asmussen|mott|coxe/i.test(ln) && !cur.trainer) {
-        cur.trainer = ln;
+
+      // odds guess
+      if (!cur.odds && /(\d+\/\d+)(\s*-\s*\d+\/\d+)?/.test(ln)) {
+        cur.odds = ln;
+        continue;
+      }
+      // jockey trainer guesses
+      if (!cur.jockey && /(jockey|^luis|^irad|^jose|saez|prat|rosario|smith)/i.test(ln)) {
+        cur.jockey = ln.replace(/^jockey[:\s-]*/i, '');
+        continue;
+      }
+      if (!cur.trainer && /(trainer|pletcher|baffert|brown|asmussen|mott|cox)/i.test(ln)) {
+        cur.trainer = ln.replace(/^trainer[:\s-]*/i, '');
+        continue;
       }
     }
-    if (cur) horses.push(cur);
-    return horses;
-  }
+    pushCur();
+  return horses;
+}
 
   // ---------- Rendering ----------
   function renderHorses(horses) {
-    const rows = $('#horseRows');
-    if (!rows) return warn('No #horseRows container found');
+    const rows = ensureHorseRowsContainer();
     rows.innerHTML = '';
+    if (!horses || !horses.length) return;
 
     horses.forEach((h, i) => {
       const el = document.createElement('div');
@@ -64,42 +100,54 @@
     });
   }
 
-  // Fill inputs and horses from a structured payload OR fallback text
+  // ---------- Orchestrator ----------
   function fillFormFromExtraction(payload) {
-    log('fillFormFromExtraction payload:', payload);
+    hideLegacyDump();
 
-    // 1) Structured first
-    let race = payload?.race || {};
+    // Primary: structured payload
+    let race   = payload?.race || {};
     let horses = Array.isArray(payload?.horses) ? payload.horses : [];
 
-    // 2) Fallback: try payload.text or payload.raw
-    const blob = payload?.text || payload?.raw || payload?.content || '';
+    // Fallback: plain text blob
+    const blob = payload?.text || payload?.raw || payload?.content || payload?.ocr || '';
     if ((!race?.date && !race?.track && !race?.surface && !race?.distance) && blob) {
-      race = { ...parseRaceFromText(blob) };
+      race = parseRaceFromText(blob);
     }
     if ((!horses?.length) && blob) {
       horses = parseHorsesFromText(blob);
     }
 
-    // 3) Fill the race inputs by ID
+    // Fill race inputs
     const f = {
-      date: $('#raceDate'),
-      track: $('#raceTrack'),
-      surface: $('#raceSurface'),
+      date:     $('#raceDate'),
+      track:    $('#raceTrack'),
+      surface:  $('#raceSurface'),
       distance: $('#raceDistance'),
     };
-    if (f.date) f.date.value = race.date || f.date.value || '';
-    if (f.track) f.track.value = race.track || f.track.value || '';
-    if (f.surface) f.surface.value = race.surface || f.surface.value || '';
+    if (f.date)     f.date.value     = race.date     || f.date.value     || '';
+    if (f.track)    f.track.value    = race.track    || f.track.value    || '';
+    if (f.surface)  f.surface.value  = race.surface  || f.surface.value  || '';
     if (f.distance) f.distance.value = race.distance || f.distance.value || '';
 
-    // 4) Render the horses in #horseRows
+    // Render horses in structured rows
     renderHorses(horses);
 
-    // 5) Hide any raw debug blob area if present
-    const dbg = $('#analysisOutput');
-    if (dbg) dbg.style.display = 'none';
+    // Badge
     setBadge('Ready to predict');
+  }
+
+  // ---------- Predict should read from #horseRows, not any textarea ----------
+  function collectHorsesFromUI() {
+    const rows = $$('#horseRows .horse-row');
+    if (!rows.length) return [];
+    return rows.map((row) => {
+      const cols = row.querySelectorAll('div');
+      const name    = cols[0]?.textContent.replace(/^\d+\.\s*/, '').trim() || '';
+      const odds    = cols[1]?.textContent.trim() || '';
+      const jockey  = cols[2]?.textContent.trim() || '';
+      const trainer = cols[3]?.textContent.trim() || '';
+      return { name, odds, jockey, trainer };
+    });
   }
 
   async function healthCheck() {
@@ -193,6 +241,9 @@
   async function predictWPS() {
     setBadge('Predicting...');
     try {
+      const horses = collectHorsesFromUI();
+      log('[Predict] horses:', horses);
+      
       const body = {
         race: {
           date: $('#raceDate')?.value || '',
@@ -200,7 +251,7 @@
           surface: $('#raceSurface')?.value || '',
           distance: $('#raceDistance')?.value || '',
         },
-        horses: $$('#horseRows .horse-row').map((r) => ({ text: r.textContent.trim() })),
+        horses: horses,
       };
       log('Predict request body:', body);
       const res = await fetch('/api/predict_wps', {
@@ -224,7 +275,7 @@
     }
   }
 
-  // ---------- Wire up (call these from your existing handlers) ----------
+  // ---------- Wire up ----------
   document.addEventListener('DOMContentLoaded', () => {
     log('DOMContentLoaded: attaching handlers');
     attachHandlers();
