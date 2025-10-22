@@ -277,7 +277,7 @@
 
   // ---------- Wire up ----------
   document.addEventListener('DOMContentLoaded', () => {
-    log('DOMContentLoaded: attaching handlers');
+    log('DOMContentLoaded: attaching handlers - robust horse extraction v2');
     attachHandlers();
     setBadge('Idle');
     healthCheck();
