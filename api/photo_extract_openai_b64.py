@@ -47,7 +47,22 @@ async def photo_extract_openai_b64(file: UploadFile = File(...)):
         contents = await file.read()
         if not contents:
             return JSONResponse({"ok": False, "error": "Empty file"})
-        # Stub response for now (replace with OCR later)
-        return JSONResponse(stub_extract())
+        
+        # Get stub data
+        result = stub_extract()
+        horses_list = result["horses"]
+        
+        # Log the full array to confirm we're returning all horses
+        print(f"[API] Returning {len(horses_list)} horses: {[h['name'] for h in horses_list]}")
+        
+        return JSONResponse({
+            "ok": True,
+            "horses": horses_list,   # list of dicts with all parsed horses
+            "meta": {
+                "raw_text": result["meta"]["raw_text"],
+                "notes": f"Stub data: {len(horses_list)} horses returned"
+            }
+        })
     except Exception as e:
+        print(f"[API] Error: {str(e)}")
         return JSONResponse({"ok": False, "error": str(e)})

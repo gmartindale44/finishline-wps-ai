@@ -34,136 +34,180 @@ function toastError(message) {
 // ===== Robust horse parser =====
 function parseHorsesFromText(text) {
   if (!text) return [];
-  const lines = text
-    .split(/\r?\n/)
-    .map(l => l.trim())
-    .filter(l => l.length > 0);
+  const all = text
+    .replace(/\u00A0/g, ' ')          // non-breaking spaces
+    .replace(/[ \t]+/g, ' ')          // collapse spaces
+    .trim();
 
-  const horses = [];
+  const lines = all.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   const oddsRe = /(\d+\s*\/\s*\d+|\d+\s*-\s*\d+|\d+\s*to\s*\d+|\d+)/i;
+  const horses = [];
 
-  // Try block-of-4 first
+  // Pass 1: 4-line blocks
   for (let i = 0; i < lines.length; i++) {
     const m = lines[i].match(/^\s*\d+\.\s*(.+)$/); // "1. Clarita"
     if (!m) continue;
     const name = m[1].trim();
-
-    const oddsLine = lines[i + 1] || "";
+    const oddsLine = lines[i + 1] || '';
     const oddsMatch = oddsLine.match(oddsRe);
-    const odds = oddsMatch ? oddsMatch[1].replace(/\s+/g, "") : "";
+    const odds = oddsMatch ? oddsMatch[1].replace(/\s+/g, '') : '';
 
-    const jockey = (lines[i + 2] || "").trim();
-    const trainer = (lines[i + 3] || "").trim();
+    const jockey = (lines[i + 2] || '').trim();
+    const trainer = (lines[i + 3] || '').trim();
 
-    // Sanity check: name + odds at minimum
     if (name && odds) {
       horses.push({ name, odds, jockey, trainer });
       i += 3;
-      continue;
     }
   }
 
-  // If nothing from 4-line blocks, try single-line fallback
-  if (horses.length === 0) {
+  // Pass 2: single-line fallback
+  if (!horses.length) {
     for (const l of lines) {
       const m = l.match(/^\s*\d+\.\s*(.+?)\s+(\d+\s*\/\s*\d+|\d+\s*-\s*\d+|\d+\s*to\s*\d+|\d+)(?:\s+(.+?))?(?:\s+(.+))?$/i);
       if (m) {
         horses.push({
           name: m[1].trim(),
-          odds: m[2].replace(/\s+/g, ""),
-          jockey: (m[3] || "").trim(),
-          trainer: (m[4] || "").trim(),
+          odds: m[2].replace(/\s+/g, ''),
+          jockey: (m[3] || '').trim(),
+          trainer: (m[4] || '').trim(),
         });
       }
     }
   }
 
-  // De-dup and cap at 24 to avoid runaway
+  // Pass 3: defensive split by numbered sections to avoid truncation
+  if (!horses.length) {
+    const chunks = all.split(/(?=^\s*\d+\.\s+)/m); // keep numbers by zero-width ahead
+    for (const chunk of chunks) {
+      const lns = chunk.split(/\r?\n/).map(x => x.trim()).filter(Boolean);
+      if (!lns.length) continue;
+      const first = lns[0];
+      const m = first.match(/^\s*\d+\.\s*(.+)$/);
+      if (!m) continue;
+      const name = m[1].trim();
+
+      // Try to find odds somewhere in the next two lines
+      const cand = (lns[1] || '') + ' ' + (lns[2] || '');
+      const om = cand.match(oddsRe);
+      const odds = om ? om[1].replace(/\s+/g, '') : '';
+
+      // Try infer jockey/trainer as the next two lines if present
+      const jockey = (lns[2] || '').trim();
+      const trainer = (lns[3] || '').trim();
+
+      if (name && odds) {
+        horses.push({ name, odds, jockey, trainer });
+      }
+    }
+  }
+
+  // Dedup + cap
   const seen = new Set();
-  const cleaned = [];
+  const out = [];
   for (const h of horses) {
     const key = `${h.name}|${h.odds}|${h.jockey}|${h.trainer}`;
-    if (!seen.has(key)) { seen.add(key); cleaned.push(h); }
+    if (!seen.has(key)) { seen.add(key); out.push(h); }
   }
-  return cleaned.slice(0, 24);
+  return out.slice(0, 24);
 }
 
 // ===== Horse form population =====
-    function getHorseRows() {
-  // Find the repeating rows for Horse Data - look for the single row structure
-  const horseForm = document.querySelector('.horse-form-inline[data-horse-row]');
-  if (!horseForm) return [];
-  
-  return [{
-    row: horseForm,
-    name: horseForm.querySelector('input[name="horseName"]'),
-    odds: horseForm.querySelector('input[name="horseOdds"]'),
-    jockey: horseForm.querySelector('input[name="horseJockey"]'),
-    trainer: horseForm.querySelector('input[name="horseTrainer"]'),
-  }];
+// Prefer a stable wrapper with a known ID or data-attr if available:
+const HORSE_ROWS_CONTAINER_SEL = '#horse-rows, [data-horse-rows], .horse-rows';
+const HORSE_ROW_SEL = '[data-horse-row], .horse-row, .horseRow';
+const ADD_HORSE_SEL = '#add-horse-btn, button#add-horse, button[data-add-horse], button.add-horse, button:has(> span), button';
+
+function getHorseRows() {
+  const container = document.querySelector(HORSE_ROWS_CONTAINER_SEL) || document;
+  const rows = Array.from(container.querySelectorAll(HORSE_ROW_SEL));
+
+  // Map each row to its four inputs. Try specific names first, then fallbacks.
+  return rows.map(row => ({
+    row,
+    name: row.querySelector('input[name="horseName"], input[data-name="horseName"], input.horse-name, input[placeholder*="Horse"], input:nth-of-type(1)'),
+    odds: row.querySelector('input[name="horseOdds"], input[data-name="horseOdds"], input.horse-odds, input[placeholder*="Odds"], input:nth-of-type(2)'),
+    jockey: row.querySelector('input[name="horseJockey"], input[data-name="horseJockey"], input.horse-jockey, input[placeholder*="Jockey"], input:nth-of-type(3)'),
+    trainer: row.querySelector('input[name="horseTrainer"], input[data-name="horseTrainer"], input.horse-trainer, input[placeholder*="Trainer"], input:nth-of-type(4)'),
+  }));
 }
 
-function clickAddHorse() {
-  const addBtn = document.querySelector('#addHorseBtn');
-  if (addBtn) {
-        addBtn.click();
-    return true;
+function findAddHorseButton() {
+  // Choose the "Add Horse" button that's nearest to the rows container
+  const container = document.querySelector(HORSE_ROWS_CONTAINER_SEL);
+  if (container) {
+    const btn = container.querySelector(ADD_HORSE_SEL);
+    if (btn && /add\s*horse/i.test(btn.textContent)) return btn;
   }
-  return false;
+  // Otherwise search globally for a button whose label matches
+  const candidates = Array.from(document.querySelectorAll(ADD_HORSE_SEL))
+    .filter(b => /add\s*horse/i.test(b.textContent || ''));
+  return candidates[0] || null;
 }
 
-function ensureRows(n) {
-  // For now, we'll work with the single row and populate it
-  // In a real implementation, clicking "Add Horse" would create new rows
-  const rows = getHorseRows();
-  return rows.slice(0, n); // Return up to n rows
+function nextFrame() {
+  return new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
+}
+
+async function ensureRows(n) {
+  let rows = getHorseRows();
+  const addBtn = findAddHorseButton();
+  if (!addBtn) {
+    console.warn('Add Horse button not found – cannot add rows');
+    return rows;
+  }
+  while (rows.length < n) {
+    addBtn.click();
+    // Wait a tick for DOM/framework to mount the new row
+    await nextFrame();
+    rows = getHorseRows();
+  }
+  return rows;
 }
 
 function fillRow(rowObj, { name, odds, jockey, trainer }) {
-  if (rowObj.name) rowObj.name.value = name || "";
-  if (rowObj.odds) rowObj.odds.value = odds || "";
-  if (rowObj.jockey) rowObj.jockey.value = jockey || "";
-  if (rowObj.trainer) rowObj.trainer.value = trainer || "";
+  if (rowObj.name) rowObj.name.value = name || '';
+  if (rowObj.odds) rowObj.odds.value = odds || '';
+  if (rowObj.jockey) rowObj.jockey.value = jockey || '';
+  if (rowObj.trainer) rowObj.trainer.value = trainer || '';
 }
 
-function populateHorseForm(horses) {
-  // For now, populate the first horse in the single row
-  // In a real implementation, this would create multiple rows
-  if (horses.length > 0) {
-    const rows = ensureRows(1);
-    if (rows.length > 0) {
-      fillRow(rows[0], horses[0]);
-    }
-  }
+async function populateHorseForm(horses) {
+  console.log('[OCR] horses returned:', horses.length);
+  const rows = await ensureRows(horses.length);
+  console.log('[OCR] rows ensured:', rows.length);
+
+  horses.forEach((h, i) => {
+    if (!rows[i]) return;
+    fillRow(rows[i], h);
+  });
+  console.log('[OCR] filled rows');
 }
 
 // ===== OCR handler =====
 async function handleOcrResponse(res) {
-        let data;
+  let data;
   try { data = await res.json(); } catch { data = {}; }
 
   if (!data || data.ok === false) {
-    toastError(data?.error || "Analyze error");
-          return;
-        }
+    toastError(data?.error || 'Analyze error');
+    return;
+  }
 
   const horses =
     Array.isArray(data.horses) && data.horses.length
       ? data.horses
-      : parseHorsesFromText(data?.meta?.raw_text || data?.text || "");
+      : parseHorsesFromText(data?.meta?.raw_text || data?.text || '');
 
-  if (horses.length === 0) {
-    toastWarn("No horses found in OCR");
-          return;
-        }
-        
-  // DO NOT autofill race fields
-  if (AUTOFILL_RACE_FROM_OCR && data?.meta?.race) {
-    // Optional future: fill race fields here if toggle is true
+  if (!horses.length) {
+    toastWarn('No horses found in OCR');
+    return;
   }
 
-  populateHorseForm(horses);
-  toastOk("Horse list filled from OCR");
+  // DO NOT autofill race fields here (guarded elsewhere)
+
+  await populateHorseForm(horses);
+  toastOk('Horse list filled from OCR');
 }
 
 // ===== collect horses for predict =====
