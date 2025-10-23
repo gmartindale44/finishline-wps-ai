@@ -1,3 +1,6 @@
+// ===== Configuration =====
+const AUTOFILL_RACE_FROM_OCR = false;
+
 // ===== utilities =====
 const $  = (s) => document.querySelector(s);
 const $$ = (s) => Array.from(document.querySelectorAll(s));
@@ -12,101 +15,155 @@ function hideLegacyDump() {
   if (junk) junk.style.display = 'none';
 }
 
-function ensureHorseRowsContainer() {
-  let rows = $('#horseRows');
-  if (!rows) {
-    rows = document.createElement('div');
-    rows.id = 'horseRows';
-    rows.className = 'space-y-1 mt-2';
-    // Insert above action buttons, fallback to end of horse-data block
-    const host = $('#predictBtn')?.parentElement || document.querySelector('.horse-data') || document.body;
-    host.insertBefore(rows, $('#chooseBtn') || host.firstChild);
-  }
-  return rows;
+// ===== Toast functions =====
+function toastOk(message) {
+  console.log('[SUCCESS]', message);
+  alert(message); // Replace with proper toast implementation if available
 }
 
-// ===== fallback parsing for plain OCR text =====
-function parseRaceFromText(text) {
-  const date     = (text.match(/\b(\d{1,2}\/\d{1,2}\/\d{2,4})\b/i) || [,''])[1];
-  const track    = (text.match(/\b(Churchill Downs|Saratoga|Belmont|Keeneland|Santa Anita|Del Mar)\b/i) || [,''])[1];
-  const surface  = (text.match(/\b(Dirt|Turf|Synthetic)\b/i) || [,''])[1];
-  const distance = (text.match(/\b(\d+\s*\/\s*\d+\s*miles|\d+\s*miles|\d+\s*\/\s*\d+\s*mi|\d+\s*mi)\b/i) || [,''])[1];
-  return { date, track, surface, distance };
+function toastWarn(message) {
+  console.warn('[WARNING]', message);
+  alert(message); // Replace with proper toast implementation if available
 }
 
+function toastError(message) {
+  console.error('[ERROR]', message);
+  alert(message); // Replace with proper toast implementation if available
+}
+
+// ===== Robust horse parser =====
 function parseHorsesFromText(text) {
-  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-        const horses = [];
-  let cur = null;
-  const pushCur = () => { if (cur && cur.name) horses.push(cur); cur = null; };
+  if (!text) return [];
+  const lines = text
+    .split(/\r?\n/)
+    .map(l => l.trim())
+    .filter(l => l.length > 0);
 
+  const horses = [];
+  const oddsRe = /(\d+\s*\/\s*\d+|\d+\s*-\s*\d+|\d+\s*to\s*\d+|\d+)/i;
+
+  // Try block-of-4 first
   for (let i = 0; i < lines.length; i++) {
-    const ln = lines[i];
-    const m = ln.match(/^(\d+)\.\s*(.+)$/);  // "1. Clarita"
-    if (m) { pushCur(); cur = { name: m[2], odds: '', jockey: '', trainer: '' }; continue; }
-    if (!cur) continue;
-    if (!cur.odds && /(\d+\/\d+)(\s*-\s*\d+\/\d+)?/.test(ln)) { cur.odds = ln; continue; }
-    if (!cur.jockey && /(jockey|^luis|^irad|^jose|saez|prat|rosario|smith)/i.test(ln)) { cur.jockey = ln.replace(/^jockey[:\s-]*/i, ''); continue; }
-    if (!cur.trainer && /(trainer|pletcher|baffert|brown|asmussen|mott|cox)/i.test(ln)) { cur.trainer = ln.replace(/^trainer[:\s-]*/i, ''); continue; }
+    const m = lines[i].match(/^\s*\d+\.\s*(.+)$/); // "1. Clarita"
+    if (!m) continue;
+    const name = m[1].trim();
+
+    const oddsLine = lines[i + 1] || "";
+    const oddsMatch = oddsLine.match(oddsRe);
+    const odds = oddsMatch ? oddsMatch[1].replace(/\s+/g, "") : "";
+
+    const jockey = (lines[i + 2] || "").trim();
+    const trainer = (lines[i + 3] || "").trim();
+
+    // Sanity check: name + odds at minimum
+    if (name && odds) {
+      horses.push({ name, odds, jockey, trainer });
+      i += 3;
+      continue;
+    }
   }
-  pushCur();
-        return horses;
+
+  // If nothing from 4-line blocks, try single-line fallback
+  if (horses.length === 0) {
+    for (const l of lines) {
+      const m = l.match(/^\s*\d+\.\s*(.+?)\s+(\d+\s*\/\s*\d+|\d+\s*-\s*\d+|\d+\s*to\s*\d+|\d+)(?:\s+(.+?))?(?:\s+(.+))?$/i);
+      if (m) {
+        horses.push({
+          name: m[1].trim(),
+          odds: m[2].replace(/\s+/g, ""),
+          jockey: (m[3] || "").trim(),
+          trainer: (m[4] || "").trim(),
+        });
       }
-      
-// ===== rendering =====
-function renderHorses(horses) {
-  const rows = ensureHorseRowsContainer();
-  rows.innerHTML = '';
-  if (!horses || !horses.length) return;
-  horses.forEach((h, i) => {
-    const el = document.createElement('div');
-    el.className = 'horse-row flex items-center justify-between py-1 border-b border-white/10';
-    el.innerHTML = `
-      <div class="flex-1 truncate">${i + 1}. <strong>${h.name || ''}</strong></div>
-      <div class="w-24 text-right opacity-80">${h.odds || ''}</div>
-      <div class="w-48 text-right opacity-80 truncate">${h.jockey || ''}</div>
-      <div class="w-48 text-right opacity-80 truncate">${h.trainer || ''}</div>
-    `;
-    rows.appendChild(el);
-  });
-}
-
-function fillRace(race) {
-  const date     = $('#raceDate');
-  const track    = $('#raceTrack');
-  const surface  = $('#raceSurface');
-  const distance = $('#raceDistance');
-  if (date)     date.value     = race.date     || date.value     || '';
-  if (track)    track.value    = race.track    || track.value    || '';
-  if (surface)  surface.value  = race.surface  || surface.value  || '';
-  if (distance) distance.value = race.distance || distance.value || '';
-}
-
-// ===== orchestrator: process API payload -> UI =====
-function fillFormFromExtraction(payload) {
-  console.log('[analyze] raw payload:', payload);
-  hideLegacyDump();
-
-  // structured first
-  let race   = payload?.race || {};
-  let horses = Array.isArray(payload?.horses) ? payload.horses : [];
-
-  // allow different shapes {ok, data:{race, horses}}, etc.
-  if (!horses.length && payload?.data?.horses) horses = payload.data.horses;
-  if (!race?.date && payload?.data?.race) race = payload.data.race;
-
-  // fallback to raw text blob
-  const blob = payload?.text || payload?.raw || payload?.content || payload?.ocr || payload?.message || '';
-  if ((!race?.date && !race?.track && !race?.surface && !race?.distance) && blob) {
-    race = parseRaceFromText(blob);
-  }
-  if ((!horses?.length) && blob) {
-    horses = parseHorsesFromText(blob);
+    }
   }
 
-  fillRace(race);
-  renderHorses(horses);
-  setBadge('Ready to predict');
+  // De-dup and cap at 24 to avoid runaway
+  const seen = new Set();
+  const cleaned = [];
+  for (const h of horses) {
+    const key = `${h.name}|${h.odds}|${h.jockey}|${h.trainer}`;
+    if (!seen.has(key)) { seen.add(key); cleaned.push(h); }
+  }
+  return cleaned.slice(0, 24);
+}
+
+// ===== Horse form population =====
+    function getHorseRows() {
+  // Find the repeating rows for Horse Data - look for the single row structure
+  const horseForm = document.querySelector('.horse-form-inline[data-horse-row]');
+  if (!horseForm) return [];
+  
+  return [{
+    row: horseForm,
+    name: horseForm.querySelector('input[name="horseName"]'),
+    odds: horseForm.querySelector('input[name="horseOdds"]'),
+    jockey: horseForm.querySelector('input[name="horseJockey"]'),
+    trainer: horseForm.querySelector('input[name="horseTrainer"]'),
+  }];
+}
+
+function clickAddHorse() {
+  const addBtn = document.querySelector('#addHorseBtn');
+  if (addBtn) {
+        addBtn.click();
+    return true;
+  }
+  return false;
+}
+
+function ensureRows(n) {
+  // For now, we'll work with the single row and populate it
+  // In a real implementation, clicking "Add Horse" would create new rows
+  const rows = getHorseRows();
+  return rows.slice(0, n); // Return up to n rows
+}
+
+function fillRow(rowObj, { name, odds, jockey, trainer }) {
+  if (rowObj.name) rowObj.name.value = name || "";
+  if (rowObj.odds) rowObj.odds.value = odds || "";
+  if (rowObj.jockey) rowObj.jockey.value = jockey || "";
+  if (rowObj.trainer) rowObj.trainer.value = trainer || "";
+}
+
+function populateHorseForm(horses) {
+  // For now, populate the first horse in the single row
+  // In a real implementation, this would create multiple rows
+  if (horses.length > 0) {
+    const rows = ensureRows(1);
+    if (rows.length > 0) {
+      fillRow(rows[0], horses[0]);
+    }
+  }
+}
+
+// ===== OCR handler =====
+async function handleOcrResponse(res) {
+        let data;
+  try { data = await res.json(); } catch { data = {}; }
+
+  if (!data || data.ok === false) {
+    toastError(data?.error || "Analyze error");
+          return;
+        }
+
+  const horses =
+    Array.isArray(data.horses) && data.horses.length
+      ? data.horses
+      : parseHorsesFromText(data?.meta?.raw_text || data?.text || "");
+
+  if (horses.length === 0) {
+    toastWarn("No horses found in OCR");
+          return;
+        }
+        
+  // DO NOT autofill race fields
+  if (AUTOFILL_RACE_FROM_OCR && data?.meta?.race) {
+    // Optional future: fill race fields here if toggle is true
+  }
+
+  populateHorseForm(horses);
+  toastOk("Horse list filled from OCR");
 }
 
 // ===== collect horses for predict =====
@@ -166,10 +223,10 @@ async function predict(horses, race) {
       setBadge('Extracting…');
       try {
         const data = await postPhotos([...e.target.files]);
-        fillFormFromExtraction(data);
+        await handleOcrResponse({ json: () => Promise.resolve(data) });
       } catch (err) {
         console.error(err);
-        alert('Extract failed');
+        toastError('Extract failed');
         setBadge('Idle');
       } finally {
         fileInput.value = '';
@@ -194,16 +251,16 @@ async function predict(horses, race) {
       };
       const horses = collectHorsesFromUI();
         if (!horses.length) {
-        alert('No horses found in the form.');
+        toastWarn('No horses found in the form.');
         setBadge('Ready to predict');
             return;
         }
       try {
         const data = await predict(horses, race);
-        alert(data?.msg || data?.message || 'predict done');
+        toastOk(data?.msg || data?.message || 'predict done');
       } catch (err) {
         console.error(err);
-        alert('predict failed');
+        toastError('predict failed');
     } finally {
         setBadge('Ready to predict');
       }
@@ -212,6 +269,5 @@ async function predict(horses, race) {
 
   console.log('[init] UI wired');
   hideLegacyDump();
-  ensureHorseRowsContainer();
   setBadge('Idle');
 })();

@@ -50,11 +50,11 @@
     </div>
 
     <h3 class="mt-4">Horse Data</h3>
-    <div class="horse-form-inline">
-      <input id="horseNameInput" type="text" placeholder="Horse Name" />
-      <input id="mlOddsInput"   type="text" placeholder="ML Odds (e.g., 5-2)" />
-      <input id="jockeyInput"   type="text" placeholder="Jockey" />
-      <input id="trainerInput"  type="text" placeholder="Trainer" />
+    <div class="horse-form-inline" data-horse-row>
+      <input name="horseName" type="text" placeholder="Horse Name" />
+      <input name="horseOdds" type="text" placeholder="ML Odds (e.g., 5-2)" />
+      <input name="horseJockey" type="text" placeholder="Jockey" />
+      <input name="horseTrainer" type="text" placeholder="Trainer" />
       <button type="button" class="button" id="addHorseBtn" data-add-horse>Add Horse</button>
     </div>
 
@@ -83,6 +83,12 @@
 
     <!-- Legacy dump area (hidden by default) -->
     <div id="legacyDump" style="display:none"></div>
+
+    <!-- Debug section (optional) -->
+    <details id="debug-ocr" style="display:none;margin-top:8px;">
+      <summary>OCR Debug</summary>
+      <pre id="debug-ocr-text" style="white-space:pre-wrap"></pre>
+    </details>
 
     <div class="panel actions mt-4">
       <button class="button" id="chooseBtn" data-photo-input>Choose Photos / PDF</button>
