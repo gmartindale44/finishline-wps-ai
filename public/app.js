@@ -110,28 +110,151 @@ async function extractPhotosWithAI(filesOrB64) {
   }
 }
 
-/* ✅ FIXED ANALYZE BUTTON SELECTOR (cross-browser safe) */
-const analyzeBtn =
-  document.querySelector('[data-analyze-btn]') ||
-  document.getElementById('analyze-btn') ||
-  Array.from(document.querySelectorAll('button')).find((btn) =>
-    btn.textContent.trim().toLowerCase().includes('analyze photos')
-  );
+/** UI HOOKS: Choose Photos + Analyze — robust cross-browser selectors **/
+/** No :has or :contains — only safe, DOM-native code. */
+(function initFilePickingAndAnalyze() {
+  // --- Small helpers --------------------------------------------------
+  const findButtonByText = (text) => {
+    const lc = text.trim().toLowerCase();
+    // Try <button>, then <a role=button>, then generic clickable things
+    const btns = [
+      ...document.querySelectorAll('button, [role="button"], a, .btn, .button')
+    ];
+    return btns.find((el) => (el.textContent || '').trim().toLowerCase().includes(lc)) || null;
+  };
 
-if (analyzeBtn) {
-  analyzeBtn.addEventListener('click', async (e) => {
-    e.preventDefault();
-    const input = document.querySelector('input[type="file"]');
-    const files = Array.from(input?.files || []);
-    if (!files.length) {
-      if (typeof toastWarn === 'function') toastWarn('Choose at least one photo or PDF');
-      return;
+  const statusBadge = () =>
+    document.querySelector('[data-status="badge"], #status-badge, .status-badge');
+
+  const setBusy = (label = 'Working...') => {
+    const b = statusBadge();
+    if (b) b.textContent = label;
+  };
+  const clearBusy = () => {
+    const b = statusBadge();
+    if (b) b.textContent = 'Idle';
+  };
+
+  // --- Ensure/return a single hidden <input type="file"> --------------
+  const ensureFileInput = () => {
+    let input =
+      document.querySelector('input[type="file"][data-core-uploader]') ||
+      document.getElementById('file-input-core');
+
+    if (!input) {
+      input = document.createElement('input');
+      input.type = 'file';
+      input.id = 'file-input-core';
+      input.setAttribute('data-core-uploader', '1');
+      input.multiple = true;
+      input.accept = '.png,.jpg,.jpeg,.webp,.heic,.heif,.pdf,image/*,application/pdf';
+      input.style.position = 'fixed';
+      input.style.left = '-9999px';
+      input.style.width = '1px';
+      input.style.height = '1px';
+      input.style.opacity = '0';
+      document.body.appendChild(input);
     }
-    await extractPhotosWithAI(files);
+    return input;
+  };
+
+  // --- Find UI controls safely ---------------------------------------
+  const chooseBtn =
+    document.querySelector('[data-choose-btn]') ||
+    document.getElementById('choose-photos-btn') ||
+    findButtonByText('choose photos') ||
+    findButtonByText('choose photos / pdf');
+
+  const analyzeBtn =
+    document.querySelector('[data-analyze-btn]') ||
+    document.getElementById('analyze-btn') ||
+    findButtonByText('analyze photos with ai') ||
+    findButtonByText('analyze with ai');
+
+  // We'll keep a reference to the last selected FileList
+  let lastChosenFiles = [];
+
+  // --- Wire the Choose button -> open hidden input --------------------
+  const fileInput = ensureFileInput();
+
+  if (chooseBtn) {
+    chooseBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      // Reset the value so picking the same file twice still fires change
+      fileInput.value = '';
+      fileInput.click();
+    });
+  } else {
+    console.warn('[UI] Choose Photos button not found.');
+  }
+
+  // --- Auto-analyze toggle (turn on/off here) -------------------------
+  const AUTO_ANALYZE_ON_PICK = true;
+
+  // --- On file chosen: store and maybe analyze ------------------------
+  fileInput.addEventListener('change', async () => {
+    try {
+      const files = Array.from(fileInput.files || []);
+      lastChosenFiles = files;
+      console.log('[UI] Picked files:', files.map((f) => `${f.name} (${f.type || 'n/a'})`));
+
+      if (!files.length) return;
+
+      // Optional: visual feedback
+      setBusy('Files selected');
+
+      if (AUTO_ANALYZE_ON_PICK) {
+        if (typeof extractPhotosWithAI === 'function') {
+          await extractPhotosWithAI(files);
+        } else {
+          console.warn('[UI] extractPhotosWithAI() is missing.');
+        }
+      } else {
+        clearBusy();
+      }
+    } catch (err) {
+      console.error('[UI] fileInput change error:', err);
+      clearBusy();
+    }
   });
-} else {
-  console.warn('[INIT] Analyze button not found on page');
-}
+
+  // --- Analyze button -> run with last chosen files -------------------
+  if (analyzeBtn) {
+    analyzeBtn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const files = lastChosenFiles.length
+        ? lastChosenFiles
+        : Array.from(
+            (document.querySelector('input[type="file"]') || fileInput).files || []
+          );
+
+      if (!files.length) {
+        console.warn('[UI] No files selected; opening picker.');
+        fileInput.value = '';
+        fileInput.click();
+        return;
+      }
+
+      try {
+        if (typeof extractPhotosWithAI === 'function') {
+          setBusy('Analyzing...');
+          await extractPhotosWithAI(files);
+        } else {
+          console.warn('[UI] extractPhotosWithAI() is missing.');
+        }
+      } catch (err) {
+        console.error('[UI] analyze click error:', err);
+      } finally {
+        clearBusy();
+      }
+    });
+  } else {
+    console.warn('[UI] Analyze button not found. The Choose flow still works and can auto-analyze.');
+  }
+})();
 
 async function populateHorseForm(horses) {
   console.log('[populateHorseForm] Filling', horses.length, 'horses');
