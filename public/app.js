@@ -1,304 +1,281 @@
-window.addEventListener('error', (e) => {
-  console.error('[GLOBAL ERROR]', e.message, e.error);
-  if (typeof toastError === 'function') toastError(`Error: ${e.message}`);
-});
-window.addEventListener('unhandledrejection', (e) => {
-  console.error('[UNHANDLED REJECTION]', e.reason);
-  if (typeof toastError === 'function') toastError(`Error: ${e.reason?.message || e.reason}`);
-});
-
-const statusBadge = () =>
+/** --------------------------------------------------------------
+ *  STATUS HELPERS (optional visual feedback)
+ * -------------------------------------------------------------- */
+const getStatusBadge = () =>
   document.querySelector('[data-status="badge"], #status-badge, .status-badge');
+const setStatus = (txt) => { const b = getStatusBadge(); if (b) b.textContent = txt; };
+const setIdle = () => setStatus('Idle');
 
-let _busyWatchdog = null;
-function setBusy(label = 'Working...') {
-  const el = statusBadge();
-  if (el) el.textContent = label;
-  clearTimeout(_busyWatchdog);
-  _busyWatchdog = setTimeout(() => {
-    const b = statusBadge();
-    if (b && b.textContent?.toLowerCase().includes('extract')) {
-      console.warn('[WATCHDOG] Busy badge stuck — forcing Idle');
-      b.textContent = 'Idle';
-    }
-  }, 12_000);
+/** --------------------------------------------------------------
+ *  DOM HELPERS for horse rows (do NOT touch race meta inputs)
+ * -------------------------------------------------------------- */
+const q = (sel) => document.querySelector(sel);
+
+function getHorseListContainer() {
+  // Container that holds the list text (beneath the form) — may be null
+  return q('[data-horse-list], #horse-list, .horse-list');
 }
-function clearBusy() {
-  const el = statusBadge();
-  if (el) el.textContent = 'Idle';
-  clearTimeout(_busyWatchdog);
-  _busyWatchdog = null;
+function getHorseRowsContainer() {
+  // The inline form row area with inputs for horse name / odds / jockey / trainer
+  // Use your actual wrapper if different
+  return q('[data-horse-rows], #horse-rows, .horse-rows') || document;
 }
 
-async function extractPhotosWithAI(filesOrB64) {
-  setBusy('Extracting...');
-  const hasFiles = Array.isArray(filesOrB64) && filesOrB64[0] instanceof File;
-  const url = '/api/photo_extract_openai_b64';
-  let fetchOpts;
-
-  if (hasFiles) {
-    const form = new FormData();
-    filesOrB64.forEach((f) => form.append('file', f));
-    fetchOpts = { method: 'POST', body: form };
-  } else {
-    fetchOpts = {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image_b64: filesOrB64 }),
-    };
-  }
-
-  const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort('timeout'), 30_000);
-  fetchOpts.signal = ac.signal;
-
-  try {
-    console.log('[OCR] Fetch ->', url, fetchOpts);
-    const res = await fetch(url, fetchOpts);
-    const raw = await res.clone().text();
-    console.log('[OCR] HTTP', res.status, 'RAW:', raw);
-
-    let data = null;
-    try {
-      data = JSON.parse(raw);
-    } catch {
-      console.warn('[OCR] Response was not JSON parseable');
-    }
-    console.log('[OCR] Parsed JSON:', data);
-
-    if (!res.ok) {
-      const msg = data?.error || `Analyze failed (${res.status})`;
-      if (typeof toastError === 'function') toastError(msg);
-      return;
-    }
-
-    if (!data || data.ok === false) {
-      const msg = data?.error || 'Analyze error';
-      if (typeof toastError === 'function') toastError(msg);
-      return;
-    }
-
-    let horses = Array.isArray(data.horses) ? data.horses.filter(Boolean) : [];
-    if (!horses.length && typeof parseHorsesFromText === 'function') {
-      const maybeText = data?.meta?.raw_text || data?.text || '';
-      horses = parseHorsesFromText(maybeText) || [];
-    }
-
-    console.log('[OCR] Horses count:', horses.length, horses);
-    if (!horses.length) {
-      if (typeof toastWarn === 'function') toastWarn('No horses found in OCR result');
-      return;
-    }
-
-    if (typeof populateHorseForm === 'function') {
-      await populateHorseForm(horses);
-    } else {
-      console.warn('[OCR] populateHorseForm missing');
-    }
-
-    if (typeof toastOk === 'function') toastOk(`Filled ${horses.length} horses`);
-  } catch (err) {
-    console.error('[OCR] Exception:', err);
-    const msg =
-      err?.name === 'AbortError'
-        ? 'Analyze timed out'
-        : err?.message || 'Analyze failed';
-    if (typeof toastError === 'function') toastError(msg);
-  } finally {
-    clearTimeout(timer);
-    clearBusy();
-  }
-}
-
-/** UI HOOKS: Choose Photos + Analyze — robust cross-browser selectors **/
-/** No :has or :contains — only safe, DOM-native code. */
-(function initFilePickingAndAnalyze() {
-  // --- Small helpers --------------------------------------------------
-  const findButtonByText = (text) => {
-    const lc = text.trim().toLowerCase();
-    // Try <button>, then <a role=button>, then generic clickable things
-    const btns = [
-      ...document.querySelectorAll('button, [role="button"], a, .btn, .button')
-    ];
-    return btns.find((el) => (el.textContent || '').trim().toLowerCase().includes(lc)) || null;
-  };
-
-  const statusBadge = () =>
-    document.querySelector('[data-status="badge"], #status-badge, .status-badge');
-
-  const setBusy = (label = 'Working...') => {
-    const b = statusBadge();
-    if (b) b.textContent = label;
-  };
-  const clearBusy = () => {
-    const b = statusBadge();
-    if (b) b.textContent = 'Idle';
-  };
-
-  // --- Ensure/return a single hidden <input type="file"> --------------
-  const ensureFileInput = () => {
-    let input =
-      document.querySelector('input[type="file"][data-core-uploader]') ||
-      document.getElementById('file-input-core');
-
-    if (!input) {
-      input = document.createElement('input');
-      input.type = 'file';
-      input.id = 'file-input-core';
-      input.setAttribute('data-core-uploader', '1');
-      input.multiple = true;
-      input.accept = '.png,.jpg,.jpeg,.webp,.heic,.heif,.pdf,image/*,application/pdf';
-      input.style.position = 'fixed';
-      input.style.left = '-9999px';
-      input.style.width = '1px';
-      input.style.height = '1px';
-      input.style.opacity = '0';
-      document.body.appendChild(input);
-    }
-    return input;
-  };
-
-  // --- Find UI controls safely ---------------------------------------
-  const chooseBtn =
-    document.querySelector('[data-choose-btn]') ||
-    document.getElementById('choose-photos-btn') ||
-    findButtonByText('choose photos') ||
-    findButtonByText('choose photos / pdf');
-
-  const analyzeBtn =
-    document.querySelector('[data-analyze-btn]') ||
-    document.getElementById('analyze-btn') ||
-    findButtonByText('analyze photos with ai') ||
-    findButtonByText('analyze with ai');
-
-  // We'll keep a reference to the last selected FileList
-  let lastChosenFiles = [];
-
-  // --- Wire the Choose button -> open hidden input --------------------
-  const fileInput = ensureFileInput();
-
-  if (chooseBtn) {
-    chooseBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      // Reset the value so picking the same file twice still fires change
-      fileInput.value = '';
-      fileInput.click();
-    });
-  } else {
-    console.warn('[UI] Choose Photos button not found.');
-  }
-
-  // --- Auto-analyze toggle (turn on/off here) -------------------------
-  const AUTO_ANALYZE_ON_PICK = true;
-
-  // --- On file chosen: store and maybe analyze ------------------------
-  fileInput.addEventListener('change', async () => {
-    try {
-      const files = Array.from(fileInput.files || []);
-      lastChosenFiles = files;
-      console.log('[UI] Picked files:', files.map((f) => `${f.name} (${f.type || 'n/a'})`));
-
-      if (!files.length) return;
-
-      // Optional: visual feedback
-      setBusy('Files selected');
-
-      if (AUTO_ANALYZE_ON_PICK) {
-        if (typeof extractPhotosWithAI === 'function') {
-          await extractPhotosWithAI(files);
-        } else {
-          console.warn('[UI] extractPhotosWithAI() is missing.');
-        }
-      } else {
-        clearBusy();
-      }
-    } catch (err) {
-      console.error('[UI] fileInput change error:', err);
-      clearBusy();
-    }
-  });
-
-  // --- Analyze button -> run with last chosen files -------------------
-  if (analyzeBtn) {
-    analyzeBtn.addEventListener('click', async (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-
-      const files = lastChosenFiles.length
-        ? lastChosenFiles
-        : Array.from(
-            (document.querySelector('input[type="file"]') || fileInput).files || []
-          );
-
-      if (!files.length) {
-        console.warn('[UI] No files selected; opening picker.');
-        fileInput.value = '';
-        fileInput.click();
-        return;
-      }
-
-      try {
-        if (typeof extractPhotosWithAI === 'function') {
-          setBusy('Analyzing...');
-          await extractPhotosWithAI(files);
-        } else {
-          console.warn('[UI] extractPhotosWithAI() is missing.');
-        }
-      } catch (err) {
-        console.error('[UI] analyze click error:', err);
-      } finally {
-        clearBusy();
-      }
-    });
-  } else {
-    console.warn('[UI] Analyze button not found. The Choose flow still works and can auto-analyze.');
-  }
-})();
-
-async function populateHorseForm(horses) {
-  console.log('[populateHorseForm] Filling', horses.length, 'horses');
-
-  const container =
-    document.querySelector('#horse-rows, [data-horse-rows], .horse-rows') || document;
+function makeHorseRow() {
+  // Find the single inline row template (the visible row with inputs).
+  // If you already have an "Add Horse" flow, we'll click it to generate rows.
   const addBtn =
-    container.querySelector('#add-horse-btn, button#add-horse, button.add-horse') ||
-    document.querySelector('#add-horse-btn, button#add-horse, button.add-horse');
+    q('[data-add-horse], #add-horse, button, [role="button"]');
+  // Try to find specific by text
+  const add = [...document.querySelectorAll('button, [role="button"], a')]
+    .find(b => /add horse/i.test(b.textContent || ''));
+  const clickTarget = q('[data-add-horse]') || q('#add-horse') || add || addBtn;
 
-  let rows = Array.from(container.querySelectorAll('[data-horse-row], .horseRow, .horse-row'));
-  while (rows.length < horses.length && addBtn) {
-    addBtn.click();
-    await new Promise((r) => setTimeout(r, 100));
-    rows = Array.from(container.querySelectorAll('[data-horse-row], .horseRow, .horse-row'));
+  if (clickTarget) {
+    clickTarget.click();
   }
 
-  horses.forEach((h, i) => {
-    const row = rows[i];
-    if (!row) return;
-    const name = row.querySelector('input[name="horseName"], input.horse-name, input:nth-of-type(1)');
-    const odds = row.querySelector('input[name="horseOdds"], input.horse-odds, input:nth-of-type(2)');
-    const jockey = row.querySelector('input[name="horseJockey"], input.horse-jockey, input:nth-of-type(3)');
-    const trainer = row.querySelector('input[name="horseTrainer"], input.horse-trainer, input:nth-of-type(4)');
-    if (name) name.value = h.name || '';
-    if (odds) odds.value = h.odds || '';
-    if (jockey) jockey.value = h.jockey || '';
-    if (trainer) trainer.value = h.trainer || '';
-  });
+  // Return the last row's inputs after adding
+  const rows = [...document.querySelectorAll('.horse-row, [data-horse-row]')];
+  if (rows.length) return rows[rows.length - 1];
+
+  // Fallback: use the visible inline inputs (single-row layout)
+  // (Adjust these selectors to your actual inline inputs)
+  return {
+    name:  q('input[placeholder="Horse Name"], input[name="horseName"]'),
+    odds:  q('input[placeholder="ML Odds (e.g., 5-2)"], input[name="mlOdds"]'),
+    jockey:q('input[placeholder="Jockey"], input[name="jockey"]'),
+    trainer:q('input[placeholder="Trainer"], input[name="trainer"]')
+  };
+}
+
+function setInputValue(el, value) { if (el) { el.value = value || ''; el.dispatchEvent(new Event('input', { bubbles: true })); } }
+
+function fillLastVisibleInlineRow(h) {
+  // If your UI is a single inline row (not multiple), fill those fields
+  setInputValue(q('input[placeholder="Horse Name"], input[name="horseName"]'), h.name);
+  setInputValue(q('input[placeholder="ML Odds (e.g., 5-2)"], input[name="mlOdds"]'), h.odds);
+  setInputValue(q('input[placeholder="Jockey"], input[name="jockey"]'), h.jockey);
+  setInputValue(q('input[placeholder="Trainer"], input[name="trainer"]'), h.trainer);
+}
+
+function fillNewHorseRow(h) {
+  const row = makeHorseRow();
+
+  // If row is a DOM node with inputs inside:
+  const name   = row.querySelector ? row.querySelector('input[name], input[placeholder="Horse Name"]') : row.name;
+  const odds   = row.querySelector ? row.querySelector('input[placeholder*="ML Odds"], input[name="mlOdds"]') : row.odds;
+  const jockey = row.querySelector ? row.querySelector('input[placeholder="Jockey"], input[name="jockey"]') : row.jockey;
+  const trainer= row.querySelector ? row.querySelector('input[placeholder="Trainer"], input[name="trainer"]') : row.trainer;
+
+  if (!name && !odds && !jockey && !trainer) {
+    // Fallback: single-inline-row layout
+    return fillLastVisibleInlineRow(h);
+  }
+  setInputValue(name, h.name);
+  setInputValue(odds, h.odds);
+  setInputValue(jockey, h.jockey);
+  setInputValue(trainer, h.trainer);
+}
+
+/** --------------------------------------------------------------
+ *  POPULATE ONLY HORSE FIELDS (no date/track/surface/distance)
+ * -------------------------------------------------------------- */
+function populateHorseForm(horses) {
+  try {
+    // Clear the "list" block under the form if present (we want the inputs, not the list)
+    const list = getHorseListContainer();
+    if (list) list.textContent = '';
+
+    // Fill rows
+    horses.forEach((h, idx) => {
+      const clean = {
+        name:   (h.name   || '').trim(),
+        odds:   (h.odds   || '').trim(),
+        jockey: (h.jockey || '').trim(),
+        trainer:(h.trainer|| '').trim(),
+      };
+      fillNewHorseRow(clean);
+    });
+  } catch (err) {
+    console.error('[populateHorseForm] error:', err);
+  }
+}
+
+/** --------------------------------------------------------------
+ *  RESPONSE PARSING (accept JSON list or plain text list)
+ * -------------------------------------------------------------- */
+function parseHorsesFromResponse(payload) {
+  // 1) JSON { ok:true, horses:[{name,odds,jockey,trainer}, ...] }
+  if (payload && typeof payload === 'object') {
+    if (Array.isArray(payload.horses)) return payload.horses;
+    if (Array.isArray(payload)) return payload; // if endpoint returns array directly
+    if (payload.text) {
+      // Some handlers return { text: "1. Horse ...\n2. Horse ..." }
+      return parseHorsesFromText(payload.text);
+    }
+  }
+  // 2) string fallback
+  if (typeof payload === 'string') {
+    return parseHorsesFromText(payload);
+  }
+  return [];
 }
 
 function parseHorsesFromText(text) {
-  if (!text) return [];
-  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  // Very forgiving fallback: lines like
+  // "1. Clarita | 10/1 | Luis Saez | Philip A. Bauer"
   const horses = [];
-  for (let i = 0; i < lines.length; i++) {
-    const m = lines[i].match(/^\d+\.\s*(.+)$/);
-    if (m) {
-      const name = m[1];
-      const odds = (lines[i + 1] || '').match(/\d+\/\d+/)?.[0] || '';
-      const jockey = lines[i + 2] || '';
-      const trainer = lines[i + 3] || '';
-      if (name && odds) horses.push({ name, odds, jockey, trainer });
+  const lines = String(text || '')
+    .replace(/\r/g, '')
+    .split('\n')
+    .map(l => l.trim())
+    .filter(Boolean);
+
+  for (const line of lines) {
+    // Try pipe-delimited
+    const parts = line.replace(/^\d+\.?\s*/, '').split('|').map(s => s.trim());
+    if (parts.length >= 1) {
+      horses.push({
+        name: parts[0] || '',
+        odds: parts[1] || '',
+        jockey: parts[2] || '',
+        trainer: parts[3] || '',
+      });
     }
   }
   return horses;
 }
+
+/** --------------------------------------------------------------
+ *  CORE: EXTRACT PHOTOS with AI (actually hit the API)
+ * -------------------------------------------------------------- */
+async function extractPhotosWithAI(files) {
+  if (!files || !files.length) {
+    console.warn('[extractPhotosWithAI] No files supplied.');
+    return;
+  }
+  setStatus('Extracting...');
+
+  try {
+    // Send ONLY first file; you can loop for multi-page later if needed
+    const file = files[0];
+    const fd = new FormData();
+    fd.append('file', file, file.name);
+
+    const res = await fetch('/api/photo_extract_openai_b64', {
+      method: 'POST',
+      body: fd,
+    });
+
+    // Basic network failure guard
+    if (!res.ok) {
+      const t = await res.text().catch(() => '');
+      throw new Error(`Extract failed (${res.status}): ${t || 'No body'}`);
+    }
+
+    // Try JSON first, then text
+    let payload;
+    const contentType = res.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      payload = await res.json();
+    } else {
+      payload = await res.text();
+    }
+
+    console.log('[extractPhotosWithAI] raw payload:', payload);
+
+    // Endpoint may return {ok:false,error:...}
+    if (payload && payload.ok === false) {
+      throw new Error(payload.error || 'Unknown extract error');
+    }
+
+    const horses = parseHorsesFromResponse(payload);
+    if (!horses.length) {
+      console.warn('[extractPhotosWithAI] No horses parsed from response.');
+      setStatus('No horses found');
+      return;
+    }
+
+    // Populate only horse rows
+    populateHorseForm(horses);
+    setStatus('Ready to predict');
+  } catch (err) {
+    console.error('[extractPhotosWithAI] error:', err);
+    alert(`Extract error: ${err.message || err}`);
+    setIdle();
+  }
+}
+
+/** --------------------------------------------------------------
+ *  FILE PICKER + ANALYZE BUTTON HOOKS (safe + robust)
+ *  (This is compatible with previous snippet; if it exists, keep only one copy)
+ * -------------------------------------------------------------- */
+(function initFilePickingAndAnalyze() {
+  const findByText = (txt) => {
+    const lc = txt.trim().toLowerCase();
+    const els = document.querySelectorAll('button, [role="button"], a, .btn, .button');
+    return [...els].find(el => (el.textContent || '').trim().toLowerCase().includes(lc)) || null;
+  };
+
+  const chooseBtn =
+    document.querySelector('[data-choose-btn]') ||
+    document.getElementById('choose-photos-btn') ||
+    findByText('choose photos / pdf') ||
+    findByText('choose photos');
+
+  const analyzeBtn =
+    document.querySelector('[data-analyze-btn]') ||
+    document.getElementById('analyze-btn') ||
+    findByText('analyze photos with ai') ||
+    findByText('analyze with ai');
+
+  // Make (or get) a hidden input
+  let fileInput =
+    document.querySelector('input[type="file"][data-core-uploader]') ||
+    document.getElementById('file-input-core');
+
+  if (!fileInput) {
+    fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.id = 'file-input-core';
+    fileInput.setAttribute('data-core-uploader', '1');
+    fileInput.multiple = true;
+    fileInput.accept = '.png,.jpg,.jpeg,.webp,.heic,.heif,.pdf,image/*,application/pdf';
+    fileInput.style.position = 'fixed';
+    fileInput.style.left = '-9999px';
+    fileInput.style.opacity = '0';
+    document.body.appendChild(fileInput);
+  }
+
+  let lastChosenFiles = [];
+
+  if (chooseBtn) {
+    chooseBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      fileInput.value = '';
+      fileInput.click();
+    });
+  }
+
+  fileInput.addEventListener('change', async () => {
+    const files = Array.from(fileInput.files || []);
+    lastChosenFiles = files;
+    if (!files.length) return;
+    await extractPhotosWithAI(files);
+  });
+
+  if (analyzeBtn) {
+    analyzeBtn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      const files = lastChosenFiles.length ? lastChosenFiles : Array.from(fileInput.files || []);
+      if (!files.length) {
+        fileInput.value = '';
+        fileInput.click();
+        return;
+      }
+      await extractPhotosWithAI(files);
+    });
+  }
+  setIdle(); // initialize badge if present
+})();
