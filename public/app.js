@@ -78,25 +78,91 @@ function fillNewHorseRow(h) {
   setInputValue(trainer, h.trainer);
 }
 
-/** --------------------------------------------------------------
- *  POPULATE ONLY HORSE FIELDS (no date/track/surface/distance)
- * -------------------------------------------------------------- */
+/** Find the Add Horse button reliably by text or data-id */
+function getAddHorseButton() {
+  // 1) explicit data-hook/id
+  let btn = document.querySelector('[data-add-horse], #add-horse');
+  if (btn) return btn;
+
+  // 2) by text content
+  const candidates = document.querySelectorAll('button, [role="button"], a, .btn, .button');
+  btn = [...candidates].find(el => /(^|\s)add horse(\s|$)/i.test((el.textContent || '').trim()));
+  return btn || null;
+}
+
+/** Click "Add Horse" and return the newly created row container or its inputs (fallback last row) */
+function clickAddHorseAndGetRow() {
+  const before = [...document.querySelectorAll('.horse-row, [data-horse-row]')];
+  const addBtn = getAddHorseButton();
+  if (addBtn) addBtn.click();
+
+  // Prefer a concrete new row node if your app renders rows with a class
+  const after = [...document.querySelectorAll('.horse-row, [data-horse-row]')];
+  if (after.length > before.length) return after[after.length - 1];
+
+  // Fallback: use the "last/only" inline inputs as a pseudo-row
+    return {
+    name:   document.querySelector('input[placeholder="Horse Name"], input[name="horseName"]'),
+    odds:   document.querySelector('input[placeholder*="ML Odds"], input[name="mlOdds"]'),
+    jockey: document.querySelector('input[placeholder="Jockey"], input[name="jockey"]'),
+    trainer:document.querySelector('input[placeholder="Trainer"], input[name="trainer"]'),
+  };
+}
+
+/** ─────────────────────────────────────────────────────────────
+ *  POPULATE ONLY HORSE FIELDS (multi-row aware)
+ *  - First horse → fill the existing inline row
+ *  - Remaining horses → click "Add Horse" then fill each new row
+ *  (Race Date / Track / Surface / Distance are never touched)
+ *  ───────────────────────────────────────────────────────────── */
 function populateHorseForm(horses) {
   try {
-    // Clear the "list" block under the form if present (we want the inputs, not the list)
-    const list = getHorseListContainer();
+    if (!Array.isArray(horses) || horses.length === 0) return;
+
+    // 1) Clear any static list block if present (we only want inputs)
+    const list = document.querySelector('[data-horse-list], #horse-list, .horse-list');
     if (list) list.textContent = '';
 
-    // Fill rows
-    horses.forEach((h, idx) => {
-      const clean = {
-        name:   (h.name   || '').trim(),
-        odds:   (h.odds   || '').trim(),
-        jockey: (h.jockey || '').trim(),
-        trainer:(h.trainer|| '').trim(),
+    // Helper to set input value and dispatch input event
+    const setVal = (el, v) => { if (el) { el.value = v || ''; el.dispatchEvent(new Event('input', { bubbles: true })); } };
+
+    // Helper to fill a row-like object (real row element or the inline inputs fallback)
+    const fillRow = (rowEl, h) => {
+      const name   = rowEl.querySelector ? rowEl.querySelector('input[name], input[placeholder="Horse Name"]') : rowEl.name;
+      const odds   = rowEl.querySelector ? rowEl.querySelector('input[placeholder*="ML Odds"], input[name="mlOdds"]') : rowEl.odds;
+      const jockey = rowEl.querySelector ? rowEl.querySelector('input[placeholder="Jockey"], input[name="jockey"]') : rowEl.jockey;
+      const trainer= rowEl.querySelector ? rowEl.querySelector('input[placeholder="Trainer"], input[name="trainer"]') : rowEl.trainer;
+      setVal(name,   h.name);
+      setVal(odds,   h.odds);
+      setVal(jockey, h.jockey);
+      setVal(trainer,h.trainer);
+    };
+
+    // 2) Fill the FIRST horse into the existing inline row
+    const first = {
+      name:   (horses[0].name   || '').trim(),
+      odds:   (horses[0].odds   || '').trim(),
+      jockey: (horses[0].jockey || '').trim(),
+      trainer:(horses[0].trainer|| '').trim(),
+    };
+    fillRow({
+      name:   document.querySelector('input[placeholder="Horse Name"], input[name="horseName"]'),
+      odds:   document.querySelector('input[placeholder*="ML Odds"], input[name="mlOdds"]'),
+      jockey: document.querySelector('input[placeholder="Jockey"], input[name="jockey"]'),
+      trainer:document.querySelector('input[placeholder="Trainer"], input[name="trainer"]'),
+    }, first);
+
+    // 3) For EACH remaining horse:
+    for (let i = 1; i < horses.length; i++) {
+      const h = {
+        name:   (horses[i].name   || '').trim(),
+        odds:   (horses[i].odds   || '').trim(),
+        jockey: (horses[i].jockey || '').trim(),
+        trainer:(horses[i].trainer|| '').trim(),
       };
-      fillNewHorseRow(clean);
-    });
+      const newRow = clickAddHorseAndGetRow();
+      fillRow(newRow, h);
+    }
   } catch (err) {
     console.error('[populateHorseForm] error:', err);
   }
@@ -125,7 +191,7 @@ function parseHorsesFromResponse(payload) {
 function parseHorsesFromText(text) {
   // Very forgiving fallback: lines like
   // "1. Clarita | 10/1 | Luis Saez | Philip A. Bauer"
-  const horses = [];
+        const horses = [];
   const lines = String(text || '')
     .replace(/\r/g, '')
     .split('\n')
@@ -136,7 +202,7 @@ function parseHorsesFromText(text) {
     // Try pipe-delimited
     const parts = line.replace(/^\d+\.?\s*/, '').split('|').map(s => s.trim());
     if (parts.length >= 1) {
-      horses.push({
+          horses.push({
         name: parts[0] || '',
         odds: parts[1] || '',
         jockey: parts[2] || '',
@@ -153,8 +219,8 @@ function parseHorsesFromText(text) {
 async function extractPhotosWithAI(files) {
   if (!files || !files.length) {
     console.warn('[extractPhotosWithAI] No files supplied.');
-    return;
-  }
+              return;
+            }
   setStatus('Extracting...');
 
   try {
@@ -179,7 +245,7 @@ async function extractPhotosWithAI(files) {
     const contentType = res.headers.get('content-type') || '';
     if (contentType.includes('application/json')) {
       payload = await res.json();
-    } else {
+          } else {
       payload = await res.text();
     }
 
@@ -194,7 +260,7 @@ async function extractPhotosWithAI(files) {
     if (!horses.length) {
       console.warn('[extractPhotosWithAI] No horses parsed from response.');
       setStatus('No horses found');
-      return;
+                return;
     }
 
     // Populate only horse rows
@@ -265,15 +331,15 @@ async function extractPhotosWithAI(files) {
     await extractPhotosWithAI(files);
   });
 
-  if (analyzeBtn) {
+    if (analyzeBtn) {
     analyzeBtn.addEventListener('click', async (e) => {
       e.preventDefault();
       const files = lastChosenFiles.length ? lastChosenFiles : Array.from(fileInput.files || []);
       if (!files.length) {
         fileInput.value = '';
         fileInput.click();
-        return;
-      }
+          return;
+        }
       await extractPhotosWithAI(files);
     });
   }
