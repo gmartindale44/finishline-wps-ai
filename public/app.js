@@ -101,7 +101,7 @@ function clickAddHorseAndGetRow() {
   if (after.length > before.length) return after[after.length - 1];
 
   // Fallback: use the "last/only" inline inputs as a pseudo-row
-    return {
+  return {
     name:   document.querySelector('input[placeholder="Horse Name"], input[name="horseName"]'),
     odds:   document.querySelector('input[placeholder*="ML Odds"], input[name="mlOdds"]'),
     jockey: document.querySelector('input[placeholder="Jockey"], input[name="jockey"]'),
@@ -109,62 +109,132 @@ function clickAddHorseAndGetRow() {
   };
 }
 
-/** ─────────────────────────────────────────────────────────────
- *  POPULATE ONLY HORSE FIELDS (multi-row aware)
- *  - First horse → fill the existing inline row
- *  - Remaining horses → click "Add Horse" then fill each new row
- *  (Race Date / Track / Surface / Distance are never touched)
- *  ───────────────────────────────────────────────────────────── */
-function populateHorseForm(horses) {
+/* ---------- Robust multi-row population (index-based) ---------- */
+
+/** Stable selectors for the four inputs inside the Horse Data section */
+const SEL = {
+  name:   'input[placeholder="Horse Name"], input[name="horseName"]',
+  odds:   'input[placeholder*="ML Odds"], input[name="mlOdds"]',
+  jockey: 'input[placeholder="Jockey"], input[name="jockey"]',
+  trainer:'input[placeholder="Trainer"], input[name="trainer"]',
+};
+
+/** Find the Horse Data section root (closest common ancestor of the four inputs) */
+function getHorseSectionRoot() {
+  // Try near the buttons first (often the easiest anchor)
+  const addBtn = document.querySelector('button, [role="button"], .btn, .button');
+  const byText = [...document.querySelectorAll('button, [role="button"], .btn, .button')]
+    .find(b => /(^|\s)add horse(\s|$)/i.test((b.textContent || '').trim()));
+  const anchor = byText || addBtn;
+
+  // If we have at least one of the inputs, use its parent section as ground truth
+  const nameInput = document.querySelector(SEL.name);
+  if (nameInput) {
+    // Walk up until we find a node that contains all four selector types
+    let node = nameInput;
+    while (node && node !== document.body) {
+      const hasAll =
+        node.querySelector(SEL.name) &&
+        node.querySelector(SEL.odds) &&
+        node.querySelector(SEL.jockey) &&
+        node.querySelector(SEL.trainer);
+      if (hasAll) return node;
+      node = node.parentElement;
+    }
+  }
+  // Fallback: use anchor's parent chain
+  let n = anchor;
+  while (n && n !== document.body) {
+    const hasAny = n.querySelector?.(SEL.name) || n.querySelector?.(SEL.odds);
+    if (hasAny) return n;
+    n = n.parentElement;
+  }
+  return document; // last resort
+}
+
+/** Collect Nodelists of each column inside the Horse Data section */
+function getColumnLists() {
+  const root = getHorseSectionRoot();
+  return {
+    names:   root.querySelectorAll(SEL.name),
+    odds:    root.querySelectorAll(SEL.odds),
+    jockeys: root.querySelectorAll(SEL.jockey),
+    trainers:root.querySelectorAll(SEL.trainer),
+  };
+}
+
+/** Return current number of horse rows by counting name inputs */
+function getRowCount() {
+  return getColumnLists().names.length;
+}
+
+/** Click the Add Horse button */
+function clickAddHorse() {
+  let btn =
+    document.querySelector('[data-add-horse], #add-horse') ||
+    [...document.querySelectorAll('button, [role="button"], .btn, .button')]
+      .find(el => /(^|\s)add horse(\s|$)/i.test((el.textContent || '').trim()));
+  if (btn) btn.click();
+}
+
+/** Ensure we have at least `n` rows, clicking Add Horse and waiting for DOM growth */
+async function ensureRows(n, timeoutMs = 3000) {
+  const start = performance.now();
+  while (getRowCount() < n) {
+    clickAddHorse();
+
+    // Wait a tick, then check again (with a short backoff loop)
+    let grown = false;
+    for (let i = 0; i < 20; i++) {
+      await new Promise(r => setTimeout(r, 25));
+      if (getRowCount() >= n) { grown = true; break; }
+    }
+    if (!grown && (performance.now() - start) > timeoutMs) break;
+  }
+}
+
+/** Set a value + dispatch input for reactivity frameworks */
+function setVal(el, v) {
+  if (!el) return;
+  el.value = v ?? '';
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+/** Fill a single row by index (0-based) */
+function fillRowAtIndex(i, horse) {
+  const cols = getColumnLists();
+  setVal(cols.names[i],   horse.name ?? '');
+  setVal(cols.odds[i],    horse.odds ?? '');
+  setVal(cols.jockeys[i], horse.jockey ?? '');
+  setVal(cols.trainers[i],horse.trainer ?? '');
+}
+
+/**
+ * Populate ALL horses without touching Race Date / Track / Surface / Distance.
+ * Expects: horses = [{name, odds, jockey, trainer}, ...]
+ */
+async function populateHorseForm(horses) {
   try {
     if (!Array.isArray(horses) || horses.length === 0) return;
 
-    // 1) Clear any static list block if present (we only want inputs)
-    const list = document.querySelector('[data-horse-list], #horse-list, .horse-list');
-    if (list) list.textContent = '';
+    // How many rows do we need?
+    const needed = horses.length;
 
-    // Helper to set input value and dispatch input event
-    const setVal = (el, v) => { if (el) { el.value = v || ''; el.dispatchEvent(new Event('input', { bubbles: true })); } };
+    // Make sure enough rows exist
+    await ensureRows(needed);
 
-    // Helper to fill a row-like object (real row element or the inline inputs fallback)
-    const fillRow = (rowEl, h) => {
-      const name   = rowEl.querySelector ? rowEl.querySelector('input[name], input[placeholder="Horse Name"]') : rowEl.name;
-      const odds   = rowEl.querySelector ? rowEl.querySelector('input[placeholder*="ML Odds"], input[name="mlOdds"]') : rowEl.odds;
-      const jockey = rowEl.querySelector ? rowEl.querySelector('input[placeholder="Jockey"], input[name="jockey"]') : rowEl.jockey;
-      const trainer= rowEl.querySelector ? rowEl.querySelector('input[placeholder="Trainer"], input[name="trainer"]') : rowEl.trainer;
-      setVal(name,   h.name);
-      setVal(odds,   h.odds);
-      setVal(jockey, h.jockey);
-      setVal(trainer,h.trainer);
-    };
-
-    // 2) Fill the FIRST horse into the existing inline row
-    const first = {
-      name:   (horses[0].name   || '').trim(),
-      odds:   (horses[0].odds   || '').trim(),
-      jockey: (horses[0].jockey || '').trim(),
-      trainer:(horses[0].trainer|| '').trim(),
-    };
-    fillRow({
-      name:   document.querySelector('input[placeholder="Horse Name"], input[name="horseName"]'),
-      odds:   document.querySelector('input[placeholder*="ML Odds"], input[name="mlOdds"]'),
-      jockey: document.querySelector('input[placeholder="Jockey"], input[name="jockey"]'),
-      trainer:document.querySelector('input[placeholder="Trainer"], input[name="trainer"]'),
-    }, first);
-
-    // 3) For EACH remaining horse:
-    for (let i = 1; i < horses.length; i++) {
-      const h = {
-        name:   (horses[i].name   || '').trim(),
-        odds:   (horses[i].odds   || '').trim(),
-        jockey: (horses[i].jockey || '').trim(),
-        trainer:(horses[i].trainer|| '').trim(),
-      };
-      const newRow = clickAddHorseAndGetRow();
-      fillRow(newRow, h);
+    // Fill each row by index
+    for (let i = 0; i < needed; i++) {
+      const h = horses[i] || {};
+      fillRowAtIndex(i, {
+        name:   (h.name   || '').trim(),
+        odds:   (h.odds   || '').trim(),
+        jockey: (h.jockey || '').trim(),
+        trainer:(h.trainer|| '').trim(),
+      });
     }
   } catch (err) {
-    console.error('[populateHorseForm] error:', err);
+    console.error('[populateHorseForm] multi-row error:', err);
   }
 }
 
