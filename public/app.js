@@ -5,9 +5,18 @@ const AUTOFILL_RACE_FROM_OCR = false;
 const $  = (s) => document.querySelector(s);
 const $$ = (s) => Array.from(document.querySelectorAll(s));
 
-function setBadge(text) {
-  const b = $('#statusBadge');
-  if (b) b.textContent = text;
+// ===== Busy state management =====
+let _busy = null;
+function setBusy(label) {
+  _busy = label;
+  // set badge text safely
+  const badge = document.querySelector('[data-badge], .badge, .status-badge');
+  if (badge) { badge.textContent = label || 'Idle'; }
+}
+function clearBusy() {
+  _busy = null;
+  const badge = document.querySelector('[data-badge], .badge, .status-badge');
+  if (badge) { badge.textContent = 'Idle'; }
 }
 
 function hideLegacyDump() {
@@ -132,7 +141,7 @@ function getHorseRows() {
   }));
 }
 
-function findAddHorseButton() {
+    function findAddHorseButton() {
   // Choose the "Add Horse" button that's nearest to the rows container
   const container = document.querySelector(HORSE_ROWS_CONTAINER_SEL);
   if (container) {
@@ -151,13 +160,13 @@ function nextFrame() {
 
 async function ensureRows(n) {
   let rows = getHorseRows();
-  const addBtn = findAddHorseButton();
-  if (!addBtn) {
+      const addBtn = findAddHorseButton();
+      if (!addBtn) {
     console.warn('Add Horse button not found – cannot add rows');
     return rows;
-  }
+      }
   while (rows.length < n) {
-    addBtn.click();
+        addBtn.click();
     // Wait a tick for DOM/framework to mount the new row
     await nextFrame();
     rows = getHorseRows();
@@ -184,30 +193,76 @@ async function populateHorseForm(horses) {
   console.log('[OCR] filled rows');
 }
 
-// ===== OCR handler =====
-async function handleOcrResponse(res) {
-  let data;
-  try { data = await res.json(); } catch { data = {}; }
+// ===== OCR extraction with timeout and reliability =====
+async function extractPhotosWithAI(filesOrB64) {
+  setBusy('Extracting...');
 
-  if (!data || data.ok === false) {
-    toastError(data?.error || 'Analyze error');
-    return;
+  // Build request body: either multipart with 'file', or JSON { image_b64 }
+  const hasFiles = Array.isArray(filesOrB64) && filesOrB64[0] instanceof File;
+  let url = '/api/photo_extract_openai_b64';
+  let fetchOpts;
+
+  if (hasFiles) {
+    const form = new FormData();
+    filesOrB64.forEach(f => form.append('file', f));
+    fetchOpts = { method: 'POST', body: form };
+        } else {
+    fetchOpts = {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image_b64: filesOrB64 }),
+    };
   }
 
-  const horses =
-    Array.isArray(data.horses) && data.horses.length
-      ? data.horses
-      : parseHorsesFromText(data?.meta?.raw_text || data?.text || '');
+  // 30s timeout guard
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort('timeout'), 30_000);
+  fetchOpts.signal = ac.signal;
 
-  if (!horses.length) {
-    toastWarn('No horses found in OCR');
-    return;
+  try {
+    const res = await fetch(url, fetchOpts);
+    let data = null;
+    try { data = await res.json(); } catch { /* non-JSON */ }
+
+    console.log('[OCR] HTTP', res.status, 'data:', data);
+
+    if (!res.ok) {
+      toastError(`Analyze failed (${res.status})`);
+        return;
+      }
+    if (!data || data.ok === false) {
+      toastError(data?.error || 'Analyze error');
+        return;
+      }
+
+    // prefer server horses; fallback to client parsing
+    const horses =
+      (Array.isArray(data.horses) ? data.horses : [])?.filter(Boolean) ??
+      [];
+
+    // Defensive: parse client side if server gave none
+    const parsed = (!horses.length)
+      ? parseHorsesFromText(data?.meta?.raw_text || data?.text || '')
+      : horses;
+
+    console.log('[OCR] horses returned:', parsed?.length, parsed);
+
+    if (!parsed || !parsed.length) {
+      toastWarn('No horses found in OCR result');
+            return;
+    }
+
+    // only fill horse rows — do not touch race fields here
+    await populateHorseForm(parsed);
+    toastOk(`Filled ${parsed.length} horses from OCR`);
+  } catch (err) {
+    const msg = (err?.name === 'AbortError') ? 'Analyze timed out' : (err?.message || 'Analyze failed');
+    console.warn('[OCR] error:', err);
+    toastError(msg);
+      } finally {
+    clearTimeout(t);
+    clearBusy();   // <<< ALWAYS clear status
   }
-
-  // DO NOT autofill race fields here (guarded elsewhere)
-
-  await populateHorseForm(horses);
-  toastOk('Horse list filled from OCR');
 }
 
 // ===== collect horses for predict =====
@@ -225,26 +280,12 @@ function collectHorsesFromUI() {
 }
 
 // ===== API calls =====
-async function postPhotos(files) {
-  const fd = new FormData();
-  for (const f of files) fd.append('file', f, f.name);
-  console.log('[analyze] sending files:', files.length);
-  const res = await fetch('/api/photo_extract_openai_b64', { method: 'POST', body: fd });
-  const ct = res.headers.get('content-type') || '';
-            let data;
-  if (ct.includes('application/json')) data = await res.json();
-  else data = { text: await res.text() };
-  console.log('[analyze] response:', data);
-  if (!res.ok) throw new Error('analyze failed');
-  return data;
-}
-
 async function predict(horses, race) {
   const payload = { horses, race };
   console.log('[predict] payload:', payload);
   const res = await fetch('/api/predict_wps', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
     body: JSON.stringify(payload),
   });
   const data = await res.json().catch(async () => ({ message: await res.text() }));
@@ -264,29 +305,34 @@ async function predict(horses, race) {
     chooseBtn.addEventListener('click', () => fileInput.click());
     fileInput.addEventListener('change', async (e) => {
       if (!e.target.files?.length) return;
-      setBadge('Extracting…');
       try {
-        const data = await postPhotos([...e.target.files]);
-        await handleOcrResponse({ json: () => Promise.resolve(data) });
+        await extractPhotosWithAI([...e.target.files]);
       } catch (err) {
         console.error(err);
         toastError('Extract failed');
-        setBadge('Idle');
       } finally {
         fileInput.value = '';
-            }
-        });
-    }
-
-  // Analyze -> reuse last chosen or ask again
-  if (analyzeBtn && fileInput) {
-    analyzeBtn.addEventListener('click', () => chooseBtn?.click());
+      }
+    });
   }
+
+  // Analyze button handler
+  document.querySelector('[data-analyze-btn], #analyzeBtn, button#analyze')
+    ?.addEventListener('click', async () => {
+      // get selected files from the file input
+      const input = document.querySelector('input[type="file"][multiple], input[type="file"]');
+      const files = Array.from(input?.files || []);
+      if (!files.length) {
+        toastWarn('Choose at least one photo or PDF');
+        return;
+      }
+      await extractPhotosWithAI(files);
+    });
 
   // Predict
   if (predictBtn) {
     predictBtn.addEventListener('click', async () => {
-      setBadge('Predicting…');
+      setBusy('Predicting…');
       const race = {
         date:     $('#raceDate')?.value || '',
         track:    $('#raceTrack')?.value || '',
@@ -294,24 +340,24 @@ async function predict(horses, race) {
         distance: $('#raceDistance')?.value || '',
       };
       const horses = collectHorsesFromUI();
-        if (!horses.length) {
+      if (!horses.length) {
         toastWarn('No horses found in the form.');
-        setBadge('Ready to predict');
-            return;
-        }
+        clearBusy();
+        return;
+      }
       try {
         const data = await predict(horses, race);
         toastOk(data?.msg || data?.message || 'predict done');
       } catch (err) {
         console.error(err);
         toastError('predict failed');
-    } finally {
-        setBadge('Ready to predict');
+      } finally {
+        clearBusy();
       }
     });
   }
 
   console.log('[init] UI wired');
   hideLegacyDump();
-  setBadge('Idle');
+  clearBusy();
 })();
