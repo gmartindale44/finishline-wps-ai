@@ -109,12 +109,17 @@ function clickAddHorseAndGetRow() {
   };
 }
 
-/* =========================
-   Multi-row incremental population (one-by-one)
-   - Never touches Race Date / Track / Surface / Distance
-   - Clicks "Add Horse" for each additional row
-   - Waits for the new row to actually appear before filling
-   ========================= */
+/* =========================================================
+   FinishLine WPS AI — Multi-row incremental population (v2)
+   - ONLY fills horse rows (never touches race fields)
+   - Clicks "Add Horse" for each additional entry
+   - Waits for DOM to grow, with strict timeouts
+   - Verbose logs so we can pinpoint failures
+   ========================================================= */
+
+const LOG = (...a) => console.log("%c[WPS-AI]", "color:#7dd3fc;font-weight:700", ...a);
+const WARN = (...a) => console.warn("%c[WPS-AI]", "color:#fbbf24;font-weight:700", ...a);
+const ERR = (...a) => console.error("%c[WPS-AI]", "color:#f87171;font-weight:700", ...a);
 
 const SEL = {
   name:   'input[placeholder="Horse Name"], input[name="horseName"]',
@@ -123,126 +128,144 @@ const SEL = {
   trainer:'input[placeholder="Trainer"], input[name="trainer"]',
 };
 
-/** Locate the horse section root that contains all four input types */
 function getHorseSectionRoot() {
-  const tryFromInput = () => {
-    const anyName = document.querySelector(SEL.name);
-    let n = anyName;
-    while (n && n !== document.body) {
-      const hasAll =
-        n.querySelector(SEL.name) &&
-        n.querySelector(SEL.odds) &&
-        n.querySelector(SEL.jockey) &&
-        n.querySelector(SEL.trainer);
-      if (hasAll) return n;
-      n = n.parentElement;
-        }
-        return null;
-      };
-
-  const byInputs = tryFromInput();
-  if (byInputs) return byInputs;
-
-  // Fallback: scan sections and pick the one dense with our inputs
-  const candidates = [...document.querySelectorAll('section, form, .card, .panel, .container, .content, main, div')];
+  // Prefer the container that already holds one full row
+  const firstName = document.querySelector(SEL.name);
+  let n = firstName;
+  while (n && n !== document.body) {
+    const hasAll =
+      n.querySelector(SEL.name) &&
+      n.querySelector(SEL.odds) &&
+      n.querySelector(SEL.jockey) &&
+      n.querySelector(SEL.trainer);
+    if (hasAll) return n;
+    n = n.parentElement;
+  }
+  // Fallback: choose the densest container
+  const candidates = [...document.querySelectorAll('section, form, .card, .panel, .container, main, .content, div')];
   let best = document;
-  let bestScore = -1;
+  let scoreBest = -1;
   for (const c of candidates) {
     const score = (c.querySelectorAll(SEL.name).length > 0) +
                   (c.querySelectorAll(SEL.odds).length > 0) +
                   (c.querySelectorAll(SEL.jockey).length > 0) +
                   (c.querySelectorAll(SEL.trainer).length > 0);
-    if (score > bestScore) { best = c; bestScore = score; }
+    if (score > scoreBest) { best = c; scoreBest = score; }
   }
   return best;
 }
 
-function getCols() {
+function cols() {
   const root = getHorseSectionRoot();
   return {
+    root,
     names:    root.querySelectorAll(SEL.name),
     odds:     root.querySelectorAll(SEL.odds),
     jockeys:  root.querySelectorAll(SEL.jockey),
     trainers: root.querySelectorAll(SEL.trainer),
   };
 }
-const getRowCount = () => getCols().names.length;
+const rowCount = () => cols().names.length;
 
-/** Fire input event after setting value for reactivity */
 function setVal(el, v) {
   if (!el) return;
   el.value = v ?? '';
   el.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
-/** Try to find and click the "Add Horse" button */
-function clickAddHorse() {
-  const btn =
-    document.querySelector('[data-add-horse], #add-horse') ||
-    [...document.querySelectorAll('button, [role="button"], .btn, .button')]
-      .find(b => /(^|\s)add horse(\s|$)/i.test((b.textContent || '').trim()));
-  if (btn) btn.click();
+function findAddHorseBtn() {
+  // Prefer known data/id
+  const candidates = [
+    '[data-add-horse]',
+    '#add-horse',
+    // Generic button scans (text match)
+    'button', '[role="button"]', '.btn', '.button'
+  ];
+  for (const sel of candidates) {
+    const matches = [...document.querySelectorAll(sel)]
+      .filter(b => (b.textContent || '').trim().toLowerCase() === 'add horse');
+    if (matches.length) return matches[0];
+  }
+  // Fuzzy contains 'add' + 'horse'
+  const fuzzy = [...document.querySelectorAll('button, [role="button"], .btn, .button')]
+    .find(b => {
+      const t = (b.textContent || '').toLowerCase();
+      return t.includes('add') && t.includes('horse');
+    });
+  return fuzzy || null;
 }
 
-/** Wait for the number of "Horse Name" inputs to reach target */
-async function waitForRowCount(target, timeoutMs = 4000) {
+async function waitForRows(target, timeoutMs = 5000) {
   const start = performance.now();
   while (performance.now() - start < timeoutMs) {
-    if (getRowCount() >= target) return true;
-    await new Promise(r => setTimeout(r, 40));
+    if (rowCount() >= target) return true;
+    await new Promise(r => setTimeout(r, 35));
   }
-  return getRowCount() >= target;
+  return rowCount() >= target;
 }
 
-/** Fill a specific row (0-based index) */
 function fillRow(i, horse) {
-  const { names, odds, jockeys, trainers } = getCols();
+  const { names, odds, jockeys, trainers } = cols();
+  LOG(`E) Filling row #${i}`, horse);
   setVal(names[i],    (horse.name    || '').trim());
   setVal(odds[i],     (horse.odds    || '').trim());
   setVal(jockeys[i],  (horse.jockey  || '').trim());
   setVal(trainers[i], (horse.trainer || '').trim());
 }
 
+async function ensureRowExists(idx) {
+  const need = idx + 1;
+  if (rowCount() >= need) return true;
+
+  const btn = findAddHorseBtn();
+  if (!btn) {
+    ERR(`D) "Add Horse" button not found; cannot create row #${idx}`);
+    return false;
+  }
+
+  // Some UIs require the previous row to be non-empty; we rely on fill-before-click loop
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    LOG(`D) Clicking "Add Horse" (attempt ${attempt}) to reach ${need} rows`);
+    btn.click();
+    const ok = await waitForRows(need, 1800);
+    if (ok) return true;
+  }
+  ERR(`D) DOM did not grow to ${need} rows after clicking "Add Horse"`);
+  return false;
+}
+
 /**
- * Incremental population:
- *  - Fills row 0 with horses[0]
- *  - For every next horse:
- *      click Add Horse,
- *      wait until row count == i+1,
- *      fill that new row
+ * MAIN: populate all horses, one-by-one
+ * Call this with the OCR result array: [{name, odds, jockey, trainer}, ...]
  */
 async function populateHorseForm(horses) {
-  if (!Array.isArray(horses) || horses.length === 0) return;
+  LOG('A) populateHorseForm called with', horses);
 
-  // 1) Make sure at least one row exists (most UIs already have row 0)
-  if (getRowCount() === 0) {
-    clickAddHorse();
-    await waitForRowCount(1);
+  if (!Array.isArray(horses) || horses.length === 0) {
+    WARN('A) No horses to populate.');
+    return;
   }
 
-  // 2) Fill the first row
+  // Make sure at least one row exists
+  if (rowCount() === 0) {
+    LOG('B) No rows yet; creating first row…');
+    if (!(await ensureRowExists(0))) return;
+  }
+
+  // Fill row 0 immediately (many UIs ship one blank row)
+  LOG('C) Filling first row (index 0)…');
   fillRow(0, horses[0]);
 
-  // 3) For each remaining horse, add a new row then fill it
+  // For subsequent horses, ensure row exists then fill
   for (let i = 1; i < horses.length; i++) {
-    const targetCount = i + 1;
-
-    // If we don't yet have targetCount rows, add one and wait
-    if (getRowCount() < targetCount) {
-      clickAddHorse();
-      const ok = await waitForRowCount(targetCount);
-      // As a safety, if DOM didn't grow (some UIs require the previous row non-empty),
-      // try one more click after a small delay.
-        if (!ok) {
-        await new Promise(r => setTimeout(r, 120));
-        clickAddHorse();
-        await waitForRowCount(targetCount);
-      }
+    if (!(await ensureRowExists(i))) {
+      ERR(`Stopping at i=${i} — cannot ensure row exists.`);
+      break;
     }
-
-    // Now fill the newly available row i
     fillRow(i, horses[i]);
   }
+
+  LOG('Done populating. Final rowCount =', rowCount());
 }
 
 /** --------------------------------------------------------------
