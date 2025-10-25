@@ -1,257 +1,140 @@
-"""
-Hardened OCR endpoint with strict JSON envelope and validation.
-Prevents FUNCTION_INVOCATION_FAILED by validating payloads and handling all errors.
-"""
-import logging
-import base64
-import asyncio
-from typing import List, Optional
-from fastapi import Request
-from pydantic import BaseModel, Field, validator
-from .common.schemas import json_ok, json_err, make_request_id
+# apps/api/photo_extract_openai_b64.py
+import json, os, sys, traceback, base64, time
+from typing import Dict, Any
+from apps.lib.config import FINISHLINE_OPENAI_API_KEY, FINISHLINE_OPENAI_MODEL, boot_banner
+from fastapi import APIRouter, Request, Response
+import httpx
 
-logger = logging.getLogger(__name__)
+router = APIRouter()
 
-# Vercel request body limit is ~4.5MB, but we need headroom for JSON overhead
-MAX_DECODED_SIZE_MB = 3.5
-MAX_IMAGES = 6
+boot_banner()
 
+OPENAI_URL = "https://api.openai.com/v1/chat/completions"
 
-class OcrRequest(BaseModel):
-    """OCR request payload schema."""
-    images: List[str] = Field(..., description="List of base64-encoded images (data URLs or raw base64)")
-    max_pages: Optional[int] = Field(None, description="Optional max pages for PDF")
-    
-    @validator("images")
-    def validate_images_not_empty(cls, v):
-        if not v or len(v) == 0:
-            raise ValueError("images list cannot be empty")
-        if len(v) > MAX_IMAGES:
-            raise ValueError(f"Too many images (max {MAX_IMAGES})")
-        return v
+def _err(msg: str, **kw) -> Dict[str, Any]:
+    return {"ok": False, "error": {"message": msg, **kw}}
 
+def _ok(data: Any) -> Dict[str, Any]:
+    return {"ok": True, "data": data}
 
-def estimate_decoded_size_mb(base64_string: str) -> float:
-    """
-    Estimate decoded size of base64 string in MB.
-    Base64 encoding is ~4/3 of original size.
-    """
-    # Remove data URL prefix if present
-    if "," in base64_string:
-        base64_string = base64_string.split(",", 1)[1]
-    
-    # Calculate decoded size
-    size_bytes = (len(base64_string) * 3) / 4
-    return size_bytes / (1024 * 1024)
+def _model_fallback_needed(err_text: str) -> bool:
+    err_text_l = err_text.lower()
+    needles = ["invalid model", "model", "not found", "unsupported", "does not exist"]
+    return any(k in err_text_l for k in needles)
 
-
-async def photo_extract_openai_b64_handler(request: Request, body: dict):
-    """
-    Extract text/data from images using OpenAI Vision API.
-    
-    This endpoint:
-    - Validates Content-Type
-    - Validates payload size
-    - Calls OpenAI with timeouts and retries
-    - Returns structured JSON (ApiOk or ApiErr)
-    - NEVER throws unhandled exceptions
-    
-    Request body:
-        {
-            "images": ["data:image/jpeg;base64,...", ...],
-            "max_pages": 10  // optional
-        }
-    
-    Success response (ApiOk):
-        {
-            "ok": true,
-            "data": {
-                "spans": [...],
-                "raw": "...",
-                "count": 5
+async def _call_openai(image_b64: str, model: str, timeout=60) -> Dict[str, Any]:
+    headers = {
+        "Authorization": f"Bearer {FINISHLINE_OPENAI_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    # Keep the prompt terse and structured; we only need Horse/Jockey/Trainer/ML
+    system = (
+        "You are an OCR+extractor. Return JSON array of objects with "
+        "keys: horse, jockey, trainer, ml. Only the list, nothing else."
+    )
+    user = (
+        "Extract entries from this racing list image. If odds like '10/1' appear, map to ml."
+    )
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": user},
+                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_b64}"}},
+                ],
             },
-            "requestId": "abc123..."
-        }
-    
-    Error response (ApiErr):
-        {
-            "ok": false,
-            "error": {
-                "code": "payload_too_large",
-                "message": "Image too large; please upload a smaller image",
-                "details": {...}
-            },
-            "requestId": "abc123..."
-        }
-    """
-    request_id = getattr(request.state, "request_id", make_request_id())
-    
+        ],
+        "temperature": 0.1,
+        "response_format": {"type": "json_object"},
+    }
+
+    t0 = time.time()
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        r = await client.post(OPENAI_URL, headers=headers, json=payload)
+    dt = time.time() - t0
+
+    meta = {
+        "status": r.status_code,
+        "elapsed_sec": round(dt, 3),
+        "request_id": r.headers.get("x-request-id"),
+        "vercel_id": r.headers.get("x-vercel-id"),
+        "model": model,
+    }
+    print(f"[FinishLine OCR] OpenAI call meta: {meta}", flush=True)
+
+    if r.status_code >= 400:
+        try:
+            body = r.json()
+        except Exception:
+            body = {"raw": r.text[:400]}
+        print("🚨 [FinishLine OCR ERROR] HTTP", r.status_code, json.dumps(body, indent=2), flush=True)
+        return _err("openai_http_error", meta=meta, body=body)
+
     try:
-        # 1. Validate Content-Type
-        content_type = request.headers.get("content-type", "")
-        if not content_type.startswith("application/json"):
-            logger.warning(f"[{request_id}] Bad content-type: {content_type}")
-            return json_err(
-                code="bad_content_type",
-                message="Expected application/json",
-                request_id=request_id,
-                status=415
-            )
-        
-        # 2. Validate request body schema
-        try:
-            ocr_request = OcrRequest(**body)
-        except Exception as e:
-            logger.warning(f"[{request_id}] Schema validation failed: {e}")
-            return json_err(
-                code="invalid_request",
-                message="Request validation failed",
-                request_id=request_id,
-                status=400,
-                details=str(e)
-            )
-        
-        # 3. Preflight: Check for empty images (already validated by pydantic, but explicit check)
-        if len(ocr_request.images) == 0:
-            return json_err(
-                code="no_images",
-                message="No images provided",
-                request_id=request_id,
-                status=400
-            )
-        
-        # 4. Preflight: Validate payload sizes
-        for i, img_b64 in enumerate(ocr_request.images):
-            size_mb = estimate_decoded_size_mb(img_b64)
-            logger.info(f"[{request_id}] Image {i+1}/{len(ocr_request.images)}: ~{size_mb:.2f}MB decoded")
-            
-            if size_mb > MAX_DECODED_SIZE_MB:
-                return json_err(
-                    code="payload_too_large",
-                    message=f"Image {i+1} too large (~{size_mb:.1f}MB); please upload a smaller image",
-                    request_id=request_id,
-                    status=413,
-                    details={"index": i, "size_mb": round(size_mb, 2), "max_mb": MAX_DECODED_SIZE_MB}
-                )
-        
-        # 5. Import OCR provider (lazy import to avoid startup failures)
-        try:
-            from .openai_ocr import run_openai_ocr_on_bytes, decode_data_url_or_b64
-        except ImportError as e:
-            logger.error(f"[{request_id}] OCR provider import failed: {e}")
-            return json_err(
-                code="ocr_unavailable",
-                message="OCR service unavailable",
-                request_id=request_id,
-                status=503,
-                details="OCR provider not configured"
-            )
-        
-        # 6. Process images with timeout and retry
-        PER_IMAGE_TIMEOUT = 25  # seconds
-        TOTAL_BUDGET = 45  # seconds (stay under Vercel 60s limit)
-        MAX_RETRIES = 1
-        
-        all_spans = []
-        raw_results = []
-        
-        async def process_with_retry(img_b64: str, img_index: int):
-            """Process single image with retry on transient errors."""
-            for attempt in range(MAX_RETRIES + 1):
-                try:
-                    # Decode image
-                    content = decode_data_url_or_b64(img_b64)
-                    
-                    # Call OCR with timeout
-                    result = await asyncio.wait_for(
-                        run_openai_ocr_on_bytes(content, filename=f"image_{img_index+1}.jpg"),
-                        timeout=PER_IMAGE_TIMEOUT
-                    )
-                    
-                    return result
-                    
-                except asyncio.TimeoutError:
-                    logger.warning(f"[{request_id}] Image {img_index+1} timed out after {PER_IMAGE_TIMEOUT}s")
-                    if attempt == MAX_RETRIES:
-                        raise
-                    await asyncio.sleep(1)  # Brief backoff
-                    
-                except Exception as e:
-                    # Check if it's a transient error (429, 5xx)
-                    error_str = str(e).lower()
-                    is_transient = "429" in error_str or "502" in error_str or "503" in error_str or "timeout" in error_str
-                    
-                    if attempt < MAX_RETRIES and is_transient:
-                        logger.warning(f"[{request_id}] Image {img_index+1} attempt {attempt+1} failed (transient): {e}")
-                        await asyncio.sleep(1)  # Brief backoff
-                        continue
-                    
-                    # Non-transient or final retry
-                    raise
-        
-        # Process all images with total timeout
-        try:
-            tasks = [process_with_retry(img, i) for i, img in enumerate(ocr_request.images)]
-            results = await asyncio.wait_for(
-                asyncio.gather(*tasks, return_exceptions=True),
-                timeout=TOTAL_BUDGET
-            )
-            
-            # Collect results and handle per-image errors
-            for i, result in enumerate(results):
-                if isinstance(result, Exception):
-                    logger.error(f"[{request_id}] Image {i+1} failed: {result}")
-                    # Don't fail entire request for one image
-                    raw_results.append({"error": str(result), "index": i})
-                elif isinstance(result, dict):
-                    horses = result.get("horses", [])
-                    all_spans.extend(horses)
-                    raw_results.append({"horses": horses, "index": i})
-                else:
-                    logger.warning(f"[{request_id}] Image {i+1} returned unexpected type: {type(result)}")
-                    raw_results.append({"error": "unexpected_result_type", "index": i})
-        
-        except asyncio.TimeoutError:
-            logger.error(f"[{request_id}] Total processing exceeded {TOTAL_BUDGET}s budget")
-            return json_err(
-                code="timeout",
-                message=f"OCR processing exceeded {TOTAL_BUDGET}s time budget",
-                request_id=request_id,
-                status=504,
-                details={"budget_seconds": TOTAL_BUDGET}
-            )
-        
-        except Exception as e:
-            # Provider error (network, API error, etc.)
-            logger.exception(f"[{request_id}] OCR provider failed")
-            return json_err(
-                code="ocr_provider_error",
-                message="OCR provider failed",
-                request_id=request_id,
-                status=502,
-                details={"error": str(e)[:200]}
-            )
-        
-        # 7. Return success with extracted data
-        logger.info(f"[{request_id}] OCR success: {len(all_spans)} total spans from {len(ocr_request.images)} images")
-        
-        return json_ok(
-            data={
-                "spans": all_spans,
-                "raw": raw_results,
-                "count": len(all_spans)
-            },
-            request_id=request_id
-        )
-    
-    except Exception as e:
-        # Final catch-all (should never reach here due to middleware, but belt-and-suspenders)
-        logger.exception(f"[{request_id}] Unhandled exception in OCR handler")
-        return json_err(
-            code="internal_error",
-            message="Internal server error",
-            request_id=request_id,
-            status=500,
-            details=str(e)[:200]
-        )
+        body = r.json()
+    except Exception:
+        print("🚨 [FinishLine OCR ERROR] Non-JSON response", r.text[:400], flush=True)
+        return _err("openai_non_json", meta=meta)
 
+    try:
+        content = body["choices"][0]["message"]["content"]
+        # response_format=json_object guarantees JSON object; extract array under some key
+        parsed = json.loads(content)
+        # accept either {"items": [...]} or {"data":[...]} or just {"list":[...]} or {"horses":[...]}
+        arr = None
+        for k in ["items", "data", "list", "horses"]:
+            if isinstance(parsed.get(k), list):
+                arr = parsed[k]
+                break
+        if arr is None and isinstance(parsed, list):
+            arr = parsed
+        if arr is None:
+            # last-ditch: flatten any list in values
+            for v in parsed.values():
+                if isinstance(v, list):
+                    arr = v
+                    break
+        if not arr:
+            return _err("empty_parse", meta=meta, raw=parsed)
+        return _ok({"entries": arr, "meta": meta})
+    except Exception as ex:
+        print("🚨 [FinishLine OCR ERROR] parse failure", repr(ex), flush=True)
+        print(traceback.format_exc(), flush=True)
+        return _err("parse_failure", meta=meta, raw=body)
+
+@router.post("/api/photo_extract_openai_b64")
+async def photo_extract_openai_b64(request: Request):
+    if not FINISHLINE_OPENAI_API_KEY:
+        return Response(content=json.dumps(_err("missing_api_key")), media_type="application/json", status_code=500)
+
+    try:
+        payload = await request.json()
+    except Exception:
+        return Response(content=json.dumps(_err("invalid_json")), media_type="application/json", status_code=400)
+
+    image_b64 = payload.get("b64")
+    if not image_b64:
+        return Response(content=json.dumps(_err("missing_image")), media_type="application/json", status_code=400)
+
+    print(f"[FinishLine OCR] ▶ request received size(b64)={len(image_b64)}", flush=True)
+
+    # primary call
+    primary_model = FINISHLINE_OPENAI_MODEL or "gpt-4o-mini"
+    res = await _call_openai(image_b64, primary_model)
+
+    if not res["ok"]:
+        body = res.get("error", {})
+        body_text = json.dumps(body)
+        if _model_fallback_needed(body_text):
+            print(f"[FinishLine OCR] Retrying with model=gpt-4o because: {body_text[:160]}", flush=True)
+            res2 = await _call_openai(image_b64, "gpt-4o")
+            if res2["ok"]:
+                print("[FinishLine OCR] ✅ Fallback succeeded", flush=True)
+                return Response(content=json.dumps(res2), media_type="application/json")
+            else:
+                print("[FinishLine OCR] ❌ Fallback also failed", flush=True)
+
+    return Response(content=json.dumps(res), media_type="application/json")

@@ -201,8 +201,8 @@ async function waitForRows(target, timeoutMs = 5000) {
   const start = performance.now();
   while (performance.now() - start < timeoutMs) {
     if (rowCount() >= target) return true;
-    await new Promise(r => setTimeout(r, 30));
-  }
+        await new Promise(r => setTimeout(r, 30));
+      }
   return rowCount() >= target;
 }
 
@@ -385,13 +385,54 @@ async function handleOcrTextAndPopulate(ocrText) {
       const text = await extractViaAPI(file);
       LOG('OCR text length:', text.length);
       await handleOcrTextAndPopulate(text);
-    } catch (e) {
+        } catch (e) {
       ERR(e);
       alert('Error while extracting text (see console)');
-    } finally {
+      } finally {
       fileInput.value = '';
     }
   });
+// Dev injector button for testing multi-row form filling
+(function addDevInjector() {
+  if (window.location.hostname === 'localhost' || window.location.search.includes('dev=true')) {
+    const devBtn = document.createElement('button');
+    devBtn.textContent = '🧪 Test Multi-Row Fill';
+    devBtn.style.cssText = 'position:fixed;top:10px;right:10px;z-index:9999;background:#ff6b6b;color:white;border:none;padding:8px 12px;border-radius:4px;font-size:12px;cursor:pointer;';
+    
+    devBtn.addEventListener('click', async () => {
+      try {
+        const sample = [
+          { horse: "Clarita", jockey: "Luis Saez", trainer: "Philip A. Bauer", ml: "10/1" },
+          { horse: "Absolute Honor", jockey: "Tyler Gaffalione", trainer: "Saffie A. Joseph, Jr.", ml: "5/2" },
+          { horse: "Indict", jockey: "Cristian A. Torres", trainer: "Thomas Drury, Jr.", ml: "8/1" },
+          { horse: "Jewel Box", jockey: "Luan Machado", trainer: "Ian R. Wilkes", ml: "15/1" },
+        ];
+        
+        const r = await fetch("/api/debug_fill", { 
+          method: "POST", 
+          headers: { "Content-Type": "application/json" }, 
+          body: JSON.stringify({ entries: sample })
+        });
+        const out = await r.json();
+        
+        // Convert to horses format
+        const horses = out.data.entries.map(entry => ({
+          name: entry.horse || entry.name || '',
+          ml_odds: entry.ml || entry.odds || '',
+          jockey: entry.jockey || '',
+          trainer: entry.trainer || ''
+        }));
+        
+        await populateHorses(horses);
+        toast('✅ Multi-row test completed!');
+      } catch (err) {
+        console.error('Dev injector error:', err);
+        toast('❌ Dev test failed: ' + err.message);
+      }
+    });
+    
+    document.body.appendChild(devBtn);
+  }
 })();
 
 (function () {
@@ -433,7 +474,7 @@ async function handleOcrTextAndPopulate(ocrText) {
     // Looks for the small state pill near "Race Information"
     const pills = qsAll(".badge, .chip, .pill, .state, [data-badge]");
     const pill = pills.find(p => /idle|ready|extract|analyz|predict/i.test(p.textContent||""));
-    if (!pill) return;
+        if (!pill) return;
     pill.textContent = state;
   }
 
@@ -546,8 +587,8 @@ async function handleOcrTextAndPopulate(ocrText) {
         if (!text || !text.length) {
           alert("OCR returned empty text.\nPlease try a clearer image or PDF.");
           setBadge("Idle");
-          return;
-        }
+              return;
+            }
         // Keep last for debugging
         window.WPS = window.WPS || {};
         window.WPS.lastOCRText = text;
@@ -558,18 +599,18 @@ async function handleOcrTextAndPopulate(ocrText) {
         if (!horses.length) {
           alert("No horses detected from OCR text.\nOpen DevTools console to view OCR text and adjust parser.");
           setBadge("Idle");
-          return;
+                return;
         }
 
         await populateAll(horses);
         setBadge("Ready");
-      } catch (e) {
+          } catch (e) {
         ERR("Extraction error", e);
         alert("Image extraction failed. See console for details.");
         setBadge("Idle");
+          }
+        });
       }
-    });
-  }
 
   function wireChooseButton() {
     mountPicker();
@@ -594,6 +635,47 @@ async function handleOcrTextAndPopulate(ocrText) {
   mo.observe(document.documentElement, { childList: true, subtree: true });
 
   LOG("Hotfix module installed");
+// Dev injector button for testing multi-row form filling
+(function addDevInjector() {
+  if (window.location.hostname === 'localhost' || window.location.search.includes('dev=true')) {
+    const devBtn = document.createElement('button');
+    devBtn.textContent = '🧪 Test Multi-Row Fill';
+    devBtn.style.cssText = 'position:fixed;top:10px;right:10px;z-index:9999;background:#ff6b6b;color:white;border:none;padding:8px 12px;border-radius:4px;font-size:12px;cursor:pointer;';
+    
+    devBtn.addEventListener('click', async () => {
+      try {
+        const sample = [
+          { horse: "Clarita", jockey: "Luis Saez", trainer: "Philip A. Bauer", ml: "10/1" },
+          { horse: "Absolute Honor", jockey: "Tyler Gaffalione", trainer: "Saffie A. Joseph, Jr.", ml: "5/2" },
+          { horse: "Indict", jockey: "Cristian A. Torres", trainer: "Thomas Drury, Jr.", ml: "8/1" },
+          { horse: "Jewel Box", jockey: "Luan Machado", trainer: "Ian R. Wilkes", ml: "15/1" },
+        ];
+        
+        const r = await fetch("/api/debug_fill", { 
+          method: "POST", 
+          headers: { "Content-Type": "application/json" }, 
+          body: JSON.stringify({ entries: sample })
+        });
+        const out = await r.json();
+        
+        // Convert to horses format
+        const horses = out.data.entries.map(entry => ({
+          name: entry.horse || entry.name || '',
+          ml_odds: entry.ml || entry.odds || '',
+          jockey: entry.jockey || '',
+          trainer: entry.trainer || ''
+        }));
+        
+        await populateHorses(horses);
+        toast('✅ Multi-row test completed!');
+      } catch (err) {
+        console.error('Dev injector error:', err);
+        toast('❌ Dev test failed: ' + err.message);
+      }
+    });
+    
+    document.body.appendChild(devBtn);
+  }
 })();
 
 // ==============================================================================
@@ -704,28 +786,59 @@ async function populateHorses(horses){
 async function handleUploadAndExtract(file){
   setBadge('extracting');
 
-  // Send as multipart/form-data
-  const fd = new FormData();
-  fd.append('file', file);
+  try {
+    // Convert file to base64 for the new API format
+    const base64 = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result;
+        // Remove data URL prefix if present
+        const base64Data = result.includes(',') ? result.split(',')[1] : result;
+        resolve(base64Data);
+      };
+      reader.onerror = reject;
+            reader.readAsDataURL(file);
+    });
 
-  const resp = await fetch('/api/photo_extract_openai_b64', { method:'POST', body: fd });
-  const data = await resp.json();
+    const resp = await fetch('/api/photo_extract_openai_b64', { 
+      method:'POST', 
+            headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ b64: base64 })
+    });
+    const out = await resp.json();
 
-  if (window.FL_DEBUG) console.log('[OCR resp]', data);
+    if (window.FL_DEBUG) console.log('[OCR resp]', out);
 
-  if (!data.ok) {
+    if (!out.ok) {
+      console.error("[FinishLine OCR] server-error:", out);
+      const errorMsg = out.error?.message ?? "unknown";
+      toast(`Image extraction failed: ${errorMsg} (see console)`);
+      setBadge('error');
+      return;
+    }
+
+    const entries = out.data?.entries ?? [];
+    if (entries.length === 0) {
+      setBadge('error');
+      toast('No horses detected. Try a clearer image or PDF.');
+            return;
+        }
+        
+    // Convert entries to horses format for existing populateHorses function
+    const horses = entries.map(entry => ({
+      name: entry.horse || entry.name || '',
+      ml_odds: entry.ml || entry.odds || '',
+      jockey: entry.jockey || '',
+      trainer: entry.trainer || ''
+    }));
+
+    await populateHorses(horses);
+    setBadge('ready');
+  } catch (err) {
+    console.error("[FinishLine OCR] unexpected error:", err);
+    toast(`Unexpected error during extraction: ${err.message}`);
     setBadge('error');
-    toast(data.error || 'Extraction failed.');
-    return;
   }
-  const horses = Array.isArray(data.horses) ? data.horses : [];
-  if (horses.length === 0) {
-    setBadge('error');
-    toast('No horses detected. Try a clearer image or PDF.');
-    return;
-  }
-  await populateHorses(horses);
-  setBadge('ready');
 }
 
 // Hook up file input (keep your existing listener, but ensure it calls handleUploadAndExtract)
@@ -742,7 +855,7 @@ async function handleUploadAndExtract(file){
     if (!f) return;
     try {
       await handleUploadAndExtract(f);
-    } catch (err) {
+        } catch (err) {
       console.error(err);
       setBadge('error');
       toast('Unexpected error during extraction.');
@@ -753,5 +866,46 @@ async function handleUploadAndExtract(file){
 
   if (btn) {
     btn.addEventListener('click', () => input.click());
+  }
+// Dev injector button for testing multi-row form filling
+(function addDevInjector() {
+  if (window.location.hostname === 'localhost' || window.location.search.includes('dev=true')) {
+    const devBtn = document.createElement('button');
+    devBtn.textContent = '🧪 Test Multi-Row Fill';
+    devBtn.style.cssText = 'position:fixed;top:10px;right:10px;z-index:9999;background:#ff6b6b;color:white;border:none;padding:8px 12px;border-radius:4px;font-size:12px;cursor:pointer;';
+    
+    devBtn.addEventListener('click', async () => {
+      try {
+        const sample = [
+          { horse: "Clarita", jockey: "Luis Saez", trainer: "Philip A. Bauer", ml: "10/1" },
+          { horse: "Absolute Honor", jockey: "Tyler Gaffalione", trainer: "Saffie A. Joseph, Jr.", ml: "5/2" },
+          { horse: "Indict", jockey: "Cristian A. Torres", trainer: "Thomas Drury, Jr.", ml: "8/1" },
+          { horse: "Jewel Box", jockey: "Luan Machado", trainer: "Ian R. Wilkes", ml: "15/1" },
+        ];
+        
+        const r = await fetch("/api/debug_fill", { 
+          method: "POST", 
+          headers: { "Content-Type": "application/json" }, 
+          body: JSON.stringify({ entries: sample })
+        });
+        const out = await r.json();
+        
+        // Convert to horses format
+        const horses = out.data.entries.map(entry => ({
+          name: entry.horse || entry.name || '',
+          ml_odds: entry.ml || entry.odds || '',
+          jockey: entry.jockey || '',
+          trainer: entry.trainer || ''
+        }));
+        
+        await populateHorses(horses);
+        toast('✅ Multi-row test completed!');
+      } catch (err) {
+        console.error('Dev injector error:', err);
+        toast('❌ Dev test failed: ' + err.message);
+      }
+    });
+    
+    document.body.appendChild(devBtn);
   }
 })();
