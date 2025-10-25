@@ -4,7 +4,7 @@
 // - Handles file upload + OCR + incremental horse population
 // - Provides comprehensive logging and error handling
 
-import { fillRowsFromHorses } from './js/horse-form.js';
+import { fillAllHorses } from '/js/horse-populate-hotfix.js';
 
 (function () {
   if (window.__finishline_picker_bootstrapped__) return;
@@ -397,13 +397,13 @@ import { fillRowsFromHorses } from './js/horse-form.js';
       const horses = Array.isArray(payload?.horses) ? payload.horses : [];
       log('horses extracted:', horses);
 
-      // Populate horses using the new robust system
+      // Populate horses using the hotfix system
       try {
-        console.log('[FLDBG] calling fillRowsFromHorses(...) with', horses.length, 'items');
-        await fillRowsFromHorses(horses);
+        console.log('[FLDBG] calling fillAllHorses(...) with', horses.length, 'items');
+        await fillAllHorses(horses);
         statusBadge.textContent = 'Ready';
       } catch (e) {
-        error('fillRowsFromHorses error:', e);
+        error('fillAllHorses error:', e);
         showOcrError('Population failed. See console for details.');
         statusBadge.textContent = 'Idle';
       }
