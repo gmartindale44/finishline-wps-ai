@@ -184,3 +184,164 @@
     initUI();
   }
 })();
+
+/* finishline-picker-wireup.js */
+(function () {
+  const log = (...a) => console.log("[FinishLine]", ...a);
+  const err = (...a) => console.error("[FinishLine]", ...a);
+
+  // Controls (adjust selectors if needed)
+  const btnChoose = document.querySelector('.photo-picker-label, button[data-action="choose"]') 
+                 || document.querySelector('button:has(span.picker-text)');
+  const inputFile = document.getElementById('photo-input-main') 
+                 || document.querySelector('input[type="file"][accept*="image"], input[type="file"][accept*="pdf"]');
+  const btnAnalyze = document.querySelector('button[data-action="analyze"], button:has(> span:contains("Analyze Photos with AI"))')
+                   || Array.from(document.querySelectorAll('button')).find(b => /Analyze Photos with AI/i.test(b.textContent));
+  const statusChip = document.querySelector('[data-status], .status-chip, .chip-status') 
+                  || document.querySelector('button[aria-live], .status'); // fallback
+
+  if (!inputFile || !btnAnalyze) {
+    err("Picker/Analyze controls not found. inputFile:", !!inputFile, "btnAnalyze:", !!btnAnalyze);
+    return;
+  }
+
+  // State
+  let selectedFile = null;
+  let extracting = false;
+
+  // Helpers
+  const setIdle = () => {
+    extracting = false;
+    btnAnalyze.disabled = !selectedFile;
+    if (statusChip) statusChip.textContent = "Idle";
+    document.body.dataset.extracting = "0";
+  };
+
+  const setExtracting = () => {
+    extracting = true;
+    btnAnalyze.disabled = true;
+    if (statusChip) statusChip.textContent = "Extracting…";
+    document.body.dataset.extracting = "1";
+  };
+
+  const setDone = () => {
+    extracting = false;
+    btnAnalyze.disabled = !selectedFile;
+    if (statusChip) statusChip.textContent = "Ready to predict";
+    document.body.dataset.extracting = "0";
+  };
+
+  // Call backend
+  async function postOCR(file) {
+    const url = "/api/photo_extract_openai_b64";
+    const fd = new FormData();
+    fd.append("file", file, file.name || "upload");
+
+    log("POST", url, { name: file.name, size: file.size, type: file.type });
+
+    const res = await fetch(url, { method: "POST", body: fd });
+    const ct = res.headers.get("content-type") || "";
+    let data = null;
+    try {
+      data = /application\/json/.test(ct) ? await res.json() : await res.text();
+    } catch (e) {
+      err("Failed to parse response", e);
+    }
+
+    if (!res.ok || !data || data.ok === false) {
+      const detail = (data && (data.detail || data.error)) || res.statusText;
+      const reqId = data && data.reqId;
+      throw new Error(`OCR failed (${res.status}). ${detail || "Unknown error"}${reqId ? " | reqId="+reqId : ""}`);
+    }
+    return data;
+  }
+
+  // Populate horses incrementally
+  function populateHorses(horses) {
+    const list = Array.isArray(horses) ? horses : [];
+    if (!list.length) {
+      log("No horses parsed from OCR");
+      return;
+    }
+    log("Populating horses", list.length, list);
+
+    // Use existing helper if present
+    if (typeof window.populateHorseForm === "function") {
+      list.forEach((h, idx) => {
+        try { window.populateHorseForm(h, idx); } catch (e) { err("populateHorseForm error", e); }
+      });
+      return;
+    }
+
+    // Fallback: fill first row, then click Add Horse and fill subsequent rows
+    const addBtn = Array.from(document.querySelectorAll("button")).find(b => /Add Horse/i.test(b.textContent));
+    function fillRow(i, horse) {
+      const rows = document.querySelectorAll('[data-horse-row], .horse-row, .horse-line');
+      const row = rows[i] || rows[rows.length - 1] || document;
+      const name = row.querySelector('input[placeholder*="Horse"]') || document.querySelector('input[placeholder*="Horse"]');
+      const odds = row.querySelector('input[placeholder*="Odds"]') || document.querySelector('input[placeholder*="Odds"]');
+      const jockey = row.querySelector('input[placeholder*="Jockey"]') || document.querySelector('input[placeholder*="Jockey"]');
+      const trainer = row.querySelector('input[placeholder*="Trainer"]') || document.querySelector('input[placeholder*="Trainer"]');
+
+      if (name) name.value = horse.name || "";
+      if (odds) odds.value = horse.odds || "";
+      if (jockey) jockey.value = horse.jockey || "";
+      if (trainer) trainer.value = horse.trainer || "";
+    }
+
+    list.forEach((h, i) => {
+      if (i > 0 && addBtn) addBtn.click();
+      fillRow(i, h);
+    });
+  }
+
+  // Events
+  inputFile.addEventListener("change", (e) => {
+    const f = e.target.files && e.target.files[0];
+    selectedFile = f || null;
+    log("onFilesSelected", !!selectedFile, selectedFile && { name: selectedFile.name, size: selectedFile.size, type: selectedFile.type });
+    if (selectedFile) {
+      btnAnalyze.disabled = false;
+      // optional: show filename somewhere
+      const info = document.querySelector('[data-file-name]');
+      if (info) info.textContent = selectedFile.name;
+    } else {
+      btnAnalyze.disabled = true;
+    }
+  });
+
+  btnAnalyze.addEventListener("click", async () => {
+    if (!selectedFile || extracting) return;
+    try {
+      setExtracting();
+      const data = await postOCR(selectedFile);
+      log("OCR response", data);
+      if (data && data.horses) populateHorses(data.horses);
+      setDone();
+    } catch (e) {
+      err(e.message || e);
+      setIdle();
+      alert(e.message || "OCR failed");
+    }
+  });
+
+  // Optional: auto-run OCR immediately after choosing a file (uncomment if desired)
+  // inputFile.addEventListener("change", () => {
+  //   if (selectedFile && !extracting) btnAnalyze.click();
+  // });
+
+  // If your Choose button is a custom element not tied to the input directly, keep this
+  if (btnChoose && !btnChoose.hasAttribute("for")) {
+    btnChoose.addEventListener("click", () => {
+      if (!extracting) {
+        log("Choose clicked → opening dialog");
+        inputFile.value = "";
+        inputFile.click();
+      }
+    });
+  }
+
+  // Initial state
+  setIdle();
+  log("Picker/Analyze wireup ready");
+})();

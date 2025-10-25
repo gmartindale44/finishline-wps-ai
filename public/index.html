@@ -105,9 +105,15 @@
 
       <!-- Analyze / Predict / Add Horse (single instances) -->
       <div class="actions-row" style="margin-top:10px;display:flex;gap:10px;">
-        <button id="analyze-btn" type="button" class="button secondary">Analyze Photos with AI</button>
+        <button id="analyze-btn" data-action="analyze" type="button" class="button secondary">Analyze Photos with AI</button>
         <button id="predict-btn" type="button" class="button success">Predict W/P/S</button>
         <button id="add-horse-btn" type="button" class="button">Add Horse</button>
+      </div>
+      
+      <!-- Status and file info -->
+      <div style="margin-top:8px;display:flex;align-items:center;gap:10px;">
+        <span data-status class="chip" style="padding:4px 8px;background:#f0f0f0;border-radius:4px;font-size:12px;">Idle</span>
+        <span data-file-name style="color:#aaa;font-size:12px;"></span>
       </div>
       
       <!-- Dev-only debug injector -->
