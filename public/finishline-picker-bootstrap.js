@@ -278,21 +278,24 @@
       // Hide any previous OCR errors
       hideOcrError();
 
-      // Use robust horse extraction
-      const horses = coerceHorses(payload);
-      log('Horses parsed:', Array.isArray(horses) ? horses.length : 'N/A');
-
-      if (!Array.isArray(horses) || horses.length === 0) {
-        showOcrError('No horses were found in OCR output.');
-        // Also log the precise shapes we tried so debugging is easy:
-        console.debug('[FLDBG] parse paths tried: resp.horses, resp.data.horses, JSON.parse(resp.data), extractBracedJSON(resp.data), resp.text/raw/body/message');
+      // Handle consistent API response shape
+      if (!payload?.ok || !Array.isArray(payload.horses)) {
+        showOcrError('OCR failed: invalid response');
         statusBadge.textContent = 'Idle';
         return;
       }
 
+      if (payload.horses.length === 0) {
+        showOcrError('No horses found in the image');
+        statusBadge.textContent = 'Idle';
+        return;
+      }
+
+      log('Horses parsed:', payload.horses.length);
+
       // Populate horses incrementally
       try {
-        await populateIncremental(horses);
+        await populateIncremental(payload.horses);
         statusBadge.textContent = 'Ready';
       } catch (e) {
         error('populateIncremental error:', e);
