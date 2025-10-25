@@ -1,0 +1,9 @@
+/* If you prefer a file, leave this; otherwise the JS already injects it dynamically. */
+.overlay, .backdrop, .mask, .modal-overlay, .loading, [data-blocking-overlay="true"] {
+  pointer-events: none !important;
+}
+.photo-picker-label, [data-action="choose"] {
+  position: relative;
+  z-index: 1000 !important;
+  pointer-events: auto !important;
+}
