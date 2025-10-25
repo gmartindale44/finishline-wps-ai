@@ -94,26 +94,27 @@
     </details>
 
     <div class="panel actions mt-4">
-      <!-- Hidden input (single instance) -->
+      <!-- Photo input (hidden) + label fallback -->
       <input id="photo-input-main" type="file" accept="image/*,.pdf" style="display:none" />
+      <button id="photo-choose-btn" type="button" class="button">Choose Photos / PDF</button>
+      <span id="photo-file-note" class="muted">No file selected.</span>
 
-      <!-- Choose button and filename label -->
-      <div class="picker-row" style="display:flex;align-items:center;gap:10px;">
-        <button id="choose-photos-btn" type="button" class="button">Choose Photos / PDF</button>
-        <span id="file-name-label" style="font-size:12px;color:#9aa4ae;">No file selected.</span>
-      </div>
-
-      <!-- Analyze / Predict / Add Horse (single instances) -->
-      <div class="actions-row" style="margin-top:10px;display:flex;gap:10px;">
-        <button id="analyze-btn" data-action="analyze" type="button" class="button secondary">Analyze Photos with AI</button>
+      <!-- Action buttons -->
+      <div style="margin-top:10px;display:flex;gap:10px;">
+        <button id="analyze-btn" type="button" class="button secondary">Analyze Photos with AI</button>
         <button id="predict-btn" type="button" class="button success">Predict W/P/S</button>
         <button id="add-horse-btn" type="button" class="button">Add Horse</button>
       </div>
       
       <!-- Status and file info -->
       <div style="margin-top:8px;display:flex;align-items:center;gap:10px;">
-        <span data-status class="chip" style="padding:4px 8px;background:#f0f0f0;border-radius:4px;font-size:12px;">Idle</span>
-        <span data-file-name style="color:#aaa;font-size:12px;"></span>
+        <span data-status-badge class="chip" style="padding:4px 8px;background:#f0f0f0;border-radius:4px;font-size:12px;">Idle</span>
+      </div>
+      
+      <!-- Horse row controls (existing) -->
+      <div id="horse-rows">
+        <!-- one template row in HTML or created dynamically in JS -->
+        <!-- Each row: inputs with classes .horse-name, .horse-odds, .horse-jockey, .horse-trainer -->
       </div>
       
       <!-- Dev-only debug injector -->
