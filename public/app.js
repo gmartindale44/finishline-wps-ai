@@ -393,3 +393,205 @@ async function handleOcrTextAndPopulate(ocrText) {
     }
   });
 })();
+
+(function () {
+  if (window.WPSHotfix?.installed) return;
+  const WPS = (window.WPSHotfix = { installed: true });
+  const LOG = (...a) => console.log("%c[WPS]", "color:#60a5fa;font-weight:700", ...a);
+  const ERR = (...a) => console.error("%c[WPS]", "color:#f87171;font-weight:700", ...a);
+
+  // ---------- DOM utils ----------
+  function qsAll(sel, root = document) { try { return Array.from(root.querySelectorAll(sel)); } catch { return []; } }
+  function textIncludes(el, ...needles) {
+    const t = (el?.textContent || "").toLowerCase();
+    return needles.every(n => t.includes(n));
+  }
+  function findChooseButton() {
+    const cands = qsAll('button, [role="button"], .btn, .button');
+    return cands.find(b => textIncludes(b, "choose") && (textIncludes(b, "photo") || textIncludes(b, "pdf")));
+  }
+  function findAddHorseButton() {
+    const cands = qsAll('button, [role="button"], .btn, .button');
+    return cands.find(b => textIncludes(b, "add") && textIncludes(b, "horse"));
+  }
+  function valueSet(el, v) {
+    if (!el) return;
+    el.value = v ?? "";
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+  function selectFieldAt(index, selectors) {
+    for (const sel of selectors) {
+      const nodes = qsAll(sel);
+      if (nodes.length > index) return nodes[index];
+    }
+    return null;
+  }
+
+  // ---------- badge helpers (non-fatal if not present) ----------
+  function setBadge(state) {
+    // Looks for the small state pill near "Race Information"
+    const pills = qsAll(".badge, .chip, .pill, .state, [data-badge]");
+    const pill = pills.find(p => /idle|ready|extract|analyz|predict/i.test(p.textContent||""));
+    if (!pill) return;
+    pill.textContent = state;
+  }
+
+  // ---------- network ----------
+  async function postImageToOCR(file) {
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch("/api/photo_extract_openai_b64", { method: "POST", body: fd });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(`OCR HTTP ${res.status}: ${JSON.stringify(json)}`);
+    // Accept a few shapes
+    return json.text || json.raw || (json.result && json.result.text) || "";
+  }
+
+  // ---------- simple OCR parser (robust fallback) ----------
+  function parseHorses(raw) {
+    // Very defensive: collect lines, strip number prefixes, find odds lines, basic name/jockey/trainer grouping.
+    if (!raw) return [];
+    const lines = raw.replace(/\r/g, "\n").split("\n").map(x => x.trim()).filter(Boolean);
+
+    const isOdds  = s => /\b\d{1,2}\s*[/\-]\s*\d{1,2}\b/.test(s);
+    const stripNo = s => s.replace(/^\s*\d+\.\s*/, "");
+    const isNamey = s => /[A-Za-z]/.test(s) && !isOdds(s);
+
+    const out = [];
+    for (let i = 0; i < lines.length; i++) {
+      let name = stripNo(lines[i]);
+      if (!isNamey(name)) continue;
+
+      let odds = "", jockey = "", trainer = "";
+      // Scan a small window forward
+      for (let j = i + 1; j < Math.min(i + 7, lines.length); j++) {
+        const L = lines[j];
+        if (!odds && isOdds(L)) { odds = L.match(/\d{1,2}\s*[/\-]\s*\d{1,2}/)[0].replace(/\s*/g,""); continue; }
+        if (!jockey && isNamey(L)) { jockey = L; continue; }
+        if (!trainer && isNamey(L)) { trainer = L; break; }
+      }
+      // Sanity: name required
+      if (name) out.push({ name, odds, jockey, trainer });
+    }
+    // De-dupe by name+odds (case-insens)
+    const seen = new Set();
+    const dedup = [];
+    for (const h of out) {
+      const k = (h.name||"").toLowerCase() + "|" + (h.odds||"");
+      if (!seen.has(k)) { seen.add(k); dedup.push(h); }
+    }
+    return dedup;
+  }
+
+  // ---------- form filling ----------
+  async function ensureRow(index) {
+    // detect current count using the horse-name input group
+    let count = qsAll('input[placeholder="Horse Name"], input[name="horseName"]').length;
+    if (count > index) return true;
+    const btn = findAddHorseButton();
+    if (!btn) return false;
+    btn.click();
+    // wait for DOM growth up to ~1s
+    for (let i = 0; i < 20; i++) {
+      await new Promise(r => setTimeout(r, 50));
+      count = qsAll('input[placeholder="Horse Name"], input[name="horseName"]').length;
+      if (count > index) return true;
+    }
+    return false;
+  }
+
+  function fillRow(index, horse) {
+    // NEVER touch race fields. Only the per-horse inputs:
+    const nameEl   = selectFieldAt(index, ['input[placeholder="Horse Name"]', 'input[name="horseName"]']);
+    const oddsEl   = selectFieldAt(index, ['input[placeholder*="ML Odds"]', 'input[name="mlOdds"]']);
+    const jockeyEl = selectFieldAt(index, ['input[placeholder="Jockey"]', 'input[name="jockey"]']);
+    const trainEl  = selectFieldAt(index, ['input[placeholder="Trainer"]', 'input[name="trainer"]']);
+
+    valueSet(nameEl,   horse.name || "");
+    valueSet(oddsEl,   horse.odds || "");
+    valueSet(jockeyEl, horse.jockey || "");
+    valueSet(trainEl,  horse.trainer || "");
+  }
+
+  async function populateAll(horses) {
+    LOG("Populate horses (count)", horses.length, horses);
+    for (let i = 0; i < horses.length; i++) {
+      const ok = await ensureRow(i);
+      if (!ok) { ERR("Could not ensure row", i); break; }
+      fillRow(i, horses[i]);
+    }
+    LOG("Population complete.");
+  }
+
+  // ---------- file picker wiring ----------
+  function mountPicker() {
+    if (document.getElementById("wps-hidden-file-input")) return;
+    const inp = document.createElement("input");
+    inp.type = "file";
+    inp.accept = "image/*,.pdf";
+    inp.id = "wps-hidden-file-input";
+    inp.style.display = "none";
+    document.body.appendChild(inp);
+
+    inp.addEventListener("change", async () => {
+      const file = inp.files?.[0];
+      inp.value = ""; // allow same-file reselect
+      if (!file) return;
+      try {
+        setBadge("Extracting…");
+        LOG("Uploading file", file.name, file.type, file.size);
+        const text = await postImageToOCR(file);
+        LOG("OCR text length:", text.length);
+        if (!text || !text.length) {
+          alert("OCR returned empty text.\nPlease try a clearer image or PDF.");
+          setBadge("Idle");
+          return;
+        }
+        // Keep last for debugging
+        window.WPS = window.WPS || {};
+        window.WPS.lastOCRText = text;
+
+        const horses = parseHorses(text);
+        LOG("Parsed horses:", horses.length, horses);
+
+        if (!horses.length) {
+          alert("No horses detected from OCR text.\nOpen DevTools console to view OCR text and adjust parser.");
+          setBadge("Idle");
+          return;
+        }
+
+        await populateAll(horses);
+        setBadge("Ready");
+      } catch (e) {
+        ERR("Extraction error", e);
+        alert("Image extraction failed. See console for details.");
+        setBadge("Idle");
+      }
+    });
+  }
+
+  function wireChooseButton() {
+    mountPicker();
+    const btn = findChooseButton();
+    if (!btn) {
+      // try again later — DOM may not be ready yet
+      setTimeout(wireChooseButton, 400);
+      return;
+    }
+    if (btn.__wps_wired) return;
+    btn.__wps_wired = true;
+    btn.addEventListener("click", () => {
+      document.getElementById("wps-hidden-file-input").click();
+    });
+    LOG("Choose Photos / PDF wired.");
+  }
+
+  // Kickoff
+  document.addEventListener("DOMContentLoaded", wireChooseButton);
+  // In case app uses hydration, observe for late mounts
+  const mo = new MutationObserver(() => wireChooseButton());
+  mo.observe(document.documentElement, { childList: true, subtree: true });
+
+  LOG("Hotfix module installed");
+})();
