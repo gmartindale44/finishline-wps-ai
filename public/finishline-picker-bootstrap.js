@@ -103,10 +103,112 @@
     (row.querySelector('.horse-trainer') || {}).value = h.trainer ?? '';
   }
 
-  // 6) Incremental horse population
+  // 6) OCR Error Display Functions
+  function showOcrError(msg) {
+    console.warn('[FLDBG] OCR error:', msg);
+    const host = document.querySelector('#action-buttons, .action-buttons') || document.getElementById('analyze-section') || document.body;
+    let el = document.getElementById('fl-ocr-error');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'fl-ocr-error';
+      el.style.marginLeft = '8px';
+      el.style.display = 'inline-block';
+      el.style.padding = '4px 8px';
+      el.style.borderRadius = '6px';
+      el.style.background = 'rgba(220, 53, 69, 0.15)'; // soft danger
+      el.style.color = '#ff6b6b';
+      el.style.fontSize = '12px';
+      el.style.fontWeight = '600';
+      host.appendChild(el);
+    }
+    el.textContent = msg;
+    el.style.visibility = 'visible';
+  }
+
+  function hideOcrError() {
+    const el = document.getElementById('fl-ocr-error');
+    if (el) el.style.visibility = 'hidden';
+  }
+
+  function tryParseJSON(str) {
+    try { return JSON.parse(str); } catch { return null; }
+  }
+
+  function extractBracedJSON(str) {
+    if (typeof str !== 'string') return null;
+    const start = str.indexOf('{');
+    if (start === -1) return null;
+    // attempt to find a balanced block
+    let depth = 0;
+    for (let i = start; i < str.length; i++) {
+      const ch = str[i];
+      if (ch === '{') depth++;
+      else if (ch === '}') {
+        depth--;
+        if (depth === 0) {
+          const sliced = str.slice(start, i + 1);
+          const parsed = tryParseJSON(sliced);
+          if (parsed) return parsed;
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Accepts whatever the API returned and tries hard to get horses[].
+   * Supports:
+   *   { ok:true, horses:[...] }
+   *   { ok:true, data:{ horses:[...] } }
+   *   { ok:true, data:"{ \"horses\": [...] }" }
+   *   { ok:true, text:"... JSON blob ..." }
+   */
+  function coerceHorses(resp) {
+    console.log('[FLDBG] coerceHorses: raw resp keys =', resp && Object.keys(resp || {}));
+    const trunc = (v) => (typeof v === 'string' ? v.slice(0, 300) : JSON.stringify(v || {}, null, 0).slice(0, 300));
+    console.log('[FLDBG] API JSON (trunc):', trunc(resp));
+
+    // 1) direct
+    if (resp && Array.isArray(resp.horses)) return resp.horses;
+
+    // 2) nested object
+    if (resp && resp.data && Array.isArray(resp.data.horses)) return resp.data.horses;
+
+    // 3) nested string JSON
+    if (resp && typeof resp.data === 'string') {
+      const parsed = tryParseJSON(resp.data) || extractBracedJSON(resp.data);
+      if (parsed && Array.isArray(parsed.horses)) return parsed.horses;
+    }
+
+    // 4) sometimes servers put the blob in resp.text or resp.raw
+    const candidates = [resp && resp.text, resp && resp.raw, resp && resp.body, resp && resp.message];
+    for (const c of candidates) {
+      if (typeof c === 'string') {
+        const parsed = tryParseJSON(c) || extractBracedJSON(c);
+        if (parsed && Array.isArray(parsed.horses)) return parsed.horses;
+      } else if (c && typeof c === 'object' && Array.isArray(c.horses)) {
+        return c.horses;
+      }
+    }
+
+    // 5) last-ditch: scan any stringy field containing "horses"
+    const allStr = [];
+    for (const k in (resp || {})) {
+      const val = resp[k];
+      if (typeof val === 'string' && val.includes('"horses"')) allStr.push(val);
+    }
+    for (const blob of allStr) {
+      const parsed = tryParseJSON(blob) || extractBracedJSON(blob);
+      if (parsed && Array.isArray(parsed.horses)) return parsed.horses;
+    }
+
+    return [];
+  }
+
+  // 7) Incremental horse population
   async function populateIncremental(horses) {
     if (!Array.isArray(horses) || horses.length === 0) {
-      alert('No horses found in the image. Try a clearer screenshot or PDF.');
+      showOcrError('No horses were found in OCR output.');
       return;
     }
 
@@ -173,9 +275,30 @@
         return;
       }
 
+      // Hide any previous OCR errors
+      hideOcrError();
+
+      // Use robust horse extraction
+      const horses = coerceHorses(payload);
+      log('Horses parsed:', Array.isArray(horses) ? horses.length : 'N/A');
+
+      if (!Array.isArray(horses) || horses.length === 0) {
+        showOcrError('No horses were found in OCR output.');
+        // Also log the precise shapes we tried so debugging is easy:
+        console.debug('[FLDBG] parse paths tried: resp.horses, resp.data.horses, JSON.parse(resp.data), extractBracedJSON(resp.data), resp.text/raw/body/message');
+        statusBadge.textContent = 'Idle';
+        return;
+      }
+
       // Populate horses incrementally
-      await populateIncremental(payload.horses);
-      statusBadge.textContent = 'Ready';
+      try {
+        await populateIncremental(horses);
+        statusBadge.textContent = 'Ready';
+      } catch (e) {
+        error('populateIncremental error:', e);
+        showOcrError('Failed filling the form. See console for details.');
+        statusBadge.textContent = 'Idle';
+      }
 
     } catch (err) {
       error('finishlineUploadAndExtract error:', err);
