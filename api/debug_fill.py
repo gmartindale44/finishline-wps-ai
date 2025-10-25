@@ -1,7 +1,8 @@
 # api/debug_fill.py
-from fastapi import APIRouter, Request, Response
+from fastapi import FastAPI, APIRouter, Request, Response
 import json
 
+app = FastAPI()
 router = APIRouter()
 
 @router.post("/api/debug_fill")
@@ -18,4 +19,4 @@ async def debug_fill(request: Request):
         print("[debug_fill] error", e)
         return Response(content=json.dumps({"ok": False, "error": str(e)}), media_type="application/json", status_code=500)
 
-app = router
+app.include_router(router)
