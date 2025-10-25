@@ -205,73 +205,123 @@
     return [];
   }
 
+  // ---------- Odds normalizer ----------
+  function normalizeOdds(raw) {
+    if (!raw) return '';
+    const s = String(raw).trim();
+    const dashish = /(\d+)\s*[-–—]\s*(\d+)/;
+    const toish   = /(\d+)\s*(?:to|:)\s*(\d+)/i;
+    if (dashish.test(s)) return s.replace(dashish, '$1/$2');
+    if (toish.test(s))  return s.replace(toish, '$1/$2');
+    return s;
+  }
+
+  // ---------- DOM helpers tuned to our UI ----------
+  function getHorseSectionRoot() {
+    // Flexible: try a known container; fall back to form/body
+    return (
+      document.querySelector('#horse-section') ||
+      document.querySelector('.horse-section') ||
+      document.querySelector('form') ||
+      document.body
+    );
+  }
+
+  function clickAddHorse() {
+    const btn =
+      document.querySelector('button[data-action="add-horse"]') ||
+      [...document.querySelectorAll('button, input[type="button"]')].find(
+        b => /add\s*horse/i.test(b.textContent || b.value || '')
+      );
+    if (btn) {
+      btn.click();
+      return true;
+    }
+    console.warn('[FLDBG] Add Horse button not found.');
+    return false;
+  }
+
+  function getLastRowInputs() {
+    const root = getHorseSectionRoot();
+    const nameInputs    = [...root.querySelectorAll('input[placeholder*="Horse"]')];
+    const oddsInputs    = [...root.querySelectorAll('input[placeholder*="ML Odds"]')];
+    const jockeyInputs  = [...root.querySelectorAll('input[placeholder*="Jockey"]')];
+    const trainerInputs = [...root.querySelectorAll('input[placeholder*="Trainer"]')];
+    const last = arr => (arr.length ? arr[arr.length - 1] : null);
+    return {
+      name:    last(nameInputs),
+      odds:    last(oddsInputs),
+      jockey:  last(jockeyInputs),
+      trainer: last(trainerInputs),
+    };
+  }
+
+  async function ensureBlankRow() {
+    let { name, odds, jockey, trainer } = getLastRowInputs();
+    const filled =
+      (name && name.value?.trim()) ||
+      (odds && odds.value?.trim()) ||
+      (jockey && jockey.value?.trim()) ||
+      (trainer && trainer.value?.trim());
+
+    if (!name || !odds || !jockey || !trainer || filled) {
+      if (clickAddHorse()) {
+        await new Promise(r => setTimeout(r, 150)); // let DOM append the new quartet
+        ({ name, odds, jockey, trainer } = getLastRowInputs());
+      }
+    }
+    return { name, odds, jockey, trainer };
+  }
+
+  async function fillOneRow(h) {
+    const { name, odds, jockey, trainer } = await ensureBlankRow();
+    if (!name || !odds || !jockey || !trainer) {
+      console.warn('[FLDBG] Missing inputs for a row:', { name, odds, jockey, trainer });
+      return false;
+    }
+    // Fill the last row's quartet
+    name.value     = h?.name    ?? '';
+    odds.value     = normalizeOdds(h?.odds);
+    jockey.value   = h?.jockey  ?? '';
+    trainer.value  = h?.trainer ?? '';
+    return true;
+  }
+
   // 7) Incremental horse population
   async function populateIncremental(horses) {
     try {
       if (!Array.isArray(horses) || horses.length === 0) {
-        console.warn('[FLDBG] populateIncremental: no horses array');
+        console.warn('[FLDBG] populateIncremental: empty list');
         return;
       }
-
-      const addButton = document.querySelector('button[data-action="add-horse"], #add-horse-btn, .add-horse-button, button:contains("Add Horse")');
-      const rowContainer = document.querySelector('#horse-table, .horse-rows, form'); // flexible selector
-
+      let filled = 0;
       for (let i = 0; i < horses.length; i++) {
-        const h = horses[i];
-        console.log(`[FLDBG] Populating row ${i + 1}: ${h.name} (${h.odds})`);
-
-        // Ensure there's a blank row
-        let lastRow = rowContainer?.querySelector('.horse-row:last-child');
-        const nameInput = lastRow?.querySelector('input[name="horse-name"], input[placeholder*="Horse"]');
-        const oddsInput = lastRow?.querySelector('input[name="odds"], input[placeholder*="ML Odds"], input[name*="odds"]');
-        const jockeyInput = lastRow?.querySelector('input[name="jockey"], input[placeholder*="Jockey"]');
-        const trainerInput = lastRow?.querySelector('input[name="trainer"], input[placeholder*="Trainer"]');
-
-        // If any of these are missing or already filled, click Add Horse to make a new one
-        if (!nameInput || nameInput.value) {
-          addButton?.click();
-          await new Promise(r => setTimeout(r, 200));
-          lastRow = rowContainer?.querySelector('.horse-row:last-child');
-        }
-
-        const row = {
-          name: lastRow?.querySelector('input[name="horse-name"], input[placeholder*="Horse"]'),
-          odds: lastRow?.querySelector('input[name="odds"], input[placeholder*="ML Odds"], input[name*="odds"]'),
-          jockey: lastRow?.querySelector('input[name="jockey"], input[placeholder*="Jockey"]'),
-          trainer: lastRow?.querySelector('input[name="trainer"], input[placeholder*="Trainer"]')
-        };
-
-        if (!row.name || !row.odds || !row.jockey || !row.trainer) {
-          console.warn(`[FLDBG] Missing field(s) for row ${i + 1}`, row);
-          continue;
-        }
-
-        // Fill values
-        row.name.value = h.name || '';
-        row.odds.value = h.odds || '';
-        row.jockey.value = h.jockey || '';
-        row.trainer.value = h.trainer || '';
-
-        await new Promise(r => setTimeout(r, 100)); // small pause for UX
+        const h = horses[i] || {};
+        console.log(`[FLDBG] Row ${i + 1}:`, h);
+        const ok = await fillOneRow(h);
+        if (ok) filled++;
+        await new Promise(r => setTimeout(r, 60)); // small pacing
       }
-
-      console.log('[FLDBG] All horses populated successfully');
+      // Toast
       const toast = document.createElement('div');
-      toast.textContent = '✅ Horses populated successfully!';
-      toast.style.position = 'fixed';
-      toast.style.bottom = '20px';
-      toast.style.right = '20px';
-      toast.style.padding = '10px 15px';
-      toast.style.background = 'rgba(0,255,100,0.2)';
-      toast.style.color = '#00ff88';
-      toast.style.border = '1px solid #00ff88';
-      toast.style.borderRadius = '8px';
-      toast.style.zIndex = '9999';
+      toast.textContent = `✅ Horses populated: ${filled}/${horses.length}`;
+      Object.assign(toast.style, {
+        position: 'fixed',
+        bottom: '20px',
+        right: '20px',
+        padding: '10px 14px',
+        background: 'rgba(0,255,140,0.12)',
+        border: '1px solid #00ff8c',
+        color: '#00ff8c',
+        borderRadius: '10px',
+        fontSize: '14px',
+        zIndex: 99999,
+        backdropFilter: 'blur(6px)',
+      });
       document.body.appendChild(toast);
-      setTimeout(() => toast.remove(), 3500);
-
+      setTimeout(() => toast.remove(), 3200);
     } catch (err) {
-      console.error('[FLDBG] populateIncremental error', err);
+      console.error('[FLDBG] populateIncremental error:', err);
     }
   }
 
@@ -340,11 +390,13 @@
         return;
       }
 
-      log('Horses parsed:', payload.horses.length);
+      // Extract horses array from response
+      const horses = Array.isArray(payload?.horses) ? payload.horses : [];
+      log('horses extracted:', horses);
 
       // Populate horses incrementally
       try {
-        await populateIncremental(payload.horses);
+        await populateIncremental(horses);
         statusBadge.textContent = 'Ready';
       } catch (e) {
         error('populateIncremental error:', e);
