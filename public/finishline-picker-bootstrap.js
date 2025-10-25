@@ -1,17 +1,40 @@
-// FinishLine WPS AI — Hardened Photo Picker Bootstrap
+// FinishLine WPS AI — Hardened Photo Picker Bootstrap with Incremental Population
 // - Creates/ensures a hidden file input
-// - Opens the OS picker via global click delegation (works for any "Choose Photos / PDF" button)
-// - Provides clear console logs for debugging
+// - Opens the OS picker via global click delegation
+// - Handles file upload + OCR + incremental horse population
+// - Provides comprehensive logging and error handling
 (function () {
   if (window.__finishline_picker_bootstrapped__) return;
   window.__finishline_picker_bootstrapped__ = true;
 
-  function log(...args) { console.log("[Picker]", ...args); }
-  function warn(...args) { console.warn("[Picker]", ...args); }
-  function error(...args) { console.error("[Picker]", ...args); }
+  function log(...args) { console.log("[FLDBG]", ...args); }
+  function warn(...args) { console.warn("[FLDBG]", ...args); }
+  function error(...args) { console.error("[FLDBG]", ...args); }
+
+  // DOM element selectors
+  const $ = (sel) => document.querySelector(sel);
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+  const ids = {
+    chooseBtn:  '#photo-choose-btn',
+    fileInput:  '#photo-input-main',
+    note:       '#photo-file-note',
+    addHorse:   '#add-horse-btn',
+    horseList:  '#horse-rows',
+    analyzeBtn: '#analyze-btn',
+    predictBtn: '#predict-btn'
+  };
+
+  // Check for required DOM elements
+  const missing = Object.entries(ids).filter(([, sel]) => !$(sel)).map(([k, sel]) => `${k} (${sel})`);
+  if (missing.length) {
+    error('Missing DOM elements:', missing.join(', '));
+  } else {
+    log('Required DOM elements found.');
+  }
 
   // 1) Ensure hidden <input type="file">
-  let input = document.getElementById("photo-input-main");
+  let input = $(ids.fileInput);
   if (!input) {
     input = document.createElement("input");
     input.id = "photo-input-main";
@@ -33,7 +56,7 @@
       pointer-events: none !important;
     }
     /* Keep any explicit picker label/button clickable and on top if needed */
-    .photo-picker-label, [data-action="choose"] {
+    .photo-picker-label, [data-action="choose"], ${ids.chooseBtn} {
       position: relative;
       z-index: 1000 !important;
       pointer-events: auto !important;
@@ -41,48 +64,198 @@
   `;
   document.head.appendChild(style);
 
-  // 3) State: selected file enables "Analyze" button (if present)
-  const btnAnalyze =
-    document.querySelector('[data-action="analyze"]') ||
-    Array.from(document.querySelectorAll("button")).find(b =>
-      /analyze photos with ai/i.test(b.textContent || "")
-    ) || null;
+  // 3) File to base64 conversion
+  function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onerror = () => reject(new Error('FileReader failed'));
+      fr.onload = () => {
+        const s = String(fr.result || '');
+        const i = s.indexOf(',');
+        resolve(i >= 0 ? s.slice(i + 1) : s);
+      };
+      fr.readAsDataURL(file);
+    });
+  }
 
-  let selectedFile = null;
-  input.addEventListener("change", (e) => {
-    selectedFile = (e.target.files && e.target.files[0]) || null;
-    log("onFilesSelected:", selectedFile && { name: selectedFile.name, size: selectedFile.size, type: selectedFile.type });
-    if (btnAnalyze) btnAnalyze.disabled = !selectedFile;
-  });
+  // 4) Add horse row with timeout protection
+  async function addHorseRowWait() {
+    const addBtn = $(ids.addHorse);
+    const list = $(ids.horseList);
+    if (!addBtn || !list) throw new Error('Missing add-horse button or horse list container');
+    
+    const before = list.children.length;
+    addBtn.click();
+    
+    const start = performance.now();
+    while (list.children.length <= before) {
+      if (performance.now() - start > 4000) throw new Error('Timeout waiting for new horse row');
+      await sleep(40);
+    }
+    return list.children[list.children.length - 1];
+  }
 
-  // 4) Global click delegation: ANY "Choose Photos / PDF" (or data-action="choose") opens the picker
-  const chooseRegex = /choose\s*(photos?|file)?\s*(\/\s*pdf)?|upload/i;
-  document.addEventListener("click", (evt) => {
-    const el = evt.target.closest('[data-action="choose"], .photo-picker-label, button');
-    if (!el) return;
-    const isChoose = el.dataset && el.dataset.action === "choose";
-    const txt = (el.textContent || "").trim();
-    if (isChoose || chooseRegex.test(txt)) {
-      // Don't let other handlers cancel this path
-      evt.preventDefault();
-      evt.stopPropagation();
-      if (!input) {
-        error("No file input available; cannot open picker.");
+  // 5) Fill row inputs by CSS class
+  function fillRow(row, h) {
+    (row.querySelector('.horse-name') || {}).value = h.name ?? '';
+    (row.querySelector('.horse-odds') || {}).value = h.odds ?? '';
+    (row.querySelector('.horse-jockey') || {}).value = h.jockey ?? '';
+    (row.querySelector('.horse-trainer') || {}).value = h.trainer ?? '';
+  }
+
+  // 6) Incremental horse population
+  async function populateIncremental(horses) {
+    if (!Array.isArray(horses) || horses.length === 0) {
+      alert('No horses found in the image. Try a clearer screenshot or PDF.');
+      return;
+    }
+
+    log('horses extracted:', horses.length, horses);
+    
+    for (let i = 0; i < horses.length; i++) {
+      const row = await addHorseRowWait();
+      fillRow(row, horses[i]);
+      log(`populate row ${i + 1}:`, horses[i].name, horses[i].odds, horses[i].jockey, horses[i].trainer);
+      
+      // Small delay between rows to let DOM settle
+      await sleep(60);
+    }
+    
+    log('DONE population');
+  }
+
+  // 7) Main upload + extract + populate flow
+  async function finishlineUploadAndExtract(file) {
+    log('START upload+extract for', file.name);
+    
+    // File validation
+    if (!file.type || (!file.type.startsWith('image/') && file.type !== 'application/pdf')) {
+      alert('Please select an image or PDF');
+      return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      alert('File > 15MB; pick a smaller file.');
+      return;
+    }
+
+    // Update UI state
+    const statusBadge = document.querySelector('[data-status-badge]') || { textContent: '' };
+    statusBadge.textContent = 'Extracting…';
+
+    try {
+      // Convert to base64
+      const b64 = await fileToBase64(file);
+      log('base64 length:', b64.length);
+
+      // POST to API
+      const t0 = performance.now();
+      const res = await fetch('/api/photo_extract_openai_b64', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: file.name, mime: file.type, data: b64 })
+      });
+      const raw = await res.text();
+      const dt = (performance.now() - t0) | 0;
+      log('POST /api/photo_extract_openai_b64 status:', res.status, `(${dt}ms)`, 'raw:', raw);
+
+      // Parse response
+      let payload;
+      try {
+        payload = JSON.parse(raw);
+      } catch {
+        payload = { ok: false, error: 'Bad JSON', raw };
+      }
+
+      if (!res.ok || !payload.ok) {
+        const msg = payload.error || `HTTP ${res.status}`;
+        alert(`Extraction failed: ${msg}\nCheck Network + Vercel logs.`);
+        statusBadge.textContent = 'Idle';
         return;
       }
-      // Allow re-selecting the same file
-      input.value = "";
-      log("Opening OS file dialog…");
-      input.click();
+
+      // Populate horses incrementally
+      await populateIncremental(payload.horses);
+      statusBadge.textContent = 'Ready';
+
+    } catch (err) {
+      error('finishlineUploadAndExtract error:', err);
+      alert('Unexpected error (see console).');
+      statusBadge.textContent = 'Idle';
     }
-  }, true); // capture = true helps bypass rogue onclicks swallowing the event
+  }
 
-  // Optional: expose a tiny API for tests or future use
-  window.__finishline_picker = {
-    open() { input && (input.value = "", input.click()); },
-    input,
-    get selectedFile() { return selectedFile; }
-  };
+  // 8) Wire up file picker
+  const chooseBtn = $(ids.chooseBtn);
+  const note = $(ids.note) || { textContent: '' };
 
-  log("Hardened photo picker bootstrap ready");
+  if (chooseBtn && input) {
+    chooseBtn.addEventListener('click', () => {
+      log('Choose clicked');
+      input.value = '';
+      input.click();
+    });
+
+    chooseBtn.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        input.value = '';
+        input.click();
+      }
+    });
+
+    input.addEventListener('change', async () => {
+      if (!input.files || !input.files.length) {
+        warn('fileInput.change: no file selected');
+        note.textContent = 'No file selected.';
+        return;
+      }
+      
+      const f = input.files[0];
+      note.textContent = `Selected: ${f.name} (${Math.round(f.size / 1024)} KB)`;
+      log('file selected:', { name: f.name, type: f.type, size: f.size });
+      
+      try {
+        await finishlineUploadAndExtract(f);
+      } catch (err) {
+        error('finishlineUploadAndExtract error:', err);
+        alert('Unexpected error (see console).');
+      }
+    });
+
+    log('Picker wired');
+  }
+
+  // 9) Test Backend button (sends 1x1 PNG to the same endpoint)
+  const testBtn = document.createElement('button');
+  testBtn.textContent = 'Test Backend';
+  testBtn.className = 'btn';
+  testBtn.style.marginLeft = '8px';
+  (document.querySelector(ids.chooseBtn)?.parentElement || document.body).appendChild(testBtn);
+  
+  testBtn.addEventListener('click', async () => {
+    log('Test Backend clicked');
+    const png1x1 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAA' +
+                  'AAC0lEQVR42mP8/x8AAwMB/ax0Qb0AAAAASUVORK5CYII=';
+    const t0 = performance.now();
+    const res = await fetch('/api/photo_extract_openai_b64', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: 'debug.png', mime: 'image/png', data: png1x1 })
+    });
+    const raw = await res.text();
+    const dt = (performance.now() - t0) | 0;
+    log('TEST POST status:', res.status, `(${dt}ms)`, 'raw:', raw);
+    try {
+      console.log('[FLDBG] TEST parsed:', JSON.parse(raw));
+    } catch {
+      console.warn('[FLDBG] TEST raw not JSON:', raw);
+    }
+    alert(`Test call returned HTTP ${res.status}. See console for body.`);
+  });
+
+  // 10) Expose API for external use
+  window.finishlineUploadAndExtract = finishlineUploadAndExtract;
+  window.populateIncremental = populateIncremental;
+
+  log('Debug bootstrap installed.');
 })();
