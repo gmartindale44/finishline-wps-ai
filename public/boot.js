@@ -37,21 +37,14 @@
   }
 
   async function postPhoto(file) {
-    // Convert file to base64 for JSON API
-    const base64 = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result.split(",")[1]);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-    
-    const payload = { b64: base64 };
-    LOG("POST /api/photo_extract_openai_b64 size=", file.size, "type=", file.type, "b64len=", base64.length);
+    // Send as multipart form data for Node.js function
+    const fd = new FormData();
+    fd.append("file", file);
+    LOG("POST /api/photo_extract_openai_b64 size=", file.size, "type=", file.type);
 
     const res = await fetch("/api/photo_extract_openai_b64", { 
       method: "POST", 
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
+      body: fd
     });
     if (!res.ok) {
       const txt = await res.text().catch(() => "");
@@ -62,8 +55,8 @@
 
   function populateHorsesFromExtraction(payload) {
     // Do not touch race date / track / surface / distance
-    // Handle API response format: {ok: true, data: {entries: [...]}}
-    const horses = payload?.data?.entries || payload?.horses || payload?.entries || [];
+    // Handle API response format: {ok: true, horses: [...]}
+    const horses = payload?.horses || payload?.data?.entries || payload?.entries || [];
     if (!Array.isArray(horses) || horses.length === 0) {
       LOG("No horses found in payload; payload keys:", Object.keys(payload || {}));
       alert("No horses found in OCR result.");
