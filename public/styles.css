@@ -43,4 +43,31 @@ input,select{width:100%;padding:10px 12px;border:1px solid var(--border);border-
 .foot{max-width:1080px;margin:32px auto 48px;padding:0 20px;color:var(--muted)}
 .muted{color:var(--muted)}
 .remove-btn{background:#231b3e;color:#ffb4c2;border:1px solid rgba(255,90,122,.3)}
-.dropping{border:2px dashed var(--accent)!important;background:rgba(124,55,255,.05)!important}
+/* Ensure status badges and overlays don't block clicks */
+.badge,
+.status-badge,
+.app-status,
+.header-status {
+  pointer-events: none;
+}
+
+/* Ensure the choose button is always clickable */
+#chooseBtn,
+[data-photo-input] {
+  position: relative;
+  z-index: 10;
+  pointer-events: auto;
+}
+
+/* Prevent any backdrop from blocking the button */
+.panel-header {
+  pointer-events: none;
+}
+
+.panel-header .badge {
+  pointer-events: none;
+}
+
+.panel-header h2 {
+  pointer-events: none;
+}

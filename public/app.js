@@ -565,76 +565,191 @@ async function handleOcrTextAndPopulate(ocrText) {
     LOG("Population complete.");
   }
 
-  // ---------- file picker wiring ----------
-  function mountPicker() {
-    if (document.getElementById("wps-hidden-file-input")) return;
-    const inp = document.createElement("input");
-    inp.type = "file";
-    inp.accept = "image/*,.pdf";
-    inp.id = "wps-hidden-file-input";
-    inp.style.display = "none";
-    document.body.appendChild(inp);
-
-    inp.addEventListener("change", async () => {
-      const file = inp.files?.[0];
-      inp.value = ""; // allow same-file reselect
-      if (!file) return;
-      try {
-        setBadge("Extracting…");
-        LOG("Uploading file", file.name, file.type, file.size);
-        const text = await postImageToOCR(file);
-        LOG("OCR text length:", text.length);
-        if (!text || !text.length) {
-          alert("OCR returned empty text.\nPlease try a clearer image or PDF.");
-          setBadge("Idle");
-              return;
-            }
-        // Keep last for debugging
-        window.WPS = window.WPS || {};
-        window.WPS.lastOCRText = text;
-
-        const horses = parseHorses(text);
-        LOG("Parsed horses:", horses.length, horses);
-
-        if (!horses.length) {
-          alert("No horses detected from OCR text.\nOpen DevTools console to view OCR text and adjust parser.");
-          setBadge("Idle");
-                return;
-        }
-
-        await populateAll(horses);
-        setBadge("Ready");
-          } catch (e) {
-        ERR("Extraction error", e);
-        alert("Image extraction failed. See console for details.");
-        setBadge("Idle");
-          }
-        });
+  // ---------- robust file picker wiring ----------
+  let isExtracting = false;
+  
+  function createHiddenFileInput() {
+    // Remove existing hidden input if any
+    const existing = document.getElementById("robust-file-input");
+    if (existing) existing.remove();
+    
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*,.pdf";
+    input.id = "robust-file-input";
+    input.style.cssText = "position:absolute;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;";
+    document.body.appendChild(input);
+    
+    input.addEventListener("change", async (e) => {
+      console.log("[Picker] File input change event fired");
+      const files = e.target.files;
+      if (!files || files.length === 0) {
+        console.log("[Picker] No files selected");
+        return;
       }
-
+      
+      const file = files[0];
+      console.log("[Picker] Selected file:", { name: file.name, type: file.type, size: file.size });
+      
+      try {
+        isExtracting = true;
+        setBadge("Extracting…");
+        
+        // Convert file to base64
+        const base64 = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const result = reader.result;
+            const b64 = result.includes(',') ? result.split(',')[1] : result;
+            console.log("[Picker] Base64 length:", b64.length);
+            resolve(b64);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+        
+        // Call OCR endpoint
+        const resp = await fetch("/api/photo_extract_openai_b64", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ b64: base64 })
+        });
+        
+        const out = await resp.json();
+        console.log("[Picker] OCR response:", out);
+        
+        if (!out.ok) {
+          console.error("[Picker] OCR server-error:", out);
+          const errorMsg = out.error?.message ?? "unknown";
+          alert(`Image extraction failed: ${errorMsg} (see console)`);
+          setBadge("Idle");
+          return;
+        }
+        
+        const entries = out.data?.entries ?? [];
+        console.log("[Picker] Entries to populate:", entries);
+        
+        if (entries.length === 0) {
+          alert("No horses detected in the image. Please try a clearer image or PDF.");
+          setBadge("Idle");
+          return;
+        }
+        
+        // Convert entries to horses format
+        const horses = entries.map(entry => ({
+          name: entry.horse || entry.name || '',
+          ml_odds: entry.ml || entry.odds || '',
+          jockey: entry.jockey || '',
+          trainer: entry.trainer || ''
+        }));
+        
+        await populateAll(horses);
+        setBadge("Ready to predict");
+        
+      } catch (err) {
+        console.error("[Picker] Uncaught picker error:", err);
+        alert("Unexpected error while extracting. See console for details.");
+        setBadge("Idle");
+      } finally {
+        isExtracting = false;
+        // Clear input to allow same file selection
+        input.value = "";
+      }
+    });
+    
+    return input;
+  }
+  
+  function findChooseButton() {
+    return document.getElementById("chooseBtn") ||
+           document.querySelector('[data-photo-input]') ||
+           Array.from(document.querySelectorAll('button')).find(b => 
+             /choose.*photos/i.test(b.textContent || ''));
+  }
+  
   function wireChooseButton() {
-    mountPicker();
     const btn = findChooseButton();
     if (!btn) {
-      // try again later — DOM may not be ready yet
+      console.log("[Picker] Choose button not found, retrying...");
       setTimeout(wireChooseButton, 400);
       return;
     }
-    if (btn.__wps_wired) return;
-    btn.__wps_wired = true;
-    btn.addEventListener("click", () => {
-      document.getElementById("wps-hidden-file-input").click();
+    
+    if (btn.__robust_wired) return;
+    btn.__robust_wired = true;
+    
+    // Create hidden input
+    const hiddenInput = createHiddenFileInput();
+    
+    btn.addEventListener("click", (e) => {
+      console.log("[Picker] Choose button clicked");
+      e.preventDefault();
+      e.stopPropagation();
+      
+      if (isExtracting) {
+        console.log("[Picker] Already extracting, ignoring click");
+        return;
+      }
+      
+      // Clear value to allow same file selection
+      hiddenInput.value = "";
+      hiddenInput.click();
     });
-    LOG("Choose Photos / PDF wired.");
+    
+    console.log("[Picker] Choose Photos / PDF button wired successfully");
   }
-
-  // Kickoff
-  document.addEventListener("DOMContentLoaded", wireChooseButton);
-  // In case app uses hydration, observe for late mounts
-  const mo = new MutationObserver(() => wireChooseButton());
-  mo.observe(document.documentElement, { childList: true, subtree: true });
+  
+  // Initialize on DOM ready
+  if (document.readyState === 'loading') {
+    document.addEventListener("DOMContentLoaded", wireChooseButton);
+  } else {
+    wireChooseButton();
+  }
+  
+  // Watch for dynamic content changes
+  const observer = new MutationObserver(() => {
+    const btn = findChooseButton();
+    if (btn && !btn.__robust_wired) {
+      wireChooseButton();
+    }
+  });
+  observer.observe(document.documentElement, { childList: true, subtree: true });
 
   LOG("Hotfix module installed");
+  
+  // Dev injector function
+  window.injectSampleHorses = async function() {
+    try {
+      console.log("[Dev] Injecting sample horses");
+      const sample = [
+        { horse: "Clarita", jockey: "Luis Saez", trainer: "Philip A. Bauer", ml: "10/1" },
+        { horse: "Absolute Honor", jockey: "Tyler Gaffalione", trainer: "Saffie A. Joseph, Jr.", ml: "5/2" },
+        { horse: "Indict", jockey: "Cristian A. Torres", trainer: "Thomas Drury, Jr.", ml: "8/1" },
+        { horse: "Jewel Box", jockey: "Luan Machado", trainer: "Ian R. Wilkes", ml: "15/1" },
+      ];
+      
+      const horses = sample.map(entry => ({
+        name: entry.horse || entry.name || '',
+        ml_odds: entry.ml || entry.odds || '',
+        jockey: entry.jockey || '',
+        trainer: entry.trainer || ''
+      }));
+      
+      await populateAll(horses);
+      alert('✅ Sample horses injected successfully!');
+    } catch (err) {
+      console.error('Dev injector error:', err);
+      alert('❌ Dev injection failed: ' + err.message);
+    }
+  };
+  
+  // Show dev button in dev mode
+  if (window.location.hostname === 'localhost' || window.location.search.includes('dev=true')) {
+    const devBtn = document.getElementById('devInjectBtn');
+    if (devBtn) {
+      devBtn.style.display = 'inline-block';
+    }
+  }
 // Dev injector button for testing multi-row form filling
 (function addDevInjector() {
   if (window.location.hostname === 'localhost' || window.location.search.includes('dev=true')) {
