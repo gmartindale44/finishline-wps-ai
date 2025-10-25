@@ -94,14 +94,22 @@
     </details>
 
     <div class="panel actions mt-4">
-      <!-- Picker region -->
+      <!-- Hidden input (single instance) -->
       <input id="photo-input-main" type="file" accept="image/*,.pdf" style="display:none" />
-      <button id="choose-photos-btn" type="button" class="button">Choose Photos / PDF</button>
-      <!-- Optional: show status -->
-      <div id="picker-status" style="margin-top:6px;font-size:12px;color:#9aa4ae;"></div>
-      <button id="analyze-btn" type="button" class="button secondary">Analyze Photos with AI</button>
-      <button id="predict-btn" type="button" class="button success">Predict W/P/S</button>
-      <button id="add-horse-btn" type="button" class="button">Add Horse</button>
+
+      <!-- Choose button and filename label -->
+      <div class="picker-row" style="display:flex;align-items:center;gap:10px;">
+        <button id="choose-photos-btn" type="button" class="button">Choose Photos / PDF</button>
+        <span id="file-name-label" style="font-size:12px;color:#9aa4ae;">No file selected.</span>
+      </div>
+
+      <!-- Analyze / Predict / Add Horse (single instances) -->
+      <div class="actions-row" style="margin-top:10px;display:flex;gap:10px;">
+        <button id="analyze-btn" type="button" class="button secondary">Analyze Photos with AI</button>
+        <button id="predict-btn" type="button" class="button success">Predict W/P/S</button>
+        <button id="add-horse-btn" type="button" class="button">Add Horse</button>
+      </div>
+      
       <!-- Dev-only debug injector -->
       <button class="button secondary" id="devInjectBtn" style="display:none;" onclick="injectSampleHorses()">🧪 Dev: Inject Sample Horses</button>
     </div>

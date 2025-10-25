@@ -1,6 +1,6 @@
 // public/boot.js
 (() => {
-  const VER = "boot@1.0.0";
+  const VER = "boot@1.1.0";
   const LOG = (...a) => console.log("[BOOT]", ...a);
   const ERR = (...a) => console.error("[BOOT]", ...a);
 
@@ -14,83 +14,174 @@
     try { alert(`Unhandled error: ${e?.reason?.message || e?.reason}`); } catch {}
   });
 
-  function byId(id){ return document.getElementById(id); }
-  function setStatus(msg){ const s=byId("picker-status"); if(s) s.textContent=msg||""; LOG("status:", msg); }
+  const $ = (id) => document.getElementById(id);
 
-  // Hardened binding (safe to call multiple times)
   function bindOnce(el, type, handler) {
     if (!el) return;
     el.removeEventListener(type, handler);
     el.addEventListener(type, handler);
   }
 
-  async function onChooseClick() {
-    try {
-      LOG("Choose clicked");
-      const input = byId("photo-input-main");
-      if (!input) throw new Error("photo-input-main missing");
-      input.value = "";          // allow reselect same file
-      input.click();             // open OS picker
-    } catch (e) {
-      ERR("onChooseClick:", e);
-      alert(`Open dialog error: ${e?.message || e}`);
+  function setFilenameLabel(text) {
+    const lab = $("file-name-label");
+    if (lab) lab.textContent = text || "No file selected.";
+  }
+
+  function ensureSingleAddHorse() {
+    // Remove accidental duplicates — keep the first #add-horse-btn
+    const all = Array.from(document.querySelectorAll("#add-horse-btn"));
+    if (all.length > 1) {
+      all.slice(1).forEach((n) => n.parentNode && n.parentNode.removeChild(n));
+      LOG("Removed duplicate Add Horse buttons:", all.length - 1);
     }
   }
 
-  async function onFileSelected(ev) {
-    try {
-      const files = ev?.target?.files || [];
-      LOG("onFileSelected count=", files.length);
-      if (!files.length) { setStatus("No file selected."); return; }
+  async function postPhoto(file) {
+    // Convert file to base64 for JSON API
+    const base64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result.split(",")[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+    
+    const payload = { b64: base64 };
+    LOG("POST /api/photo_extract_openai_b64 size=", file.size, "type=", file.type, "b64len=", base64.length);
 
-      const f = files[0];
-      LOG("file:", { name: f.name, type: f.type, size: f.size });
-      setStatus("Ready to send file (frontend OK).");
-      // NOTE: We do not POST here; your main app's logic should do it.
-      // This boot layer proves events are firing — if nothing else happens,
-      // the problem is in the main app flow (payload shape or API handler).
-    } catch (e) {
-      ERR("onFileSelected:", e);
-      alert(`File select error: ${e?.message || e}`);
-    } finally {
-      try { ev.target.value = ""; } catch {}
+    const res = await fetch("/api/photo_extract_openai_b64", { 
+      method: "POST", 
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      throw new Error(`OCR API ${res.status}: ${txt || res.statusText}`);
     }
+    return res.json();
   }
 
-  function onAnalyze(){ LOG("Analyze clicked"); alert("Analyze button is wired. Hand off to app logic here."); }
-  function onPredict(){ LOG("Predict clicked"); alert("Predict button is wired. Hand off to app logic here."); }
-  function onAddHorse(){ LOG("Add Horse clicked"); alert("Add Horse button is wired. Hand off to app logic here."); }
+  function populateHorsesFromExtraction(payload) {
+    // Do not touch race date / track / surface / distance
+    // Handle API response format: {ok: true, data: {entries: [...]}}
+    const horses = payload?.data?.entries || payload?.horses || payload?.entries || [];
+    if (!Array.isArray(horses) || horses.length === 0) {
+      LOG("No horses found in payload; payload keys:", Object.keys(payload || {}));
+      alert("No horses found in OCR result.");
+      return;
+    }
+
+    // Use app-level helper if present:
+    if (window.finishline && typeof window.finishline.populateFromExtraction === "function") {
+      LOG("Delegating to finishline.populateFromExtraction");
+      window.finishline.populateFromExtraction(payload);
+      return;
+    }
+
+    // Minimal safe filler (append rows + fill) — never touch the race fields.
+    const nameInputSel   = 'input[name="horse_name"]';
+    const oddsInputSel   = 'input[name="horse_odds"]';
+    const jockeyInputSel = 'input[name="horse_jockey"]';
+    const trainerInputSel= 'input[name="horse_trainer"]';
+
+    const addBtn = $("add-horse-btn");
+    if (!addBtn) {
+      ERR("Missing #add-horse-btn; cannot append rows");
+      return;
+    }
+
+    // Helper: adds a row by clicking the app's button so the native layout is respected
+    function addRow() { addBtn.click(); }
+
+    // Locate the last row inputs (most apps append at the end)
+    function lastRowInputs() {
+      const names   = document.querySelectorAll(nameInputSel);
+      const odds    = document.querySelectorAll(oddsInputSel);
+      const jockeys = document.querySelectorAll(jockeyInputSel);
+      const trainers= document.querySelectorAll(trainerInputSel);
+      const idx = Math.max(names.length, odds.length, jockeys.length, trainers.length) - 1;
+      return {
+        name: names[idx], odds: odds[idx], jockey: jockeys[idx], trainer: trainers[idx]
+      };
+    }
+
+    horses.forEach((h, i) => {
+      addRow();
+      const { name, odds, jockey, trainer } = normalizeHorse(h);
+      const inputs = lastRowInputs();
+      if (inputs.name)    inputs.name.value    = name;
+      if (inputs.odds)    inputs.odds.value    = odds;
+      if (inputs.jockey)  inputs.jockey.value  = jockey;
+      if (inputs.trainer) inputs.trainer.value = trainer;
+    });
+
+    function normalizeHorse(h) {
+      // Be flexible on keys from OCR
+      const name    = h.name    || h.horse   || h.horse_name   || "";
+      const odds    = h.odds    || h.ml      || h.morning_line || "";
+      const jockey  = h.jockey  || h.rider   || "";
+      const trainer = h.trainer || h.handler || "";
+      return { name, odds, jockey, trainer };
+    }
+  }
 
   function initUI() {
     LOG(`initUI ${VER}`);
-    const btnPick = byId("choose-photos-btn");
-    const input   = byId("photo-input-main");
-    const btnAna  = byId("analyze-btn");
-    const btnPre  = byId("predict-btn");
-    const btnAdd  = byId("add-horse-btn");
+    ensureSingleAddHorse();
 
-    // Clear 'disabled' accidentally left by earlier state
-    [btnPick, btnAna, btnPre, btnAdd].forEach(btn => btn && btn.removeAttribute("disabled"));
+    const btnPick = $("choose-photos-btn");
+    const input   = $("photo-input-main");
+    const btnAna  = $("analyze-btn");
+    const btnPre  = $("predict-btn");
+    const btnAdd  = $("add-horse-btn");
 
-    bindOnce(btnPick, "click", onChooseClick);
-    if (input) {
-      bindOnce(input, "change", onFileSelected);
-      bindOnce(input, "input",  onFileSelected); // extra guard
-    }
-    bindOnce(btnAna, "click", onAnalyze);
-    bindOnce(btnPre, "click", onPredict);
-    bindOnce(btnAdd, "click", onAddHorse);
+    [btnPick, btnAna, btnPre, btnAdd].forEach(b => b && b.removeAttribute("disabled"));
+
+    bindOnce(btnPick, "click", () => {
+      LOG("Choose clicked");
+      if (!input) { alert("File input not found"); return; }
+      input.click();
+    });
+
+    bindOnce(input, "change", async (ev) => {
+      try {
+        const f = ev?.target?.files?.[0];
+        if (!f) { setFilenameLabel("No file selected."); return; }
+        setFilenameLabel(`${f.name} (${(f.size/1024).toFixed(1)} KB)`);
+        // Post and populate
+        const json = await postPhoto(f);
+        LOG("OCR response:", json);
+        populateHorsesFromExtraction(json);
+      } catch (e) {
+        ERR("file change handler:", e);
+        alert(`Image extraction failed: ${e?.message || e}`);
+      } finally {
+        // Allow re-selecting the same file later
+        try { ev.target.value = ""; } catch {}
+      }
+    });
+
+    bindOnce(btnAna, "click", () => {
+      LOG("Analyze clicked");
+      // Optional: trigger the same as choose if no file chosen yet
+      alert("Analyze is wired. Use Choose Photos / PDF to select a file.");
+    });
+
+    bindOnce(btnPre, "click", () => {
+      LOG("Predict clicked");
+      alert("Predict is wired. (Model call not shown here.)");
+    });
+
+    bindOnce(btnAdd, "click", () => LOG("Add Horse clicked"));
 
     const debug = new URLSearchParams(location.search).get("debug") === "ui";
     if (debug) {
-      LOG("debug=ui → dump elements:", { btnPick, input, btnAna, btnPre, btnAdd });
+      LOG("debug=ui elements:", { btnPick, input, btnAna, btnPre, btnAdd });
       const badge = document.createElement("div");
       badge.textContent = "UI DEBUG MODE";
       Object.assign(badge.style, { position:"fixed", right:"8px", bottom:"8px", padding:"4px 6px", background:"#2b2d31", color:"#fff", fontSize:"12px", borderRadius:"4px", zIndex:99999 });
       document.body.appendChild(badge);
     }
 
-    setStatus("");
     LOG("UI wired successfully.");
   }
 
