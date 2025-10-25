@@ -68,6 +68,36 @@ input,select{width:100%;padding:10px 12px;border:1px solid var(--border);border-
   pointer-events: none;
 }
 
-.panel-header h2 {
+/* FinishLine picker guard — prevents common overlays from swallowing clicks */
+.overlay, .backdrop, .mask, .modal-overlay, .loading, [data-blocking-overlay="true"] {
+  pointer-events: none !important;
+}
+
+/* Hardened photo picker styles */
+.photo-picker-container {
+  position: relative;
+  display: inline-block;
+}
+
+.photo-picker-label {
+  position: relative;
+  z-index: 1000 !important;
+  pointer-events: auto !important;
+  cursor: pointer;
+}
+
+.photo-picker-label:disabled,
+.photo-picker-label[aria-disabled="true"] {
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+/* Ensure the picker is always clickable */
+#photo-input-main {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
   pointer-events: none;
 }

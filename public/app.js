@@ -409,7 +409,7 @@ async function handleOcrTextAndPopulate(ocrText) {
         ];
         
         const r = await fetch("/api/debug_fill", { 
-          method: "POST", 
+          method: "POST",
           headers: { "Content-Type": "application/json" }, 
           body: JSON.stringify({ entries: sample })
         });
@@ -565,148 +565,191 @@ async function handleOcrTextAndPopulate(ocrText) {
     LOG("Population complete.");
   }
 
-  // ---------- clean file picker implementation ----------
+  // ---------- hardened photo picker implementation ----------
   let isExtracting = false;
   
-  function createFilePicker() {
-    // Remove any existing file picker
-    const existing = document.getElementById("photo-picker-input");
-    if (existing) existing.remove();
+  // Check for debug mode
+  const showDebugRaw = new URLSearchParams(window.location.search).get("debug") === "picker";
+  
+  // Add overlay guard CSS
+  function addOverlayGuard() {
+    const existing = document.querySelector('[data-finishline-picker-guard]');
+    if (existing) return;
     
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "image/*,.pdf";
-    input.id = "photo-picker-input";
-    input.style.cssText = "position:absolute;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;";
-    document.body.appendChild(input);
-    
-    input.addEventListener("change", async (e) => {
-      console.log("[Picker] onFilesSelected fired");
-      const file = e.target.files?.[0];
-      if (!file) {
-        console.warn("[Picker] no file selected");
-        return;
+    const style = document.createElement("style");
+    style.setAttribute("data-finishline-picker-guard", "true");
+    style.textContent = `
+      .overlay, .backdrop, .mask, .modal-overlay, .loading, [data-blocking-overlay="true"] {
+        pointer-events: none !important;
       }
-      
-      console.log("[Picker] file:", file.name, file.type, file.size);
-      
-      try {
-        isExtracting = true;
-        setBadge("Extracting…");
-        
-        // Convert file to base64
-        const b64 = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve((reader.result).split(",")[1] ?? "");
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        });
-        
-        console.log("[Picker] sending to /api/photo_extract_openai_b64 (len=", b64.length, ")");
-        
-        const r = await fetch("/api/photo_extract_openai_b64", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ b64 }),
-        });
-        
-        const out = await r.json();
-        console.log("[Picker] response:", out);
-        
-        if (!out.ok) {
-          alert("OCR failed: " + (out.error?.message ?? "unknown"));
-          setBadge("Idle");
-          return;
-        }
-        
-        const entries = out.data?.entries ?? [];
-        console.log("[Picker] entries:", entries);
-        
-        if (entries.length === 0) {
-          alert("No horses detected in the image. Please try a clearer image or PDF.");
-          setBadge("Idle");
-          return;
-        }
-        
-        // Convert entries to horses format and populate
-        const horses = entries.map(entry => ({
-          name: entry.horse || entry.name || '',
-          ml_odds: entry.ml || entry.odds || '',
-          jockey: entry.jockey || '',
-          trainer: entry.trainer || ''
-        }));
-        
-        await populateAll(horses);
-        setBadge("Ready to predict");
-        
-      } catch (err) {
-        console.error("[Picker] picker error:", err);
-        alert("Error during extraction—see console.");
-        setBadge("Idle");
-      } finally {
-        isExtracting = false;
-        if (input) input.value = "";
-      }
+    `;
+    document.head.appendChild(style);
+  }
+  
+  function readFileAsBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result).split(",")[1] ?? "");
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
     });
-    
-    return input;
   }
   
-  function findChooseButton() {
-    return document.getElementById("chooseBtn") ||
-           document.querySelector('[data-photo-input]') ||
-           Array.from(document.querySelectorAll('button')).find(b => 
-             /choose.*photos/i.test(b.textContent || ''));
-  }
-  
-  function wireChooseButton() {
-    const btn = findChooseButton();
-    if (!btn) {
-      console.log("[Picker] Choose button not found, retrying...");
-      setTimeout(wireChooseButton, 400);
+  async function onFilesSelected(e) {
+    console.log("[Picker] onFilesSelected fired");
+    const file = e.target.files?.[0];
+    if (!file) {
+      console.warn("[Picker] no file selected");
       return;
     }
     
-    if (btn.__picker_wired) return;
-    btn.__picker_wired = true;
+    console.log("[Picker] file:", { name: file.name, type: file.type, size: file.size });
     
-    // Create file picker
-    const fileInput = createFilePicker();
-    
-    btn.addEventListener("click", (e) => {
-      console.log("[Picker] Choose clicked");
-      e.preventDefault();
-      e.stopPropagation();
+    try {
+      isExtracting = true;
+      setBadge("Extracting…");
+      updatePickerLabel(true);
       
-      if (isExtracting) {
-        console.log("[Picker] Already extracting, ignoring click");
-        return;
+      const b64 = await readFileAsBase64(file);
+      console.log("[Picker] POST /api/photo_extract_openai_b64 len=", b64.length);
+      
+      const r = await fetch("/api/photo_extract_openai_b64", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ b64 }),
+      });
+      
+      const out = await r.json().catch(() => ({}));
+      console.log("[Picker] response:", out);
+      
+      if (!out?.ok) {
+        alert("OCR failed: " + (out?.error?.message ?? "unknown"));
+        setBadge("Idle");
+              return;
+            }
+
+      const entries = out?.data?.entries ?? [];
+      console.log("[Picker] entries:", entries);
+      
+      if (entries.length === 0) {
+        alert("No horses detected in the image. Please try a clearer image or PDF.");
+        setBadge("Idle");
+                return;
       }
       
-      if (!fileInput) {
-        console.warn("[Picker] fileInput null");
-        return;
-      }
+      // Convert entries to horses format and populate
+      const horses = entries.map(entry => ({
+        name: entry.horse || entry.name || '',
+        ml_odds: entry.ml || entry.odds || '',
+        jockey: entry.jockey || '',
+        trainer: entry.trainer || ''
+      }));
       
-      fileInput.value = ""; // allow same file again
-      fileInput.click();
+      await populateAll(horses);
+      setBadge("Ready to predict");
+      
+    } catch (err) {
+      console.error("[Picker] error:", err);
+      alert("Error during extraction—see console.");
+      setBadge("Idle");
+    } finally {
+      isExtracting = false;
+      updatePickerLabel(false);
+      const input = document.getElementById("photo-input-main");
+      if (input) input.value = "";
+    }
+  }
+  
+  function updatePickerLabel(extracting) {
+    const label = document.querySelector(".photo-picker-label");
+    const text = document.querySelector(".picker-text");
+    if (label && text) {
+      text.textContent = extracting ? "Extracting..." : "Choose Photos / PDF";
+      if (extracting) {
+        label.setAttribute("aria-disabled", "true");
+        label.style.opacity = "0.7";
+        label.style.pointerEvents = "none";
+          } else {
+        label.removeAttribute("aria-disabled");
+        label.style.opacity = "";
+        label.style.pointerEvents = "";
+      }
+    }
+  }
+  
+  function onChooseClick(e) {
+    console.log("[Picker] Choose clicked");
+    
+    if (isExtracting) {
+      console.log("[Picker] Already extracting, ignoring click");
+      return;
+    }
+    
+    // Try both label-for and JS-ref paths for maximum reliability
+    const input = document.getElementById("photo-input-main");
+    if (!input) {
+      console.warn("[Picker] input not found");
+      return;
+    }
+    
+    // Reset to allow same-file reselect
+    input.value = "";
+    // JS fallback path (label-htmlFor already works without JS)
+    input.click();
+  }
+  
+  function initializeHardenedPicker() {
+    // Add overlay guard
+    addOverlayGuard();
+    
+    // Get the input and label elements
+    const input = document.getElementById("photo-input-main");
+    const label = document.querySelector(".photo-picker-label");
+    
+    if (!input || !label) {
+      console.log("[Picker] Elements not found, retrying...");
+      setTimeout(initializeHardenedPicker, 400);
+                return;
+    }
+    
+    if (input.__picker_wired) return;
+    input.__picker_wired = true;
+    
+    // Show debug input if in debug mode
+    if (showDebugRaw) {
+      input.style.display = "inline-block";
+      console.log("[Picker] Debug mode: showing raw input");
+    }
+    
+    // Wire up the file input
+    input.addEventListener("change", onFilesSelected);
+    
+    // Wire up the label click (additional JS fallback)
+    label.addEventListener("click", onChooseClick);
+    
+    // Also handle keyboard events for accessibility
+    label.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        onChooseClick(e);
+      }
     });
     
-    console.log("[Picker] Choose Photos / PDF button wired successfully");
+    console.log("[Picker] Hardened photo picker initialized successfully");
   }
   
   // Initialize on DOM ready
   if (document.readyState === 'loading') {
-    document.addEventListener("DOMContentLoaded", wireChooseButton);
+    document.addEventListener("DOMContentLoaded", initializeHardenedPicker);
   } else {
-    wireChooseButton();
+    initializeHardenedPicker();
   }
   
   // Watch for dynamic content changes
   const observer = new MutationObserver(() => {
-    const btn = findChooseButton();
-    if (btn && !btn.__picker_wired) {
-      wireChooseButton();
+    const input = document.getElementById("photo-input-main");
+    if (input && !input.__picker_wired) {
+      initializeHardenedPicker();
     }
   });
   observer.observe(document.documentElement, { childList: true, subtree: true });
@@ -995,7 +1038,7 @@ async function handleUploadAndExtract(file){
         ];
         
         const r = await fetch("/api/debug_fill", { 
-          method: "POST", 
+            method: "POST",
           headers: { "Content-Type": "application/json" }, 
           body: JSON.stringify({ entries: sample })
         });
@@ -1011,7 +1054,7 @@ async function handleUploadAndExtract(file){
         
         await populateHorses(horses);
         toast('✅ Multi-row test completed!');
-      } catch (err) {
+        } catch (err) {
         console.error('Dev injector error:', err);
         toast('❌ Dev test failed: ' + err.message);
       }
