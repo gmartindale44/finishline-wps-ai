@@ -10,8 +10,13 @@ from openai import AsyncOpenAI
 router = Router()
 
 OPENAI_MODEL = os.getenv("FINISHLINE_OPENAI_MODEL", "gpt-4o-mini")
-OPENAI_KEY   = os.getenv("OPENAI_API_KEY") or os.getenv("FINISHLINE_OPENAI_API_KEY")
+OPENAI_KEY = os.getenv("FINISHLINE_OPENAI_API_KEY")
+
+if not OPENAI_KEY:
+    raise RuntimeError("Missing FINISHLINE_OPENAI_API_KEY environment variable. Set it in Vercel > Settings > Environment Variables.")
+
 client = AsyncOpenAI(api_key=OPENAI_KEY)
+print(f"[FinishLine] OpenAI model={OPENAI_MODEL}, key_prefix={OPENAI_KEY[:7]}…")
 
 def _strip_data_uri(s: str) -> str:
     if not s:
