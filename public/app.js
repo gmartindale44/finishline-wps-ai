@@ -595,3 +595,163 @@ async function handleOcrTextAndPopulate(ocrText) {
 
   LOG("Hotfix module installed");
 })();
+
+// ==============================================================================
+// ROBUST OCR + MULTI-ROW POPULATION SYSTEM
+// ==============================================================================
+
+window.FL_DEBUG = !!(new URLSearchParams(location.search).get('dbg'));
+
+function qs(sel, root=document){ return root.querySelector(sel); }
+function qsa(sel, root=document){ return Array.from(root.querySelectorAll(sel)); }
+
+function getHorseRowsRoot() {
+  // Main form container that holds the horse rows; adjust if your markup differs
+  const candidates = [
+    '[data-horse-rows]',
+    '#horse-rows',
+    '.horse-rows',
+    'form'
+  ];
+  for (const c of candidates) {
+    const el = qs(c);
+    if (el) return el;
+  }
+  return document; // last resort
+}
+
+function getRowInputsAt(index){
+  // Row inputs by predictable order: name, ml_odds, jockey, trainer
+  const rows = qsa('[data-horse-row], .horse-row, .grid-row');
+  if (rows.length === 0) return null;
+  const r = rows[index] || null;
+  if (!r) return null;
+
+  const name   = qs('input[placeholder*="Horse"], input[name*="horse"], input[data-field="name"]', r);
+  const odds   = qs('input[placeholder*="Odds"], input[name*="odds"], input[data-field="ml_odds"]', r);
+  const jockey = qs('input[placeholder*="Jockey"], input[name*="jockey"], input[data-field="jockey"]', r);
+  const trainer= qs('input[placeholder*="Trainer"], input[name*="trainer"], input[data-field="trainer"]', r);
+
+  return {row: r, name, odds, jockey, trainer};
+}
+
+function getRaceFieldGuards(){
+  return {
+    date:    qs('input[type="date"], input[placeholder*="mm/dd"], input[name*="date"]'),
+    track:   qs('input[placeholder*="track"], input[name*="track"]'),
+    surface: qs('select[name*="surface"], select[placeholder*="surface"], input[placeholder*="surface"]'),
+    dist:    qs('input[placeholder*="1 1/4 miles"], input[name*="distance"], select[name*="distance"]')
+  };
+}
+
+function setBadge(state){
+  const badge = qs('[data-badge], .status-badge');
+  if (!badge) return;
+  const map = {
+    idle: 'Idle',
+    extracting: 'Extracting…',
+    ready: 'Ready to predict',
+    error: 'Error'
+  };
+  badge.textContent = map[state] || state;
+}
+
+function toast(msg){
+  if (window.FL_DEBUG) console.log('[Toast]', msg);
+  alert(msg);
+}
+
+async function ensureRowCount(target){
+  const addBtn = qs('[data-add-horse], button:has(> span:contains("Add Horse")), button');
+  const rowsSel = '[data-horse-row], .horse-row, .grid-row';
+  let tries = 0;
+
+  for (;;) {
+    const count = qsa(rowsSel).length;
+    if (count >= target) return count;
+    addBtn?.click();
+    await new Promise(r => setTimeout(r, 120));
+    tries++;
+    if (tries > 60) throw new Error('Timed out creating rows');
+  }
+}
+
+async function fillRow(index, horse){
+  const inputs = getRowInputsAt(index);
+  if (!inputs) throw new Error(`Row ${index} not found`);
+  const {name, odds, jockey, trainer} = inputs;
+
+  const write = (el, val) => { if (el && val) { el.value = val; el.dispatchEvent(new Event('input', {bubbles:true})); } };
+
+  write(name,   horse.name    || '');
+  write(odds,   horse.ml_odds || '');
+  write(jockey, horse.jockey  || '');
+  write(trainer,horse.trainer || '');
+  await new Promise(r => setTimeout(r, 80));
+}
+
+async function populateHorses(horses){
+  // Guard: never touch race fields
+  const guards = getRaceFieldGuards();
+  if (window.FL_DEBUG) console.log('[guards]', guards);
+
+  await ensureRowCount(horses.length);
+  for (let i=0; i<horses.length; i++){
+    await fillRow(i, horses[i]);
+  }
+}
+
+async function handleUploadAndExtract(file){
+  setBadge('extracting');
+
+  // Send as multipart/form-data
+  const fd = new FormData();
+  fd.append('file', file);
+
+  const resp = await fetch('/api/photo_extract_openai_b64', { method:'POST', body: fd });
+  const data = await resp.json();
+
+  if (window.FL_DEBUG) console.log('[OCR resp]', data);
+
+  if (!data.ok) {
+    setBadge('error');
+    toast(data.error || 'Extraction failed.');
+    return;
+  }
+  const horses = Array.isArray(data.horses) ? data.horses : [];
+  if (horses.length === 0) {
+    setBadge('error');
+    toast('No horses detected. Try a clearer image or PDF.');
+    return;
+  }
+  await populateHorses(horses);
+  setBadge('ready');
+}
+
+// Hook up file input (keep your existing listener, but ensure it calls handleUploadAndExtract)
+(function wireUpload(){
+  const btn = qs('button, [data-upload], [data-choose-photos]'); // your real selector for "Choose Photos / PDF"
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*,application/pdf';
+  input.style.display = 'none';
+  document.body.appendChild(input);
+
+  input.addEventListener('change', async e => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    try {
+      await handleUploadAndExtract(f);
+    } catch (err) {
+      console.error(err);
+      setBadge('error');
+      toast('Unexpected error during extraction.');
+    } finally {
+      input.value = '';
+    }
+  });
+
+  if (btn) {
+    btn.addEventListener('click', () => input.click());
+  }
+})();

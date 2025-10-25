@@ -1,68 +1,206 @@
-import os, base64, json
-from fastapi import FastAPI, File, UploadFile, HTTPException
-from fastapi.responses import JSONResponse
+# api/photo_extract_openai_b64.py
+import os, io, base64, json, traceback
+from typing import Dict, Any, List, Optional, Tuple
+from starlette.requests import Request
+from starlette.responses import JSONResponse
+from starlette.routing import Router
+from PIL import Image, ImageFilter, ImageOps
+from openai import AsyncOpenAI
 
-app = FastAPI()
+router = Router()
 
-PROVIDER = os.getenv("FINISHLINE_DATA_PROVIDER", "stub").strip().lower()
+OPENAI_MODEL = os.getenv("FINISHLINE_OPENAI_MODEL", "gpt-4o-mini")
+OPENAI_KEY   = os.getenv("OPENAI_API_KEY") or os.getenv("FINISHLINE_OPENAI_API_KEY")
+client = AsyncOpenAI(api_key=OPENAI_KEY)
 
-def stub_extract():
-    horses = [
-        {"name": "Clarita", "odds": "10/1", "jockey": "Luis Saez", "trainer": "Philip A. Bauer"},
-        {"name": "Absolute Honor", "odds": "5/2", "jockey": "Tyler Gaffalione", "trainer": "Saffie A. Joseph, Jr."},
-        {"name": "Indict", "odds": "8/1", "jockey": "Cristian A. Torres", "trainer": "Thomas Drury, Jr."},
-        {"name": "Jewel Box", "odds": "15/1", "jockey": "Luan Machado", "trainer": "Ian R. Wilkes"}
-    ]
-    raw_text = """1. Clarita
-10/1
-Luis Saez
-Philip A. Bauer
+def _strip_data_uri(s: str) -> str:
+    if not s:
+        return s
+    if s.lower().startswith(("data:", "data:image", "data:application")) and ";base64," in s:
+        return s.split(";base64,", 1)[1]
+    return s
 
-2. Absolute Honor
-5/2
-Tyler Gaffalione
-Saffie A. Joseph, Jr.
+def _b64_to_bytes(s: str) -> bytes:
+    return base64.b64decode(_strip_data_uri(s))
 
-3. Indict
-8/1
-Cristian A. Torres
-Thomas Drury, Jr.
+def _as_png_bytes(img: Image.Image) -> bytes:
+    buf = io.BytesIO()
+    img.save(buf, format="PNG", optimize=True)
+    return buf.getvalue()
 
-4. Jewel Box
-15/1
-Luan Machado
-Ian R. Wilkes"""
-    return {
-        "ok": True,
-        "horses": horses,
-        "meta": {
-            "raw_text": raw_text,
-            "notes": "Stub data for testing"
-        }
-    }
-
-@app.post("/api/photo_extract_openai_b64")
-async def photo_extract_openai_b64(file: UploadFile = File(...)):
+def _preprocess_for_ocr(raw: bytes) -> Tuple[bytes, Dict[str, Any]]:
+    meta: Dict[str, Any] = {}
     try:
-        contents = await file.read()
-        if not contents:
-            return JSONResponse({"ok": False, "error": "Empty file"})
-        
-        # Get stub data
-        result = stub_extract()
-        horses_list = result["horses"]
-        
-        # Log the full array to confirm we're returning all horses
-        print(f"[API] Returning {len(horses_list)} horses: {[h['name'] for h in horses_list]}")
-        
-        return JSONResponse({
-            "ok": True,
-            "horses": horses_list,   # list of dicts with all parsed horses
-            "meta": {
-                "raw_text": result["meta"]["raw_text"],
-                "notes": f"Stub data: {len(horses_list)} horses returned"
-            }
-        })
+        im = Image.open(io.BytesIO(raw))
+        meta["orig_mode"] = im.mode
+        meta["orig_size"] = im.size
+
+        im = ImageOps.grayscale(im)
+        im = ImageOps.autocontrast(im, cutoff=1)
+        w, h = im.size
+        if w < 900:
+            scale = min(2.0, 900 / max(1, w))
+            im = im.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
+            meta["upscaled_to"] = im.size
+        im = im.filter(ImageFilter.SHARPEN)
+
+        pre_bytes = _as_png_bytes(im)
+        meta["pre_size_bytes"] = len(pre_bytes)
+        return pre_bytes, meta
     except Exception as e:
-        print(f"[API] Error: {str(e)}")
-        return JSONResponse({"ok": False, "error": str(e)})
+        meta["pre_error"] = f"{type(e).__name__}: {e}"
+        return raw, meta
+
+def _horse_schema() -> str:
+    return json.dumps({
+        "type":"object",
+        "properties":{
+            "horses":{
+                "type":"array",
+                "items":{
+                    "type":"object",
+                    "properties":{
+                        "name":{"type":"string"},
+                        "ml_odds":{"type":"string"},
+                        "jockey":{"type":"string"},
+                        "trainer":{"type":"string"}
+                    },
+                    "required":["name"]
+                }
+            }
+        },
+        "required":["horses"]
+    })
+
+async def _ocr_structured(img_bytes: bytes) -> Dict[str, Any]:
+    img_b64 = base64.b64encode(img_bytes).decode()
+    sys = (
+        "You are an expert OCR parser for US horse racing entries. "
+        "Return ONLY valid JSON matching the provided JSON-Schema. "
+        "Extract ALL rows; do not infer missing ones."
+    )
+    user = (
+        "Extract horses from this image. DO NOT include race date, track, surface, or distance. "
+        "Only return horses with name, morning-line odds (ml_odds), jockey, and trainer."
+    )
+    schema = _horse_schema()
+    resp = await client.chat.completions.create(
+        model=OPENAI_MODEL,
+        temperature=0,
+        max_tokens=900,
+        response_format={"type":"json_schema","json_schema":{"name":"HorseList","schema":json.loads(schema)}},
+        messages=[
+            {"role":"system","content":sys},
+            {"role":"user","content":[
+                {"type":"text","text":user},
+                {"type":"input_image","image_url":{"url":f"data:image/png;base64,{img_b64}","detail":"high"}}
+            ]}
+        ]
+    )
+    try:
+        return json.loads(resp.choices[0].message.content or "{}")
+    except Exception:
+        return {"horses":[]}
+
+async def _ocr_raw_text(img_bytes: bytes) -> str:
+    img_b64 = base64.b64encode(img_bytes).decode()
+    sys = "You are an OCR transcription engine. Respond with FULL raw text only—no JSON, no commentary."
+    resp = await client.chat.completions.create(
+        model=OPENAI_MODEL,
+        temperature=0,
+        max_tokens=2000,
+        messages=[
+            {"role":"system","content":sys},
+            {"role":"user","content":[
+                {"type":"text","text":"Transcribe every visible character from the image."},
+                {"type":"input_image","image_url":{"url":f"data:image/png;base64,{img_b64}","detail":"high"}}
+            ]}
+        ]
+    )
+    return (resp.choices[0].message.content or "").strip()
+
+async def _parse_from_raw_text(raw_text: str) -> Dict[str, Any]:
+    if not raw_text.strip():
+        return {"horses":[]}
+    sys = (
+        "Convert the OCR text into horses JSON. "
+        "Only include horses (name, ml_odds, jockey, trainer). "
+        "Ignore date/track/surface/distance."
+    )
+    schema = _horse_schema()
+    resp = await client.chat.completions.create(
+        model=OPENAI_MODEL,
+        temperature=0,
+        max_tokens=900,
+        response_format={"type":"json_schema","json_schema":{"name":"HorseList","schema":json.loads(schema)}},
+        messages=[
+            {"role":"system","content":sys},
+            {"role":"user","content":f"OCR TEXT:\n{raw_text}\n\nReturn JSON only."}
+        ]
+    )
+    try:
+        return json.loads(resp.choices[0].message.content or "{}")
+    except Exception:
+        return {"horses":[]}
+
+@router.route("/api/photo_extract_openai_b64", methods=["POST"])
+async def handler(request: Request) -> JSONResponse:
+    dbg: Dict[str, Any] = {"ok": False, "stage":"start"}
+    try:
+        img_bytes = None
+        ct = request.headers.get("content-type","")
+        dbg["content_type"] = ct
+
+        if "multipart/form-data" in ct:
+            form = await request.form()
+            file = form.get("file")
+            if file:
+                img_bytes = await file.read()
+                dbg["input"] = {"kind":"multipart","size": len(img_bytes)}
+        else:
+            body = await request.json()
+            b64 = body.get("image_b64") or body.get("b64") or body.get("image")
+            if b64:
+                img_bytes = _b64_to_bytes(b64)
+                dbg["input"] = {"kind":"json-b64","size": len(img_bytes)}
+
+        if not img_bytes:
+            dbg["error"] = "No image received"
+            return JSONResponse(dbg, status_code=400)
+
+        pre_bytes, pre_meta = _preprocess_for_ocr(img_bytes)
+        dbg["preprocess"] = pre_meta
+
+        dbg["stage"] = "structured_ocr"
+        first = await _ocr_structured(pre_bytes)
+        horses = (first or {}).get("horses") or []
+        dbg["first_count"] = len(horses)
+
+        if len(horses) == 0:
+            dbg["stage"] = "raw_ocr_fallback"
+            raw_txt = await _ocr_raw_text(pre_bytes)
+            dbg["raw_text_preview"] = raw_txt[:400]
+            parsed = await _parse_from_raw_text(raw_txt)
+            horses = (parsed or {}).get("horses") or []
+            dbg["fallback_count"] = len(horses)
+
+        def _clean(s: Optional[str]) -> Optional[str]:
+            return None if s is None else " ".join(str(s).split())
+
+        for h in horses:
+            h["name"]    = _clean(h.get("name"))
+            h["ml_odds"] = _clean(h.get("ml_odds"))
+            h["jockey"]  = _clean(h.get("jockey"))
+            h["trainer"] = _clean(h.get("trainer"))
+
+        if len(horses) == 0:
+            return JSONResponse({"ok": False, "error":"OCR returned empty text", "debug": dbg}, status_code=200)
+
+        return JSONResponse({"ok": True, "horses": horses, "debug": dbg}, status_code=200)
+
+    except Exception as e:
+        dbg["error"] = f"{type(e).__name__}: {e}"
+        dbg["trace"] = traceback.format_exc()[-2000:]
+        return JSONResponse({"ok": False, "debug": dbg}, status_code=500)
+
+app = router
