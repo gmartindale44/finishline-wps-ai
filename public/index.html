@@ -50,9 +50,9 @@
     </div>
 
     <h3 class="mt-4">Horse Data</h3>
-    <div class="horse-form-inline" data-horse-row>
+    <div class="horse-form-inline horse-row" data-horse-row>
       <input name="horseName" type="text" placeholder="Horse Name" />
-      <input name="horseOdds" type="text" placeholder="ML Odds (e.g., 5-2)" />
+      <input name="mlOdds" type="text" placeholder="ML Odds (e.g., 5-2)" />
       <input name="horseJockey" type="text" placeholder="Jockey" />
       <input name="horseTrainer" type="text" placeholder="Trainer" />
       <button type="button" class="button" id="addHorseBtn" data-add-horse>Add Horse</button>
@@ -105,12 +105,12 @@
       </div>
 
       <!-- Existing buttons/containers must have stable ids -->
-      <button id="add-horse-btn" data-action="add-horse" type="button" class="btn">Add Horse</button>
+      <button id="btn-add-horse" data-action="add-horse" type="button" class="btn">Add Horse</button>
       <div id="horse-rows"><!-- horse rows are appended inside here --></div>
 
       <!-- Optional (keep if present) -->
-      <button id="analyze-btn" type="button" class="btn">Analyze Photos with AI</button>
-      <button id="predict-btn" type="button" class="btn">Predict W/P/S</button>
+      <button id="btn-analyze" type="button" class="btn">Analyze Photos with AI</button>
+      <button id="btn-predict" type="button" class="btn">Predict W/P/S</button>
       
       <!-- Status feedback -->
       <div style="margin-top:8px;display:flex;align-items:center;gap:10px;">
@@ -126,7 +126,17 @@
     <p>© NovaSpark Collective LLC · FinishLine WPS AI</p>
     <p class="muted">Disclaimer: This tool is for informational/entertainment purposes only and does not constitute betting advice.</p>
   </footer>
-  <script src="/finishline-picker-bootstrap.js" defer></script>
+  <script type="module" src="/finishline-picker-bootstrap.js"></script>
   <script src="/boot.js" defer></script>
+  
+  <!-- Toast notification -->
+  <div id="toast" style="position:fixed;left:50%;bottom:28px;transform:translateX(-50%);padding:10px 14px;border-radius:8px;background:#222;color:#fff;font-size:14px;display:none;z-index:9999"></div>
+  
+  <!-- Module scripts -->
+  <script type="module" src="/js/ui-utils.js"></script>
+  <script type="module">
+    import { initActions } from '/js/actions.js';
+    initActions();
+  </script>
 </body>
 </html>

@@ -3,6 +3,9 @@
 // - Opens the OS picker via global click delegation
 // - Handles file upload + OCR + incremental horse population
 // - Provides comprehensive logging and error handling
+
+import { fillRowsFromHorses } from './js/horse-form.js';
+
 (function () {
   if (window.__finishline_picker_bootstrapped__) return;
   window.__finishline_picker_bootstrapped__ = true;
@@ -394,12 +397,13 @@
       const horses = Array.isArray(payload?.horses) ? payload.horses : [];
       log('horses extracted:', horses);
 
-      // Populate horses incrementally
+      // Populate horses using the new robust system
       try {
-        await populateIncremental(horses);
+        console.log('[FLDBG] calling fillRowsFromHorses(...) with', horses.length, 'items');
+        await fillRowsFromHorses(horses);
         statusBadge.textContent = 'Ready';
       } catch (e) {
-        error('populateIncremental error:', e);
+        error('fillRowsFromHorses error:', e);
         showOcrError('Population failed. See console for details.');
         statusBadge.textContent = 'Idle';
       }
