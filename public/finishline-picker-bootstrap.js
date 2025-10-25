@@ -207,23 +207,72 @@
 
   // 7) Incremental horse population
   async function populateIncremental(horses) {
-    if (!Array.isArray(horses) || horses.length === 0) {
-      showOcrError('No horses were found in OCR output.');
-      return;
-    }
+    try {
+      if (!Array.isArray(horses) || horses.length === 0) {
+        console.warn('[FLDBG] populateIncremental: no horses array');
+        return;
+      }
 
-    log('horses extracted:', horses.length, horses);
-    
-    for (let i = 0; i < horses.length; i++) {
-      const row = await addHorseRowWait();
-      fillRow(row, horses[i]);
-      log(`populate row ${i + 1}:`, horses[i].name, horses[i].odds, horses[i].jockey, horses[i].trainer);
-      
-      // Small delay between rows to let DOM settle
-      await sleep(60);
+      const addButton = document.querySelector('button[data-action="add-horse"], #add-horse-btn, .add-horse-button, button:contains("Add Horse")');
+      const rowContainer = document.querySelector('#horse-table, .horse-rows, form'); // flexible selector
+
+      for (let i = 0; i < horses.length; i++) {
+        const h = horses[i];
+        console.log(`[FLDBG] Populating row ${i + 1}: ${h.name} (${h.odds})`);
+
+        // Ensure there's a blank row
+        let lastRow = rowContainer?.querySelector('.horse-row:last-child');
+        const nameInput = lastRow?.querySelector('input[name="horse-name"], input[placeholder*="Horse"]');
+        const oddsInput = lastRow?.querySelector('input[name="odds"], input[placeholder*="ML Odds"], input[name*="odds"]');
+        const jockeyInput = lastRow?.querySelector('input[name="jockey"], input[placeholder*="Jockey"]');
+        const trainerInput = lastRow?.querySelector('input[name="trainer"], input[placeholder*="Trainer"]');
+
+        // If any of these are missing or already filled, click Add Horse to make a new one
+        if (!nameInput || nameInput.value) {
+          addButton?.click();
+          await new Promise(r => setTimeout(r, 200));
+          lastRow = rowContainer?.querySelector('.horse-row:last-child');
+        }
+
+        const row = {
+          name: lastRow?.querySelector('input[name="horse-name"], input[placeholder*="Horse"]'),
+          odds: lastRow?.querySelector('input[name="odds"], input[placeholder*="ML Odds"], input[name*="odds"]'),
+          jockey: lastRow?.querySelector('input[name="jockey"], input[placeholder*="Jockey"]'),
+          trainer: lastRow?.querySelector('input[name="trainer"], input[placeholder*="Trainer"]')
+        };
+
+        if (!row.name || !row.odds || !row.jockey || !row.trainer) {
+          console.warn(`[FLDBG] Missing field(s) for row ${i + 1}`, row);
+          continue;
+        }
+
+        // Fill values
+        row.name.value = h.name || '';
+        row.odds.value = h.odds || '';
+        row.jockey.value = h.jockey || '';
+        row.trainer.value = h.trainer || '';
+
+        await new Promise(r => setTimeout(r, 100)); // small pause for UX
+      }
+
+      console.log('[FLDBG] All horses populated successfully');
+      const toast = document.createElement('div');
+      toast.textContent = '✅ Horses populated successfully!';
+      toast.style.position = 'fixed';
+      toast.style.bottom = '20px';
+      toast.style.right = '20px';
+      toast.style.padding = '10px 15px';
+      toast.style.background = 'rgba(0,255,100,0.2)';
+      toast.style.color = '#00ff88';
+      toast.style.border = '1px solid #00ff88';
+      toast.style.borderRadius = '8px';
+      toast.style.zIndex = '9999';
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 3500);
+
+    } catch (err) {
+      console.error('[FLDBG] populateIncremental error', err);
     }
-    
-    log('DONE population');
   }
 
   // 7) Main upload + extract + populate flow
@@ -299,7 +348,7 @@
         statusBadge.textContent = 'Ready';
       } catch (e) {
         error('populateIncremental error:', e);
-        showOcrError('Failed filling the form. See console for details.');
+        showOcrError('Population failed. See console for details.');
         statusBadge.textContent = 'Idle';
       }
 
