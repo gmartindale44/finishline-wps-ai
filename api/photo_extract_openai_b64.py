@@ -16,7 +16,7 @@ if not OPENAI_KEY:
     raise RuntimeError("Missing FINISHLINE_OPENAI_API_KEY environment variable. Set it in Vercel > Settings > Environment Variables.")
 
 client = AsyncOpenAI(api_key=OPENAI_KEY)
-print(f"[FinishLine] OpenAI model={OPENAI_MODEL}, key_prefix={OPENAI_KEY[:7]}…")
+print(f"[FinishLine] OCR using model={OPENAI_MODEL}, key_prefix={OPENAI_KEY[:7]}…")
 
 def _strip_data_uri(s: str) -> str:
     if not s:
@@ -78,74 +78,95 @@ def _horse_schema() -> str:
     })
 
 async def _ocr_structured(img_bytes: bytes) -> Dict[str, Any]:
-    img_b64 = base64.b64encode(img_bytes).decode()
-    sys = (
-        "You are an expert OCR parser for US horse racing entries. "
-        "Return ONLY valid JSON matching the provided JSON-Schema. "
-        "Extract ALL rows; do not infer missing ones."
-    )
-    user = (
-        "Extract horses from this image. DO NOT include race date, track, surface, or distance. "
-        "Only return horses with name, morning-line odds (ml_odds), jockey, and trainer."
-    )
-    schema = _horse_schema()
-    resp = await client.chat.completions.create(
-        model=OPENAI_MODEL,
-        temperature=0,
-        max_tokens=900,
-        response_format={"type":"json_schema","json_schema":{"name":"HorseList","schema":json.loads(schema)}},
-        messages=[
-            {"role":"system","content":sys},
-            {"role":"user","content":[
-                {"type":"text","text":user},
-                {"type":"input_image","image_url":{"url":f"data:image/png;base64,{img_b64}","detail":"high"}}
-            ]}
-        ]
-    )
     try:
-        return json.loads(resp.choices[0].message.content or "{}")
-    except Exception:
+        img_b64 = base64.b64encode(img_bytes).decode()
+        sys = (
+            "You are an expert OCR parser for US horse racing entries. "
+            "Return ONLY valid JSON matching the provided JSON-Schema. "
+            "Extract ALL rows; do not infer missing ones."
+        )
+        user = (
+            "Extract horses from this image. DO NOT include race date, track, surface, or distance. "
+            "Only return horses with name, morning-line odds (ml_odds), jockey, and trainer."
+        )
+        schema = _horse_schema()
+        resp = await client.chat.completions.create(
+            model=OPENAI_MODEL,
+            temperature=0,
+            max_tokens=900,
+            response_format={"type":"json_schema","json_schema":{"name":"HorseList","schema":json.loads(schema)}},
+            messages=[
+                {"role":"system","content":sys},
+                {"role":"user","content":[
+                    {"type":"text","text":user},
+                    {"type":"input_image","image_url":{"url":f"data:image/png;base64,{img_b64}","detail":"high"}}
+                ]}
+            ]
+        )
+        try:
+            return json.loads(resp.choices[0].message.content or "{}")
+        except Exception as e:
+            print(f"[FinishLine OCR ERROR] JSON parsing failed in structured OCR: {e}")
+            return {"horses":[]}
+    except Exception as e:
+        print(f"[FinishLine OCR ERROR] Structured OCR failed: {e}")
+        traceback.print_exc()
         return {"horses":[]}
 
 async def _ocr_raw_text(img_bytes: bytes) -> str:
-    img_b64 = base64.b64encode(img_bytes).decode()
-    sys = "You are an OCR transcription engine. Respond with FULL raw text only—no JSON, no commentary."
-    resp = await client.chat.completions.create(
-        model=OPENAI_MODEL,
-        temperature=0,
-        max_tokens=2000,
-        messages=[
-            {"role":"system","content":sys},
-            {"role":"user","content":[
-                {"type":"text","text":"Transcribe every visible character from the image."},
-                {"type":"input_image","image_url":{"url":f"data:image/png;base64,{img_b64}","detail":"high"}}
-            ]}
-        ]
-    )
-    return (resp.choices[0].message.content or "").strip()
+    try:
+        img_b64 = base64.b64encode(img_bytes).decode()
+        sys = "You are an OCR transcription engine. Respond with FULL raw text only—no JSON, no commentary."
+        resp = await client.chat.completions.create(
+            model=OPENAI_MODEL,
+            temperature=0,
+            max_tokens=2000,
+            messages=[
+                {"role":"system","content":sys},
+                {"role":"user","content":[
+                    {"type":"text","text":"Transcribe every visible character from the image."},
+                    {"type":"input_image","image_url":{"url":f"data:image/png;base64,{img_b64}","detail":"high"}}
+                ]}
+            ]
+        )
+        result = (resp.choices[0].message.content or "").strip()
+        if not result:
+            print("[FinishLine OCR ERROR] Empty OCR output received from OpenAI.")
+            raise ValueError("Empty OCR output received from OpenAI.")
+        return result
+    except Exception as e:
+        print(f"[FinishLine OCR ERROR] Raw text OCR failed: {e}")
+        traceback.print_exc()
+        raise
 
 async def _parse_from_raw_text(raw_text: str) -> Dict[str, Any]:
     if not raw_text.strip():
         return {"horses":[]}
-    sys = (
-        "Convert the OCR text into horses JSON. "
-        "Only include horses (name, ml_odds, jockey, trainer). "
-        "Ignore date/track/surface/distance."
-    )
-    schema = _horse_schema()
-    resp = await client.chat.completions.create(
-        model=OPENAI_MODEL,
-        temperature=0,
-        max_tokens=900,
-        response_format={"type":"json_schema","json_schema":{"name":"HorseList","schema":json.loads(schema)}},
-        messages=[
-            {"role":"system","content":sys},
-            {"role":"user","content":f"OCR TEXT:\n{raw_text}\n\nReturn JSON only."}
-        ]
-    )
     try:
-        return json.loads(resp.choices[0].message.content or "{}")
-    except Exception:
+        sys = (
+            "Convert the OCR text into horses JSON. "
+            "Only include horses (name, ml_odds, jockey, trainer). "
+            "Ignore date/track/surface/distance."
+        )
+        schema = _horse_schema()
+        resp = await client.chat.completions.create(
+            model=OPENAI_MODEL,
+            temperature=0,
+            max_tokens=900,
+            response_format={"type":"json_schema","json_schema":{"name":"HorseList","schema":json.loads(schema)}},
+            messages=[
+                {"role":"system","content":sys},
+                {"role":"user","content":f"OCR TEXT:\n{raw_text}\n\nReturn JSON only."}
+            ]
+        )
+        try:
+            return json.loads(resp.choices[0].message.content or "{}")
+        except Exception as e:
+            print(f"[FinishLine OCR ERROR] JSON parsing failed in raw text parsing: {e}")
+            return {"horses":[]}
+    except Exception as e:
+        print(f"[FinishLine OCR ERROR] Raw text parsing failed: {e}")
+        traceback.print_exc()
         return {"horses":[]}
 
 @router.route("/api/photo_extract_openai_b64", methods=["POST"])
@@ -204,8 +225,11 @@ async def handler(request: Request) -> JSONResponse:
         return JSONResponse({"ok": True, "horses": horses, "debug": dbg}, status_code=200)
 
     except Exception as e:
-        dbg["error"] = f"{type(e).__name__}: {e}"
+        error_msg = f"{type(e).__name__}: {e}"
+        print(f"[FinishLine OCR ERROR] Main handler failed: {error_msg}")
+        traceback.print_exc()
+        dbg["error"] = error_msg
         dbg["trace"] = traceback.format_exc()[-2000:]
-        return JSONResponse({"ok": False, "debug": dbg}, status_code=500)
+        return JSONResponse({"ok": False, "error": f"OCR failed: {e}", "debug": dbg}, status_code=500)
 
 app = router
