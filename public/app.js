@@ -565,69 +565,62 @@ async function handleOcrTextAndPopulate(ocrText) {
     LOG("Population complete.");
   }
 
-  // ---------- robust file picker wiring ----------
+  // ---------- clean file picker implementation ----------
   let isExtracting = false;
   
-  function createHiddenFileInput() {
-    // Remove existing hidden input if any
-    const existing = document.getElementById("robust-file-input");
+  function createFilePicker() {
+    // Remove any existing file picker
+    const existing = document.getElementById("photo-picker-input");
     if (existing) existing.remove();
     
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "image/*,.pdf";
-    input.id = "robust-file-input";
+    input.id = "photo-picker-input";
     input.style.cssText = "position:absolute;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;";
     document.body.appendChild(input);
     
     input.addEventListener("change", async (e) => {
-      console.log("[Picker] File input change event fired");
-      const files = e.target.files;
-      if (!files || files.length === 0) {
-        console.log("[Picker] No files selected");
+      console.log("[Picker] onFilesSelected fired");
+      const file = e.target.files?.[0];
+      if (!file) {
+        console.warn("[Picker] no file selected");
         return;
       }
       
-      const file = files[0];
-      console.log("[Picker] Selected file:", { name: file.name, type: file.type, size: file.size });
+      console.log("[Picker] file:", file.name, file.type, file.size);
       
       try {
         isExtracting = true;
         setBadge("Extracting…");
         
         // Convert file to base64
-        const base64 = await new Promise((resolve, reject) => {
+        const b64 = await new Promise((resolve, reject) => {
           const reader = new FileReader();
-          reader.onload = () => {
-            const result = reader.result;
-            const b64 = result.includes(',') ? result.split(',')[1] : result;
-            console.log("[Picker] Base64 length:", b64.length);
-            resolve(b64);
-          };
+          reader.onload = () => resolve((reader.result).split(",")[1] ?? "");
           reader.onerror = reject;
           reader.readAsDataURL(file);
         });
         
-        // Call OCR endpoint
-        const resp = await fetch("/api/photo_extract_openai_b64", {
+        console.log("[Picker] sending to /api/photo_extract_openai_b64 (len=", b64.length, ")");
+        
+        const r = await fetch("/api/photo_extract_openai_b64", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ b64: base64 })
+          body: JSON.stringify({ b64 }),
         });
         
-        const out = await resp.json();
-        console.log("[Picker] OCR response:", out);
+        const out = await r.json();
+        console.log("[Picker] response:", out);
         
         if (!out.ok) {
-          console.error("[Picker] OCR server-error:", out);
-          const errorMsg = out.error?.message ?? "unknown";
-          alert(`Image extraction failed: ${errorMsg} (see console)`);
+          alert("OCR failed: " + (out.error?.message ?? "unknown"));
           setBadge("Idle");
           return;
         }
         
         const entries = out.data?.entries ?? [];
-        console.log("[Picker] Entries to populate:", entries);
+        console.log("[Picker] entries:", entries);
         
         if (entries.length === 0) {
           alert("No horses detected in the image. Please try a clearer image or PDF.");
@@ -635,7 +628,7 @@ async function handleOcrTextAndPopulate(ocrText) {
           return;
         }
         
-        // Convert entries to horses format
+        // Convert entries to horses format and populate
         const horses = entries.map(entry => ({
           name: entry.horse || entry.name || '',
           ml_odds: entry.ml || entry.odds || '',
@@ -647,13 +640,12 @@ async function handleOcrTextAndPopulate(ocrText) {
         setBadge("Ready to predict");
         
       } catch (err) {
-        console.error("[Picker] Uncaught picker error:", err);
-        alert("Unexpected error while extracting. See console for details.");
+        console.error("[Picker] picker error:", err);
+        alert("Error during extraction—see console.");
         setBadge("Idle");
       } finally {
         isExtracting = false;
-        // Clear input to allow same file selection
-        input.value = "";
+        if (input) input.value = "";
       }
     });
     
@@ -675,14 +667,14 @@ async function handleOcrTextAndPopulate(ocrText) {
       return;
     }
     
-    if (btn.__robust_wired) return;
-    btn.__robust_wired = true;
+    if (btn.__picker_wired) return;
+    btn.__picker_wired = true;
     
-    // Create hidden input
-    const hiddenInput = createHiddenFileInput();
+    // Create file picker
+    const fileInput = createFilePicker();
     
     btn.addEventListener("click", (e) => {
-      console.log("[Picker] Choose button clicked");
+      console.log("[Picker] Choose clicked");
       e.preventDefault();
       e.stopPropagation();
       
@@ -691,9 +683,13 @@ async function handleOcrTextAndPopulate(ocrText) {
         return;
       }
       
-      // Clear value to allow same file selection
-      hiddenInput.value = "";
-      hiddenInput.click();
+      if (!fileInput) {
+        console.warn("[Picker] fileInput null");
+        return;
+      }
+      
+      fileInput.value = ""; // allow same file again
+      fileInput.click();
     });
     
     console.log("[Picker] Choose Photos / PDF button wired successfully");
@@ -709,7 +705,7 @@ async function handleOcrTextAndPopulate(ocrText) {
   // Watch for dynamic content changes
   const observer = new MutationObserver(() => {
     const btn = findChooseButton();
-    if (btn && !btn.__robust_wired) {
+    if (btn && !btn.__picker_wired) {
       wireChooseButton();
     }
   });
