@@ -99,8 +99,9 @@
       <button id="choose-photos-btn" type="button" class="button">Choose Photos / PDF</button>
       <!-- Optional: show status -->
       <div id="picker-status" style="margin-top:6px;font-size:12px;color:#9aa4ae;"></div>
-      <button class="button secondary" id="analyzeBtn">Analyze Photos with AI</button>
-      <button class="button success" id="predictBtn">Predict W/P/S</button>
+      <button id="analyze-btn" type="button" class="button secondary">Analyze Photos with AI</button>
+      <button id="predict-btn" type="button" class="button success">Predict W/P/S</button>
+      <button id="add-horse-btn" type="button" class="button">Add Horse</button>
       <!-- Dev-only debug injector -->
       <button class="button secondary" id="devInjectBtn" style="display:none;" onclick="injectSampleHorses()">🧪 Dev: Inject Sample Horses</button>
     </div>
@@ -110,5 +111,6 @@
     <p>© NovaSpark Collective LLC · FinishLine WPS AI</p>
     <p class="muted">Disclaimer: This tool is for informational/entertainment purposes only and does not constitute betting advice.</p>
   </footer>
+  <script src="/boot.js" defer></script>
 </body>
 </html>
