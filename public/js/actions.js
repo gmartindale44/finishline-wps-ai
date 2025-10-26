@@ -1,5 +1,5 @@
 // public/js/actions.js
-import { readRowsToJson } from './horse-form.js';
+import { collectHorsesFromDOM } from './horses-dom-collector.js';
 import { toast } from './ui-utils.js';
 
 async function postJSON(url, body) {
@@ -18,7 +18,7 @@ function bindAction(id, url, emptyMsg) {
   const btn = document.getElementById(id);
   if (!btn) return;
   btn.addEventListener('click', async () => {
-    const horses = readRowsToJson();
+    const horses = collectHorsesFromDOM();
     if (!horses.length) { toast(emptyMsg || 'Add at least one horse'); return; }
     btn.disabled = true;
     btn.dataset.loading = '1';

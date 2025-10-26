@@ -5,6 +5,7 @@
 // - Provides comprehensive logging and error handling
 
 import { fillAllHorses } from '/js/horse-populate-hotfix.js';
+import { collectHorsesFromDOM } from './js/horses-dom-collector.js';
 
 (function () {
   if (window.__finishline_picker_bootstrapped__) return;
@@ -401,6 +402,14 @@ import { fillAllHorses } from '/js/horse-populate-hotfix.js';
       try {
         console.log('[FLDBG] calling fillAllHorses(...) with', horses.length, 'items');
         await fillAllHorses(horses);
+        
+        // Refresh DOM cache after autofill so Analyze/Predict buttons work immediately
+        try {
+          window.FL_HORSES = collectHorsesFromDOM();
+        } catch (e) {
+          console.warn('[FLDBG] post-OCR collect failed', e);
+        }
+        
         statusBadge.textContent = 'Ready';
       } catch (e) {
         error('fillAllHorses error:', e);
