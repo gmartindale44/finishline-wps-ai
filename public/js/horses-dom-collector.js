@@ -55,3 +55,6 @@ export function collectHorsesFromDOM() {
   console.log('[FLDBG] DOM collector found', valid.length, 'horses:', valid);
   return valid;
 }
+
+// Export to window for global access
+window.collectHorsesFromDOM = collectHorsesFromDOM;
