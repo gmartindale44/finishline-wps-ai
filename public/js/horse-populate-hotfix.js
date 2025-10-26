@@ -13,7 +13,9 @@ function q(root, sel){ return root.querySelector(sel); }
 function qa(root, sel){ return Array.from(root.querySelectorAll(sel)); }
 
 const FL_SELECTORS = {
-  addBtn: '#btn-add-horse, button#add-horse, button.add-horse',
+  addBtn: '#btn-add-horse, button#add-horse-btn, button.add-horse, button:has-text("Add Horse")',
+  analyzeBtn: '#btn-analyze, button#btn-analyze-ai, button.analyze-btn',
+  predictBtn: '#btn-predict, button#btn-predict-wps, button.predict-btn',
   name:    'input[placeholder^="Horse Name" i],input[aria-label^="Horse Name" i]',
   odds:    'input[placeholder^="ML Odds" i],input[aria-label^="ML Odds" i]',
   jockey:  'input[placeholder^="Jockey" i],input[aria-label^="Jockey" i]',
@@ -95,15 +97,36 @@ async function fillRowByIndex(index, horse) {
   console.log('[hotfix] filled row', index, 'horse:', horse.name);
 }
 
-async function clickAddHorse() {
-  // Prefer id/class if present; otherwise find by text
-  let btn = qs(FL_SELECTORS.addBtn);
+async function clickAddHorseReliable() {
+  const before = getHorseRows().length;
+  let btn = document.querySelector(FL_SELECTORS.addBtn);
   if (!btn) {
     // fallback: find any button whose textContent includes "Add Horse"
     btn = Array.from(document.querySelectorAll('button')).find(b => /add\s*horse/i.test(b.textContent || ''));
   }
   if (!btn) throw new Error('[hotfix] Add Horse button not found');
+  
   btn.click();
+  
+  // Wait for the new row to appear
+  for (let i = 0; i < 20; i++) {
+    await wait(150);
+    if (getHorseRows().length > before) return;
+  }
+  
+  console.warn('[hotfix] Add Horse click fallback triggered; forcing clone of last row');
+  const lastRow = getHorseRows().at(-1);
+  if (lastRow) {
+    const clone = lastRow.cloneNode(true);
+    lastRow.parentElement.appendChild(clone);
+    // Clear the inputs in the cloned row
+    const inputs = clone.querySelectorAll('input');
+    inputs.forEach(inp => inp.value = '');
+  }
+}
+
+async function clickAddHorse() {
+  return clickAddHorseReliable();
 }
 
 // Main population function
@@ -135,6 +158,7 @@ async function populateAllHorses(horses) {
   try {
     const all = window.collectHorsesFromDOM ? window.collectHorsesFromDOM() : [];
     console.log('[hotfix] done. DOM shows', all.length, 'horses');
+    console.log('[hotfix] Population complete — rows visible:', getHorseRows().length);
   } catch (e) {
     console.warn('[hotfix] collector refresh failed', e);
   }

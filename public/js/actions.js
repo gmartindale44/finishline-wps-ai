@@ -46,6 +46,7 @@ function bindAction(id, url, emptyMsg) {
 }
 
 export function initActions() {
-  bindAction('btn-analyze', '/api/analyze', 'No horses to analyze');
+  // Note: These endpoints don't exist yet, but will show a clear 404 for now
+  bindAction('btn-analyze', '/api/photo_extract_openai_b64', 'No horses to analyze');
   bindAction('btn-predict', '/api/predict', 'No horses to predict');
 }
