@@ -1,14 +1,22 @@
 // public/js/dom-map.js
 export const FL_SELECTORS = {
-  addBtn: '#btn-add-horse, #addHorseBtn, button[data-action="add-horse"], button:has-text("Add Horse")',
-  analyzeBtn: '#btn-analyze, #analyze-btn, button.analyze-btn',
-  predictBtn: '#btn-predict, #predict-btn, button.predict-btn',
+  addBtn: [
+    '#add-horse-btn',
+    '#btn-add-horse',
+    '#addHorseBtn',
+    'button#add-horse-btn',
+    'button.add-horse',
+    'button.btn[type="button"]',
+    '[data-action="add-horse"]'
+  ].join(','),
+  analyzeBtn: '#analyze-btn, button#analyze-btn, button:has-text("Analyze Photos")',
+  predictBtn: '#predict-btn, button#predict-btn, button:has-text("Predict W/P/S")',
   // row inputs (per row wrapper)
-  row: '.horse-row, .horse, .horse-form-row, .row.horse, [data-horse-row]',
-  name: 'input[placeholder^="Horse Name" i], input[name^="horseName" i], input[name^="horse-name" i]',
-  odds: 'input[placeholder^="ML Odds" i], input[name^="mlOdds" i], input[name^="ml-odds" i]',
-  jockey: 'input[placeholder^="Jockey" i], input[name^="jockey" i], input[name^="horseJockey" i]',
-  trainer: 'input[placeholder^="Trainer" i], input[name^="trainer" i], input[name^="horseTrainer" i]',
+  row: '.horse-row, .horse, .row, .form-row, .input-group, [data-horse-row]',
+  name: 'input[placeholder^="Horse" i], input[placeholder^="Horse Name" i]',
+  odds: 'input[placeholder^="ML Odds" i]',
+  jockey: 'input[placeholder^="Jockey" i]',
+  trainer: 'input[placeholder^="Trainer" i]',
 };
 
 export function q(sel, root=document) { return root.querySelector(sel); }

@@ -8,6 +8,9 @@ export async function fillAllHorses(horses) {
   console.log('[FL] will fill', horses.length, 'horses.');
   if (!horses?.length) throw new Error('[FL] No horses to fill.');
 
+  // Debug: list all available buttons
+  console.log('[DEBUG] Available buttons:', [...document.querySelectorAll('button')].map(b => b.textContent.trim()));
+
   // never touch race fields — only row inputs:
   for (let i = 0; i < horses.length; i++) {
     const h = horses[i];

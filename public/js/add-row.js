@@ -7,35 +7,31 @@ export async function addRowReliable() {
   
   const btn = q(FL_SELECTORS.addBtn);
   if (!btn) {
-    console.error('[FinishLine] Add Horse button not found — check selector.');
-    console.error('[FinishLine] Tried selectors:', FL_SELECTORS.addBtn);
-    console.error('[FinishLine] Available buttons:', Array.from(document.querySelectorAll('button')).map(b => ({
-      id: b.id, 
-      text: b.textContent.trim(),
-      classes: b.className
-    })));
-    throw new Error('[FinishLine] Add Horse button not found — check selector.');
+    console.error('[FinishLine] Add Horse button not found. Buttons present:', [...document.querySelectorAll('button')].map(b => b.textContent.trim()));
+    throw new Error('Add Horse button selector failed');
   }
-  
-  console.log('[FinishLine] Clicking Add Horse button');
+
   btn.click();
+  console.log(`[FinishLine] Clicked Add Horse (row ${before + 1})`);
 
-  // wait for UI to render a new row
-  const added = await waitForNewRow(before, 3000);
-  if (added) {
-    console.log(`[FinishLine] Successfully added row ${before + 1}`);
-    return;
+  // wait for UI to render a new row with extended timeout
+  for (let i = 0; i < 25; i++) {
+    await wait(200);
+    const current = getHorseRows().length;
+    if (current > before) {
+      console.log(`[FinishLine] Confirmed new row added (${current} total)`);
+      return;
+    }
   }
 
-  // fallback: if the framework swallowed the click, clone the last row
-  console.warn('[FinishLine] Add Horse click fallback: cloning last row manually.');
+  // fallback: clone the last row if click didn't work
+  console.warn('[FinishLine] Fallback cloning last row...');
   const rows = getHorseRows();
   const last = rows.at(-1);
-  if (!last) throw new Error('[FinishLine] No row template to clone.');
-  const clone = last.cloneNode(true);
-  // clear inputs in cloned node
-  clone.querySelectorAll('input').forEach(i => { i.value = ''; });
-  last.parentElement.appendChild(clone);
-  await wait(100);
-  console.log(`[FinishLine] Manually cloned row. New count: ${getHorseRows().length}`);
+  if (last) {
+    const clone = last.cloneNode(true);
+    clone.querySelectorAll('input').forEach(i => (i.value = ''));
+    last.parentElement.appendChild(clone);
+    console.log(`[FinishLine] Cloned row. New count: ${getHorseRows().length}`);
+  }
 }
