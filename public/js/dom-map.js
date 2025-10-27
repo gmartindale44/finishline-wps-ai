@@ -1,27 +1,47 @@
 // public/js/dom-map.js
 export const FL_SELECTORS = {
-  addBtn: '#add-horse-btn, button#add-horse-btn, button.add-horse, button:has-text("Add Horse")',
-  analyzeBtn: '#analyze-btn, button#btn-analyze-ai, button.analyze-btn',
-  predictBtn: '#predict-btn, button#btn-predict-wps, button.predict-btn',
+  addBtn: '#btn-add-horse, #addHorseBtn, button[data-action="add-horse"], button:has-text("Add Horse")',
+  analyzeBtn: '#btn-analyze, #analyze-btn, button.analyze-btn',
+  predictBtn: '#btn-predict, #predict-btn, button.predict-btn',
   // row inputs (per row wrapper)
-  row: '.horse-row, .horse, .horse-form-row, .row.horse',
-  name: 'input[placeholder^="Horse Name" i], input[name="horse-name"], input.horse-name',
-  odds: 'input[placeholder^="ML Odds" i], input[name="ml-odds"], input.ml-odds',
-  jockey: 'input[placeholder^="Jockey" i], input[name="jockey"], input.jockey',
-  trainer: 'input[placeholder^="Trainer" i], input[name="trainer"], input.trainer',
+  row: '.horse-row, .horse, .horse-form-row, .row.horse, [data-horse-row]',
+  name: 'input[placeholder^="Horse Name" i], input[name^="horseName" i], input[name^="horse-name" i]',
+  odds: 'input[placeholder^="ML Odds" i], input[name^="mlOdds" i], input[name^="ml-odds" i]',
+  jockey: 'input[placeholder^="Jockey" i], input[name^="jockey" i], input[name^="horseJockey" i]',
+  trainer: 'input[placeholder^="Trainer" i], input[name^="trainer" i], input[name^="horseTrainer" i]',
 };
 
 export function q(sel, root=document) { return root.querySelector(sel); }
 export function qa(sel, root=document) { return Array.from(root.querySelectorAll(sel)); }
 
 export function getHorseRows() {
-  // rows are any containers that have at least the name input
-  const all = qa(FL_SELECTORS.row);
-  if (all.length) return all;
-  // fallback: infer rows by finding name inputs and using their closest row-ish container
+  // First try: rows with explicit row classes or attributes
+  const explicit = qa(FL_SELECTORS.row);
+  if (explicit.length) return explicit;
+  
+  // Second try: infer rows by finding name inputs
   const names = qa(FL_SELECTORS.name);
   if (!names.length) return [];
-  return names.map(el => el.closest('.horse-row, .horse, .row, form, .grid, .flex') ?? el.parentElement);
+  
+  // Find containers that hold all 4 inputs
+  const rows = new Set();
+  for (const name of names) {
+    let node = name;
+    while (node && node !== document.body) {
+      const hasAll = 
+        node.querySelector(FL_SELECTORS.name) &&
+        node.querySelector(FL_SELECTORS.odds) &&
+        node.querySelector(FL_SELECTORS.jockey) &&
+        node.querySelector(FL_SELECTORS.trainer);
+      if (hasAll) {
+        rows.add(node);
+        break;
+      }
+      node = node.parentElement;
+    }
+  }
+  
+  return Array.from(rows);
 }
 
 export function getRowFields(row) {
