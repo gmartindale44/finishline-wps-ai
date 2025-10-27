@@ -4,7 +4,7 @@
 // - Handles file upload + OCR + incremental horse population
 // - Provides comprehensive logging and error handling
 
-import { fillAllHorses } from '/js/horse-populate-hotfix.js';
+import { fillAllHorses } from './js/horse-populate-hotfix.js';
 import { collectHorsesFromDOM } from './js/horses-dom-collector.js';
 
 (function () {
