@@ -126,17 +126,7 @@
     <p>© NovaSpark Collective LLC · FinishLine WPS AI</p>
     <p class="muted">Disclaimer: This tool is for informational/entertainment purposes only and does not constitute betting advice.</p>
   </footer>
-  <script type="module" src="/finishline-picker-bootstrap.js"></script>
-  <script src="/boot.js" defer></script>
-  
-  <!-- Toast notification -->
-  <div id="toast" style="position:fixed;left:50%;bottom:28px;transform:translateX(-50%);padding:10px 14px;border-radius:8px;background:#222;color:#fff;font-size:14px;display:none;z-index:9999"></div>
-  
-  <!-- Module scripts -->
-  <script type="module" src="/js/ui-utils.js"></script>
-  <script type="module">
-    import { initActions } from '/js/actions.js';
-    initActions();
-  </script>
+  <!-- Simple, non-brittle wiring -->
+  <script src="/js/finishline-simple.js" defer></script>
 </body>
 </html>
