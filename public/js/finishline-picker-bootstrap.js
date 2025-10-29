@@ -82,6 +82,7 @@
       const body = await safeJson(res);
       if (!res.ok) throw new Error(body?.error || `Analyze ${res.status}`);
 
+      window.__lastAnalyze = body; // Store for Predict
       state.features = body.features || null;
       if (status) status.textContent = 'Analysis complete. Ready to Predict.';
       predictBtn?.removeAttribute('disabled');
@@ -95,26 +96,38 @@
   });
 
   predictBtn?.addEventListener('click', async () => {
-    if (!state.horses?.length) return alert('No horses to predict.');
+    if (!window.__lastAnalyze) {
+      alert('Analyze first to compute features.');
+      return;
+    }
     predictBtn.setAttribute('disabled', 'true');
     if (status) status.textContent = 'Predicting W/P/S…';
 
     try {
-      const meta = collectMeta();
       const res = await fetch('/api/predict_wps', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ horses: state.horses, meta, features: state.features || undefined })
+        headers: {'content-type': 'application/json'},
+        body: JSON.stringify(window.__lastAnalyze)
       });
-      const body = await safeJson(res);
-      if (!res.ok) throw new Error(body?.error || `Predict ${res.status}`);
+      const data = await safeJson(res);
+      if (!res.ok) throw new Error(data?.error || 'Prediction failed');
 
-      renderPredictions(body);
+      const { picks, probs, confidence } = data;
+      // Find displayed % for chosen picks
+      const winP = probs.find(h => h.name === picks.win)?.winPct ?? 0;
+      const plcP = probs.find(h => h.name === picks.place)?.plcPct ?? 0;
+      const shwP = probs.find(h => h.name === picks.show)?.shwPct ?? 0;
+
+      console.log('[FLDBG] Predictions:', { picks, confidence, top6: probs.slice(0, 6) });
+
+      const head = confidence < 0.22 ? 'Predictions (low confidence)' : 'Predictions';
+      alert(`⭐ ${head}:\n\n🏆 Win: ${picks.win} (${winP.toFixed(1)}%)\n🥈 Place: ${picks.place} (${plcP.toFixed(1)}%)\n🥉 Show: ${picks.show} (${shwP.toFixed(1)}%)`);
+
       if (status) status.textContent = 'Prediction complete.';
     } catch (err) {
-      console.error('[FLDBG] Predict failed:', err);
+      console.error('[FLDBG] Predict error:', err);
       if (status) status.textContent = `Predict failed: ${err.message}`;
-      alert('Predict failed. See console for details.');
+      alert(`Predict failed: ${err.message}`);
     } finally {
       predictBtn.removeAttribute('disabled');
     }
@@ -188,14 +201,4 @@
     return { date, track, surface, distance };
   }
 
-  function renderPredictions(data) {
-    console.log('[FLDBG] Predictions:', data);
-    const picks = data.picks || {};
-    const msg = [
-      picks.win   ? `🏆 Win:   ${picks.win.name} (${picks.win.mlOdds || picks.win.odds})`   : '🏆 Win:   —',
-      picks.place ? `🥈 Place: ${picks.place.name} (${picks.place.mlOdds || picks.place.odds})` : '🥈 Place: —',
-      picks.show  ? `🥉 Show:  ${picks.show.name} (${picks.show.mlOdds || picks.show.odds})`  : '🥉 Show:  —',
-    ].join('\n');
-    alert(msg);
-  }
 })();

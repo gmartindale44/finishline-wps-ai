@@ -1,4 +1,4 @@
-import { featuresForHorse, clamp01 } from './_utils/odds.js';
+import { parseMlOdds, extractSpeedFig } from './_utils/odds.js';
 
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -31,13 +31,38 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'No horses provided' });
     }
 
-    const features = horses.map(featuresForHorse).map(f => ({
-      ...f,
-      score: clamp01(f.impliedProb + f.formBoost + f.jockeyBoost + f.trainerBoost),
-    }));
+    // Process horses: parse odds, extract speed figures, normalize
+    const processed = horses.map(h => {
+      const name = String(h?.name || '').trim();
+      const oddsML = String(h?.odds || h?.ml_odds || h?.oddsML || '').trim();
+      const oddsNum = parseMlOdds(oddsML);
+      
+      // Try to extract speed figure from name field or a combined field
+      // Look for patterns like "(108*)" after horse names
+      const rawText = String(h?.name || '') + ' ' + String(h?.raw || '');
+      const speedFig = extractSpeedFig(rawText) || extractSpeedFig(h?.speedFig) || extractSpeedFig(String(h?.name || '')) || null;
 
-    console.log('[analyze] OK:', features.length);
-    return res.status(200).json({ ok: true, meta: meta ?? null, features });
+      return {
+        name,
+        oddsML: oddsML || null,
+        oddsNum: oddsNum,
+        jockey: String(h?.jockey || '').trim() || null,
+        trainer: String(h?.trainer || '').trim() || null,
+        speedFig: speedFig,
+      };
+    }).filter(h => h.name); // Remove entries without names
+
+    const source = meta?.source || 'ocr';
+    const cardHash = meta?.cardHash || null;
+
+    console.log('[analyze] Processed:', processed.length, 'horses');
+    return res.status(200).json({
+      horses: processed,
+      meta: {
+        source: source === 'manual' ? 'manual' : 'ocr',
+        cardHash: cardHash || undefined,
+      },
+    });
 
   } catch (err) {
     console.error('[analyze] Internal error:', err);
