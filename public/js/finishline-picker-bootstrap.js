@@ -190,10 +190,11 @@
 
   function renderPredictions(data) {
     console.log('[FLDBG] Predictions:', data);
+    const picks = data.picks || {};
     const msg = [
-      data.win   ? `🏆 Win:   ${data.win.name} (${data.win.odds})`   : '🏆 Win:   —',
-      data.place ? `🥈 Place: ${data.place.name} (${data.place.odds})` : '🥈 Place: —',
-      data.show  ? `🥉 Show:  ${data.show.name} (${data.show.odds})`  : '🥉 Show:  —',
+      picks.win   ? `🏆 Win:   ${picks.win.name} (${picks.win.mlOdds || picks.win.odds})`   : '🏆 Win:   —',
+      picks.place ? `🥈 Place: ${picks.place.name} (${picks.place.mlOdds || picks.place.odds})` : '🥈 Place: —',
+      picks.show  ? `🥉 Show:  ${picks.show.name} (${picks.show.mlOdds || picks.show.odds})`  : '🥉 Show:  —',
     ].join('\n');
     alert(msg);
   }

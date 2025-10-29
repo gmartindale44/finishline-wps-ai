@@ -1,35 +1,40 @@
+const { featuresForHorse, clamp01 } = require('./_utils/odds');
+
+function setCors(res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+}
+
 module.exports = async (req, res) => {
+  setCors(res);
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
   try {
     if (req.method !== 'POST') {
-      res.statusCode = 405;
-      return res.json({ ok: false, error: 'Method not allowed' });
+      return res.status(405).json({ error: 'Method not allowed' });
     }
-    const { horses = [], meta = {} } = req.body || {};
-    const seen = new Set();
-    const out = [];
-    for (const h of horses) {
-      const key = (h?.name || '').toLowerCase();
-      if (!key || seen.has(key)) continue;
-      seen.add(key);
-      out.push({
-        name: (h.name || '').trim(),
-        odds: (h.odds || '').trim(),
-        jockey: (h.jockey || '').trim(),
-        trainer: (h.trainer || '').trim(),
-      });
+    const { horses, meta } = req.body || {};
+    if (!Array.isArray(horses) || horses.length === 0) {
+      return res.status(400).json({ error: 'No horses provided' });
     }
-    // Return normalized horses + optional analysis features
-    const features = {
-      count: out.length,
-      meta: meta || {},
-      processed: Date.now()
-    };
-    res.statusCode = 200;
-    res.setHeader('Content-Type', 'application/json');
-    return res.json({ ok: true, horses: out, features });
-  } catch (e) {
-    res.statusCode = 500;
-    res.setHeader('Content-Type', 'application/json');
-    return res.json({ ok: false, error: String(e?.message || e) });
+
+    // Compute basic features per horse
+    const features = horses.map(featuresForHorse).map(f => {
+      // toy overall score (kept here so Predict can also recompute if needed)
+      const score = clamp01(f.impliedProb + f.formBoost + f.jockeyBoost + f.trainerBoost);
+      return { ...f, score };
+    });
+
+    return res.status(200).json({
+      ok: true,
+      meta: meta ?? null,
+      features,
+      // keep surface for debugging
+      info: { count: features.length }
+    });
+  } catch (err) {
+    console.error('[analyze] error:', err);
+    return res.status(500).json({ error: 'Analyze failed' });
   }
 };
