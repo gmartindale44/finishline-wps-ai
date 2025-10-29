@@ -4,7 +4,7 @@ module.exports = async (req, res) => {
       res.statusCode = 405;
       return res.json({ ok: false, error: 'Method not allowed' });
     }
-    const { horses = [] } = req.body || {};
+    const { horses = [], meta = {} } = req.body || {};
     const seen = new Set();
     const out = [];
     for (const h of horses) {
@@ -18,10 +18,18 @@ module.exports = async (req, res) => {
         trainer: (h.trainer || '').trim(),
       });
     }
+    // Return normalized horses + optional analysis features
+    const features = {
+      count: out.length,
+      meta: meta || {},
+      processed: Date.now()
+    };
     res.statusCode = 200;
-    return res.json({ ok: true, horses: out });
+    res.setHeader('Content-Type', 'application/json');
+    return res.json({ ok: true, horses: out, features });
   } catch (e) {
     res.statusCode = 500;
+    res.setHeader('Content-Type', 'application/json');
     return res.json({ ok: false, error: String(e?.message || e) });
   }
 };

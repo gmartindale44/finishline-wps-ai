@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>FinishLine WPS AI</title>
   <link rel="stylesheet" href="./styles.css" />
-  <script defer src="./app.js"></script>
 </head>
 <body>
   <header class="hero">
@@ -15,9 +14,6 @@
     </div>
     <p class="subtitle">Win / Place / Show Predictor</p>
   </header>
-
-  <!-- Hidden file input -->
-  <input id="fileInput" type="file" accept="image/*,application/pdf" multiple style="display:none" />
 
   <!-- Main Panel (single canonical form) -->
   <section class="panel panel-main" id="mainPanel">
@@ -29,15 +25,15 @@
     <div class="grid grid-2">
       <label class="field">
         <span>Race Date</span>
-        <input id="raceDate" type="text" placeholder="mm/dd/yyyy" />
+        <input id="race-date" type="text" placeholder="mm/dd/yyyy" />
       </label>
       <label class="field">
         <span>Track</span>
-        <input id="raceTrack" type="text" placeholder="e.g., Churchill Downs" />
+        <input id="race-track" type="text" placeholder="e.g., Churchill Downs" />
       </label>
       <label class="field">
         <span>Surface</span>
-        <select id="raceSurface">
+        <select id="race-surface">
           <option value="Dirt" selected>Dirt</option>
           <option value="Turf">Turf</option>
           <option value="Synthetic">Synthetic</option>
@@ -45,17 +41,17 @@
       </label>
       <label class="field">
         <span>Distance</span>
-        <input id="raceDistance" type="text" placeholder="e.g., 1 1/4 miles" />
+        <input id="race-distance" type="text" placeholder="e.g., 1 1/4 miles" />
       </label>
     </div>
 
     <h3 class="mt-4">Horse Data</h3>
     <div class="horse-form-inline horse-row" data-horse-row>
-      <input name="horseName" type="text" placeholder="Horse Name" />
-      <input name="mlOdds" type="text" placeholder="ML Odds (e.g., 5-2)" />
-      <input name="horseJockey" type="text" placeholder="Jockey" />
-      <input name="horseTrainer" type="text" placeholder="Trainer" />
-      <button type="button" class="button" id="addHorseBtn" data-add-horse>Add Horse</button>
+      <input name="horseName" type="text" placeholder="Horse Name" id="horse-name" />
+      <input name="mlOdds" type="text" placeholder="ML Odds (e.g., 5-2)" id="ml-odds" />
+      <input name="jockey" type="text" placeholder="Jockey" id="jockey" />
+      <input name="trainer" type="text" placeholder="Trainer" id="trainer" />
+      <button type="button" class="button" id="add-horse-btn">Add Horse</button>
     </div>
 
     <!-- Horse rows container for dynamic row creation -->
@@ -94,24 +90,13 @@
     </details>
 
     <div class="panel actions mt-4">
-      <!-- Hardened picker: input + button + label + status -->
+      <!-- Hardened picker: input + button + status -->
       <input id="photo-input-main" type="file" accept="image/*,.pdf" hidden />
       <button id="choose-photos-btn" type="button" class="btn">Choose Photos / PDF</button>
-      <label for="photo-input-main" class="btn btn-secondary" id="choose-photos-label">Choose Photos / PDF</label>
       <span id="picker-status" class="muted">No file selected.</span>
       
-      <!-- UX tip -->
-      <div style="margin-top:4px;font-size:11px;color:#666;font-style:italic;">
-        Upload a screenshot/PDF of the race list (name / trainer+jockey / odds). No horse photos.
-      </div>
-
-      <!-- Existing buttons/containers must have stable ids -->
-      <button id="btn-add-horse" data-action="add-horse" type="button" class="btn">Add Horse</button>
-      <div id="horse-rows"><!-- horse rows are appended inside here --></div>
-
-      <!-- Optional (keep if present) -->
-      <button id="btn-analyze" type="button" class="btn">Analyze Photos with AI</button>
-      <button id="btn-predict" type="button" class="btn">Predict W/P/S</button>
+      <button id="analyze-btn" type="button" class="btn btn-secondary" disabled>Analyze Photos with AI</button>
+      <button id="predict-btn" type="button" class="btn btn-primary" disabled>Predict W/P/S</button>
       
       <!-- Status feedback -->
       <div style="margin-top:8px;display:flex;align-items:center;gap:10px;">
@@ -127,7 +112,6 @@
     <p>© NovaSpark Collective LLC · FinishLine WPS AI</p>
     <p class="muted">Disclaimer: This tool is for informational/entertainment purposes only and does not constitute betting advice.</p>
   </footer>
-  <!-- Simple, non-brittle wiring -->
-  <script src="/js/finishline-simple.js" defer></script>
+  <script src="/js/finishline-picker-bootstrap.js" defer></script>
 </body>
 </html>

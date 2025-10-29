@@ -41,10 +41,16 @@ export default async function handler(req, res) {
   if (!OPENAI_KEY) return res.status(500).json({ ok:false, error:'Missing FINISHLINE_OPENAI_API_KEY' });
 
   try {
-    const { filename, mime, data } = req.body || {};
-    if (!filename || !mime || !data) return res.status(400).json({ ok:false, error:'Bad body: need filename, mime, data' });
+    // Accept both formats: {image_b64, mode} or {filename, mime, data}
+    const { image_b64, mode, filename, mime, data } = req.body || {};
+    const base64Data = image_b64 || data;
+    const detectedMime = mime || 'image/png';
+    
+    if (!base64Data) {
+      return res.status(400).json({ ok:false, error:'Bad body: need image_b64 (or filename+mime+data)' });
+    }
 
-    const imageUrl = `data:${mime};base64,${data}`;
+    const imageUrl = `data:${detectedMime};base64,${base64Data}`;
     const client = new OpenAI({ apiKey: OPENAI_KEY });
 
     // Tailored prompt for race lists
@@ -170,7 +176,7 @@ Rules:
       return Array.from(dedup.values());
     }
 
-    console.log('[OCR] model=', PRIMARY_MODEL, 'file=', filename, 'mime=', mime, 'size=', data.length);
+    console.log('[OCR] model=', PRIMARY_MODEL, 'mode=', mode || 'default', 'size=', base64Data.length);
 
     let response = null;
     let usedModel = PRIMARY_MODEL;
