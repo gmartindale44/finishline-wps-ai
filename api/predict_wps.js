@@ -21,7 +21,7 @@ export default async function handler(req, res) {
       catch (err) { return res.status(400).json({ error: 'Invalid JSON' }); }
     }
 
-    const { horses, Lightning, features } = body || {};
+    const { horses, meta, features } = body || {};
     if (!Array.isArray(horses) || horses.length === 0) {
       return res.status(400).json({ error: 'No horses provided' });
     }
