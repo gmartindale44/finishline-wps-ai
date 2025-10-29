@@ -94,10 +94,11 @@
     </details>
 
     <div class="panel actions mt-4">
-      <!-- Choose + hidden input + file note -->
-      <button id="photo-choose-btn" type="button" class="btn">Choose Photos / PDF</button>
-      <input id="photo-input-main" type="file" accept="image/*,.pdf" style="display:none" />
-      <span id="photo-file-note" class="file-note">No file selected.</span>
+      <!-- Hardened picker: input + button + label + status -->
+      <input id="photo-input-main" type="file" accept="image/*,.pdf" hidden />
+      <button id="choose-photos-btn" type="button" class="btn">Choose Photos / PDF</button>
+      <label for="photo-input-main" class="btn btn-secondary" id="choose-photos-label">Choose Photos / PDF</label>
+      <span id="picker-status" class="muted">No file selected.</span>
       
       <!-- UX tip -->
       <div style="margin-top:4px;font-size:11px;color:#666;font-style:italic;">
