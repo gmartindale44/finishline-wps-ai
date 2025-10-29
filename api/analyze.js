@@ -12,29 +12,40 @@ module.exports = async (req, res) => {
 
   try {
     if (req.method !== 'POST') {
+      console.error('[analyze] Wrong method:', req.method);
       return res.status(405).json({ error: 'Method not allowed' });
     }
-    const { horses, meta } = req.body || {};
+
+    // --- Safe parse for req.body ---
+    let body = req.body;
+    if (typeof body === 'string') {
+      try { body = JSON.parse(body); }
+      catch (err) { console.error('[analyze] Bad JSON:', err); return res.status(400).json({ error: 'Invalid JSON body' }); }
+    }
+
+    const { horses, meta } = body || {};
     if (!Array.isArray(horses) || horses.length === 0) {
+      console.error('[analyze] Missing horses array:', body);
       return res.status(400).json({ error: 'No horses provided' });
     }
 
-    // Compute basic features per horse
-    const features = horses.map(featuresForHorse).map(f => {
-      // toy overall score (kept here so Predict can also recompute if needed)
-      const score = clamp01(f.impliedProb + f.formBoost + f.jockeyBoost + f.trainerBoost);
-      return { ...f, score };
-    });
+    // --- Compute features ---
+    const features = horses.map(featuresForHorse).map(f => ({
+      ...f,
+      score: clamp01(f.impliedProb + f.formBoost + f.jockeyBoost + f.trainerBoost)
+    }));
+
+    console.log('[analyze] Computed features OK:', features.length);
 
     return res.status(200).json({
       ok: true,
       meta: meta ?? null,
       features,
-      // keep surface for debugging
       info: { count: features.length }
     });
+
   } catch (err) {
-    console.error('[analyze] error:', err);
-    return res.status(500).json({ error: 'Analyze failed' });
+    console.error('[analyze] Internal error:', err);
+    return res.status(500).json({ error: 'Analyze failed', details: err.message });
   }
 };
