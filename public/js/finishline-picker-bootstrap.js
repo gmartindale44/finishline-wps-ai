@@ -10,6 +10,39 @@
   const state = { horses: [], features: null };
   window.__finishline = state;
 
+  // Front-end FSM and shared cache
+  const FL = window.FL || (window.FL = {});
+  FL.state = 'idle'; // 'idle' | 'analyzing' | 'ready' | 'predicting'
+  FL.last = { horses: [], meta: {}, analysis: null };
+
+  function setState(next) {
+    FL.state = next;
+    if (!analyzeBtn || !predictBtn) return;
+    if (next === 'idle') {
+      analyzeBtn.disabled = false;
+      analyzeBtn.textContent = 'Analyze with AI';
+      predictBtn.disabled = true;
+      predictBtn.textContent = 'Predict W/P/S';
+    }
+    if (next === 'analyzing') {
+      analyzeBtn.disabled = true;
+      analyzeBtn.textContent = 'Analyzing...';
+      predictBtn.disabled = true;
+      predictBtn.textContent = 'Predict W/P/S';
+    }
+    if (next === 'ready') {
+      analyzeBtn.disabled = false;
+      analyzeBtn.textContent = 'Analyze with AI';
+      predictBtn.disabled = false;
+      predictBtn.textContent = 'Predict W/P/S';
+    }
+    if (next === 'predicting') {
+      analyzeBtn.disabled = true;
+      predictBtn.disabled = true;
+      predictBtn.textContent = 'Predicting...';
+    }
+  }
+
   // Wire Add Horse button to create new rows
   const addHorseBtn = document.getElementById('add-horse-btn');
   const horseRowsContainer = document.getElementById('horse-rows');
@@ -121,14 +154,15 @@
   }
 
   async function runAnalyze() {
-    const btn = analyzeBtn;
+    if (FL.state === 'analyzing' || FL.state === 'predicting') return;
     try {
-      btn.disabled = true;
-      btn.textContent = 'Analyzing...';
+      setState('analyzing');
 
       const horses = collectHorsesFromDOM();
       if (!horses.length) {
-        throw new Error('No horses on the form to analyze.');
+        alert('Analyze failed: No horses found.');
+        setState('idle');
+        return;
       }
 
       const meta = {
@@ -142,33 +176,25 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ horses, meta })
       });
-      if (!res.ok) throw new Error(`Analyze ${res.status}`);
-      const data = await safeJsonParse(res);
+      if (!res.ok) {
+        const txt = await res.text();
+        console.error('[FLDBG] Analyze failed:', txt);
+        alert('Analyze failed. See console for details.');
+        setState('idle');
+        return;
+      }
+      const analysis = await safeJsonParse(res);
 
-      const w = data?.picks?.win?.name || data?.picks?.win;
-      const p = data?.picks?.place?.name || data?.picks?.place;
-      const s = data?.picks?.show?.name || data?.picks?.show;
-      const conf = data?.confidence;
-      const msg = [
-        '⭐ Predictions:',
-        w ? `🏆 Win: ${w}` : '',
-        p ? `🥈 Place: ${p}` : '',
-        s ? `🥉 Show: ${s}` : '',
-        conf ? `📊 Confidence: ${(conf * 100).toFixed(1)}%` : ''
-      ].filter(Boolean).join('\n');
-      
-      alert(msg || 'No predictions returned.');
-      
-      window.__lastAnalyze = data;
+      FL.last = { horses, meta, analysis };
+      window.__lastAnalyze = analysis;
       if (status) status.textContent = 'Analysis complete. Ready to Predict.';
-      predictBtn?.removeAttribute('disabled');
+      console.log('[FLDBG] Analysis complete; ready to predict.', { count: horses.length });
+
+      setState('ready');
     } catch (err) {
-      console.error('[FLDBG] Analyze failed:', err);
+      console.error('[FLDBG] Analyze error:', err);
       alert('Analyze failed. See console for details.');
-      if (status) status.textContent = `Analyze failed: ${err.message}`;
-    } finally {
-      analyzeBtn.textContent = 'Analyze with AI';
-      analyzeBtn.disabled = false;
+      setState('idle');
     }
   }
 
@@ -181,18 +207,22 @@
   }
 
   predictBtn?.addEventListener('click', async () => {
-    if (!window.__lastAnalyze) {
-      alert('Analyze first to compute features.');
-      return;
-    }
-    predictBtn.setAttribute('disabled', 'true');
+    if (FL.state !== 'ready') { alert('Predict failed: Analyze first.'); return; }
+    setState('predicting');
     if (status) status.textContent = 'Predicting W/P/S…';
 
     try {
+      const { horses, meta } = FL.last || {};
+      if (!Array.isArray(horses) || horses.length === 0) {
+        alert('Predict failed: No horses provided');
+        setState('idle');
+        return;
+      }
+
       const res = await fetch('/api/predict_wps', {
         method: 'POST',
         headers: {'content-type': 'application/json'},
-        body: JSON.stringify(window.__lastAnalyze)
+        body: JSON.stringify({ horses, meta })
       });
       const data = await safeJson(res);
       if (!res.ok) throw new Error(data?.error || 'Prediction failed');
@@ -213,7 +243,7 @@
       if (status) status.textContent = `Predict failed: ${err.message}`;
       alert(`Predict failed: ${err.message}`);
     } finally {
-      predictBtn.removeAttribute('disabled');
+      setState('idle');
     }
   });
 
@@ -283,4 +313,6 @@
     return { date, track, surface, distance };
   }
 
+  // Initialize FSM on load
+  setState('idle');
 })();
