@@ -67,33 +67,118 @@
     }
   });
 
-  analyzeBtn?.addEventListener('click', async () => {
-    if (!state.horses?.length) return alert('No horses to analyze.');
-    analyzeBtn.setAttribute('disabled', 'true');
-    if (status) status.textContent = 'Analyzing…';
+  // Analyze button: collect horses already on the form and POST to /api/analyze
+  function mlToImplied(ml) {
+    if (!ml) return null;
+    const t = String(ml).trim().toUpperCase();
+    if (t === 'EVEN' || t === 'EVENS' || t === '1/1') return 0.5;
+    if (/^\d+(\.\d+)?$/.test(t)) {
+      const num = parseFloat(t);
+      return 1 / (num + 1);
+    }
+    const m = t.match(/^(\d+)\s*\/\s*(\d+)$/);
+    if (m) {
+      const a = parseFloat(m[1]);
+      const b = parseFloat(m[2]);
+      if (b === 0) return null;
+      return b / (a + b);
+    }
+    return null;
+  }
 
+  function collectHorsesFromDOM() {
+    const rows = Array.from(document.querySelectorAll('.horse-row'));
+    const horses = [];
+    for (const row of rows) {
+      const name = row.querySelector('input[name="horseName"]')?.value?.trim();
+      const ml = row.querySelector('input[name="mlOdds"]')?.value?.trim();
+      const jockey = row.querySelector('input[name="jockey"]')?.value?.trim();
+      const trainer = row.querySelector('input[name="trainer"]')?.value?.trim();
+      if (name) {
+        horses.push({
+          name,
+          ml: ml || '',
+          ml_implied: mlToImplied(ml),
+          jockey: jockey || '',
+          trainer: trainer || ''
+        });
+      }
+    }
+    return horses;
+  }
+
+  async function safeJsonParse(res) {
+    const txt = await res.text();
     try {
-      const meta = collectMeta();
+      return JSON.parse(txt);
+    } catch {
+      const match = txt.match(/\{[\s\S]*\}/);
+      if (match) {
+        try { return JSON.parse(match[0]); } catch {}
+      }
+      throw new Error('Invalid JSON response:\n' + txt);
+    }
+  }
+
+  async function runAnalyze() {
+    const btn = analyzeBtn;
+    try {
+      btn.disabled = true;
+      btn.textContent = 'Analyzing...';
+
+      const horses = collectHorsesFromDOM();
+      if (!horses.length) {
+        throw new Error('No horses on the form to analyze.');
+      }
+
+      const meta = {
+        track: document.getElementById('race-track')?.value?.trim() || '',
+        distance: document.getElementById('race-distance')?.value?.trim() || '',
+        surface: document.getElementById('race-surface')?.value?.trim() || ''
+      };
+
       const res = await fetch('/api/analyze', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ horses: state.horses, meta })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ horses, meta })
       });
-      const body = await safeJson(res);
-      if (!res.ok) throw new Error(body?.error || `Analyze ${res.status}`);
+      if (!res.ok) throw new Error(`Analyze ${res.status}`);
+      const data = await safeJsonParse(res);
 
-      window.__lastAnalyze = body; // Store for Predict
-      state.features = body.features || null;
+      const w = data?.picks?.win?.name || data?.picks?.win;
+      const p = data?.picks?.place?.name || data?.picks?.place;
+      const s = data?.picks?.show?.name || data?.picks?.show;
+      const conf = data?.confidence;
+      const msg = [
+        '⭐ Predictions:',
+        w ? `🏆 Win: ${w}` : '',
+        p ? `🥈 Place: ${p}` : '',
+        s ? `🥉 Show: ${s}` : '',
+        conf ? `📊 Confidence: ${(conf * 100).toFixed(1)}%` : ''
+      ].filter(Boolean).join('\n');
+      
+      alert(msg || 'No predictions returned.');
+      
+      window.__lastAnalyze = data;
       if (status) status.textContent = 'Analysis complete. Ready to Predict.';
       predictBtn?.removeAttribute('disabled');
     } catch (err) {
       console.error('[FLDBG] Analyze failed:', err);
-      if (status) status.textContent = `Analyze failed: ${err.message}`;
       alert('Analyze failed. See console for details.');
+      if (status) status.textContent = `Analyze failed: ${err.message}`;
     } finally {
-      analyzeBtn.removeAttribute('disabled');
+      analyzeBtn.textContent = 'Analyze with AI';
+      analyzeBtn.disabled = false;
     }
-  });
+  }
+
+  if (analyzeBtn) {
+    analyzeBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      runAnalyze();
+    });
+    analyzeBtn.removeAttribute('disabled');
+  }
 
   predictBtn?.addEventListener('click', async () => {
     if (!window.__lastAnalyze) {
@@ -113,7 +198,6 @@
       if (!res.ok) throw new Error(data?.error || 'Prediction failed');
 
       const { picks, probs, confidence } = data;
-      // Find displayed % for chosen picks
       const winP = probs.find(h => h.name === picks.win)?.winPct ?? 0;
       const plcP = probs.find(h => h.name === picks.place)?.plcPct ?? 0;
       const shwP = probs.find(h => h.name === picks.show)?.shwPct ?? 0;
@@ -166,7 +250,6 @@
       oddsEl.value   = first.odds || '';
       jockeyEl.value = first.jockey || '';
       trainerEl_case.value= first.trainer || '';
-      // Trigger input events
       [nameEl, oddsEl, jockeyEl, trainerEl_case].forEach(el => {
         el.dispatchEvent(new Event('input', { bubbles: true }));
         el.dispatchEvent(new Event('change', { bubbles: true }));
@@ -176,7 +259,6 @@
     if (addBtn && rest.length > 0) {
       for (const h of rest) {
         addBtn.click();
-        // Wait for DOM update
         await new Promise(r => setTimeout(r, 150));
         const rows = document.querySelectorAll('.horse-row');
         const lastRow = rows[rows.length - 1];
