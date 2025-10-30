@@ -7,7 +7,7 @@ This project intentionally does **not** use a project-level `vercel.json` or `no
 Instead, we rely on **per-function runtime configuration** set directly in each API handler file:
 
 ```javascript
-export const config = { runtime: 'nodejs20.x' };
+export const config = { runtime: 'nodejs' };
 
 export default async function handler(req, res) {
   // handler logic
@@ -24,9 +24,9 @@ export default async function handler(req, res) {
 ### Current Runtime
 
 All API functions in `api/**/*.js` are configured to use:
-- **Runtime**: `nodejs20.x`
+- **Runtime**: `nodejs`
 - **Module System**: ESM (`"type": "module"` in `package.json`)
-- **Node Version**: `>=20` (specified in `package.json` engines)
+- **Node Version**: `20.x` (specified in `package.json` engines)
 
 ### Adding New API Routes
 
@@ -35,7 +35,7 @@ When adding new API handlers:
 1. Create the file in `api/` directory
 2. Include the runtime config:
    ```javascript
-   export const config = { runtime: 'nodejs20.x' };
+   export const config = { runtime: 'nodejs' };
    ```
 3. Export default handler function
 4. Use ESM imports (no `require()` or `module.exports`)

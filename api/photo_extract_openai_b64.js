@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 
 export const config = {
-  runtime: "nodejs20.x"
+  runtime: "nodejs"
 };
 
 const OPENAI_KEY   = process.env.FINISHLINE_OPENAI_API_KEY;
