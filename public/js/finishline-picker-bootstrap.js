@@ -13,33 +13,101 @@
   // Front-end FSM and shared cache
   const FL = window.FL || (window.FL = {});
   FL.state = 'idle'; // 'idle' | 'analyzing' | 'ready' | 'predicting'
-  FL.last = { horses: [], meta: {}, analysis: null };
+  FL.last = { payload: null };
+
+  // ---- STATUS CHIP ----
+  function updateChip() {
+    let chip = document.getElementById('fl-status-chip');
+    if (!chip) {
+      const chipEl = document.createElement('span');
+      chipEl.id = 'fl-status-chip';
+      chipEl.style.marginLeft = '12px';
+      chipEl.style.padding = '4px 10px';
+      chipEl.style.borderRadius = '12px';
+      chipEl.style.fontSize = '0.85em';
+      chipEl.style.transition = 'all 0.4s ease';
+      chipEl.style.display = 'inline-block';
+      chipEl.textContent = '🟢 Idle';
+      document.querySelector('.actions')?.appendChild(chipEl)
+        || document.querySelector('#analyze-btn')?.insertAdjacentElement('afterend', chipEl);
+      chip = chipEl;
+    }
+
+    const c = chip;
+    c.style.opacity = '1';
+    if (FL.state === 'idle') {
+      c.textContent = '🟢 Idle';
+      c.style.background = 'rgba(0,255,100,0.15)';
+      c.style.color = '#5CFF89';
+    } else if (FL.state === 'analyzing') {
+      c.textContent = '🟡 Analyzing...';
+      c.style.background = 'rgba(255,200,0,0.15)';
+      c.style.color = '#FFD85C';
+    } else if (FL.state === 'ready') {
+      c.textContent = '🔵 Ready';
+      c.style.background = 'rgba(100,180,255,0.15)';
+      c.style.color = '#5CB8FF';
+    } else if (FL.state === 'predicting') {
+      c.textContent = '🟣 Predicting...';
+      c.style.background = 'rgba(180,100,255,0.15)';
+      c.style.color = '#C890FF';
+    }
+  }
 
   function setState(next) {
     FL.state = next;
+    updateChip();
     if (!analyzeBtn || !predictBtn) return;
     if (next === 'idle') {
       analyzeBtn.disabled = false;
-      analyzeBtn.textContent = 'Analyze with AI';
+      if (analyzeBtn.querySelector('.label')) {
+        analyzeBtn.querySelector('.label').textContent = 'Analyze with AI';
+      } else {
+        analyzeBtn.textContent = 'Analyze with AI';
+      }
       predictBtn.disabled = true;
-      predictBtn.textContent = 'Predict W/P/S';
+      if (predictBtn.querySelector('.label')) {
+        predictBtn.querySelector('.label').textContent = 'Predict W/P/S';
+      } else {
+        predictBtn.textContent = 'Predict W/P/S';
+      }
     }
     if (next === 'analyzing') {
       analyzeBtn.disabled = true;
-      analyzeBtn.textContent = 'Analyzing...';
+      if (analyzeBtn.querySelector('.label')) {
+        analyzeBtn.querySelector('.label').textContent = 'Analyzing...';
+      } else {
+        analyzeBtn.textContent = 'Analyzing...';
+      }
       predictBtn.disabled = true;
-      predictBtn.textContent = 'Predict W/P/S';
+      if (predictBtn.querySelector('.label')) {
+        predictBtn.querySelector('.label').textContent = 'Predict W/P/S';
+      } else {
+        predictBtn.textContent = 'Predict W/P/S';
+      }
     }
     if (next === 'ready') {
       analyzeBtn.disabled = false;
-      analyzeBtn.textContent = 'Analyze with AI';
+      if (analyzeBtn.querySelector('.label')) {
+        analyzeBtn.querySelector('.label').textContent = 'Analyze with AI';
+      } else {
+        analyzeBtn.textContent = 'Analyze with AI';
+      }
       predictBtn.disabled = false;
-      predictBtn.textContent = 'Predict W/P/S';
+      if (predictBtn.querySelector('.label')) {
+        predictBtn.querySelector('.label').textContent = 'Predict W/P/S';
+      } else {
+        predictBtn.textContent = 'Predict W/P/S';
+      }
     }
     if (next === 'predicting') {
       analyzeBtn.disabled = true;
       predictBtn.disabled = true;
-      predictBtn.textContent = 'Predicting...';
+      if (predictBtn.querySelector('.label')) {
+        predictBtn.querySelector('.label').textContent = 'Predicting...';
+      } else {
+        predictBtn.textContent = 'Predicting...';
+      }
     }
   }
 
@@ -168,7 +236,8 @@
       const meta = {
         track: document.getElementById('race-track')?.value?.trim() || '',
         distance: document.getElementById('race-distance')?.value?.trim() || '',
-        surface: document.getElementById('race-surface')?.value?.trim() || ''
+        surface: document.getElementById('race-surface')?.value?.trim() || '',
+        date: document.getElementById('race-date')?.value?.trim() || ''
       };
 
       const res = await fetch('/api/analyze', {
@@ -176,24 +245,22 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ horses, meta })
       });
-      if (!res.ok) {
-        const txt = await res.text();
-        console.error('[FLDBG] Analyze failed:', txt);
-        alert('Analyze failed. See console for details.');
+      const json = await safeJsonParse(res);
+      if (!res.ok || !json.ok) {
+        console.error('[FLDBG] Analyze failed:', json);
+        alert(`Analyze failed: ${json.error || 'Unknown error'}`);
         setState('idle');
         return;
       }
-      const analysis = await safeJsonParse(res);
 
-      FL.last = { horses, meta, analysis };
-      window.__lastAnalyze = analysis;
+      FL.last.payload = json.payload;
       if (status) status.textContent = 'Analysis complete. Ready to Predict.';
       console.log('[FLDBG] Analysis complete; ready to predict.', { count: horses.length });
 
       setState('ready');
     } catch (err) {
       console.error('[FLDBG] Analyze error:', err);
-      alert('Analyze failed. See console for details.');
+      alert(`Analyze failed: ${err.message}`);
       setState('idle');
     }
   }
@@ -207,42 +274,48 @@
   }
 
   predictBtn?.addEventListener('click', async () => {
-    if (FL.state !== 'ready') { alert('Predict failed: Analyze first.'); return; }
+    const payload = FL.last.payload;
+    if (!payload) {
+      alert('Please run Analyze with AI first.');
+      return;
+    }
+
+    if (FL.state !== 'ready') {
+      alert('Predict failed: Analyze first.');
+      return;
+    }
+
     setState('predicting');
     if (status) status.textContent = 'Predicting W/P/S…';
 
     try {
-      const { horses, meta } = FL.last || {};
-      if (!Array.isArray(horses) || horses.length === 0) {
-        alert('Predict failed: No horses provided');
-        setState('idle');
-        return;
-      }
-
       const res = await fetch('/api/predict_wps', {
         method: 'POST',
-        headers: {'content-type': 'application/json'},
-        body: JSON.stringify({ horses, meta })
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ payload })
       });
-      const data = await safeJson(res);
-      if (!res.ok) throw new Error(data?.error || 'Prediction failed');
+      const json = await safeJsonParse(res);
+      if (!res.ok || !json.ok) {
+        throw new Error(json.error || 'Prediction failed');
+      }
 
-      const { picks, probs, confidence } = data;
-      const winP = probs.find(h => h.name === picks.win)?.winPct ?? 0;
-      const plcP = probs.find(h => h.name === picks.place)?.plcPct ?? 0;
-      const shwP = probs.find(h => h.name === picks.show)?.shwPct ?? 0;
+      const { picks, confidence } = json;
+      console.log('[FLDBG] Predictions:', { picks, confidence });
 
-      console.log('[FLDBG] Predictions:', { picks, confidence, top6: probs.slice(0, 6) });
-
-      const head = confidence < 0.22 ? 'Predictions (low confidence)' : 'Predictions';
-      alert(`⭐ ${head}:\n\n🏆 Win: ${picks.win} (${winP.toFixed(1)}%)\n🥈 Place: ${picks.place} (${plcP.toFixed(1)}%)\n🥉 Show: ${picks.show} (${shwP.toFixed(1)}%)`);
+      alert(
+        `⭐ Predictions:\n\n` +
+        `🏆 Win: ${picks.win}\n` +
+        `🥈 Place: ${picks.place}\n` +
+        `🥉 Show: ${picks.show}\n\n` +
+        `🔎 Confidence: ${(confidence*100).toFixed(1)}%`
+      );
 
       if (status) status.textContent = 'Prediction complete.';
+      setState('idle');
     } catch (err) {
       console.error('[FLDBG] Predict error:', err);
       if (status) status.textContent = `Predict failed: ${err.message}`;
       alert(`Predict failed: ${err.message}`);
-    } finally {
       setState('idle');
     }
   });
@@ -315,4 +388,6 @@
 
   // Initialize FSM on load
   setState('idle');
+  window.addEventListener('DOMContentLoaded', updateChip);
+  updateChip();
 })();
