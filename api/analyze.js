@@ -1,6 +1,6 @@
-export const config = { runtime: 'nodejs20.x' };
-
 import { scoreHorses } from './_openai.js';
+
+export const config = { runtime: 'nodejs20.x' };
 
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -26,8 +26,9 @@ export default async function handler(req, res) {
 
     return res.status(200).json(analysis);
 
-  } catch (e) {
-    console.error('[analyze] error', e);
-    return res.status(500).json({ error: e.message || 'Analyze failed' });
+  } catch (err) {
+    console.error('[API ERROR]', err);
+    const status = err?.status || err?.statusCode || 500;
+    return res.status(status).json({ ok: false, error: String(err?.message || err || 'Analyze failed') });
   }
 }

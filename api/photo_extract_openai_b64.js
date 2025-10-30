@@ -1,13 +1,12 @@
-// /api/photo_extract_openai_b64.js (Node runtime)
 import OpenAI from "openai";
+
+export const config = {
+  runtime: "nodejs20.x"
+};
 
 const OPENAI_KEY   = process.env.FINISHLINE_OPENAI_API_KEY;
 const PRIMARY_MODEL = process.env.FINISHLINE_OPENAI_MODEL || "gpt-4o";
 const FALLBACK_MODEL = "gpt-4o-mini";
-
-export const config = {
-  runtime: "nodejs"
-};
 
 // JSON schema for race list extraction
 const RACE_SCHEMA = {
@@ -235,11 +234,11 @@ Rules:
     return res.status(200).json({ ok: true, horses });
 
   } catch (err) {
-    console.error('[OCR ERROR]', err);
-    return res.status(500).json({ 
+    console.error('[API ERROR]', err);
+    const status = err?.status || err?.statusCode || 500;
+    return res.status(status).json({ 
       ok: false, 
-      error: "OCR extraction failed", 
-      diag: err?.message || 'Internal error' 
+      error: String(err?.message || err || 'OCR extraction failed')
     });
   }
 }

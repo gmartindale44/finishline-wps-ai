@@ -1,6 +1,6 @@
-export const config = { runtime: 'nodejs20.x' };
-
 import { chooseWPS } from './_openai.js';
+
+export const config = { runtime: 'nodejs20.x' };
 
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -25,8 +25,9 @@ export default async function handler(req, res) {
 
     return res.status(200).json(picks);
 
-  } catch (e) {
-    console.error('[predict_wps] error', e);
-    return res.status(500).json({ error: e.message || 'Predict failed' });
+  } catch (err) {
+    console.error('[API ERROR]', err);
+    const status = err?.status || err?.statusCode || 500;
+    return res.status(status).json({ ok: false, error: String(err?.message || err || 'Predict failed') });
   }
 }
