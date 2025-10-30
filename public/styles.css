@@ -104,6 +104,9 @@ input,select{width:100%;padding:10px 12px;border:1px solid var(--border);border-
 
 button[disabled][aria-busy="true"] { opacity: 0.7; }
 
+/* Buttons with inline spinners */
+.btn .spinner { margin-left: 8px; }
+
 /* Hardened picker overlay guard */
 .overlay, .backdrop, .mask, .modal-overlay, .loading, [data-blocking-overlay="true"] { pointer-events: none !important; }
 #choose-photos-btn { position: relative; z-index: 1000; pointer-events: auto !important; }

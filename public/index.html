@@ -95,12 +95,20 @@
       <button id="choose-photos-btn" type="button" class="btn">Choose Photos / PDF</button>
       <span id="picker-status" class="muted">No file selected.</span>
       
-      <button id="analyze-btn" type="button" class="btn btn-secondary" disabled>Analyze with AI</button>
-      <button id="predict-btn" type="button" class="btn btn-primary" disabled>Predict W/P/S</button>
+      <button id="analyze-btn" type="button" class="btn btn-secondary" disabled>
+        <span class="label">Analyze with AI</span>
+        <span class="spinner" style="display:none;"></span>
+      </button>
+      <button id="predict-btn" type="button" class="btn btn-primary" disabled>
+        <span class="label">Predict W/P/S</span>
+        <span class="spinner" style="display:none;"></span>
+      </button>
       
       <!-- Status feedback -->
       <div style="margin-top:8px;display:flex;align-items:center;gap:10px;">
         <span data-status-badge class="chip" style="padding:4px 8px;background:#f0f0f0;border-radius:4px;font-size:12px;">Idle</span>
+        <small id="status-analyze" class="chip chip-muted">Idle</small>
+        <small id="status-predict" class="chip chip-muted">Idle</small>
       </div>
       
       <!-- Dev-only debug injector -->
