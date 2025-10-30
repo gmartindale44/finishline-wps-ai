@@ -92,26 +92,15 @@
     <div class="panel actions mt-4">
       <!-- Hardened picker: input + button + status -->
       <input id="photo-input-main" type="file" accept="image/*,.pdf" hidden />
-      <button id="choose-photos-btn" type="button" class="btn">Choose Photos / PDF</button>
-      <span id="picker-status" class="muted">No file selected.</span>
+      <button id="btn-pick" type="button" class="btn">Choose Photos / PDF</button>
+      <span id="chip-pick" class="chip chip-idle">Idle</span>
+      <span id="picker-status" class="muted" style="margin-left:8px;">No file selected.</span>
       
-      <button id="analyze-btn" type="button" class="btn btn-secondary btn-aura" disabled>
-        <span class="label">Analyze with AI</span>
-        <span class="spinner" style="display:none;"></span>
-      </button>
-      <button id="predict-btn" type="button" class="btn btn-primary btn-aura" disabled>
-        <span class="label">Predict W/P/S</span>
-        <span class="spinner" style="display:none;"></span>
-      </button>
+      <button id="btn-analyze" type="button" class="btn btn-secondary" disabled>Analyze with AI</button>
+      <span id="chip-analyze" class="chip chip-idle">Idle</span>
       
-      <!-- Status feedback -->
-      <div style="margin-top:8px;display:flex;align-items:center;gap:10px;">
-        <span data-status-badge class="chip" style="padding:4px 8px;background:#f0f0f0;border-radius:4px;font-size:12px;">Idle</span>
-        <small id="chip-analyze" class="chip chip-muted">Idle</small>
-        <small id="chip-predict" class="chip chip-muted">Idle</small>
-        <small id="status-analyze" class="chip chip-muted" style="display:none;">Idle</small>
-        <small id="status-predict" class="chip chip-muted" style="display:none;">Idle</small>
-      </div>
+      <button id="btn-predict" type="button" class="btn btn-primary" disabled>Predict W/P/S</button>
+      <span id="chip-predict" class="chip chip-idle">Idle</span>
       
       <!-- Dev-only debug injector -->
       <button class="button secondary" id="devInjectBtn" style="display:none;" onclick="injectSampleHorses()">🧪 Dev: Inject Sample Horses</button>
@@ -121,6 +110,7 @@
   <footer class="foot">
     <p>© NovaSpark Collective LLC · FinishLine WPS AI</p>
     <p class="muted">Disclaimer: This tool is for informational/entertainment purposes only and does not constitute betting advice.</p>
+    <div id="fl-debug" style="opacity:.6;font-size:12px;margin-top:.5rem;"></div>
   </footer>
   <script src="/js/finishline-picker-bootstrap.js" defer></script>
 </body>
