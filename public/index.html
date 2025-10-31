@@ -45,66 +45,31 @@
       </label>
     </div>
 
-    <h3 class="mt-4">Horse Data</h3>
-    <div class="horse-form-inline horse-row" data-horse-row>
-      <input name="horseName" type="text" placeholder="Horse Name" id="horse-name" class="horse-name" />
-      <input name="mlOdds" type="text" placeholder="ML Odds (e.g., 5-2)" id="ml-odds" class="ml-odds" />
-      <input name="jockey" type="text" placeholder="Jockey" id="jockey" class="jockey" />
-      <input name="trainer" type="text" placeholder="Trainer" id="trainer" class="trainer" />
-      <button type="button" class="button" id="add-horse-btn">Add Horse</button>
-    </div>
+    <!-- Horse Data Section -->
+    <section id="horse-section" class="panel mt-4">
+      <div class="section-header">
+        <h3 class="section-title">Horse Data</h3>
+        <button id="add-row-btn" class="btn btn-secondary btn-sm">+ Add Horse</button>
+      </div>
 
-    <!-- Horse rows container for dynamic row creation -->
-    <div id="horse-rows" data-horse-rows class="horse-rows space-y-1 mt-2"></div>
+      <!-- Table / rows container -->
+      <div id="horse-rows" class="rows"></div>
 
-    <!-- Legacy horse rows container for parsed OCR results -->
-    <div id="horseRows" class="space-y-1 mt-2"></div>
-
-    <!-- Hide existing debug containers -->
-    <div id="horse-list" class="horse-list" style="display:none">
-      <table>
-        <thead>
-          <tr>
-            <th>Horse Name</th>
-            <th>Odds</th>
-            <th>Jockey</th>
-            <th>Trainer</th>
-          </tr>
-        </thead>
-        <tbody data-horse-list>
-          <!-- OCR results will populate here -->
-        </tbody>
-      </table>
-    </div>
-
-    <!-- Additional horse list container for robust rendering -->
-    <div id="horseList" class="horse-list" style="display:none"></div>
-
-    <!-- Legacy dump area (hidden by default) -->
-    <div id="legacyDump" style="display:none"></div>
-
-    <!-- Debug section (optional) -->
-    <details id="debug-ocr" style="display:none;margin-top:8px;">
-      <summary>OCR Debug</summary>
-      <pre id="debug-ocr-text" style="white-space:pre-wrap"></pre>
-    </details>
-
-    <div class="panel actions mt-4">
-      <!-- Hardened picker: input + button + status -->
-      <input id="file-input" type="file" accept=".png,.jpg,.jpeg,.webp,.pdf" multiple style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;" />
-      <button id="choose-btn" type="button" class="btn">Choose Photos / PDF</button>
-      <span class="chip chip--idle" data-chip="choose">Idle</span>
-      <span id="file-selected-label" class="muted" style="margin-left:8px;">No file selected.</span>
-      
-      <button id="analyze-btn" type="button" class="btn btn-secondary" disabled>Analyze with AI</button>
-      <span class="chip chip--idle" data-chip="analyze">Idle</span>
-      
-      <button id="predict-btn" type="button" class="btn btn-primary" disabled>Predict W/P/S</button>
-      <span class="chip chip--idle" data-chip="predict">Idle</span>
-      
-      <!-- Dev-only debug injector -->
-      <button class="button secondary" id="devInjectBtn" style="display:none;" onclick="injectSampleHorses()">🧪 Dev: Inject Sample Horses</button>
-    </div>
+      <div class="controls">
+        <input id="file-input" type="file" accept=".png,.jpg,.jpeg,.webp,.pdf" multiple style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;" />
+        <button id="choose-btn" type="button" class="btn">Choose Photos / PDF</button>
+        <span id="file-selected-label" class="muted" style="margin-left:8px;">No file selected.</span>
+        
+        <button id="analyze-btn" type="button" class="btn btn-secondary" disabled>Analyze with AI</button>
+        <button id="predict-btn" type="button" class="btn btn-primary" disabled>Predict W/P/S</button>
+        
+        <div class="chips">
+          <span data-chip="choose" class="chip chip--idle">Idle</span>
+          <span data-chip="analyze" class="chip chip--idle">Idle</span>
+          <span data-chip="predict" class="chip chip--idle">Idle</span>
+        </div>
+      </div>
+    </section>
   </section>
 
   <footer class="foot">

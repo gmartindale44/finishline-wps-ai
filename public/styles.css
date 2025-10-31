@@ -29,6 +29,79 @@ h1{font-weight:800;letter-spacing:.3px;color:var(--fg);text-shadow:0 0 24px rgba
 input,select,button{font:inherit}
 input,select{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:#0f0d1e;color:var(--fg)}
 .horse-form-inline{display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:10px;align-items:center}
+
+/* Horse Section Styles */
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: .75rem;
+}
+
+.section-title {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--fg);
+  margin: 0;
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: .875rem;
+}
+
+.horse-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: .5rem;
+  margin-bottom: .5rem;
+}
+
+.input {
+  background: #1e1e2f;
+  border: 1px solid var(--border);
+  color: var(--fg);
+  padding: 8px;
+  border-radius: 6px;
+  font: inherit;
+}
+
+.chip {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: .85rem;
+  font-weight: 500;
+  margin-right: .25rem;
+}
+
+.chip--idle { background: #333; color: #bbb; }
+.chip--ready { background: #0055ff; color: #fff; }
+.chip--done { background: #16a34a; color: #fff; }
+.chip--error { background: #b91c1c; color: #fff; }
+.chip--working { background: #eab308; color: #000; }
+
+.chips {
+  display: inline-flex;
+  gap: .25rem;
+  margin-left: .5rem;
+}
+
+.controls { 
+  margin-top: 1rem; 
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .5rem;
+}
+
+.rows { 
+  margin-top: .5rem; 
+}
 .button{padding:10px 14px;border:0;border-radius:12px;color:#fff;background:linear-gradient(180deg,var(--accent),#5b19f5);cursor:pointer;font-weight:600;transition:.2s transform ease, .2s box-shadow ease;box-shadow:0 8px 18px rgba(124,55,255,.25)}
 .button:hover{transform:translateY(-1px);box-shadow:0 12px 26px rgba(124,55,255,.35)}
 .button.secondary{background:linear-gradient(180deg,#2a2a47,#24223f)}

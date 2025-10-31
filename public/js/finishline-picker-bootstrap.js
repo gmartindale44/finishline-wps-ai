@@ -8,8 +8,17 @@ let pickedFiles = [];
 let analysisReady = false; // gate for Predict
 let lastAnalyzedHorses = []; // for predict payload
 
+// ===== CONFIG =====
+const MAX_HORSES = 24;
+const rowsContainer = document.getElementById('horse-rows');
+const addRowBtn = document.getElementById('add-row-btn');
+const chooseBtn = document.getElementById('choose-btn');
+const fileInput = document.getElementById('file-input');
+const fileLabel = document.getElementById('file-selected-label');
+const analyzeBtn = document.getElementById('analyze-btn');
+const predictBtn = document.getElementById('predict-btn');
+
 function setChip(id, text, tone='idle') {
-  // id is the small <span class="chip" data-chip="analyze"> etc
   const chip = document.querySelector(`[data-chip="${id}"]`);
   if (!chip) return;
   chip.textContent = text;
@@ -32,55 +41,156 @@ function enable(el, yes=true) {
   }
 }
 
-/* === Row Scraper (stable) === */
-function collectHorseRows() {
-  // Expect rows that visually look like columns: Name | ML Odds | Jockey | Trainer
-  // We'll look for the 4 input fields inside the same row container.
-  const rows = [];
-  const containers = $$('.horse-row, .row, .horseDataRow'); // include your actual row classes
-
-  containers.forEach(row => {
-    const name = $('input[placeholder*="Horse"][placeholder*="Name"], input[data-field="name"]', row);
-    const odds = $('input[placeholder*="Odds"], input[data-field="odds"]', row);
-    const jockey = $('input[placeholder*="Jockey"], input[data-field="jockey"]', row);
-    const trainer = $('input[placeholder*="Trainer"], input[data-field="trainer"]', row);
-
-    // Also support static text cells -> read textContent if no input present
-    const getVal = (el, altSel) => el?.value?.trim()
-      || $(altSel, row)?.textContent?.trim()
-      || '';
-
-    const item = {
-      name: getVal(name, '[data-col="horse"], .horseName'),
-      odds: getVal(odds, '[data-col="odds"], .mlodds'),
-      jockey: getVal(jockey, '[data-col="jockey"], .jockey'),
-      trainer: getVal(trainer, '[data-col="trainer"], .trainer'),
-    };
-
-    const any = item.name || item.odds || item.jockey || item.trainer;
-    if (any) rows.push(item);
-  });
-
-  // Fallback: table layout
-  if (rows.length === 0) {
-    const tr = $$('table tr');
-    tr.forEach(r => {
-      const cells = $$('td,th', r);
-      if (cells.length >= 4) {
-        rows.push({
-          name: cells[0].querySelector('input')?.value?.trim() || cells[0].textContent.trim(),
-          odds: cells[1].querySelector('input')?.value?.trim() || cells[1].textContent.trim(),
-          jockey: cells[2].querySelector('input')?.value?.trim() || cells[2].textContent.trim(),
-          trainer: cells[3].querySelector('input')?.value?.trim() || cells[3].textContent.trim(),
-        });
-      }
-    });
-  }
-
-  return rows.filter(h => h.name);
+function toast(msg) {
+  // Non-blocking toast
+  console.log('[Toast]', msg);
+  const el = document.createElement('div');
+  el.textContent = msg;
+  el.style.cssText = 'position:fixed;top:20px;right:20px;background:#333;color:#fff;padding:12px 16px;border-radius:8px;z-index:10000;max-width:300px;box-shadow:0 4px 12px rgba(0,0,0,.3);';
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3000);
 }
 
-/* === API === */
+// ===== UTILITIES =====
+function createEl(tag, cls) {
+  const el = document.createElement(tag);
+  if (cls) el.className = cls;
+  return el;
+}
+
+function createHorseRow(prefill = {}) {
+  const row = createEl('div', 'horse-row');
+  const name = createEl('input', 'input'); 
+  name.placeholder = 'Horse Name';
+  const odds = createEl('input', 'input'); 
+  odds.placeholder = 'ML Odds (e.g. 5/2)';
+  const jockey = createEl('input', 'input'); 
+  jockey.placeholder = 'Jockey';
+  const trainer = createEl('input', 'input'); 
+  trainer.placeholder = 'Trainer';
+
+  if (prefill.name) name.value = prefill.name;
+  if (prefill.odds || prefill.ml_odds) odds.value = prefill.odds || prefill.ml_odds;
+  if (prefill.jockey) jockey.value = prefill.jockey;
+  if (prefill.trainer) trainer.value = prefill.trainer;
+
+  name.dataset.role = 'horse-name';
+  odds.dataset.role = 'horse-odds';
+  jockey.dataset.role = 'horse-jockey';
+  trainer.dataset.role = 'horse-trainer';
+
+  row.append(name, odds, jockey, trainer);
+  if (rowsContainer) rowsContainer.appendChild(row);
+  return row;
+}
+
+function getAllHorseRows() {
+  if (!rowsContainer) return [];
+  return Array.from(rowsContainer.querySelectorAll('.horse-row'));
+}
+
+function collectHorseData() {
+  const rows = getAllHorseRows();
+  return rows.map(row => {
+    const name = row.querySelector('[data-role="horse-name"]')?.value.trim() || '';
+    const odds = row.querySelector('[data-role="horse-odds"]')?.value.trim() || '';
+    const jockey = row.querySelector('[data-role="horse-jockey"]')?.value.trim() || '';
+    const trainer = row.querySelector('[data-role="horse-trainer"]')?.value.trim() || '';
+    return { name, odds, jockey, trainer };
+  }).filter(h => h.name);
+}
+
+function ensureRowCapacity(minRows) {
+  const current = getAllHorseRows().length;
+  for (let i = current; i < Math.min(minRows, MAX_HORSES); i++) {
+    createHorseRow();
+  }
+}
+
+function populateHorseRowsFromOCR(horses=[]) {
+  if (!Array.isArray(horses)) return;
+  ensureRowCapacity(horses.length);
+  const rows = getAllHorseRows();
+  horses.forEach((h, i) => {
+    const r = rows[i];
+    if (!r) return;
+    const nameEl = r.querySelector('[data-role="horse-name"]');
+    const oddsEl = r.querySelector('[data-role="horse-odds"]');
+    const jockeyEl = r.querySelector('[data-role="horse-jockey"]');
+    const trainerEl = r.querySelector('[data-role="horse-trainer"]');
+    if (nameEl) nameEl.value = h.name || '';
+    if (oddsEl) oddsEl.value = h.ml_odds || h.odds || '';
+    if (jockeyEl) jockeyEl.value = h.jockey || '';
+    if (trainerEl) trainerEl.value = h.trainer || '';
+  });
+}
+
+// Legacy compatibility function
+function collectHorseRows() {
+  return collectHorseData();
+}
+
+function getTypedHorsesFromForm() {
+  return collectHorseData();
+}
+
+function collectMetaFromForm() {
+  return {
+    track: $('#race-track')?.value?.trim() || $('#track')?.value?.trim() || '',
+    distance: $('#race-distance')?.value?.trim() || $('#distance')?.value?.trim() || '',
+    surface: $('#race-surface')?.value?.trim() || $('#surface')?.value?.trim() || ''
+  };
+}
+
+// ===== ROW MANAGEMENT =====
+function addOneRow() {
+  if (getAllHorseRows().length >= MAX_HORSES) {
+    toast(`Maximum ${MAX_HORSES} horses allowed`);
+    return;
+  }
+  createHorseRow();
+}
+
+if (addRowBtn) {
+  addRowBtn.addEventListener('click', addOneRow);
+}
+
+// ===== FILE PICKER =====
+if (chooseBtn) {
+  chooseBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (fileInput) fileInput.click();
+  });
+}
+
+if (fileInput) {
+  fileInput.addEventListener('change', () => {
+    pickedFiles = Array.from(fileInput.files || []);
+    if (!pickedFiles.length) {
+      if (fileLabel) fileLabel.textContent = 'No file selected.';
+      setChip('choose', 'Idle', 'idle');
+      setChip('analyze', 'Idle', 'idle');
+      enable(analyzeBtn, false);
+      return;
+    }
+    const n = pickedFiles.length;
+    if (fileLabel) fileLabel.textContent = `Loaded ${n} file${n>1?'s':''}`;
+    setChip('choose', `Loaded ${n}`, 'done');
+    setChip('analyze', 'Ready', 'ready');
+    enable(analyzeBtn, true);
+  });
+}
+
+function readAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onerror = () => reject(new Error(`Failed to read ${file.name}`));
+    fr.onload = () => resolve(String(fr.result).split('base64,')[1] || '');
+    fr.readAsDataURL(file);
+  });
+}
+
+// ===== API =====
 async function postJSON(url, payload) {
   const res = await fetch(url, {
     method: 'POST',
@@ -97,177 +207,30 @@ async function postJSON(url, payload) {
   }
 
   if (!res.ok || json?.ok === false) {
-    throw new Error(json?.message || json?.error || `Request failed (${res.status})`);
+    const msg = json?.error || json?.message || `HTTP ${res.status}`;
+    throw new Error(msg);
   }
 
   return json;
 }
 
-/* === File Picker Wiring === */
-const chooseBtn = document.getElementById('choose-btn');
-const fileInput = document.getElementById('file-input');
-const fileLabel = document.getElementById('file-selected-label');
-const analyzeBtnEl = document.getElementById('analyze-btn');
-
-chooseBtn?.addEventListener('click', (e) => {
-  e.preventDefault();
-  fileInput?.click();
-});
-
-fileInput?.addEventListener('change', () => {
-  pickedFiles = Array.from(fileInput?.files ?? []);
-  if (!pickedFiles.length) {
-    if (fileLabel) fileLabel.textContent = 'No file selected.';
-    setChip('choose', 'Idle', 'idle');
-    setChip('analyze', 'Idle', 'idle');
-    enable(analyzeBtnEl, false);
-    return;
-  }
-  const n = pickedFiles.length;
-  if (fileLabel) fileLabel.textContent = `Loaded ${n} file${n>1?'s':''}`;
-  setChip('choose', `Loaded ${n}`, 'done');
-  setChip('analyze', 'Ready', 'ready');
-  enable(analyzeBtnEl, true);
-});
-
-/* === Handlers === */
-const analyzeBtn = $('#analyze-btn') || $('#btn-analyze');       // your Analyze with AI button
-const predictBtn = $('#predict-btn') || $('#btn-predict');       // Predict W/P/S button
-const analyzeChip = $('[data-chip="analyze"]');
-const predictChip = $('[data-chip="predict"]');
-
-function setPhase(p) {
-  state.phase = p;
-  if (p === 'idle') {
-    setChip('analyze', 'Idle', 'idle');
-    setChip('predict', 'Idle', 'idle');
-    aura(analyzeBtn, false);
-    aura(predictBtn, false);
-    if (analyzeBtn) analyzeBtn.setAttribute('disabled', 'true');
-  } else if (p === 'analyzing') {
-    setChip('analyze', 'Working…', 'working');
-    setChip('predict', 'Idle', 'idle');
-    aura(analyzeBtn, true);
-  } else if (p === 'ready') {
-    setChip('analyze', 'Done', 'done');
-    setChip('predict', 'Ready', 'ready');
-    aura(analyzeBtn, false);
-    aura(predictBtn, true);
-  } else if (p === 'predicting') {
-    setChip('predict', 'Working…', 'working');
-  }
-}
-
-async function readAsBase64(file) {
-  return await new Promise((res, rej) => {
-    const fr = new FileReader();
-    fr.onerror = () => rej(new Error(`Failed to read ${file.name}`));
-    fr.onload = () => res(String(fr.result || ''));
-    fr.readAsDataURL(file);
-  });
-}
-
-function toast(msg) {
-  // Non-blocking toast (simple console for now; can enhance later)
-  console.log('[Toast]', msg);
-  // Optionally show a small notification
-  const el = document.createElement('div');
-  el.textContent = msg;
-  el.style.cssText = 'position:fixed;top:20px;right:20px;background:#333;color:#fff;padding:12px 16px;border-radius:8px;z-index:10000;max-width:300px;';
-  document.body.appendChild(el);
-  setTimeout(() => el.remove(), 3000);
-}
-
-function getTypedHorsesFromForm() {
-  const rows = Array.from(document.querySelectorAll('[data-horse-row]'));
-  return rows.map(r => {
-    const nameEl = $('input[placeholder*="Horse"][placeholder*="Name"], input[name="horseName"], input[data-field="name"], .horse-name', r);
-    const oddsEl = $('input[placeholder*="Odds"], input[name="mlOdds"], input[data-field="odds"], .ml-odds', r);
-    const jockeyEl = $('input[placeholder*="Jockey"], input[name="jockey"], input[data-field="jockey"], .jockey', r);
-    const trainerEl = $('input[placeholder*="Trainer"], input[name="trainer"], input[data-field="trainer"], .trainer', r);
-    return {
-      name: nameEl?.value?.trim() || '',
-      odds: oddsEl?.value?.trim() || undefined,
-      jockey: jockeyEl?.value?.trim() || undefined,
-      trainer: trainerEl?.value?.trim() || undefined,
-    };
-  }).filter(h => h.name);
-}
-
-function clearHorseRows() {
-  // Keep first template row; clear dynamically added rows
-  const rows = Array.from(document.querySelectorAll('[data-horse-row]'));
-  const host = $('#horse-rows');
-  if (!host) return;
-  // Remove all but keep template if it exists
-  rows.forEach((row, i) => {
-    if (i > 0 || row.closest('#horse-rows')) {
-      row.remove();
-    }
-  });
-}
-
-function addHorseRow(h) {
-  const host = $('#horse-rows');
-  if (!host) return;
-  
-  // Find template row or create from existing structure
-  const templateRow = $('[data-horse-row]');
-  if (!templateRow) return;
-  
-  const row = templateRow.cloneNode(true);
-  row.setAttribute('data-horse-row', '');
-  
-  const nameEl = $('input[placeholder*="Horse"][placeholder*="Name"], input[name="horseName"], input[data-field="name"], .horse-name', row);
-  const oddsEl = $('input[placeholder*="Odds"], input[name="mlOdds"], input[data-field="odds"], .ml-odds', row);
-  const jockeyEl = $('input[placeholder*="Jockey"], input[name="jockey"], input[data-field="jockey"], .jockey', row);
-  const trainerEl = $('input[placeholder*="Trainer"], input[name="trainer"], input[data-field="trainer"], .trainer', row);
-  
-  if (nameEl) nameEl.value = h.name || '';
-  if (oddsEl) oddsEl.value = h.ml_odds || h.odds || '';
-  if (jockeyEl) jockeyEl.value = h.jockey || '';
-  if (trainerEl) trainerEl.value = h.trainer || '';
-  
-  host.appendChild(row);
-}
-
-function populateHorseRows(horses) {
-  clearHorseRows();
-  (horses || []).forEach(addHorseRow);
-}
-
-function collectMetaFromForm() {
-  return {
-    track: $('#race-track')?.value?.trim() || $('#track')?.value?.trim() || '',
-    distance: $('#race-distance')?.value?.trim() || $('#distance')?.value?.trim() || '',
-    surface: $('#race-surface')?.value?.trim() || $('#surface')?.value?.trim() || ''
-  };
-}
-
-async function onAnalyze() {
-  const analyzeBtn = document.getElementById('analyze-btn');
-  const predictBtn = document.getElementById('predict-btn');
-  
+// ===== ANALYZE =====
+async function onAnalyzeClick() {
   try {
     setChip('analyze', 'Analyzing…', 'working');
     enable(analyzeBtn, false);
     enable(predictBtn, false);
     analysisReady = false;
-    
-    let horses = [];
+
+    let horses = collectHorseData();
 
     if (pickedFiles.length) {
-      // Build payload
-      const filesPayload = [];
-      for (const f of pickedFiles) {
-        const b64 = await new Promise((res, rej) => {
-          const fr = new FileReader();
-          fr.onerror = () => rej(new Error(`Read fail ${f.name}`));
-          fr.onload = () => res(String(fr.result).split('base64,')[1] || '');
-          fr.readAsDataURL(f);
-        });
-        filesPayload.push({ name: f.name, type: f.type, b64 });
-      }
+      const b64s = await Promise.all(pickedFiles.map(readAsBase64));
+      const filesPayload = pickedFiles.map((f, i) => ({ 
+        name: f.name, 
+        type: f.type, 
+        b64: b64s[i] 
+      }));
 
       const meta = collectMetaFromForm();
       const ocr = await fetch('/api/photo_extract_openai_b64', {
@@ -284,7 +247,8 @@ async function onAnalyze() {
       const { horses: parsed = [] } = await ocr.json();
 
       if (parsed.length >= 1) {
-        populateHorseRows(parsed);
+        populateHorseRowsFromOCR(parsed);
+        horses = collectHorseData();
       }
 
       if (parsed.length < 2) {
@@ -297,8 +261,6 @@ async function onAnalyze() {
       pickedFiles = [];
     }
 
-    // Now score whatever is in the form
-    horses = getTypedHorsesFromForm();
     if (!horses.length) {
       throw new Error('No horses to analyze');
     }
@@ -324,15 +286,22 @@ async function onAnalyze() {
   }
 }
 
-async function onPredict() {
+if (analyzeBtn) {
+  analyzeBtn.addEventListener('click', onAnalyzeClick);
+}
+
+// ===== PREDICT =====
+async function onPredictClick() {
+  if (!analysisReady) {
+    alert('Please Analyze first.');
+    return;
+  }
+
   try {
-    if (!analysisReady) {
-      return alert('Please Analyze first.');
-    }
-
     setChip('predict', 'Working…', 'working');
+    enable(predictBtn, false);
 
-    const horses = lastAnalyzedHorses.length > 0 ? lastAnalyzedHorses : getTypedHorsesFromForm();
+    const horses = lastAnalyzedHorses.length > 0 ? lastAnalyzedHorses : collectHorseData();
     const meta = state.lastAnalysis?.meta || collectMetaFromForm();
 
     const json = await postJSON('/api/predict_wps', { horses, meta });
@@ -354,11 +323,17 @@ async function onPredict() {
   } catch (e) {
     setChip('predict', 'Error', 'error');
     alert(`Predict failed: ${e?.message || e}`);
+  } finally {
+    enable(predictBtn, true);
   }
 }
 
-if (analyzeBtn) analyzeBtn.addEventListener('click', onAnalyze);
-if (predictBtn) predictBtn.addEventListener('click', onPredict);
+if (predictBtn) {
+  predictBtn.addEventListener('click', onPredictClick);
+}
 
 /* Initialize */
-setPhase('idle');
+if (rowsContainer && getAllHorseRows().length === 0) {
+  // Add one initial row
+  createHorseRow();
+}
