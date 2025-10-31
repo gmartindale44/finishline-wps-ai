@@ -1,268 +1,186 @@
-// public/js/finishline-picker-bootstrap.js
+/* === State + UI Helpers === */
+const $ = (s, r=document) => r.querySelector(s);
+const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
+const byText = (el, txt) => el && el.textContent?.trim() === txt;
 
-(() => {
-  const $ = (sel, root=document) => root.querySelector(sel);
-  const $$ = (sel, root=document) => [...root.querySelectorAll(sel)];
+const state = { phase: 'idle', lastAnalysis: null };
 
-  // Buttons
-  const btnFiles   = $('#btn-files') || $('#photo-input-main');  // Fallback to existing ID
-  const btnAnalyze = $('#btn-analyze');
-  const btnPredict = $('#btn-predict');
+function setChip(id, text, tone='idle') {
+  // id is the small <span class="chip" data-chip="analyze"> etc
+  const chip = document.querySelector(`[data-chip="${id}"]`);
+  if (!chip) return;
+  chip.textContent = text;
+  chip.className = `chip chip--${tone}`;
+}
 
-  // Chips next to buttons (span elements)
-  const chipFiles   = $('#chip-files') || $('#chip-pick');  // Fallback to existing ID
-  const chipAnalyze = $('#chip-analyze');
-  const chipPredict = $('#chip-predict');
+function aura(el, on=true) {
+  if (!el) return;
+  el.classList.toggle('aura', !!on);
+}
 
-  // Table inputs (8 rows) - try both ID patterns and dynamic row patterns
+/* === Row Scraper (stable) === */
+function collectHorseRows() {
+  // Expect rows that visually look like columns: Name | ML Odds | Jockey | Trainer
+  // We'll look for the 4 input fields inside the same row container.
   const rows = [];
-  for (let i = 1; i <= 8; i++) {
-    // Try exact ID pattern first
-    let nameEl = $(`#horse-${i}-name`);
-    let oddsEl = $(`#horse-${i}-odds`);
-    let jockeyEl = $(`#horse-${i}-jockey`);
-    let trainerEl = $(`#horse-${i}-trainer`);
+  const containers = $$('.horse-row, .row, .horseDataRow'); // include your actual row classes
 
-    // Fallback: try dynamic rows by index
-    if (!nameEl || !oddsEl) {
-      const dynamicRows = $$('[data-horse-row], .horse-row').filter(r => 
-        r.querySelector('input[name="horseName"], input[placeholder*="Horse Name"]')
-      );
-      const row = dynamicRows[i - 1];
-      if (row) {
-        nameEl = row.querySelector('input[name="horseName"], input[placeholder*="Horse Name"]');
-        oddsEl = row.querySelector('input[name="mlOdds"], input[placeholder*="ML Odds"]');
-        jockeyEl = row.querySelector('input[name="jockey"], input[placeholder*="Jockey"]');
-        trainerEl = row.querySelector('input[name="trainer"], input[placeholder*="Trainer"]');
+  containers.forEach(row => {
+    const name = $('input[placeholder*="Horse"][placeholder*="Name"], input[data-field="name"]', row);
+    const odds = $('input[placeholder*="Odds"], input[data-field="odds"]', row);
+    const jockey = $('input[placeholder*="Jockey"], input[data-field="jockey"]', row);
+    const trainer = $('input[placeholder*="Trainer"], input[data-field="trainer"]', row);
+
+    // Also support static text cells -> read textContent if no input present
+    const getVal = (el, altSel) => el?.value?.trim()
+      || $(altSel, row)?.textContent?.trim()
+      || '';
+
+    const item = {
+      name: getVal(name, '[data-col="horse"], .horseName'),
+      odds: getVal(odds, '[data-col="odds"], .mlodds'),
+      jockey: getVal(jockey, '[data-col="jockey"], .jockey'),
+      trainer: getVal(trainer, '[data-col="trainer"], .trainer'),
+    };
+
+    const any = item.name || item.odds || item.jockey || item.trainer;
+    if (any) rows.push(item);
+  });
+
+  // Fallback: table layout
+  if (rows.length === 0) {
+    const tr = $$('table tr');
+    tr.forEach(r => {
+      const cells = $$('td,th', r);
+      if (cells.length >= 4) {
+        rows.push({
+          name: cells[0].querySelector('input')?.value?.trim() || cells[0].textContent.trim(),
+          odds: cells[1].querySelector('input')?.value?.trim() || cells[1].textContent.trim(),
+          jockey: cells[2].querySelector('input')?.value?.trim() || cells[2].textContent.trim(),
+          trainer: cells[3].querySelector('input')?.value?.trim() || cells[3].textContent.trim(),
+        });
       }
-    }
-
-    rows.push({ name: nameEl, odds: oddsEl, jockey: jockeyEl, trainer: trainerEl });
+    });
   }
 
-  // In-memory state
-  let lastExtract = null;   // horses[]
-  let lastAnalysis = null;  // analysis object
-  let lastMeta = {};        // race meta
+  return rows.filter(h => h.name);
+}
 
-  const setChip = (chipEl, state, text) => {
-    if (!chipEl) return;
-    chipEl.classList.remove('chip--ready','chip--working','chip--done','chip--idle','chip--error');
-    chipEl.classList.add(`chip--${state}`);
-    if (text) chipEl.textContent = text;
-  };
-
-  const getHorsesFromUI = () => {
-    const horses = [];
-    for (const row of rows) {
-      const name = (row.name?.value || '').trim();
-      const odds = (row.odds?.value || '').trim();
-      const jockey = (row.jockey?.value || '').trim();
-      const trainer = (row.trainer?.value || '').trim();
-      if (name) {
-        horses.push({ name, odds, jockey, trainer });
-      }
-    }
-    return horses;
-  };
-
-  const getMetaFromUI = () => ({
-    track: ($('#race-track')?.value || '').trim(),
-    distance: ($('#race-distance')?.value || '').trim(),
-    surface: ($('#race-surface')?.value || '').trim(),
-    date: ($('#race-date')?.value || '').trim(),
+/* === API === */
+async function postJSON(url, payload) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type':'application/json' },
+    body: JSON.stringify(payload)
   });
 
-  const safeJson = async (res) => {
-    const ct = res.headers.get('content-type') || '';
-    if (!ct.includes('application/json')) {
-      const t = await res.text();
-      const err = new Error(t.slice(0, 300) || `HTTP ${res.status}`);
-      err.status = res.status;
-      err.plain = true;
-      throw err;
-    }
-    const data = await res.json();
-    if (!res.ok) {
-      const err = new Error(data?.error || `HTTP ${res.status}`);
-      err.status = res.status;
-      throw err;
-    }
-    return data;
-  };
-
-  const fillUI = (horses=[]) => {
-    for (let i = 0; i < rows.length && i < horses.length; i++) {
-      const h = horses[i] || {};
-      if (rows[i].name) rows[i].name.value = h.name ?? '';
-      if (rows[i].odds) rows[i].odds.value = h.odds ?? '';
-      if (rows[i].jockey) rows[i].jockey.value = h.jockey ?? '';
-      if (rows[i].trainer) rows[i].trainer.value = h.trainer ?? '';
-    }
-  };
-
-  const uploadToBase64 = (file) => new Promise((resolve, reject) => {
-    const fr = new FileReader();
-    fr.onload = () => resolve(String(fr.result).split(',')[1] || '');
-    fr.onerror = reject;
-    fr.readAsDataURL(file);
-  });
-
-  // Ensure we have at least 8 rows in the UI (if using dynamic rows)
-  const ensureRows = async () => {
-    const addBtn = $('#add-horse-btn');
-    if (!addBtn) return;
-    
-    const currentRows = $$('[data-horse-row], .horse-row').filter(r => 
-      r.querySelector('input[name="horseName"]')
-    );
-    
-    while (currentRows.length < 8) {
-      addBtn.click();
-      await new Promise(r => setTimeout(r, 50));
-      const newRows = $$('[data-horse-row], .horse-row').filter(r => 
-        r.querySelector('input[name="horseName"]')
-      );
-      if (newRows.length === currentRows.length) break; // No progress
-      currentRows.length = newRows.length;
-    }
-
-    // Re-scan rows after creating them
-    for (let i = 1; i <= 8; i++) {
-      const dynamicRows = $$('[data-horse-row], .horse-row').filter(r => 
-        r.querySelector('input[name="horseName"]')
-      );
-      const row = dynamicRows[i - 1];
-      if (row) {
-        rows[i - 1] = {
-          name: row.querySelector('input[name="horseName"]'),
-          odds: row.querySelector('input[name="mlOdds"]'),
-          jockey: row.querySelector('input[name="jockey"]'),
-          trainer: row.querySelector('input[name="trainer"]'),
-        };
-      }
-    }
-  };
-
-  // ---- Handlers ----
-
-  // Wire file input to button click (if btn-pick exists)
-  const pickBtn = $('#btn-pick');
-  if (pickBtn && btnFiles) {
-    pickBtn.addEventListener('click', () => btnFiles.click());
+  const text = await res.text();
+  let json;
+  try { 
+    json = JSON.parse(text); 
+  } catch (e) {
+    throw new Error(`Non-JSON response (${res.status}): ${text.slice(0,120)}`);
   }
 
-  btnFiles?.addEventListener('change', async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  if (!res.ok || json?.ok === false) {
+    throw new Error(json?.message || json?.error || `Request failed (${res.status})`);
+  }
 
-    await ensureRows();
+  return json;
+}
 
-    setChip(chipFiles, 'working', 'Parsing…');
-    setChip(chipAnalyze, 'idle', 'Idle');
-    setChip(chipPredict, 'idle', 'Idle');
-    if (btnAnalyze) btnAnalyze.setAttribute('disabled', 'true');
-    if (btnPredict) btnPredict.setAttribute('disabled', 'true');
-    lastAnalysis = null;
+/* === Handlers === */
+const analyzeBtn = $('#analyze-btn') || $('#btn-analyze');       // your Analyze with AI button
+const predictBtn = $('#predict-btn') || $('#btn-predict');       // Predict W/P/S button
+const analyzeChip = $('[data-chip="analyze"]');
+const predictChip = $('[data-chip="predict"]');
 
-    try {
-      const b64 = await uploadToBase64(file);
-      lastMeta = getMetaFromUI();
+function setPhase(p) {
+  state.phase = p;
+  if (p === 'idle') {
+    setChip('analyze', 'Ready', 'ready');
+    setChip('predict', 'Idle', 'idle');
+    aura(analyzeBtn, false);
+    aura(predictBtn, false);
+  } else if (p === 'analyzing') {
+    setChip('analyze', 'Working…', 'working');
+    setChip('predict', 'Idle', 'idle');
+    aura(analyzeBtn, true);
+  } else if (p === 'ready') {
+    setChip('analyze', 'Done', 'done');
+    setChip('predict', 'Ready', 'ready');
+    aura(analyzeBtn, false);
+    aura(predictBtn, true);
+  } else if (p === 'predicting') {
+    setChip('predict', 'Working…', 'working');
+  }
+}
 
-      const res = await fetch('/api/photo_extract_openai_b64', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'accept': 'application/json' },
-        body: JSON.stringify({ image_b64: b64, meta: lastMeta }),
-      });
+async function onAnalyze() {
+  try {
+    if (state.phase !== 'idle' && state.phase !== 'ready') return;
+    setPhase('analyzing');
 
-      const data = await safeJson(res);
-      const horses = Array.isArray(data?.horses) ? data.horses : [];
-      lastExtract = horses;
+    const horses = collectHorseRows();
+    const meta = {
+      track: $('#race-track')?.value?.trim() || $('#track')?.value?.trim() || '',
+      distance: $('#race-distance')?.value?.trim() || $('#distance')?.value?.trim() || '',
+      surface: $('#race-surface')?.value?.trim() || $('#surface')?.value?.trim() || ''
+    };
 
-      fillUI(horses);
-
-      const count = horses.length;
-      const msg = `Parsed ${count} horses. Ready to Analyze.`;
-      setChip(chipFiles, 'done', 'Done');
-      setChip(chipAnalyze, 'ready', 'Ready');
-      if (chipAnalyze) chipAnalyze.setAttribute('data-tip', msg);
-      if (btnAnalyze) btnAnalyze.removeAttribute('disabled');
-    } catch (err) {
-      console.error('[UPLOAD/EXTRACT ERROR]', err);
-      setChip(chipFiles, 'error', 'Error');
-      alert(`Extract failed: ${err.message || err}`);
+    if (!horses.length) {
+      throw new Error('No horses found in the form.');
     }
-  });
 
-  btnAnalyze?.addEventListener('click', async () => {
-    setChip(chipAnalyze, 'working', 'Analyzing…');
-    setChip(chipPredict, 'idle', 'Idle');
-    if (btnPredict) btnPredict.setAttribute('disabled', 'true');
-    lastAnalysis = null;
+    const json = await postJSON('/api/analyze', { horses, meta });
+    state.lastAnalysis = json.analysis;
 
-    try {
-      const horses = getHorsesFromUI();
-      lastMeta = getMetaFromUI();
+    setPhase('ready');
+  } catch (e) {
+    setPhase('idle');
+    alert(`Analyze failed: ${e.message}`);
+  }
+}
 
-      if (!horses.length) throw new Error('No horses found in the form.');
-
-      const res = await fetch('/api/analyze', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'accept': 'application/json' },
-        body: JSON.stringify({ horses, meta: lastMeta }),
-      });
-
-      const data = await safeJson(res);
-      lastAnalysis = data;
-
-      setChip(chipAnalyze, 'done', 'Done');
-      setChip(chipPredict, 'ready', 'Ready');
-      if (btnPredict) btnPredict.removeAttribute('disabled');
-      console.debug('[FLDBG] Analysis complete; ready to predict.', { count: horses.length });
-    } catch (err) {
-      console.error('[ANALYZE ERROR]', err);
-      setChip(chipAnalyze, 'error', 'Error');
-      alert(`Analyze failed: ${err.message || err}`);
+async function onPredict() {
+  try {
+    if (state.phase !== 'ready') {
+      return alert('Please Analyze first.');
     }
-  });
 
-  btnPredict?.addEventListener('click', async () => {
-    setChip(chipPredict, 'working', 'Predicting…');
+    setPhase('predicting');
 
-    try {
-      const horses = getHorsesFromUI();
-      lastMeta = getMetaFromUI();
+    const horses = collectHorseRows(); // re-capture in case user tweaked anything
+    const meta = state.lastAnalysis?.meta || {
+      track: $('#race-track')?.value?.trim() || $('#track')?.value?.trim() || '',
+      distance: $('#race-distance')?.value?.trim() || $('#distance')?.value?.trim() || '',
+      surface: $('#race-surface')?.value?.trim() || $('#surface')?.value?.trim() || ''
+    };
 
-      if (!horses.length) throw new Error('No horses found in the form.');
-      if (!lastAnalysis) throw new Error('Please Analyze first.');
+    const json = await postJSON('/api/predict_wps', { horses, meta });
 
-      const res = await fetch('/api/predict_wps', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'accept': 'application/json' },
-        body: JSON.stringify({ horses, meta: lastMeta, analysis: lastAnalysis }),
-      });
+    const { prediction } = json;
+    const picks = prediction?.picks || [];
+    const conf = prediction?.confidence ?? 0;
 
-      const data = await safeJson(res);
-      setChip(chipPredict, 'done', 'Done');
+    const msg = [
+      '⭐ Predictions:',
+      `🏆 Win: ${picks[0]?.name || '—'}`,
+      `🥈 Place: ${picks[1]?.name || '—'}`,
+      `🥉 Show: ${picks[2]?.name || '—'}`,
+      `✨ Confidence: ${(conf*100).toFixed(1)}%`
+    ].join('\n');
 
-      // Handle different response shapes: {win:{name}, place:{name}, show:{name}} or {predictions:{...}}
-      const winName = data?.win?.name || data?.win || data?.predictions?.win?.name || data?.predictions?.win || '—';
-      const placeName = data?.place?.name || data?.place || data?.predictions?.place?.name || data?.predictions?.place || '—';
-      const showName = data?.show?.name || data?.show || data?.predictions?.show?.name || data?.predictions?.show || '—';
-      const conf = data?.confidence ?? data?.predictions?.confidence;
-      alert(
-        `⭐ Predictions:\n\n` +
-        `🏆 Win: ${winName}\n` +
-        `🥈 Place: ${placeName}\n` +
-        `🥉 Show: ${showName}\n\n` +
-        (conf ? `🔒 Confidence: ${Math.round(conf*100)/100}%` : '')
-      );
-      console.debug('[FLDBG] Predictions:', data);
-    } catch (err) {
-      console.error('[PREDICT ERROR]', err);
-      setChip(chipPredict, 'error', 'Error');
-      alert(`Predict failed: ${err.message || err}`);
-    }
-  });
+    alert(msg);
+    setPhase('idle');
+  } catch (e) {
+    setPhase('idle');
+    alert(`Predict failed: ${e.message}`);
+  }
+}
 
-})();
+if (analyzeBtn) analyzeBtn.addEventListener('click', onAnalyze);
+if (predictBtn) predictBtn.addEventListener('click', onPredict);
+
+/* Initialize */
+setPhase('idle');

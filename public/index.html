@@ -96,11 +96,11 @@
       <span id="chip-pick" class="chip chip-idle">Idle</span>
       <span id="picker-status" class="muted" style="margin-left:8px;">No file selected.</span>
       
-      <button id="btn-analyze" type="button" class="btn btn-secondary" disabled>Analyze with AI</button>
-      <span id="chip-analyze" class="chip chip-idle">Idle</span>
+      <button id="analyze-btn" type="button" class="btn btn-secondary" disabled>Analyze with AI</button>
+      <span class="chip chip--idle" data-chip="analyze">Idle</span>
       
-      <button id="btn-predict" type="button" class="btn btn-primary" disabled>Predict W/P/S</button>
-      <span id="chip-predict" class="chip chip-idle">Idle</span>
+      <button id="predict-btn" type="button" class="btn btn-primary" disabled>Predict W/P/S</button>
+      <span class="chip chip--idle" data-chip="predict">Idle</span>
       
       <!-- Dev-only debug injector -->
       <button class="button secondary" id="devInjectBtn" style="display:none;" onclick="injectSampleHorses()">🧪 Dev: Inject Sample Horses</button>

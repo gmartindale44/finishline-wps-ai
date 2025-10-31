@@ -1,39 +1,42 @@
+import { config as runtimeCfg, setCors, ok, fail, badRequest } from './_http.js';
 import { scoreHorses } from './_openai.js';
 
-export const config = { runtime: 'nodejs' };
-
-function setCors(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-}
+export const config = runtimeCfg;
 
 export default async function handler(req, res) {
   setCors(res);
-  if (req.method === 'OPTIONS') return res.status(200).json({ ok: true });
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ ok: false, error: 'Method not allowed' });
-  }
+  if (req.method === 'OPTIONS') return res.status(200).end();
 
   try {
+    if (req.method !== 'POST') return badRequest(res, 'Method not allowed');
 
-    const { horses, meta } = req.body || {};
+    const body = await readJson(req, res);
+    if (!body) return; // readJson already responded
+
+    const { horses, meta } = body;
 
     if (!Array.isArray(horses) || horses.length === 0) {
-      return res.status(400).json({ ok: false, error: 'No horses provided' });
+      return badRequest(res, 'No horses provided');
     }
 
-    const analysis = await scoreHorses({ horses, meta });
+    const analysis = await scoreHorses({ horses, meta: meta || {} });
 
-    // Attach normalized list so the client can correlate
-    analysis.horseCount = horses.length;
-
-    return res.status(200).json(analysis);
+    return ok(res, { analysis });
 
   } catch (err) {
-    console.error('[API ERROR]', err);
-    const status = err?.status || err?.statusCode || 500;
-    return res.status(status).json({ ok: false, error: String(err?.message || err || 'Analyze failed') });
+    console.error('[analyze] ERROR', err);
+    return fail(res, 500, 'Analyze failed');
+  }
+}
+
+async function readJson(req, res) {
+  try {
+    const chunks = [];
+    for await (const ch of req) chunks.push(ch);
+    const raw = Buffer.concat(chunks).toString('utf8') || '{}';
+    return JSON.parse(raw);
+  } catch (e) {
+    fail(res, 400, 'Invalid JSON body');
+    return null;
   }
 }

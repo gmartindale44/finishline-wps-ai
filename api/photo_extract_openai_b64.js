@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { setCors, ok, fail, badRequest } from './_http.js';
 
 export const config = {
   runtime: "nodejs"
@@ -35,18 +36,36 @@ const RACE_SCHEMA = {
   }
 };
 
+async function readJson(req, res) {
+  try {
+    const chunks = [];
+    for await (const ch of req) chunks.push(ch);
+    const raw = Buffer.concat(chunks).toString('utf8') || '{}';
+    return JSON.parse(raw);
+  } catch (e) {
+    fail(res, 400, 'Invalid JSON body');
+    return null;
+  }
+}
+
 export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ ok:false, error:'Method not allowed' });
-  if (!OPENAI_KEY) return res.status(500).json({ ok:false, error:'Missing FINISHLINE_OPENAI_API_KEY' });
+  setCors(res);
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
+  if (req.method !== 'POST') return badRequest(res, 'Method not allowed');
+  if (!OPENAI_KEY) return fail(res, 500, 'Missing FINISHLINE_OPENAI_API_KEY');
 
   try {
+    const body = await readJson(req, res);
+    if (!body) return; // readJson already responded
+
     // Accept both formats: {image_b64, mode} or {filename, mime, data}
-    const { image_b64, mode, filename, mime, data } = req.body || {};
+    const { image_b64, mode, filename, mime, data } = body;
     const base64Data = image_b64 || data;
     const detectedMime = mime || 'image/png';
     
     if (!base64Data) {
-      return res.status(400).json({ ok:false, error:'Bad body: need image_b64 (or filename+mime+data)' });
+      return badRequest(res, 'Bad body: need image_b64 (or filename+mime+data)');
     }
 
     const imageUrl = `data:${detectedMime};base64,${base64Data}`;
@@ -231,14 +250,11 @@ Rules:
       preview: horses.slice(0, 2).map(h => h.name)
     });
 
-    return res.status(200).json({ ok: true, horses });
+    return ok(res, { horses });
 
   } catch (err) {
     console.error('[API ERROR]', err);
     const status = err?.status || err?.statusCode || 500;
-    return res.status(status).json({ 
-      ok: false, 
-      error: String(err?.message || err || 'OCR extraction failed')
-    });
+    return fail(res, status, err?.message || 'OCR extraction failed');
   }
 }
