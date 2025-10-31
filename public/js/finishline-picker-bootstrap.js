@@ -89,6 +89,32 @@ async function postJSON(url, payload) {
   return json;
 }
 
+/* === File Picker Wiring === */
+const chooseBtn = document.getElementById('choose-btn');
+const fileInput = document.getElementById('file-input');
+
+chooseBtn?.addEventListener('click', (e) => {
+  e.preventDefault();
+  fileInput?.click();
+});
+
+fileInput?.addEventListener('change', () => {
+  const files = Array.from(fileInput?.files ?? []);
+  if (!files.length) {
+    setChip('choose', 'Idle', 'idle');
+    return;
+  }
+  setChip('choose', `Loaded ${files.length}`, 'done');
+  
+  // Flip Analyze to Ready and enable the button, do NOT auto-analyze here.
+  const analyzeBtnEl = document.getElementById('analyze-btn');
+  if (analyzeBtnEl) {
+    analyzeBtnEl.removeAttribute('disabled');
+    analyzeBtnEl.classList.remove('is-disabled');
+  }
+  setChip('analyze', 'Ready', 'ready');
+});
+
 /* === Handlers === */
 const analyzeBtn = $('#analyze-btn') || $('#btn-analyze');       // your Analyze with AI button
 const predictBtn = $('#predict-btn') || $('#btn-predict');       // Predict W/P/S button
@@ -98,10 +124,11 @@ const predictChip = $('[data-chip="predict"]');
 function setPhase(p) {
   state.phase = p;
   if (p === 'idle') {
-    setChip('analyze', 'Ready', 'ready');
+    setChip('analyze', 'Idle', 'idle');
     setChip('predict', 'Idle', 'idle');
     aura(analyzeBtn, false);
     aura(predictBtn, false);
+    if (analyzeBtn) analyzeBtn.setAttribute('disabled', 'true');
   } else if (p === 'analyzing') {
     setChip('analyze', 'Working…', 'working');
     setChip('predict', 'Idle', 'idle');

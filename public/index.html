@@ -91,9 +91,9 @@
 
     <div class="panel actions mt-4">
       <!-- Hardened picker: input + button + status -->
-      <input id="photo-input-main" type="file" accept="image/*,.pdf" hidden />
-      <button id="btn-pick" type="button" class="btn">Choose Photos / PDF</button>
-      <span id="chip-pick" class="chip chip-idle">Idle</span>
+      <input id="file-input" type="file" accept=".png,.jpg,.jpeg,.webp,.pdf" multiple style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;" />
+      <button id="choose-btn" type="button" class="btn">Choose Photos / PDF</button>
+      <span class="chip chip--idle" data-chip="choose">Idle</span>
       <span id="picker-status" class="muted" style="margin-left:8px;">No file selected.</span>
       
       <button id="analyze-btn" type="button" class="btn btn-secondary" disabled>Analyze with AI</button>

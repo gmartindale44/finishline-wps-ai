@@ -93,7 +93,7 @@ input,select{width:100%;padding:10px 12px;border:1px solid var(--border);border-
 }
 
 /* Ensure the picker is always clickable */
-#photo-input-main {
+#file-input {
   position: absolute;
   left: -9999px;
   width: 1px;
@@ -133,7 +133,8 @@ button[disabled][aria-busy="true"] { opacity: 0.7; }
 
 /* Hardened picker overlay guard */
 .overlay, .backdrop, .mask, .modal-overlay, .loading, [data-blocking-overlay="true"] { pointer-events: none !important; }
-#btn-pick { position: relative; z-index: 1000; pointer-events: auto !important; }
+#choose-btn { position: relative; z-index: 1000; pointer-events: auto !important; }
+.panel.actions { pointer-events: auto !important; }
 
 /* Chip styles with indicator dots */
 .chip {
