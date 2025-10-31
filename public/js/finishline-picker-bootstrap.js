@@ -5,6 +5,8 @@ const byText = (el, txt) => el && el.textContent?.trim() === txt;
 
 const state = { phase: 'idle', lastAnalysis: null };
 let pickedFiles = [];
+let analysisReady = false; // gate for Predict
+let lastAnalyzedHorses = []; // for predict payload
 
 function setChip(id, text, tone='idle') {
   // id is the small <span class="chip" data-chip="analyze"> etc
@@ -165,112 +167,173 @@ async function readAsBase64(file) {
   });
 }
 
+function toast(msg) {
+  // Non-blocking toast (simple console for now; can enhance later)
+  console.log('[Toast]', msg);
+  // Optionally show a small notification
+  const el = document.createElement('div');
+  el.textContent = msg;
+  el.style.cssText = 'position:fixed;top:20px;right:20px;background:#333;color:#fff;padding:12px 16px;border-radius:8px;z-index:10000;max-width:300px;';
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+function getTypedHorsesFromForm() {
+  const rows = Array.from(document.querySelectorAll('[data-horse-row]'));
+  return rows.map(r => {
+    const nameEl = $('input[placeholder*="Horse"][placeholder*="Name"], input[name="horseName"], input[data-field="name"], .horse-name', r);
+    const oddsEl = $('input[placeholder*="Odds"], input[name="mlOdds"], input[data-field="odds"], .ml-odds', r);
+    const jockeyEl = $('input[placeholder*="Jockey"], input[name="jockey"], input[data-field="jockey"], .jockey', r);
+    const trainerEl = $('input[placeholder*="Trainer"], input[name="trainer"], input[data-field="trainer"], .trainer', r);
+    return {
+      name: nameEl?.value?.trim() || '',
+      odds: oddsEl?.value?.trim() || undefined,
+      jockey: jockeyEl?.value?.trim() || undefined,
+      trainer: trainerEl?.value?.trim() || undefined,
+    };
+  }).filter(h => h.name);
+}
+
+function clearHorseRows() {
+  // Keep first template row; clear dynamically added rows
+  const rows = Array.from(document.querySelectorAll('[data-horse-row]'));
+  const host = $('#horse-rows');
+  if (!host) return;
+  // Remove all but keep template if it exists
+  rows.forEach((row, i) => {
+    if (i > 0 || row.closest('#horse-rows')) {
+      row.remove();
+    }
+  });
+}
+
+function addHorseRow(h) {
+  const host = $('#horse-rows');
+  if (!host) return;
+  
+  // Find template row or create from existing structure
+  const templateRow = $('[data-horse-row]');
+  if (!templateRow) return;
+  
+  const row = templateRow.cloneNode(true);
+  row.setAttribute('data-horse-row', '');
+  
+  const nameEl = $('input[placeholder*="Horse"][placeholder*="Name"], input[name="horseName"], input[data-field="name"], .horse-name', row);
+  const oddsEl = $('input[placeholder*="Odds"], input[name="mlOdds"], input[data-field="odds"], .ml-odds', row);
+  const jockeyEl = $('input[placeholder*="Jockey"], input[name="jockey"], input[data-field="jockey"], .jockey', row);
+  const trainerEl = $('input[placeholder*="Trainer"], input[name="trainer"], input[data-field="trainer"], .trainer', row);
+  
+  if (nameEl) nameEl.value = h.name || '';
+  if (oddsEl) oddsEl.value = h.ml_odds || h.odds || '';
+  if (jockeyEl) jockeyEl.value = h.jockey || '';
+  if (trainerEl) trainerEl.value = h.trainer || '';
+  
+  host.appendChild(row);
+}
+
 function populateHorseRows(horses) {
-  const containers = $$('.horse-row, .row, .horseDataRow, [data-horse-row]');
-  const addBtn = $('#add-horse-btn');
-  
-  // Ensure we have enough rows
-  while (containers.length < horses.length && addBtn) {
-    addBtn.click();
-    const newContainers = $$('.horse-row, .row, .horseDataRow, [data-horse-row]');
-    if (newContainers.length === containers.length) break;
-    containers.length = newContainers.length;
-  }
-  
-  const finalContainers = $$('.horse-row, .row, .horseDataRow, [data-horse-row]');
-  for (let i = 0; i < Math.min(horses.length, finalContainers.length); i++) {
-    const h = horses[i] || {};
-    const row = finalContainers[i];
-    const nameEl = $('input[placeholder*="Horse"][placeholder*="Name"], input[name="horseName"], input[data-field="name"]', row);
-    const oddsEl = $('input[placeholder*="Odds"], input[name="mlOdds"], input[data-field="odds"]', row);
-    const jockeyEl = $('input[placeholder*="Jockey"], input[name="jockey"], input[data-field="jockey"]', row);
-    const trainerEl = $('input[placeholder*="Trainer"], input[name="trainer"], input[data-field="trainer"]', row);
-    
-    if (nameEl) nameEl.value = String(h.name || '').trim();
-    if (oddsEl) oddsEl.value = String(h.odds || '').trim();
-    if (jockeyEl) jockeyEl.value = String(h.jockey || '').trim();
-    if (trainerEl) trainerEl.value = String(h.trainer || '').trim();
-  }
+  clearHorseRows();
+  (horses || []).forEach(addHorseRow);
+}
+
+function collectMetaFromForm() {
+  return {
+    track: $('#race-track')?.value?.trim() || $('#track')?.value?.trim() || '',
+    distance: $('#race-distance')?.value?.trim() || $('#distance')?.value?.trim() || '',
+    surface: $('#race-surface')?.value?.trim() || $('#surface')?.value?.trim() || ''
+  };
 }
 
 async function onAnalyze() {
+  const analyzeBtn = document.getElementById('analyze-btn');
+  const predictBtn = document.getElementById('predict-btn');
+  
   try {
-    if (state.phase !== 'idle' && state.phase !== 'ready') return;
-    setChip('analyze', 'Analyzing...', 'working');
-    enable(analyzeBtnEl, false);
+    setChip('analyze', 'Analyzing…', 'working');
+    enable(analyzeBtn, false);
+    enable(predictBtn, false);
+    analysisReady = false;
     
-    let analysis;
-    const meta = {
-      track: $('#race-track')?.value?.trim() || $('#track')?.value?.trim() || '',
-      distance: $('#race-distance')?.value?.trim() || $('#distance')?.value?.trim() || '',
-      surface: $('#race-surface')?.value?.trim() || $('#surface')?.value?.trim() || ''
-    };
+    let horses = [];
 
     if (pickedFiles.length) {
-      // Read files to base64
-      const payloadFiles = [];
+      // Build payload
+      const filesPayload = [];
       for (const f of pickedFiles) {
-        const dataUrl = await readAsBase64(f);
-        const b64 = dataUrl.includes('base64,') ? dataUrl.split('base64,')[1] : dataUrl;
-        payloadFiles.push({ name: f.name, type: f.type, b64 });
+        const b64 = await new Promise((res, rej) => {
+          const fr = new FileReader();
+          fr.onerror = () => rej(new Error(`Read fail ${f.name}`));
+          fr.onload = () => res(String(fr.result).split('base64,')[1] || '');
+          fr.readAsDataURL(f);
+        });
+        filesPayload.push({ name: f.name, type: f.type, b64 });
       }
 
-      const ocrResult = await postJSON('/api/photo_extract_openai_b64', { image_b64: payloadFiles[0]?.b64, meta });
-      
-      // Populate horse rows from OCR result
-      if (Array.isArray(ocrResult?.horses) && ocrResult.horses.length) {
-        populateHorseRows(ocrResult.horses);
+      const meta = collectMetaFromForm();
+      const ocr = await fetch('/api/photo_extract_openai_b64', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files: filesPayload, meta })
+      });
+
+      if (!ocr.ok) {
+        const text = await ocr.text();
+        throw new Error(`OCR ${ocr.status}: ${text || 'failed'}`);
       }
 
-      // Now analyze the populated horses
-      const horses = collectHorseRows();
-      if (!horses.length) {
-        throw new Error('No horses found after OCR extraction.');
+      const { horses: parsed = [] } = await ocr.json();
+
+      if (parsed.length >= 1) {
+        populateHorseRows(parsed);
       }
 
-      analysis = await postJSON('/api/analyze', { horses, meta });
-    } else {
-      // No files: fall back to analyzing typed rows
-      const horses = collectHorseRows();
-      if (!horses.length) {
-        throw new Error('No horses found in the form.');
+      if (parsed.length < 2) {
+        console.warn('[OCR] Only', parsed.length, 'horse(s) parsed.');
+        toast(`Only ${parsed.length} horse(s) extracted. You can edit the rows manually.`);
       }
-      analysis = await postJSON('/api/analyze', { horses, meta });
+
+      // Allow picking the same file again
+      if (fileInput) fileInput.value = '';
+      pickedFiles = [];
     }
 
-    state.lastAnalysis = analysis.analysis;
-    setChip('analyze', 'Done', 'done');
-    
-    const predictBtnEl = document.getElementById('predict-btn');
-    enable(predictBtnEl, true);
-    setChip('predict', 'Ready', 'ready');
-    
-    // Allow re-selecting the same file later
-    if (fileInput) fileInput.value = '';
-    pickedFiles = [];
+    // Now score whatever is in the form
+    horses = getTypedHorsesFromForm();
+    if (!horses.length) {
+      throw new Error('No horses to analyze');
+    }
 
-  } catch (e) {
-    console.error('[Analyze] Failed:', e);
-    alert(`Analyze failed: ${e?.message || e}`);
+    const meta2 = collectMetaFromForm();
+    const analysis = await postJSON('/api/analyze', { horses, meta: meta2 });
+
+    // Cache and gate predict
+    lastAnalyzedHorses = horses;
+    state.lastAnalysis = analysis.analysis;
+    analysisReady = true;
+
+    setChip('analyze', 'Done', 'done');
+    enable(predictBtn, true);
+    setChip('predict', 'Ready', 'ready');
+
+  } catch (err) {
+    console.error('[Analyze] error', err);
+    alert(`Analyze failed: ${err?.message || err}`);
     setChip('analyze', 'Error', 'error');
-    enable(analyzeBtnEl, true);
+  } finally {
+    enable(analyzeBtn, true);
   }
 }
 
 async function onPredict() {
   try {
-    if (state.phase !== 'ready') {
+    if (!analysisReady) {
       return alert('Please Analyze first.');
     }
 
-    setPhase('predicting');
+    setChip('predict', 'Working…', 'working');
 
-    const horses = collectHorseRows(); // re-capture in case user tweaked anything
-    const meta = state.lastAnalysis?.meta || {
-      track: $('#race-track')?.value?.trim() || $('#track')?.value?.trim() || '',
-      distance: $('#race-distance')?.value?.trim() || $('#distance')?.value?.trim() || '',
-      surface: $('#race-surface')?.value?.trim() || $('#surface')?.value?.trim() || ''
-    };
+    const horses = lastAnalyzedHorses.length > 0 ? lastAnalyzedHorses : getTypedHorsesFromForm();
+    const meta = state.lastAnalysis?.meta || collectMetaFromForm();
 
     const json = await postJSON('/api/predict_wps', { horses, meta });
 
@@ -287,10 +350,10 @@ async function onPredict() {
     ].join('\n');
 
     alert(msg);
-    setPhase('idle');
+    setChip('predict', 'Done', 'done');
   } catch (e) {
-    setPhase('idle');
-    alert(`Predict failed: ${e.message}`);
+    setChip('predict', 'Error', 'error');
+    alert(`Predict failed: ${e?.message || e}`);
   }
 }
 
