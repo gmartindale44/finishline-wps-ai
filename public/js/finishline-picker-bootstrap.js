@@ -4,6 +4,7 @@ const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
 const byText = (el, txt) => el && el.textContent?.trim() === txt;
 
 const state = { phase: 'idle', lastAnalysis: null };
+let pickedFiles = [];
 
 function setChip(id, text, tone='idle') {
   // id is the small <span class="chip" data-chip="analyze"> etc
@@ -16,6 +17,17 @@ function setChip(id, text, tone='idle') {
 function aura(el, on=true) {
   if (!el) return;
   el.classList.toggle('aura', !!on);
+}
+
+function enable(el, yes=true) {
+  if (!el) return;
+  if (yes) { 
+    el.removeAttribute('disabled'); 
+    el.classList.remove('is-disabled'); 
+  } else { 
+    el.setAttribute('disabled',''); 
+    el.classList.add('is-disabled'); 
+  }
 }
 
 /* === Row Scraper (stable) === */
@@ -92,6 +104,8 @@ async function postJSON(url, payload) {
 /* === File Picker Wiring === */
 const chooseBtn = document.getElementById('choose-btn');
 const fileInput = document.getElementById('file-input');
+const fileLabel = document.getElementById('file-selected-label');
+const analyzeBtnEl = document.getElementById('analyze-btn');
 
 chooseBtn?.addEventListener('click', (e) => {
   e.preventDefault();
@@ -99,20 +113,19 @@ chooseBtn?.addEventListener('click', (e) => {
 });
 
 fileInput?.addEventListener('change', () => {
-  const files = Array.from(fileInput?.files ?? []);
-  if (!files.length) {
+  pickedFiles = Array.from(fileInput?.files ?? []);
+  if (!pickedFiles.length) {
+    if (fileLabel) fileLabel.textContent = 'No file selected.';
     setChip('choose', 'Idle', 'idle');
+    setChip('analyze', 'Idle', 'idle');
+    enable(analyzeBtnEl, false);
     return;
   }
-  setChip('choose', `Loaded ${files.length}`, 'done');
-  
-  // Flip Analyze to Ready and enable the button, do NOT auto-analyze here.
-  const analyzeBtnEl = document.getElementById('analyze-btn');
-  if (analyzeBtnEl) {
-    analyzeBtnEl.removeAttribute('disabled');
-    analyzeBtnEl.classList.remove('is-disabled');
-  }
+  const n = pickedFiles.length;
+  if (fileLabel) fileLabel.textContent = `Loaded ${n} file${n>1?'s':''}`;
+  setChip('choose', `Loaded ${n}`, 'done');
   setChip('analyze', 'Ready', 'ready');
+  enable(analyzeBtnEl, true);
 });
 
 /* === Handlers === */
@@ -143,29 +156,104 @@ function setPhase(p) {
   }
 }
 
+async function readAsBase64(file) {
+  return await new Promise((res, rej) => {
+    const fr = new FileReader();
+    fr.onerror = () => rej(new Error(`Failed to read ${file.name}`));
+    fr.onload = () => res(String(fr.result || ''));
+    fr.readAsDataURL(file);
+  });
+}
+
+function populateHorseRows(horses) {
+  const containers = $$('.horse-row, .row, .horseDataRow, [data-horse-row]');
+  const addBtn = $('#add-horse-btn');
+  
+  // Ensure we have enough rows
+  while (containers.length < horses.length && addBtn) {
+    addBtn.click();
+    const newContainers = $$('.horse-row, .row, .horseDataRow, [data-horse-row]');
+    if (newContainers.length === containers.length) break;
+    containers.length = newContainers.length;
+  }
+  
+  const finalContainers = $$('.horse-row, .row, .horseDataRow, [data-horse-row]');
+  for (let i = 0; i < Math.min(horses.length, finalContainers.length); i++) {
+    const h = horses[i] || {};
+    const row = finalContainers[i];
+    const nameEl = $('input[placeholder*="Horse"][placeholder*="Name"], input[name="horseName"], input[data-field="name"]', row);
+    const oddsEl = $('input[placeholder*="Odds"], input[name="mlOdds"], input[data-field="odds"]', row);
+    const jockeyEl = $('input[placeholder*="Jockey"], input[name="jockey"], input[data-field="jockey"]', row);
+    const trainerEl = $('input[placeholder*="Trainer"], input[name="trainer"], input[data-field="trainer"]', row);
+    
+    if (nameEl) nameEl.value = String(h.name || '').trim();
+    if (oddsEl) oddsEl.value = String(h.odds || '').trim();
+    if (jockeyEl) jockeyEl.value = String(h.jockey || '').trim();
+    if (trainerEl) trainerEl.value = String(h.trainer || '').trim();
+  }
+}
+
 async function onAnalyze() {
   try {
     if (state.phase !== 'idle' && state.phase !== 'ready') return;
-    setPhase('analyzing');
-
-    const horses = collectHorseRows();
+    setChip('analyze', 'Analyzing...', 'working');
+    enable(analyzeBtnEl, false);
+    
+    let analysis;
     const meta = {
       track: $('#race-track')?.value?.trim() || $('#track')?.value?.trim() || '',
       distance: $('#race-distance')?.value?.trim() || $('#distance')?.value?.trim() || '',
       surface: $('#race-surface')?.value?.trim() || $('#surface')?.value?.trim() || ''
     };
 
-    if (!horses.length) {
-      throw new Error('No horses found in the form.');
+    if (pickedFiles.length) {
+      // Read files to base64
+      const payloadFiles = [];
+      for (const f of pickedFiles) {
+        const dataUrl = await readAsBase64(f);
+        const b64 = dataUrl.includes('base64,') ? dataUrl.split('base64,')[1] : dataUrl;
+        payloadFiles.push({ name: f.name, type: f.type, b64 });
+      }
+
+      const ocrResult = await postJSON('/api/photo_extract_openai_b64', { image_b64: payloadFiles[0]?.b64, meta });
+      
+      // Populate horse rows from OCR result
+      if (Array.isArray(ocrResult?.horses) && ocrResult.horses.length) {
+        populateHorseRows(ocrResult.horses);
+      }
+
+      // Now analyze the populated horses
+      const horses = collectHorseRows();
+      if (!horses.length) {
+        throw new Error('No horses found after OCR extraction.');
+      }
+
+      analysis = await postJSON('/api/analyze', { horses, meta });
+    } else {
+      // No files: fall back to analyzing typed rows
+      const horses = collectHorseRows();
+      if (!horses.length) {
+        throw new Error('No horses found in the form.');
+      }
+      analysis = await postJSON('/api/analyze', { horses, meta });
     }
 
-    const json = await postJSON('/api/analyze', { horses, meta });
-    state.lastAnalysis = json.analysis;
+    state.lastAnalysis = analysis.analysis;
+    setChip('analyze', 'Done', 'done');
+    
+    const predictBtnEl = document.getElementById('predict-btn');
+    enable(predictBtnEl, true);
+    setChip('predict', 'Ready', 'ready');
+    
+    // Allow re-selecting the same file later
+    if (fileInput) fileInput.value = '';
+    pickedFiles = [];
 
-    setPhase('ready');
   } catch (e) {
-    setPhase('idle');
-    alert(`Analyze failed: ${e.message}`);
+    console.error('[Analyze] Failed:', e);
+    alert(`Analyze failed: ${e?.message || e}`);
+    setChip('analyze', 'Error', 'error');
+    enable(analyzeBtnEl, true);
   }
 }
 
