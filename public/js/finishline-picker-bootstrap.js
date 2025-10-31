@@ -1,278 +1,268 @@
-// --- Global app state (safe across navigations) ---
-window.__fl = window.__fl || {
-  horses: [],           // normalized form horses
-  meta: {},             // race meta (date/track/distance/surface)
-  analysis: null,       // last analysis payload
-  predict: null,        // last prediction payload
-};
+// public/js/finishline-picker-bootstrap.js
 
-// --- Helpers ---
-const $  = sel => document.querySelector(sel);
-const chipPick    = $('#chip-pick');
-const chipAnalyze = $('#chip-analyze');
-const chipPredict = $('#chip-predict');
-const btnPick     = $('#btn-pick');
-const btnAnalyze  = $('#btn-analyze');
-const btnPredict  = $('#btn-predict');
-const debugEl     = $('#fl-debug');
-const input       = $('#photo-input-main');
-const pickerStatus = $('#picker-status');
+(() => {
+  const $ = (sel, root=document) => root.querySelector(sel);
+  const $$ = (sel, root=document) => [...root.querySelectorAll(sel)];
 
-function setChip(chipEl, btnEl, mode) {
-  if (!chipEl || !btnEl) return;
-  chipEl.classList.remove('chip-idle','chip-busy','chip-ready');
-  btnEl.classList.remove('aura-busy','aura-ready');
-  if (mode === 'busy') { 
-    chipEl.classList.add('chip-busy'); 
-    btnEl.classList.add('aura-busy'); 
-    chipEl.textContent = 'Working…'; 
+  // Buttons
+  const btnFiles   = $('#btn-files') || $('#photo-input-main');  // Fallback to existing ID
+  const btnAnalyze = $('#btn-analyze');
+  const btnPredict = $('#btn-predict');
+
+  // Chips next to buttons (span elements)
+  const chipFiles   = $('#chip-files') || $('#chip-pick');  // Fallback to existing ID
+  const chipAnalyze = $('#chip-analyze');
+  const chipPredict = $('#chip-predict');
+
+  // Table inputs (8 rows) - try both ID patterns and dynamic row patterns
+  const rows = [];
+  for (let i = 1; i <= 8; i++) {
+    // Try exact ID pattern first
+    let nameEl = $(`#horse-${i}-name`);
+    let oddsEl = $(`#horse-${i}-odds`);
+    let jockeyEl = $(`#horse-${i}-jockey`);
+    let trainerEl = $(`#horse-${i}-trainer`);
+
+    // Fallback: try dynamic rows by index
+    if (!nameEl || !oddsEl) {
+      const dynamicRows = $$('[data-horse-row], .horse-row').filter(r => 
+        r.querySelector('input[name="horseName"], input[placeholder*="Horse Name"]')
+      );
+      const row = dynamicRows[i - 1];
+      if (row) {
+        nameEl = row.querySelector('input[name="horseName"], input[placeholder*="Horse Name"]');
+        oddsEl = row.querySelector('input[name="mlOdds"], input[placeholder*="ML Odds"]');
+        jockeyEl = row.querySelector('input[name="jockey"], input[placeholder*="Jockey"]');
+        trainerEl = row.querySelector('input[name="trainer"], input[placeholder*="Trainer"]');
+      }
+    }
+
+    rows.push({ name: nameEl, odds: oddsEl, jockey: jockeyEl, trainer: trainerEl });
   }
-  else if (mode === 'ready') { 
-    chipEl.classList.add('chip-ready'); 
-    btnEl.classList.add('aura-ready'); 
-    chipEl.textContent = 'Ready'; 
-  }
-  else { 
-    chipEl.classList.add('chip-idle'); 
-    chipEl.textContent = 'Idle'; 
-  }
-}
 
-function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+  // In-memory state
+  let lastExtract = null;   // horses[]
+  let lastAnalysis = null;  // analysis object
+  let lastMeta = {};        // race meta
 
-function minDelay(promise, ms){ 
-  return Promise.all([promise, sleep(ms)]).then(([x])=>x); 
-}
-
-function log(msg, obj){ 
-  console.log('[FLDBG]', msg, obj||''); 
-  if (debugEl) debugEl.textContent = String(msg); 
-}
-
-// Parse the current form into window.__fl
-function collectForm() {
-  const rows = Array.from(document.querySelectorAll('.horse-row, [data-horse-row]')); 
-  const horses = rows.map(r => {
-    const nameEl = r.querySelector('input[name="horseName"]') || r.querySelector('#horse-name') || r.querySelector('.horse-name');
-    const oddsEl = r.querySelector('input[name="mlOdds"]') || r.querySelector('#ml-odds') || r.querySelector('.odds');
-    const jockeyEl = r.querySelector('input[name="jockey"]') || r.querySelector('#jockey') || r.querySelector('.jockey');
-    const trainerEl = r.querySelector('input[name="trainer"]') || r.querySelector('#trainer') || r.querySelector('.trainer');
-    return {
-      name: (nameEl?.value || nameEl?.textContent || '').trim(),
-      odds_ml: (oddsEl?.value || oddsEl?.textContent || '').trim(),
-      jockey: (jockeyEl?.value || jockeyEl?.textContent || '').trim(),
-      trainer: (trainerEl?.value || trainerEl?.textContent || '').trim()
-    };
-  }).filter(h => h.name);
-
-  const meta = {
-    date:     $('#race-date')?.value || '',
-    track:    $('#race-track')?.value || '',
-    surface:  $('#race-surface')?.value || '',
-    distance: $('#race-distance')?.value || ''
+  const setChip = (chipEl, state, text) => {
+    if (!chipEl) return;
+    chipEl.classList.remove('chip--ready','chip--working','chip--done','chip--idle','chip--error');
+    chipEl.classList.add(`chip--${state}`);
+    if (text) chipEl.textContent = text;
   };
 
-  window.__fl.horses = horses;
-  window.__fl.meta   = meta;
-  return { horses, meta };
-}
-
-// Enable/disable buttons coherently
-function setButtons({pick=true, analyze=false, predict=false}) {
-  if (btnPick) btnPick.disabled = !pick;
-  if (btnAnalyze) btnAnalyze.disabled = !analyze;
-  if (btnPredict) btnPredict.disabled = !predict;
-}
-
-// Initial state
-setButtons({ pick:true, analyze:false, predict:false });
-if (chipPick && btnPick) setChip(chipPick, btnPick, 'idle');
-if (chipAnalyze && btnAnalyze) setChip(chipAnalyze, btnAnalyze, 'idle');
-if (chipPredict && btnPredict) setChip(chipPredict, btnPredict, 'idle');
-
-// --- Choose handler (existing) should set Analyze ready once form is parsed ---
-if (btnPick && input) {
-  const openDialog = (e) => { 
-    e?.preventDefault?.(); 
-    if (input) { input.value = ''; input.click(); }
+  const getHorsesFromUI = () => {
+    const horses = [];
+    for (const row of rows) {
+      const name = (row.name?.value || '').trim();
+      const odds = (row.odds?.value || '').trim();
+      const jockey = (row.jockey?.value || '').trim();
+      const trainer = (row.trainer?.value || '').trim();
+      if (name) {
+        horses.push({ name, odds, jockey, trainer });
+      }
+    }
+    return horses;
   };
-  btnPick.addEventListener('click', openDialog);
-  btnPick.addEventListener('keydown', e => { 
-    if (e.key === 'Enter' || e.key === ' ') openDialog(e); 
+
+  const getMetaFromUI = () => ({
+    track: ($('#race-track')?.value || '').trim(),
+    distance: ($('#race-distance')?.value || '').trim(),
+    surface: ($('#race-surface')?.value || '').trim(),
+    date: ($('#race-date')?.value || '').trim(),
   });
 
-  input.addEventListener('change', async () => {
-    const f = input.files?.[0];
-    if (!f) return;
-    if (pickerStatus) pickerStatus.textContent = `Selected: ${f.name} (${Math.round(f.size/1024)} KB). Parsing…`;
-    setChip(chipPick, btnPick, 'busy');
+  const safeJson = async (res) => {
+    const ct = res.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) {
+      const t = await res.text();
+      const err = new Error(t.slice(0, 300) || `HTTP ${res.status}`);
+      err.status = res.status;
+      err.plain = true;
+      throw err;
+    }
+    const data = await res.json();
+    if (!res.ok) {
+      const err = new Error(data?.error || `HTTP ${res.status}`);
+      err.status = res.status;
+      throw err;
+    }
+    return data;
+  };
+
+  const fillUI = (horses=[]) => {
+    for (let i = 0; i < rows.length && i < horses.length; i++) {
+      const h = horses[i] || {};
+      if (rows[i].name) rows[i].name.value = h.name ?? '';
+      if (rows[i].odds) rows[i].odds.value = h.odds ?? '';
+      if (rows[i].jockey) rows[i].jockey.value = h.jockey ?? '';
+      if (rows[i].trainer) rows[i].trainer.value = h.trainer ?? '';
+    }
+  };
+
+  const uploadToBase64 = (file) => new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(String(fr.result).split(',')[1] || '');
+    fr.onerror = reject;
+    fr.readAsDataURL(file);
+  });
+
+  // Ensure we have at least 8 rows in the UI (if using dynamic rows)
+  const ensureRows = async () => {
+    const addBtn = $('#add-horse-btn');
+    if (!addBtn) return;
+    
+    const currentRows = $$('[data-horse-row], .horse-row').filter(r => 
+      r.querySelector('input[name="horseName"]')
+    );
+    
+    while (currentRows.length < 8) {
+      addBtn.click();
+      await new Promise(r => setTimeout(r, 50));
+      const newRows = $$('[data-horse-row], .horse-row').filter(r => 
+        r.querySelector('input[name="horseName"]')
+      );
+      if (newRows.length === currentRows.length) break; // No progress
+      currentRows.length = newRows.length;
+    }
+
+    // Re-scan rows after creating them
+    for (let i = 1; i <= 8; i++) {
+      const dynamicRows = $$('[data-horse-row], .horse-row').filter(r => 
+        r.querySelector('input[name="horseName"]')
+      );
+      const row = dynamicRows[i - 1];
+      if (row) {
+        rows[i - 1] = {
+          name: row.querySelector('input[name="horseName"]'),
+          odds: row.querySelector('input[name="mlOdds"]'),
+          jockey: row.querySelector('input[name="jockey"]'),
+          trainer: row.querySelector('input[name="trainer"]'),
+        };
+      }
+    }
+  };
+
+  // ---- Handlers ----
+
+  // Wire file input to button click (if btn-pick exists)
+  const pickBtn = $('#btn-pick');
+  if (pickBtn && btnFiles) {
+    pickBtn.addEventListener('click', () => btnFiles.click());
+  }
+
+  btnFiles?.addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    await ensureRows();
+
+    setChip(chipFiles, 'working', 'Parsing…');
+    setChip(chipAnalyze, 'idle', 'Idle');
+    setChip(chipPredict, 'idle', 'Idle');
+    if (btnAnalyze) btnAnalyze.setAttribute('disabled', 'true');
+    if (btnPredict) btnPredict.setAttribute('disabled', 'true');
+    lastAnalysis = null;
 
     try {
-      // File to base64
-      const b64 = await new Promise((resolve, reject) => {
-        const r = new FileReader();
-        r.onload = () => resolve(String(r.result).split(',')[1] || '');
-        r.onerror = reject;
-        r.readAsDataURL(f);
-      });
+      const b64 = await uploadToBase64(file);
+      lastMeta = getMetaFromUI();
 
       const res = await fetch('/api/photo_extract_openai_b64', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ image_b64: b64, mode: 'ocr_horse_list' })
+        headers: { 'content-type': 'application/json', 'accept': 'application/json' },
+        body: JSON.stringify({ image_b64: b64, meta: lastMeta }),
       });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body?.error || `OCR ${res.status}`);
 
-      if (!Array.isArray(body.horses) || body.horses.length === 0) {
-        throw new Error('No horses found in the uploaded image.');
-      }
+      const data = await safeJson(res);
+      const horses = Array.isArray(data?.horses) ? data.horses : [];
+      lastExtract = horses;
 
-      // Normalize and populate form
-      const horses = body.horses.map(h => ({
-        name: (h.name || '').trim(),
-        odds_ml: (h.odds || '').toString().trim(),
-        jockey: (h.jockey || '').trim(),
-        trainer: (h.trainer || '').trim()
-      })).filter(h => h.name);
+      fillUI(horses);
 
-      // Populate form (simplified - you may have existing populateHorseForm)
-      const nameEl = $('input[name="horseName"]') || $('#horse-name');
-      const oddsEl = $('input[name="mlOdds"]') || $('#ml-odds');
-      const jockeyEl = $('input[name="jockey"]') || $('#jockey');
-      const trainerEl = $('input[name="trainer"]') || $('#trainer');
-      if (horses[0] && nameEl && oddsEl && jockeyEl && trainerEl) {
-        nameEl.value = horses[0].name || '';
-        oddsEl.value = horses[0].odds_ml || '';
-        jockeyEl.value = horses[0].jockey || '';
-        trainerEl.value = horses[0].trainer || '';
-      }
-
-      collectForm(); // Update window.__fl
-      if (pickerStatus) pickerStatus.textContent = `Parsed ${horses.length} horses. Ready to Analyze.`;
-      setChip(chipPick, btnPick, 'ready');
-      setButtons({ pick:true, analyze: horses.length>0, predict:false });
+      const count = horses.length;
+      const msg = `Parsed ${count} horses. Ready to Analyze.`;
+      setChip(chipFiles, 'done', 'Done');
+      setChip(chipAnalyze, 'ready', 'Ready');
+      if (chipAnalyze) chipAnalyze.setAttribute('data-tip', msg);
+      if (btnAnalyze) btnAnalyze.removeAttribute('disabled');
     } catch (err) {
-      console.error('[FLDBG] OCR parse failed:', err);
-      if (pickerStatus) pickerStatus.textContent = `Parse failed: ${err.message}`;
-      setChip(chipPick, btnPick, 'idle');
-      alert('Parse failed. See console for details.');
+      console.error('[UPLOAD/EXTRACT ERROR]', err);
+      setChip(chipFiles, 'error', 'Error');
+      alert(`Extract failed: ${err.message || err}`);
     }
   });
-}
 
-// --- Analyze: calls /api/analyze, stores analysis, lights Predict when done ---
-if (btnAnalyze) {
-  btnAnalyze.addEventListener('click', async () => {
-    const { horses, meta } = collectForm();
-
-    if (!horses.length) {
-      alert('Please provide horse rows before analyzing.');
-      return;
-    }
-
-    setChip(chipAnalyze, btnAnalyze, 'busy');
-    setButtons({ pick:true, analyze:false, predict:false });
+  btnAnalyze?.addEventListener('click', async () => {
+    setChip(chipAnalyze, 'working', 'Analyzing…');
+    setChip(chipPredict, 'idle', 'Idle');
+    if (btnPredict) btnPredict.setAttribute('disabled', 'true');
+    lastAnalysis = null;
 
     try {
-      const t0 = Date.now();
-      const ANALYZE_MIN_MS = 8000 + Math.floor(Math.random()*4000); // 8–12s minimum
-      const resp = await minDelay(
-        fetch('/api/analyze', {
-          method:'POST',
-          headers:{ 'Content-Type':'application/json' },
-          body: JSON.stringify({ horses, meta })
-        }).then(r => r.json()), 
-        ANALYZE_MIN_MS
-      );
+      const horses = getHorsesFromUI();
+      lastMeta = getMetaFromUI();
 
-      if (resp?.error) throw new Error(resp.error);
+      if (!horses.length) throw new Error('No horses found in the form.');
 
-      window.__fl.analysis = resp; // save full analysis
+      const res = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'accept': 'application/json' },
+        body: JSON.stringify({ horses, meta: lastMeta }),
+      });
 
-      log('Analysis complete; ready to predict.', {count: horses.length, confidence: resp?.confidence});
-      setChip(chipAnalyze, btnAnalyze, 'ready');
-      setButtons({ pick:true, analyze:true, predict:true });
-      setChip(chipPredict, btnPredict, 'idle'); // prediction not run yet
+      const data = await safeJson(res);
+      lastAnalysis = data;
 
-      alert(`Analysis complete.\nConfidence: ${Math.round((resp?.confidence||0)*100)/100}%\nReady to Predict.`);
-
+      setChip(chipAnalyze, 'done', 'Done');
+      setChip(chipPredict, 'ready', 'Ready');
+      if (btnPredict) btnPredict.removeAttribute('disabled');
+      console.debug('[FLDBG] Analysis complete; ready to predict.', { count: horses.length });
     } catch (err) {
-      console.error(err);
-      alert(`Analyze failed: ${err.message}`);
-      setChip(chipAnalyze, btnAnalyze, 'idle');
-      setButtons({ pick:true, analyze:true, predict:false });
+      console.error('[ANALYZE ERROR]', err);
+      setChip(chipAnalyze, 'error', 'Error');
+      alert(`Analyze failed: ${err.message || err}`);
     }
   });
-}
 
-// --- Predict: consumes previous analysis + current horses ---
-if (btnPredict) {
-  btnPredict.addEventListener('click', async () => {
-    const { horses, meta } = collectForm();
-
-    if (!window.__fl.analysis) {
-      alert('Please run Analyze first.');
-      return;
-    }
-
-    setChip(chipPredict, btnPredict, 'busy');
-    setButtons({ pick:true, analyze:false, predict:false });
+  btnPredict?.addEventListener('click', async () => {
+    setChip(chipPredict, 'working', 'Predicting…');
 
     try {
-      const PREDICT_MIN_MS = 4000 + Math.floor(Math.random()*3000); // 4–7s minimum
-      const resp = await minDelay(
-        fetch('/api/predict_wps', {
-          method:'POST',
-          headers:{ 'Content-Type':'application/json' },
-          body: JSON.stringify({ horses, meta, analysis: window.__fl.analysis })
-        }).then(r => r.json()), 
-        PREDICT_MIN_MS
+      const horses = getHorsesFromUI();
+      lastMeta = getMetaFromUI();
+
+      if (!horses.length) throw new Error('No horses found in the form.');
+      if (!lastAnalysis) throw new Error('Please Analyze first.');
+
+      const res = await fetch('/api/predict_wps', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'accept': 'application/json' },
+        body: JSON.stringify({ horses, meta: lastMeta, analysis: lastAnalysis }),
+      });
+
+      const data = await safeJson(res);
+      setChip(chipPredict, 'done', 'Done');
+
+      // Handle different response shapes: {win:{name}, place:{name}, show:{name}} or {predictions:{...}}
+      const winName = data?.win?.name || data?.win || data?.predictions?.win?.name || data?.predictions?.win || '—';
+      const placeName = data?.place?.name || data?.place || data?.predictions?.place?.name || data?.predictions?.place || '—';
+      const showName = data?.show?.name || data?.show || data?.predictions?.show?.name || data?.predictions?.show || '—';
+      const conf = data?.confidence ?? data?.predictions?.confidence;
+      alert(
+        `⭐ Predictions:\n\n` +
+        `🏆 Win: ${winName}\n` +
+        `🥈 Place: ${placeName}\n` +
+        `🥉 Show: ${showName}\n\n` +
+        (conf ? `🔒 Confidence: ${Math.round(conf*100)/100}%` : '')
       );
-
-      if (resp?.error) throw new Error(resp.error);
-
-      window.__fl.predict = resp;
-
-      setChip(chipPredict, btnPredict, 'ready');
-      setButtons({ pick:true, analyze:true, predict:true });
-
-      const { win, place, show, confidence=0, notes=[] } = resp;
-      const pct = Math.round(confidence*100)/100;
-      const winName = typeof win === 'string' ? win : (win?.name || '—');
-      const placeName = typeof place === 'string' ? place : (place?.name || '—');
-      const showName = typeof show === 'string' ? show : (show?.name || '—');
-
-      alert(`⭐ Predictions:
-🥇 Win: ${winName}
-🥈 Place: ${placeName}
-🥉 Show: ${showName}
-Confidence: ${pct}%
-${notes?.length ? '\nNotes:\n- ' + notes.join('\n- ') : ''}`);
-
+      console.debug('[FLDBG] Predictions:', data);
     } catch (err) {
-      console.error(err);
-      alert(`Predict failed: ${err.message}`);
-      setChip(chipPredict, btnPredict, 'idle');
-      setButtons({ pick:true, analyze:true, predict:true });
+      console.error('[PREDICT ERROR]', err);
+      setChip(chipPredict, 'error', 'Error');
+      alert(`Predict failed: ${err.message || err}`);
     }
   });
-}
 
-// Wire Add Horse button to create new rows
-const addHorseBtn = $('#add-horse-btn');
-const horseRowsContainer = $('#horse-rows');
-if (addHorseBtn && horseRowsContainer) {
-  addHorseBtn.addEventListener('click', () => {
-    const templateRow = document.querySelector('.horse-row[data-horse-row]');
-    if (!templateRow) return;
-    const newRow = templateRow.cloneNode(true);
-    newRow.querySelectorAll('input').forEach(inp => {
-      inp.value = '';
-      inp.removeAttribute('id');
-    });
-    const btn = newRow.querySelector('#add-horse-btn');
-    if (btn) btn.style.display = 'none';
-    horseRowsContainer.appendChild(newRow);
-  });
-}
+})();

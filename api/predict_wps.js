@@ -10,16 +10,23 @@ function setCors(res) {
 
 export default async function handler(req, res) {
   setCors(res);
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method === 'OPTIONS') return res.status(200).json({ ok: true });
+
+  if (req.method !== 'POST') {
+    return res.status(405).json({ ok: false, error: 'Method not allowed' });
+  }
 
   try {
-    if (req.method !== 'POST') return res.status(405).json({ error:'Method not allowed' });
 
     const { horses, meta, analysis } = req.body || {};
 
-    if (!Array.isArray(horses) || horses.length === 0) return res.status(400).json({ error:'No horses provided' });
+    if (!Array.isArray(horses) || horses.length === 0) {
+      return res.status(400).json({ ok: false, error: 'No horses provided' });
+    }
 
-    if (!analysis) return res.status(400).json({ error:'No analysis attached' });
+    if (!analysis) {
+      return res.status(400).json({ ok: false, error: 'No analysis attached' });
+    }
 
     const picks = await chooseWPS({ analysis, horses, meta });
 
