@@ -3,6 +3,12 @@ const $ = (s, r=document) => r.querySelector(s);
 const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
 const byText = (el, txt) => el && el.textContent?.trim() === txt;
 
+const FL_STATE = window.FL_STATE || (window.FL_STATE = {
+  files: [],
+  meta: null,
+  analysis: null, // {scores:[{name,score,reason}], notes, version}
+});
+
 const state = { phase: 'idle', lastAnalysis: null };
 let pickedFiles = [];
 let analysisReady = false; // gate for Predict
@@ -216,14 +222,16 @@ async function postJSON(url, payload) {
 
 // ===== ANALYZE =====
 async function onAnalyzeClick() {
+  const analyzeChip = document.querySelector('[data-chip="analyze"]');
   try {
-    setChip('analyze', 'Analyzing…', 'working');
+    setChip('analyze', 'Working...', 'working');
     enable(analyzeBtn, false);
     enable(predictBtn, false);
     analysisReady = false;
 
     let horses = collectHorseData();
 
+    // If files are loaded, run OCR first to populate rows
     if (pickedFiles.length) {
       const b64s = await Promise.all(pickedFiles.map(readAsBase64));
       const filesPayload = pickedFiles.map((f, i) => ({ 
@@ -266,11 +274,22 @@ async function onAnalyzeClick() {
     }
 
     const meta2 = collectMetaFromForm();
-    const analysis = await postJSON('/api/analyze', { horses, meta: meta2 });
+    FL_STATE.meta = meta2;
 
+    const resp = await fetch("/api/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ horses, meta: meta2 })
+    });
+
+    const data = await resp.json();
+    if (!data?.ok) throw new Error(data?.error || "Analyze failed");
+
+    FL_STATE.analysis = { scores: data.scores, notes: data.notes, version: data.version };
+    
     // Cache and gate predict
     lastAnalyzedHorses = horses;
-    state.lastAnalysis = analysis.analysis;
+    state.lastAnalysis = { analysis: FL_STATE.analysis };
     analysisReady = true;
 
     setChip('analyze', 'Done', 'done');
@@ -281,6 +300,7 @@ async function onAnalyzeClick() {
     console.error('[Analyze] error', err);
     alert(`Analyze failed: ${err?.message || err}`);
     setChip('analyze', 'Error', 'error');
+    enable(predictBtn, false);
   } finally {
     enable(analyzeBtn, true);
   }
@@ -292,37 +312,45 @@ if (analyzeBtn) {
 
 // ===== PREDICT =====
 async function onPredictClick() {
-  if (!analysisReady) {
-    alert('Please Analyze first.');
-    return;
-  }
-
+  const predictChip = document.querySelector('[data-chip="predict"]');
+  
   try {
-    setChip('predict', 'Working…', 'working');
+    if (!FL_STATE.analysis?.scores?.length) {
+      alert("Please Analyze first.");
+      return;
+    }
+
+    setChip('predict', 'Working...', 'working');
     enable(predictBtn, false);
 
-    const horses = lastAnalyzedHorses.length > 0 ? lastAnalyzedHorses : collectHorseData();
-    const meta = state.lastAnalysis?.meta || collectMetaFromForm();
+    const resp = await fetch("/api/predict_wps", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ analysis: FL_STATE.analysis, meta: FL_STATE.meta })
+    });
 
-    const json = await postJSON('/api/predict_wps', { horses, meta });
+    const data = await resp.json();
+    if (!data?.ok) throw new Error(data?.error || "Predict failed");
 
-    const { prediction } = json;
-    const picks = prediction?.picks || [];
-    const conf = prediction?.confidence ?? 0;
+    const win = data.picks?.win?.name || '—';
+    const place = data.picks?.place?.name || '—';
+    const show = data.picks?.show?.name || '—';
+    const confidence = (Number(data.confidence||0)*100).toFixed(1) + "%";
 
     const msg = [
       '⭐ Predictions:',
-      `🏆 Win: ${picks[0]?.name || '—'}`,
-      `🥈 Place: ${picks[1]?.name || '—'}`,
-      `🥉 Show: ${picks[2]?.name || '—'}`,
-      `✨ Confidence: ${(conf*100).toFixed(1)}%`
+      `🏆 Win: ${win}`,
+      `🥈 Place: ${place}`,
+      `🥉 Show: ${show}`,
+      `✨ Confidence: ${confidence}`
     ].join('\n');
 
     alert(msg);
     setChip('predict', 'Done', 'done');
-  } catch (e) {
+  } catch (err) {
+    console.error('[Predict] error', err);
+    alert(`Predict failed: ${err?.message || err}`);
     setChip('predict', 'Error', 'error');
-    alert(`Predict failed: ${e?.message || e}`);
   } finally {
     enable(predictBtn, true);
   }

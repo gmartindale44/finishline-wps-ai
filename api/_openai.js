@@ -1,49 +1,109 @@
-export const config = { runtime: 'nodejs' };
+import OpenAI from "openai";
 
-// Dumb-but-safe scoring shim (until we wire real models or external APIs)
-// Input: { horses: [{name, odds, jockey, trainer}], meta: {track, distance, surface} }
-export async function scoreHorses({ horses = [], meta = {} }) {
-  const normalizeOdds = (o) => {
-    if (o == null) return 10;
-    const s = String(o).trim();
-    // Try fractional like "5/2"
-    if (s.includes('/')) {
-      const [a,b] = s.split('/').map(Number);
-      if (a>0 && b>0) return a/b;
-    }
-    // Decimal or integer
-    const n = Number(s);
-    if (Number.isFinite(n) && n>0) return n;
-    return 10;
-  };
+const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-  const scored = horses.map((h, i) => {
-    const o = normalizeOdds(h.odds);
-    // crude score: lower odds slightly better, + small signal if jockey/trainer present
-    const base = 1 / (o + 0.5);
-    const jt = (h.jockey ? 0.05 : 0) + (h.trainer ? 0.05 : 0);
-    const trackBoost = meta?.track ? 0.02 : 0;
-    const distanceBoost = meta?.distance ? 0.02 : 0;
-    const surfaceBoost = meta?.surface ? 0.02 : 0;
-    const score = base + jt + trackBoost + distanceBoost + surfaceBoost;
-    return { index: i, name: h.name?.trim() || `Horse ${i+1}`, odds: h.odds, score };
+// JSON completion helper (stable, compact)
+export async function jsonCompletion({ system, user, temperature = 0.2 }) {
+  const resp = await client.chat.completions.create({
+    model: "gpt-4o-mini",
+    temperature,
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: user }
+    ]
   });
+  const txt = resp.choices?.[0]?.message?.content?.trim() || "{}";
+  try { return JSON.parse(txt); } catch { return { ok:false, parseError:true, raw:txt }; }
+}
 
-  const sorted = [...scored].sort((a,b)=>b.score-a.score);
-  const top = sorted.slice(0,3).map((h,ix)=>({
-    position: ['win','place','show'][ix],
-    name: h.name,
-    odds: h.odds,
-    score: Number(h.score.toFixed(4))
-  }));
-
-  const confidence = Math.max(0.1, Math.min(0.98, Number((sorted[0]?.score / (sorted[2]?.score || sorted[0]?.score || 1)).toFixed(2))));
+// Minimal feature engineering from current rows/meta
+export function deriveFeatures(h, meta = {}) {
+  const oddsTxt = (h?.odds ?? "").toString().trim(); // e.g., "5/1"
+  let mlDecimal = null;
+  if (oddsTxt.includes("/")) {
+    const [a,b] = oddsTxt.split("/");
+    const frac = Number(a) / Number(b);
+    if (Number.isFinite(frac)) mlDecimal = frac + 1;
+  } else {
+    const num = Number(oddsTxt);
+    if (Number.isFinite(num)) mlDecimal = num + 1;
+  }
 
   return {
-    horses: scored,
-    picks: top,
-    confidence,
-    meta,
-    count: horses.length
+    name: h?.name?.trim() || "",
+    odds_text: oddsTxt || null,
+    ml_decimal: mlDecimal,
+    jockey: h?.jockey || null,
+    trainer: h?.trainer || null,
+    post: Number.isFinite(h?.post) ? h.post : null,
+    surface: meta?.surface || null,
+    distance: meta?.distance || null,
+    track: meta?.track || null
+  };
+}
+
+// Stage A: score all horses with reasons (0–100)
+export async function scoreHorsesV2({ horses, meta }) {
+  const rows = (horses || []).map(h => deriveFeatures(h, meta));
+
+  const system = `
+You are a cautious handicapper. Return JSON only (no prose).
+
+Consider, in order: crowd odds signal, trainer/jockey hints, surface/distance/track fit, post bias (if present).
+
+Be concise: numbers + short reasons. Format:
+
+{
+  "scores": [{"name":"...", "score":0-100, "reason":"short"}],
+  "notes":"1 sentence overall",
+  "version":"A2"
+}`;
+  const user = JSON.stringify({ meta, horses: rows });
+  const result = await jsonCompletion({ system, user, temperature: 0.2 });
+
+  const scored = (result?.scores || [])
+    .filter(s => s?.name)
+    .map(s => ({ ...s, score: Math.max(0, Math.min(100, Number(s.score) || 0)) }))
+    .sort((a,b) => b.score - a.score);
+
+  if (!scored.length) return { ok:false, error:"No scores", raw: result };
+  return { ok:true, version: result?.version || "A2", notes: result?.notes || "", scores: scored };
+}
+
+// Stage B: finalize W/P/S using top candidates from Stage A
+export async function finalizeWPS({ scores, meta }) {
+  const topPack = (scores || []).slice(0, Math.min(8, scores?.length || 0));
+
+  const system = `
+Return JSON only. Low randomness. Choose Win/Place/Show from candidates using Stage A scores.
+
+If overall confidence < 0.55, set lowConfidence=true.
+
+Format:
+
+{
+  "win":{"name":"...","prob":0-1},
+  "place":{"name":"...","prob":0-1},
+  "show":{"name":"...","prob":0-1},
+  "confidence":0-1,
+  "lowConfidence":boolean,
+  "version":"B2"
+}`;
+  const user = JSON.stringify({ meta, candidates: topPack });
+
+  const out = await jsonCompletion({ system, user, temperature: 0.1 });
+  const clamp = x => Math.max(0, Math.min(1, Number(x)||0));
+
+  return {
+    ok:true,
+    picks: {
+      win:   { name: out?.win?.name   || topPack[0]?.name, prob: clamp(out?.win?.prob) },
+      place: { name: out?.place?.name || topPack[1]?.name, prob: clamp(out?.place?.prob) },
+      show:  { name: out?.show?.name  || topPack[2]?.name, prob: clamp(out?.show?.prob) },
+    },
+    confidence: clamp(out?.confidence),
+    lowConfidence: !!out?.lowConfidence,
+    version: out?.version || "B2"
   };
 }

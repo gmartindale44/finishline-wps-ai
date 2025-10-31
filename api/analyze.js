@@ -1,32 +1,9 @@
-import { config as runtimeCfg, setCors, ok, fail, badRequest } from './_http.js';
-import { scoreHorses } from './_openai.js';
+import { scoreHorsesV2 } from "./_openai.js";
 
-export const config = runtimeCfg;
-
-export default async function handler(req, res) {
-  setCors(res);
-  if (req.method === 'OPTIONS') return res.status(200).end();
-
-  try {
-    if (req.method !== 'POST') return badRequest(res, 'Method not allowed');
-
-    const body = await readJson(req, res);
-    if (!body) return; // readJson already responded
-
-    const { horses, meta } = body;
-
-    if (!Array.isArray(horses) || horses.length === 0) {
-      return badRequest(res, 'No horses provided');
-    }
-
-    const analysis = await scoreHorses({ horses, meta: meta || {} });
-
-    return ok(res, { analysis });
-
-  } catch (err) {
-    console.error('[analyze] ERROR', err);
-    return fail(res, 500, 'Analyze failed');
-  }
+function setCors(res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 }
 
 async function readJson(req, res) {
@@ -36,7 +13,38 @@ async function readJson(req, res) {
     const raw = Buffer.concat(chunks).toString('utf8') || '{}';
     return JSON.parse(raw);
   } catch (e) {
-    fail(res, 400, 'Invalid JSON body');
+    res.status(400).json({ error: 'Invalid JSON body' });
     return null;
+  }
+}
+
+export default async function handler(req, res) {
+  setCors(res);
+  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+
+  try {
+    const body = await readJson(req, res);
+    if (!body) return;
+
+    const { horses, meta } = body || {};
+    if (!Array.isArray(horses) || horses.length === 0) {
+      return res.status(400).json({ error: "No horses provided" });
+    }
+
+    const analysis = await scoreHorsesV2({ horses, meta });
+    if (!analysis.ok) return res.status(500).json({ error:"Analyze failed", detail:analysis });
+
+    return res.status(200).json({
+      ok:true,
+      meta: meta || null,
+      horseCount: horses.length,
+      scores: analysis.scores,   // [{name, score, reason}]
+      notes: analysis.notes,
+      version: analysis.version
+    });
+  } catch (err) {
+    console.error("[API ERROR analyze]", err);
+    return res.status(500).json({ ok:false, error:String(err?.message || err) });
   }
 }
