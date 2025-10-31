@@ -1,20 +1,37 @@
 import OpenAI from "openai";
 
+// Validate API key before creating client
+if (!process.env.OPENAI_API_KEY) {
+  throw new Error("Missing OPENAI_API_KEY environment variable");
+}
+
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // JSON completion helper (stable, compact)
 export async function jsonCompletion({ system, user, temperature = 0.2 }) {
-  const resp = await client.chat.completions.create({
-    model: "gpt-4o-mini",
-    temperature,
-    response_format: { type: "json_object" },
-    messages: [
-      { role: "system", content: system },
-      { role: "user", content: user }
-    ]
-  });
-  const txt = resp.choices?.[0]?.message?.content?.trim() || "{}";
-  try { return JSON.parse(txt); } catch { return { ok:false, parseError:true, raw:txt }; }
+  if (!process.env.OPENAI_API_KEY) {
+    return { ok: false, error: "Missing OPENAI_API_KEY", parseError: false };
+  }
+
+  try {
+    const resp = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      temperature,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user }
+      ]
+    });
+    const txt = resp.choices?.[0]?.message?.content?.trim() || "{}";
+    try {
+      return JSON.parse(txt);
+    } catch (parseErr) {
+      return { ok: false, error: "Parse failed", parseError: true, raw: txt.substring(0, 200) };
+    }
+  } catch (err) {
+    return { ok: false, error: "OpenAI API failed", detail: String(err?.message || err), parseError: false };
+  }
 }
 
 // Minimal feature engineering from current rows/meta
@@ -45,6 +62,10 @@ export function deriveFeatures(h, meta = {}) {
 
 // Stage A: score all horses with reasons (0–100)
 export async function scoreHorsesV2({ horses, meta }) {
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error("Missing OPENAI_API_KEY");
+  }
+
   const rows = (horses || []).map(h => deriveFeatures(h, meta));
 
   const system = `
@@ -62,6 +83,10 @@ Be concise: numbers + short reasons. Format:
   const user = JSON.stringify({ meta, horses: rows });
   const result = await jsonCompletion({ system, user, temperature: 0.2 });
 
+  if (!result.ok || result.parseError || result.error) {
+    throw new Error(`OpenAI response invalid: ${result.error || "Unknown error"}`);
+  }
+
   const scored = (result?.scores || [])
     .filter(s => s?.name)
     .map(s => ({ ...s, score: Math.max(0, Math.min(100, Number(s.score) || 0)) }))
@@ -73,6 +98,10 @@ Be concise: numbers + short reasons. Format:
 
 // Stage B: finalize W/P/S using top candidates from Stage A
 export async function finalizeWPS({ scores, meta }) {
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error("Missing OPENAI_API_KEY");
+  }
+
   const topPack = (scores || []).slice(0, Math.min(8, scores?.length || 0));
 
   const system = `
@@ -93,6 +122,11 @@ Format:
   const user = JSON.stringify({ meta, candidates: topPack });
 
   const out = await jsonCompletion({ system, user, temperature: 0.1 });
+
+  if (!out.ok || out.parseError || out.error) {
+    throw new Error(`OpenAI response invalid: ${out.error || "Unknown error"}`);
+  }
+
   const clamp = x => Math.max(0, Math.min(1, Number(x)||0));
 
   return {

@@ -1,9 +1,16 @@
 import { finalizeWPS } from "./_openai.js";
 
+export const config = { runtime: 'nodejs' };
+
 function setCors(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+}
+
+function safeJson(res, status, obj) {
+  res.status(status).setHeader("Content-Type", "application/json; charset=utf-8");
+  res.end(JSON.stringify(obj));
 }
 
 async function readJson(req, res) {
@@ -13,30 +20,38 @@ async function readJson(req, res) {
     const raw = Buffer.concat(chunks).toString('utf8') || '{}';
     return JSON.parse(raw);
   } catch (e) {
-    res.status(400).json({ error: 'Invalid JSON body' });
+    safeJson(res, 400, { ok: false, error: 'Invalid JSON body' });
     return null;
   }
 }
 
 export default async function handler(req, res) {
-  setCors(res);
-  if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
-
   try {
+    setCors(res);
+    if (req.method === "OPTIONS") {
+      res.status(200).setHeader("Content-Type", "application/json");
+      return res.end();
+    }
+    
+    if (req.method !== "POST") {
+      return safeJson(res, 405, { ok: false, error: "Method not allowed" });
+    }
+
     const body = await readJson(req, res);
     if (!body) return;
 
     const { analysis, meta } = body || {};
     if (!analysis?.scores?.length) {
-      return res.status(400).json({ error: "Please analyze first" });
+      return safeJson(res, 400, { ok: false, error: "Please analyze first" });
     }
 
     const out = await finalizeWPS({ scores: analysis.scores, meta });
-    if (!out.ok) return res.status(500).json({ error:"Predict failed" });
+    if (!out.ok) {
+      return safeJson(res, 500, { ok: false, error: "Predict failed" });
+    }
 
-    return res.status(200).json({
-      ok:true,
+    return safeJson(res, 200, {
+      ok: true,
       picks: out.picks,
       confidence: out.confidence,
       lowConfidence: out.lowConfidence,
@@ -44,6 +59,6 @@ export default async function handler(req, res) {
     });
   } catch (err) {
     console.error("[API ERROR predict]", err);
-    return res.status(500).json({ ok:false, error:String(err?.message || err) });
+    return safeJson(res, 500, { ok: false, error: String(err?.message || err) });
   }
 }
