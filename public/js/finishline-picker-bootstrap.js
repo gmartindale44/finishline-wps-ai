@@ -452,6 +452,14 @@
 
 
 
+        // After a successful analyze, allow re-selecting same file:
+
+        if (window.__fl_resetFileInput) window.__fl_resetFileInput();
+
+        state.lastAnalysis = Date.now();
+
+
+
         toast(`Analysis complete — ${analysis.scores.length} horses scored. Confidence: ${analysis.confidence ?? 'n/a'}.`);
 
       } catch (err) {
