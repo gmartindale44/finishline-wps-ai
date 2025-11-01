@@ -57,27 +57,24 @@
       <div id="horse-rows" class="rows"></div>
 
       <div class="controls">
-        <!-- 🔧 HORSE DATA ACTIONS (replace the existing Choose Photos/PDF chunk) -->
+        <!-- ===== HORSE DATA: ROBUST FILE PICKER ===== -->
         <div id="fl-picker-wrap" class="fl-picker-row">
-          <label id="fl-file-proxy" for="fl-file" class="fl-file-btn">Choose Photos / PDF</label>
+          <button id="fl-file-proxy" type="button" class="fl-file-btn">Choose Photos / PDF</button>
           <span id="file-selected-label" class="fl-file-label">No file selected</span>
-          <input id="fl-file" type="file" multiple hidden
-                 accept=".png,.jpg,.jpeg,.webp,.pdf,image/png,image/jpeg,application/pdf" />
+          <!-- Keep the input in the DOM; we toggle visibility with CSS so it isn't replaced by frameworks -->
+          <input id="fl-file" type="file" multiple
+                 accept=".png,.jpg,.jpeg,.webp,.pdf,image/png,image/jpeg,application/pdf"
+                 class="fl-visually-hidden" />
         </div>
         <style id="fl-picker-guard">
-          .fl-picker-row {
-            display:flex; align-items:center; gap:.75rem;
-            position:relative; z-index:10005;
-          }
-          .fl-file-btn {
-            display:inline-block; padding:.55rem .9rem; border-radius:.6rem;
-            background:#2a2f3a; color:#fff; cursor:pointer; user-select:none;
-            position:relative; z-index:10010; pointer-events:auto !important;
-            border:1px solid rgba(255,255,255,.12);
-          }
+          .fl-picker-row { display:flex; align-items:center; gap:.75rem; position:relative; z-index:10005; }
+          .fl-file-btn { padding:.55rem .9rem; border-radius:.6rem; background:#2a2f3a; color:#fff;
+                         cursor:pointer; user-select:none; position:relative; z-index:10010;
+                         border:1px solid rgba(255,255,255,.12); }
           .fl-file-btn:hover { filter:brightness(1.1); }
-          .fl-file-label { font-size:.9rem; opacity:.8; }
-          /* Nuke any accidental overlays that might eat clicks */
+          .fl-file-label { font-size:.9rem; opacity:.85; }
+          .fl-visually-hidden { position:fixed; left:-9999px; top:auto; width:1px; height:1px; overflow:hidden; }
+          /* If anything overlays the area, it won't eat clicks */
           .toast,.modal,.overlay,[data-overlay],[data-dialog] { pointer-events:none !important; }
         </style>
         
