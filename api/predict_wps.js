@@ -15,14 +15,23 @@ export default async function handler(req,res){
 
   try {
     if (req.method !== 'POST') return res.status(405).json({ error:'Method not allowed' });
-    const { horses, meta } = req.body || {};
+    const { horses, meta, mode = {} } = req.body || {};
 
     if (!Array.isArray(horses) || horses.length === 0) return res.status(400).json({ error:'No horses provided' });
 
+    // Always deep: use mode.deep and mode.consensus_passes if provided
+    const deepMode = { deep: mode.deep !== false, consensus_passes: mode.consensus_passes || 3 };
+    
     const research = await tavilyLookup(horses, meta);
-    const analysis = await scoreHorses({ horses, meta, research, accuracy: 'deep' });
+    const analysis = await scoreHorses({ horses, meta, research, accuracy: 'deep', mode: deepMode });
     const picks = await finalizeWPS({ scores: analysis.scores || [] });
-    return res.status(200).json({ picks, confidence: picks.confidence, analysis });
+    return res.status(200).json({ 
+      win: picks.win, 
+      place: picks.place, 
+      show: picks.show, 
+      confidence: picks.confidence, 
+      consensus: analysis.consensus 
+    });
 
   } catch (err) {
     console.error('[API ERROR]', err);

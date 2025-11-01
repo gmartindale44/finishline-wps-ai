@@ -20,7 +20,7 @@ export function client() {
   return new OpenAI({ apiKey: resolveOpenAIKey() });
 }
 
-export async function scoreHorses({ horses = [], meta = {}, research = {}, accuracy = 'deep' }) {
+export async function scoreHorses({ horses = [], meta = {}, research = {}, accuracy = 'deep', mode = {} }) {
   const client = new OpenAI({ apiKey: resolveOpenAIKey() });
   // Build strong, *grounded* system message that forces JSON and on-list names only.
   // Also provide baseline probabilities to anchor the model.
@@ -28,6 +28,10 @@ export async function scoreHorses({ horses = [], meta = {}, research = {}, accur
   const baseMap = {};
   horses.forEach(h => baseMap[h.name] = impliedFromOdds(h.odds || h.ml_odds));
   const baseline = normalizeProbs(names, baseMap);
+  
+  // Support mode.deep and mode.consensus_passes (default: 3 passes for deep mode)
+  const isDeep = mode?.deep !== false && (accuracy === 'deep' || mode?.deep === true);
+  const passes = isDeep ? (mode?.consensus_passes || 3) : 1;
 
   const sys = [
     'You are a disciplined horse-racing model.',
@@ -97,9 +101,9 @@ export async function scoreHorses({ horses = [], meta = {}, research = {}, accur
     }
   }
 
-  // Multi-pass consensus (3 passes)
+  // Multi-pass consensus (N passes based on mode)
   const results = [];
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < passes; i++) {
     const txt = await onePass();
     const fixed = repair(txt);
     const json = JSON.parse(fixed);
@@ -129,9 +133,23 @@ export async function scoreHorses({ horses = [], meta = {}, research = {}, accur
   merged.sort((a,b)=>b.win - a.win);
   const confidence = Math.max(0, Math.min(1, (merged[0].win - (merged[1]?.win||0)) * 1.6));
 
+  // Calculate consensus agreement (how similar are the passes?)
+  let agreement = 1.0;
+  if (results.length > 1) {
+    // Compare top picks across passes
+    const topPicks = results.map(r => {
+      const sorted = [...(r.scores || [])].sort((a,b)=>b.win-a.win);
+      return sorted.slice(0, 3).map(s => s.name);
+    });
+    // Simple agreement: count how many times top pick matches
+    const topMatchCount = topPicks.filter(p => p[0] === topPicks[0][0]).length;
+    agreement = topMatchCount / passes;
+  }
+
   return {
     scores: merged,
-    meta: { confidence }
+    meta: { confidence },
+    consensus: isDeep ? { passes, agreement: Number(agreement.toFixed(2)) } : null
   };
 }
 

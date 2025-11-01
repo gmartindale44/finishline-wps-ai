@@ -18,56 +18,35 @@
 
 
 
-  // If you kept the Accuracy dropdown, we'll ignore it and always run deep
-
-  const accuracySelect = document.getElementById('accuracy-select');
+  // Accuracy dropdown removed - always using deep mode
 
 
 
-  // ---------- STATE ----------
+  // ---------- GLOBAL STATE (durable, explicit) ----------
 
-  const state = window.__fl_state || {
-
-    files: [],
-
-    lastAnalysis: null,
-
-    ready: false,
-
-    analyzedOk: false,
-
+  window.__fl_state = window.__fl_state || {
+    pickedFiles: [],            // File[]
+    parsedHorses: null,         // [{ name, odds, jockey, trainer }]
+    analyzed: null,             // { scores:[{name,score,...}], meta:{track,surface,distance}, consensus:{passes,agreement}}
+    ui: { lastAction: null }
   };
 
-  window.__fl_state = state;
+  const state = window.__fl_state;
 
   // Lock predict button initially
-
-  if (predictBtnEl) {
-
-    if (!state.analyzedOk) {
-
-      predictBtnEl.setAttribute('disabled', '');
-
-    }
-
+  if (predictBtnEl && !state.analyzed) {
+    predictBtnEl.setAttribute('disabled', '');
   }
 
 
 
   // Restore last analysis (optional; helps with reloads)
-
   try {
-
     const cached = sessionStorage.getItem('fl_last_analysis');
-
     if (cached) {
-
-      state.analysis = JSON.parse(cached);
-
-      enable(predictBtnEl, hasValidAnalysis(state.analysis));
-
+      state.analyzed = JSON.parse(cached);
+      enable(predictBtnEl, hasValidAnalysis(state.analyzed));
     }
-
   } catch {}
 
 
@@ -119,9 +98,7 @@
 
 
   function hasValidAnalysis(analysis) {
-
     return !!(analysis && Array.isArray(analysis.scores) && analysis.scores.length > 0);
-
   }
 
 
@@ -148,44 +125,34 @@
 
 
 
-  function collectMeta() {
-
-    // Read the 4 meta inputs on the page
-
-    const date = (document.getElementById('race-date') || {}).value || '';
-
-    const track = (document.getElementById('race-track') || {}).value || '';
-
-    const surface = (document.getElementById('race-surface') || {}).value || '';
-
-    const distance = (document.getElementById('race-distance') || {}).value || '';
-
-    return { date, track, surface, distance, accuracy: 'deep' }; // force deep
-
+  function readMetaFromForm() {
+    return {
+      track:    (document.querySelector('#race-track')    ?.value || '').trim(),
+      surface:  (document.querySelector('#race-surface')  ?.value || '').trim(),
+      distance: (document.querySelector('#race-distance') ?.value || '').trim(),
+    };
   }
 
+  function readHorsesFromTable() {
+    const rows = [...document.querySelectorAll('[data-horse-row]')];
+    const horses = rows.map(r => ({
+      name:   r.querySelector('[data-horse-name]')   ?.value?.trim() || '',
+      odds:   r.querySelector('[data-horse-odds]')   ?.value?.trim() || '',
+      jockey: r.querySelector('[data-horse-jockey]') ?.value?.trim() || '',
+      trainer:r.querySelector('[data-horse-trainer]')?.value?.trim() || ''
+    })).filter(h => h.name); // keep only rows with a name
+    return horses;
+  }
 
+  // Alias for backward compatibility
+  function collectMeta() {
+    const meta = readMetaFromForm();
+    const date = (document.getElementById('race-date') || {}).value || '';
+    return { ...meta, date };
+  }
 
   function readHorseRows() {
-
-    // Reads the 8/12/etc visible rows into objects
-
-    // Adapt selectors to your markup if they differ
-
-    const rows = Array.from(document.querySelectorAll('[data-horse-row], .horse-row'));
-
-    return rows.map(r => ({
-
-      name: (r.querySelector('[data-horse-name], .horse-name, input[placeholder*="Horse Name"], input[placeholder*="Name"]') || r.querySelector('input:first-of-type'))?.value?.trim() || '',
-
-      odds: (r.querySelector('[data-horse-odds], .ml-odds, input[placeholder*="Odds"], input[placeholder*="ML"]') || r.querySelector('input:nth-of-type(2)'))?.value?.trim() || '',
-
-      jockey: (r.querySelector('[data-horse-jockey], .jockey, input[placeholder*="Jockey"]') || r.querySelector('input:nth-of-type(3)'))?.value?.trim() || '',
-
-      trainer: (r.querySelector('[data-horse-trainer], .trainer, input[placeholder*="Trainer"]') || r.querySelector('input:nth-of-type(4)'))?.value?.trim() || ''
-
-    })).filter(h => h.name);
-
+    return readHorsesFromTable();
   }
 
 
@@ -263,15 +230,12 @@
 
 
     input.addEventListener('change', () => {
-
-      state.files = Array.from(input.files || []);
-
-      const n = state.files.length;
-
+      // Update pickedFiles but do NOT clear parsedHorses or analyzed
+      state.pickedFiles = Array.from(input.files || []);
+      const n = state.pickedFiles.length;
       if (label) label.textContent = n ? `Loaded ${n} file${n>1?'s':''}` : 'No file selected';
-
       enable(analyzeBtnEl, n > 0);
-
+      // Keep parsedHorses and analyzed intact
     });
 
 
@@ -279,15 +243,11 @@
     // Allow re-selecting the SAME file after analysis by clearing input
 
     window.__fl_resetFileInput = function resetFileInput() {
-
       try { input.value = ''; } catch {}
-
-      state.files = [];
-
+      state.pickedFiles = [];
       if (label) label.textContent = 'No file selected';
-
       enable(analyzeBtnEl, false);
-
+      // DO NOT clear parsedHorses or analyzed - keep state intact
     };
 
 
@@ -364,19 +324,13 @@
 
         // If files selected ⇒ OCR first; else fall back to typed rows
 
-        const haveFiles = Array.isArray(state.files) && state.files.length > 0;
+        const haveFiles = Array.isArray(state.pickedFiles) && state.pickedFiles.length > 0;
 
         let horses = [];
 
         if (haveFiles) {
 
-          const images = await Promise.all(state.files.map(readAsBase64));
-
-          // Convert base64 data URLs to just the base64 part for API
-          const filesPayload = state.files.map((f, i) => {
-            const b64 = images[i].split('base64,')[1] || images[i];
-            return { data: b64, mime: f.type || "image/png" };
-          });
+          const images = await Promise.all(state.pickedFiles.map(readAsBase64));
 
           const resp = await fetch("/api/photo_extract_openai_b64", {
 
@@ -413,29 +367,26 @@
 
 
         if (!horses || horses.length === 0) {
-
-          // Friendly guidance instead of a dead-end
-
-          toast("I couldn't read any entries from that file.\n\nTips:\n• Upload a screenshot/PDF of the ENTRIES table (not the results).\n• Ensure columns show Horse, ML Odds, Jockey, Trainer.\n• Zoom in so text is sharp.\n• You can also type any rows by hand and Analyze again.");
-
-          state.lastAnalysis = null;
-
+          toast("No horses to analyze.");
           enable(predictBtnEl, false);
-
           return;
-
         }
 
+        // Persist parsed horses BEFORE analyze
+        state.parsedHorses = horses;
+        if (process.env.FINISHLINE_PROVIDER_DEBUG) {
+          console.debug('[OCR] parsedHorses length:', horses.length);
+        }
 
-
+        const meta = readMetaFromForm();
         const res = await fetch('/api/analyze', {
-
           method: 'POST',
-
           headers: { 'Content-Type': 'application/json' },
-
-          body: JSON.stringify({ horses, meta })
-
+          body: JSON.stringify({ 
+            horses, 
+            meta,
+            mode: { deep: true, consensus_passes: 3 }
+          })
         });
 
 
@@ -460,26 +411,20 @@
 
 
 
-        // Cache & enable predict
+        if (process.env.FINISHLINE_PROVIDER_DEBUG) {
+          console.debug('[Analyze] analyzed scores length:', analysis.scores?.length || 0);
+        }
 
-        state.analysis = analysis;
-
+        // Persist analyzed state - keep parsedHorses intact
+        state.analyzed = analysis;
+        state.ui.lastAction = 'analyze';
         sessionStorage.setItem('fl_last_analysis', JSON.stringify(analysis));
 
-        // State guard: only unlock predict on successful analyze
-        window.__fl_state = window.__fl_state || {};
-        window.__fl_state.analyzedOk = true;
+        // Enable predict button
         enable(predictBtnEl, true);
 
-
-
-        // After a successful analyze, allow re-selecting same file:
-
+        // After successful analyze, allow re-selecting same file (but keep state)
         if (window.__fl_resetFileInput) window.__fl_resetFileInput();
-
-        state.lastAnalysis = Date.now();
-
-
 
         toast(`Analysis complete — ${horses.length} entries parsed and ready.`);
 
@@ -511,73 +456,52 @@
 
     predictBtnEl.addEventListener('click', async () => {
 
-      // Guard: require a valid analysis
-
-      if (!hasValidAnalysis(state.analysis)) {
-
-        toast('Please Analyze first.');
-
-        return;
-
+      function getHorsesForPrediction() {
+        // prefer the exact horses we analyzed to ensure consistency:
+        if (window.__fl_state?.parsedHorses?.length) return window.__fl_state.parsedHorses;
+        const fromTable = readHorsesFromTable();
+        return fromTable.length ? fromTable : null;
       }
 
+      const horses = getHorsesForPrediction();
+      if (!horses || horses.length === 0) {
+        toast('Please Analyze first.');
+        return;
+      }
 
+      if (process.env.FINISHLINE_PROVIDER_DEBUG) {
+        console.debug('[Predict] horses length:', horses.length);
+      }
 
       try {
-
-        const meta = collectMeta(); // track/surface/distance only are used server-side
-
-        const payload = {
-
-          // Send only what the schema allows
-
-          scores: minimalScoresForPredict(state.analysis.scores),
-
-          meta: { track: meta.track, surface: meta.surface, distance: meta.distance }
-
+        const meta = readMetaFromForm();
+        const body = { 
+          horses, 
+          meta, 
+          mode: { deep: true, consensus_passes: 3 } 
         };
 
-
-
         const res = await fetch('/api/predict_wps', {
-
           method: 'POST',
-
           headers: { 'Content-Type': 'application/json' },
-
-          body: JSON.stringify(payload)
-
+          body: JSON.stringify(body)
         });
 
-
-
         if (!res.ok) {
-
           const t = await res.text();
-
           throw new Error(`Predict failed: ${t || res.status}`);
-
         }
 
+        const pred = await res.json(); // { win, place, show, confidence, consensus }
 
-
-        const pred = await res.json(); // { win, place, show, confidence }
-
+        const consensusInfo = pred.consensus ? ` (consensus: ${pred.consensus.passes} passes, ${(pred.consensus.agreement * 100).toFixed(0)}% agreement)` : '';
         const msg = [
-
           '⭐ Predictions:',
-
-          `🥇 Win: ${pred.win}`,
-
-          `🥈 Place: ${pred.place}`,
-
-          `🥉 Show: ${pred.show}`,
-
-          `📊 Confidence: ${pred.confidence ?? 'n/a'}`
-
+          `🥇 Win: ${pred.win || 'N/A'}`,
+          `🥈 Place: ${pred.place || 'N/A'}`,
+          `🥉 Show: ${pred.show || 'N/A'}`,
+          `📊 Confidence: ${pred.confidence ?? 'n/a'}${consensusInfo}`
         ].join('\n');
-
-
 
         alert(msg);
 
