@@ -291,7 +291,7 @@ async function onAnalyzeClick() {
     }
 
     LAST_ANALYSIS = j;
-    FL_STATE.analysis = { scores: j.fused || [], picks: j.picks, confidence: j.confidence };
+    FL_STATE.analysis = { scores: j.scores || [], picks: j.picks, confidence: j.meta?.confidence || j.confidence };
     
     // Cache and gate predict
     lastAnalyzedHorses = horses;
@@ -340,15 +340,11 @@ async function onPredictClick() {
       throw new Error(j.error || 'Unknown error');
     }
 
-    const picks = j.picks || [];
-    const winPick = picks.find(p => p.slot === 'win') || {};
-    const placePick = picks.find(p => p.slot === 'place') || {};
-    const showPick = picks.find(p => p.slot === 'show') || {};
-    
-    const win = winPick.name || '—';
-    const place = placePick.name || '—';
-    const show = showPick.name || '—';
-    const conf = Number(j.confidence || 0);
+    const picks = j.picks || {};
+    const win = picks.win || '—';
+    const place = picks.place || '—';
+    const show = picks.show || '—';
+    const conf = Number(j.confidence || 0) / 100; // API returns 0-100, convert to 0-1 for color coding
     const confidence = (conf * 100).toFixed(1) + "%";
     
     // Confidence color coding
