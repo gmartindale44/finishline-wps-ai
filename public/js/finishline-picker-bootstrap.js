@@ -24,6 +24,7 @@ const fileInput = document.getElementById('file-input');
 const fileLabel = document.getElementById('file-selected-label');
 const analyzeBtn = document.getElementById('analyze-btn');
 const predictBtn = document.getElementById('predict-btn');
+const accuracySelect = document.getElementById('accuracy-select');
 
 function setChip(id, text, tone='idle') {
   const chip = document.querySelector(`[data-chip="${id}"]`);
@@ -276,10 +277,11 @@ async function onAnalyzeClick() {
     const meta2 = collectMetaFromForm();
     FL_STATE.meta = meta2;
 
+    const mode = (accuracySelect?.value === 'deep') ? 'deep' : 'standard';
     const r = await fetch('/api/analyze', { 
       method:'POST', 
       headers:{'Content-Type':'application/json'}, 
-      body: JSON.stringify({ horses, meta: meta2 }) 
+      body: JSON.stringify({ horses, meta: meta2, mode }) 
     });
 
     const j = await safeJSON(r);
@@ -288,7 +290,7 @@ async function onAnalyzeClick() {
     }
 
     LAST_ANALYSIS = j;
-    FL_STATE.analysis = { scores: j.scores || [], notes: j.notes || '', version: j.version || 'A2' };
+    FL_STATE.analysis = { scores: j.fused || [], picks: j.picks, confidence: j.confidence };
     
     // Cache and gate predict
     lastAnalyzedHorses = horses;
@@ -318,7 +320,7 @@ async function onPredictClick() {
   const predictChip = document.querySelector('[data-chip="predict"]');
   
   try {
-    if (!FL_STATE.analysis?.scores?.length) {
+    if (!LAST_ANALYSIS || !LAST_ANALYSIS.picks) {
       alert("Please Analyze first.");
       return;
     }
@@ -337,11 +339,22 @@ async function onPredictClick() {
       throw new Error(j.error || 'Unknown error');
     }
 
-    const picks = j.picks || {};
-    const win = picks.win || '—';
-    const place = picks.place || '—';
-    const show = picks.show || '—';
-    const confidence = (Number(j.confidence||0)*100).toFixed(1) + "%";
+    const picks = j.picks || [];
+    const winPick = picks.find(p => p.slot === 'win') || {};
+    const placePick = picks.find(p => p.slot === 'place') || {};
+    const showPick = picks.find(p => p.slot === 'show') || {};
+    
+    const win = winPick.name || '—';
+    const place = placePick.name || '—';
+    const show = showPick.name || '—';
+    const conf = Number(j.confidence || 0);
+    const confidence = (conf * 100).toFixed(1) + "%";
+    
+    // Confidence color coding
+    let confColor = '#bbb';
+    if (conf >= 0.75) confColor = '#16a34a'; // green
+    else if (conf >= 0.50) confColor = '#eab308'; // yellow
+    else confColor = '#f97316'; // orange
 
     const msg = [
       '⭐ Predictions:',
