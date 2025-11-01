@@ -25,17 +25,17 @@
   // ---------- GLOBAL STATE (durable, explicit) ----------
 
   window.__fl_state = window.__fl_state || {
-    pickedFiles: [],            // File[]
-    parsedHorses: null,         // [{ name, odds, jockey, trainer }]
-    analyzed: null,             // { scores:[{name,score,...}], meta:{track,surface,distance}, consensus:{passes,agreement}}
-    ui: { lastAction: null }
+    pickedFiles: [],
+    parsedHorses: null,
+    analyzed: false,
+    ui: {}
   };
 
   const state = window.__fl_state;
 
   // Lock predict button initially
   if (predictBtnEl && !state.analyzed) {
-    predictBtnEl.setAttribute('disabled', '');
+    predictBtnEl.disabled = true;
   }
 
 
@@ -44,8 +44,11 @@
   try {
     const cached = sessionStorage.getItem('fl_last_analysis');
     if (cached) {
-      state.analyzed = JSON.parse(cached);
-      enable(predictBtnEl, hasValidAnalysis(state.analyzed));
+      const parsed = JSON.parse(cached);
+      state.analyzed = hasValidAnalysis(parsed);
+      if (state.analyzed && predictBtnEl) {
+        predictBtnEl.disabled = false;
+      }
     }
   } catch {}
 
@@ -190,111 +193,51 @@
   // ---------- FILE PICKER (robust) ----------
 
   function bindFilePicker() {
+    const btn   = document.getElementById('fl-file-btn');
+    const input = document.getElementById('fl-file');
+    const label = document.getElementById('file-selected-label');
 
-    const wrap  = $('#fl-picker-wrap');
+    if (!btn || !input) return;
 
-    const btn   = $('#fl-file-btn');
+    // z-index + pointer protections to beat overlays
+    btn.style.position = 'relative';
+    btn.style.zIndex   = '10010';
+    btn.style.pointerEvents = 'auto';
+    input.style.pointerEvents = 'auto';
 
-    const input = $('#fl-file');
-
-    const label = $('#file-selected-label') || $('#picker-status');
-
-    const analyzeBtnEl = $('[data-action="analyze"]') || $('#analyze-btn') || $('#analyze');
-
-
-
-    if (!wrap || !btn || !input) return false;
-
-
-
-    // Clean old listeners if hot-reload replaced nodes
-
-    btn.onclick = null;
-
-    input.onchange = null;
-
-
-
-    btn.addEventListener('click', (e) => {
-
-      e.preventDefault();
-
+    // Native picker must be opened by a user gesture
+    btn.onclick = (e) => {
+      e.preventDefault(); 
       e.stopPropagation();
-
       input.disabled = false;
-
-      input.click();     // user gesture -> allowed
-
-    });
-
-
-
-    input.addEventListener('change', () => {
-      // Update pickedFiles but do NOT clear parsedHorses or analyzed
-      state.pickedFiles = Array.from(input.files || []);
-      const n = state.pickedFiles.length;
-      if (label) label.textContent = n ? `Loaded ${n} file${n>1?'s':''}` : 'No file selected';
-      enable(analyzeBtnEl, n > 0);
-      // Keep parsedHorses and analyzed intact
-    });
-
-
-
-    // Allow re-selecting the SAME file after analysis by clearing input
-
-    window.__fl_resetFileInput = function resetFileInput() {
-      try { input.value = ''; } catch {}
-      state.pickedFiles = [];
-      if (label) label.textContent = 'No file selected';
-      enable(analyzeBtnEl, false);
-      // DO NOT clear parsedHorses or analyzed - keep state intact
+      input.click();
     };
 
-
-
-    // Quick diagnostics you can run in DevTools:  __fl_diag()
-
-    window.__fl_diag = () => ({
-
-      wrap: !!wrap, btn: !!btn, input: !!input, label: !!label,
-
-      filesCount: state.files?.length || 0,
-
-      analyzeEnabled: !!analyzeBtnEl && !analyzeBtnEl.disabled
-
-    });
-
-
-
-    return true;
-
+    input.onchange = () => {
+      const files = Array.from(input.files || []);
+      window.__fl_state.pickedFiles = files;
+      if (label) {
+        const n = files.length;
+        label.textContent = n ? `Loaded ${n} file${n>1?'s':''}` : 'No file selected';
+      }
+      // Do NOT clear parsed horses/analyzed here.
+      // Do NOT wipe pickedFiles here; we allow re-use across UI updates.
+    };
   }
 
+  // Re-bind if the DOM changes (Hot reload / dynamic UI)
+  const mo = new MutationObserver(() => bindFilePicker());
+  mo.observe(document.documentElement, { childList: true, subtree: true });
 
+  document.addEventListener('DOMContentLoaded', bindFilePicker);
+  bindFilePicker();
 
-  // Bind on first paint and re-bind on DOM replacements
-
-  function ensurePickerBound() {
-
-    if (bindFilePicker()) return;
-
-    const ro = new MutationObserver(() => bindFilePicker());
-
-    ro.observe(document.documentElement, { childList: true, subtree: true });
-
-  }
-
-
-
-  if (document.readyState === 'loading') {
-
-    document.addEventListener('DOMContentLoaded', ensurePickerBound, { once: true });
-
-  } else {
-
-    ensurePickerBound();
-
-  }
+  // Small helper for quick diagnostics in DevTools
+  window.__fl_diag = () => ({
+    pickedFiles: window.__fl_state?.pickedFiles?.map(f => ({ name:f.name, size:f.size })),
+    parsedHorses: Array.isArray(window.__fl_state?.parsedHorses) ? window.__fl_state.parsedHorses.length : 0,
+    analyzed: !!window.__fl_state?.analyzed
+  });
 
 
 
@@ -416,15 +359,17 @@
         }
 
         // Persist analyzed state - keep parsedHorses intact
-        state.analyzed = analysis;
+        state.parsedHorses = horses; // Ensure we keep the parsed horses
+        state.analyzed = true; // Mark as analyzed (boolean)
         state.ui.lastAction = 'analyze';
         sessionStorage.setItem('fl_last_analysis', JSON.stringify(analysis));
 
         // Enable predict button
-        enable(predictBtnEl, true);
+        if (predictBtnEl) predictBtnEl.disabled = false;
 
-        // After successful analyze, allow re-selecting same file (but keep state)
-        if (window.__fl_resetFileInput) window.__fl_resetFileInput();
+        // After successful analyze, allow re-selecting same file (only clear input control, NOT state)
+        const fileInput = document.getElementById('fl-file');
+        if (fileInput) fileInput.value = ''; // IMPORTANT: do NOT clear pickedFiles/state
 
         toast(`Analysis complete — ${horses.length} entries parsed and ready.`);
 
@@ -457,15 +402,17 @@
     predictBtnEl.addEventListener('click', async () => {
 
       function getHorsesForPrediction() {
-        // prefer the exact horses we analyzed to ensure consistency:
-        if (window.__fl_state?.parsedHorses?.length) return window.__fl_state.parsedHorses;
-        const fromTable = readHorsesFromTable();
-        return fromTable.length ? fromTable : null;
+        // 1) Prefer the analyzed/parsed list
+        if (window.__fl_state?.analyzed && Array.isArray(window.__fl_state.parsedHorses) && window.__fl_state.parsedHorses.length) {
+          return window.__fl_state.parsedHorses;
+        }
+        // 2) Fallback: read from the current rows (typed-in)
+        return readHorsesFromTable(); // your existing method
       }
 
       const horses = getHorsesForPrediction();
-      if (!horses || horses.length === 0) {
-        toast('Please Analyze first.');
+      if (!horses || !horses.length) {
+        alert('Please analyze first (no horses available).');
         return;
       }
 

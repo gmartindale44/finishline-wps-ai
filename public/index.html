@@ -57,19 +57,13 @@
 
       <div class="controls">
         <!-- ✅ Robust file picker (drop-in) -->
-        <div id="fl-picker-wrap" class="picker-row" style="display:flex;gap:.5rem;align-items:center;">
-          <button id="fl-file-btn" type="button" class="btn btn-secondary" style="position:relative;z-index:5;">
+        <div id="fl-picker-wrap" class="flex items-center gap-2">
+          <button id="fl-file-btn" type="button" class="btn btn-secondary" data-fl-file-btn>
             Choose Photos / PDF
           </button>
-          <input
-            id="fl-file"
-            type="file"
-            accept="image/*,application/pdf"
-            multiple
-            style="position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0;"
-            aria-hidden="true"
-          />
-          <span id="file-selected-label" class="chip chip-info">No file selected</span>
+          <span id="file-selected-label" class="text-sm opacity-75">No file selected</span>
+          <input id="fl-file" type="file" hidden multiple
+                 accept=".png,.jpg,.jpeg,.webp,.pdf,image/png,image/jpeg,application/pdf" />
         </div>
         
         <button id="analyze-btn" type="button" class="btn btn-secondary" disabled>Analyze with AI</button>
