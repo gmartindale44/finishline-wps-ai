@@ -384,7 +384,7 @@
 
             headers: { "Content-Type": "application/json" },
 
-            body: JSON.stringify({ files: filesPayload, meta })
+            body: JSON.stringify({ images, meta })
 
           });
 
