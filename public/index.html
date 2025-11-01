@@ -59,18 +59,18 @@
       <div class="controls">
         <!-- ===== HORSE DATA: ROBUST FILE PICKER ===== -->
         <div id="fl-picker-wrap" class="fl-picker-row">
-          <!-- Primary trigger: label-for relationship works without JS -->
+          <!-- Primary trigger (works even if JS fails) -->
           <label id="fl-file-proxy" for="fl-file" class="fl-file-btn" tabindex="0" role="button" aria-controls="fl-file">
             Choose Photos / PDF
           </label>
           <span id="file-selected-label" class="fl-file-label">No file selected</span>
 
-          <!-- Primary hidden input (stays in DOM; not removed) -->
-          <input id="fl-file" type="file" multiple hidden
+          <!-- Primary hidden input (never removed from DOM) -->
+          <input id="fl-file" type="file" hidden multiple
                  accept=".png,.jpg,.jpeg,.webp,.pdf,image/png,image/jpeg,application/pdf" />
 
-          <!-- Backup visible input (auto-shown if primary fails; also shown with ?debug=picker) -->
-          <input id="fl-file-backup" type="file" multiple class="fl-file-backup"
+          <!-- Backup visible input (auto-shown only if primary fails or ?debug=picker) -->
+          <input id="fl-file-backup" type="file" class="fl-file-backup" multiple
                  accept=".png,.jpg,.jpeg,.webp,.pdf,image/png,image/jpeg,application/pdf" />
         </div>
         <style id="fl-picker-guard">
@@ -79,9 +79,8 @@
                            user-select:none; position:relative; z-index:10010; border:1px solid rgba(255,255,255,.12); }
           .fl-file-btn:hover { filter:brightness(1.1); }
           .fl-file-label { font-size:.9rem; opacity:.85; }
-          /* backup input is hidden by default; we'll unhide if primary fails */
           .fl-file-backup { position:absolute; left:-9999px; width:1px; height:1px; opacity:0; }
-          /* common overlays that may steal clicks */
+          /* Kill overlays that swallow clicks */
           .overlay,.modal,.toast,[data-overlay],[data-dialog] { pointer-events:none !important; }
         </style>
         

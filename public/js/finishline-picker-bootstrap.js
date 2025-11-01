@@ -192,7 +192,7 @@
   // ---------- FILE PICKER (robust, label-based with backup) ----------
 
   (() => {
-    // Durable state shared with rest of app
+    // Durable app state (shared)
     const ST = (window.__fl_state = window.__fl_state || {
       pickedFiles: [],
       parsedHorses: null,
@@ -200,15 +200,23 @@
       ui: {}
     });
 
-    function $(id){ return document.getElementById(id); }
-    function q(sel){ return document.querySelector(sel); }
+    const $ = (id) => document.getElementById(id);
+    const q = (sel) => document.querySelector(sel);
 
-    // Try multiple selectors for the Analyze button (adjust if you have a known ID)
-    function enableAnalyze(enable) {
-      const btn = $('analyze-btn') || q('#analyze-with-ai, [data-analyze-btn], button#analyze, button[name="analyze"]');
-      if (btn) btn.disabled = !enable;
+    // Try several known selectors; adjust if your Analyze button has a specific id
+    function getAnalyzeBtn() {
+      return (
+        $('analyze-btn') ||
+        q('#analyze-with-ai') ||
+        q('[data-analyze-btn]') ||
+        q('button#analyze') ||
+        q('button[name="analyze"]')
+      );
     }
-
+    function enableAnalyze(enabled) {
+      const btn = getAnalyzeBtn();
+      if (btn) btn.disabled = !enabled;
+    }
     function updateLabel() {
       const label = $('file-selected-label');
       const n = ST.pickedFiles?.length || 0;
@@ -216,49 +224,71 @@
       enableAnalyze(n > 0);
     }
 
+    // Canonical "files chosen" handler
+    function onFiles(filesList) {
+      const files = Array.from(filesList || []);
+      ST.pickedFiles = files;
+      ST.analyzed = false; // new files require a fresh analyze
+      updateLabel();
+    }
+
+    // Bind both inputs + proxy, survive re-renders
     function bindPicker() {
       const proxy   = $('fl-file-proxy');
       const primary = $('fl-file');
       const backup  = $('fl-file-backup');
-
       if (!proxy || !primary || !backup) return;
 
-      // z-index/pointer safety
-      proxy.style.zIndex = '10010';
+      // Always ensure inputs are enabled
+      primary.disabled = false;
+      backup.disabled  = false;
 
-      // Primary "change" handler → persist files and enable analyze
-      const onChosen = (files) => {
-        ST.pickedFiles = Array.from(files || []);
-        ST.analyzed = false;
-        updateLabel();
+      // Listen for both 'change' and 'input' (some PDF pickers fire only 'input')
+      const wireInput = (inp) => {
+        inp.removeEventListener('change', inp.__onChange__, true);
+        inp.removeEventListener('input',  inp.__onInput__,  true);
+
+        inp.__onChange__ = (e) => onFiles(inp.files);
+        inp.__onInput__  = (e) => onFiles(inp.files);
+
+        // Use capture to survive shadowy wrappers
+        inp.addEventListener('change', inp.__onChange__, true);
+        inp.addEventListener('input',  inp.__onInput__,  true);
       };
+      wireInput(primary);
+      wireInput(backup);
 
-      primary.onchange = () => onChosen(primary.files);
-      backup.onchange  = () => onChosen(backup.files);
-
-      // If selecting the same file again, some browsers won't fire "change".
-      // We clear the value *before* opening so change will fire.
+      // Clicking the label: clear value BEFORE opening so same-file reselect fires 'change'
       const openPrimary = () => {
-        try {
-          primary.value = '';
-        } catch {}
-        // Prefer native showPicker if available (some browsers)
-        if (typeof primary.showPicker === 'function') {
-          primary.showPicker();
-        } else {
-          primary.click();
-        }
+        try { primary.value = ''; } catch {}
+        if (typeof primary.showPicker === 'function') primary.showPicker();
+        else primary.click();
       };
 
-      // Click / keyboard handlers on the label
-      proxy.addEventListener('click', (e) => {
+      proxy.onclick = (e) => {
         e.preventDefault(); e.stopPropagation();
 
-        // Try primary first with a short timeout to detect failure
         let fired = false;
-        const t = setTimeout(() => {
+        const prevCount = (primary.files || []).length;
+
+        // short poll after click to detect selection even if 'change' was swallowed
+        let ticks = 0;
+        const poll = setInterval(() => {
+          ticks++;
+          const curCount = (primary.files || []).length;
+          if (curCount !== prevCount && curCount > 0) {
+            fired = true;
+            clearInterval(poll);
+            onFiles(primary.files);
+          }
+          if (ticks > 30) { // ~1.5s
+            clearInterval(poll);
+          }
+        }, 50);
+
+        // backup reveal if primary clearly didn't open
+        const fallbackTimer = setTimeout(() => {
           if (!fired && (!primary.files || primary.files.length === 0)) {
-            // Promote backup to visible if primary seems blocked
             backup.style.position = 'static';
             backup.style.opacity  = '1';
             backup.focus();
@@ -266,24 +296,18 @@
           }
         }, 900);
 
-        const prevCount = (primary.files || []).length;
-        const onTempChange = () => {
+        // If primary changes, cancel fallback
+        const temp = () => {
           fired = true;
-          clearTimeout(t);
-          primary.removeEventListener('change', onTempChange);
+          clearTimeout(fallbackTimer);
+          primary.removeEventListener('change', temp, true);
         };
-        primary.addEventListener('change', onTempChange);
+        primary.addEventListener('change', temp, true);
 
         openPrimary();
+      };
 
-        // Extra guard: if the element under the cursor isn't the proxy, log it
-        const rect = proxy.getBoundingClientRect();
-        const el = document.elementFromPoint(rect.left + 5, rect.top + 5);
-        if (el && el !== proxy) {
-          console.debug('[picker] overlay element on top of proxy:', el);
-        }
-      });
-
+      // keyboard access
       proxy.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
@@ -291,43 +315,58 @@
         }
       });
 
-      // Debug mode: show backup input if ?debug=picker
+      // Debug mode: show backup input with ?debug=picker
       const isDebug = new URLSearchParams(location.search).get('debug') === 'picker';
       if (isDebug) {
         backup.style.position = 'static';
         backup.style.opacity  = '1';
       }
 
+      // Keep label/analyze in sync at boot
       updateLabel();
     }
 
-    // Rebind when DOM mutates (prevents "lost" input on dynamic renders)
+    // Delegate-level listener to survive DOM swaps: if some other code replaces the input,
+    // we still capture its 'change'/'input' events here.
+    document.addEventListener('change', (e) => {
+      const t = e.target;
+      if (t && (t.id === 'fl-file' || t.id === 'fl-file-backup') && t.files) {
+        onFiles(t.files);
+      }
+    }, true);
+    document.addEventListener('input', (e) => {
+      const t = e.target;
+      if (t && (t.id === 'fl-file' || t.id === 'fl-file-backup') && t.files) {
+        onFiles(t.files);
+      }
+    }, true);
+
+    // Re-bind on DOM mutations (some UIs re-render this area)
     const mo = new MutationObserver(() => bindPicker());
     mo.observe(document.body || document.documentElement, { childList:true, subtree:true });
+
     document.addEventListener('DOMContentLoaded', bindPicker);
     bindPicker();
 
-    // Helpers for the rest of the app:
+    // Tiny diag helper
+    window.__fl_diag = () => ({
+      pickedFiles: (ST.pickedFiles||[]).map(f => ({name:f.name,size:f.size})),
+      analyzed: !!ST.analyzed,
+      parsedHorses: Array.isArray(ST.parsedHorses) ? ST.parsedHorses.length : 0
+    });
 
+    // Hooks used by your analyze/predict flows (keep as-is if already present)
     window.__fl_markAnalyzeSuccess = (parsed=[]) => {
       ST.parsedHorses = parsed;
       ST.analyzed = true;
-      // Do NOT clear ST.pickedFiles; only clear the primary input value so user can reselect same file later
       const primary = $('fl-file');
-      if (primary) primary.value = '';
-      enableAnalyze(false); // optional: disable analyze until new file is chosen
+      if (primary) primary.value = ''; // allow choosing same file again later
+      enableAnalyze(false); // optional: disable Analyze until new file is picked
     };
-
     window.__fl_getHorsesForPrediction = (fallbackReaderFn) => {
       if (ST.analyzed && Array.isArray(ST.parsedHorses) && ST.parsedHorses.length) return ST.parsedHorses;
       return typeof fallbackReaderFn === 'function' ? fallbackReaderFn() : [];
     };
-
-    window.__fl_diag = () => ({
-      pickedFiles: ST.pickedFiles.map(f => ({ name:f.name, size:f.size })),
-      analyzed: !!ST.analyzed,
-      parsedHorses: Array.isArray(ST.parsedHorses) ? ST.parsedHorses.length : 0
-    });
   })();
 
 
@@ -357,14 +396,14 @@
 
 
         // If files selected ⇒ OCR first; else fall back to typed rows
-
-        const haveFiles = Array.isArray(state.pickedFiles) && state.pickedFiles.length > 0;
+        // Use window.__fl_state which is managed by the file picker IIFE
+        const haveFiles = Array.isArray(window.__fl_state?.pickedFiles) && window.__fl_state.pickedFiles.length > 0;
 
         let horses = [];
 
         if (haveFiles) {
 
-          const images = await Promise.all(state.pickedFiles.map(readAsBase64));
+          const images = await Promise.all(window.__fl_state.pickedFiles.map(readAsBase64));
 
           const resp = await fetch("/api/photo_extract_openai_b64", {
 
