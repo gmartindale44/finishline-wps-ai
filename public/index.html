@@ -57,15 +57,29 @@
       <div id="horse-rows" class="rows"></div>
 
       <div class="controls">
-        <!-- ✅ Robust file picker (drop-in) -->
-        <div id="fl-picker-wrap" class="flex items-center gap-2">
-          <button id="fl-file-btn" type="button" class="btn btn-secondary" data-fl-file-btn>
-            Choose Photos / PDF
-          </button>
-          <span id="file-selected-label" class="text-sm opacity-75">No file selected</span>
-          <input id="fl-file" type="file" hidden multiple
+        <!-- 🔧 HORSE DATA ACTIONS (replace the existing Choose Photos/PDF chunk) -->
+        <div id="fl-picker-wrap" class="fl-picker-row">
+          <label id="fl-file-proxy" for="fl-file" class="fl-file-btn">Choose Photos / PDF</label>
+          <span id="file-selected-label" class="fl-file-label">No file selected</span>
+          <input id="fl-file" type="file" multiple hidden
                  accept=".png,.jpg,.jpeg,.webp,.pdf,image/png,image/jpeg,application/pdf" />
         </div>
+        <style id="fl-picker-guard">
+          .fl-picker-row {
+            display:flex; align-items:center; gap:.75rem;
+            position:relative; z-index:10005;
+          }
+          .fl-file-btn {
+            display:inline-block; padding:.55rem .9rem; border-radius:.6rem;
+            background:#2a2f3a; color:#fff; cursor:pointer; user-select:none;
+            position:relative; z-index:10010; pointer-events:auto !important;
+            border:1px solid rgba(255,255,255,.12);
+          }
+          .fl-file-btn:hover { filter:brightness(1.1); }
+          .fl-file-label { font-size:.9rem; opacity:.8; }
+          /* Nuke any accidental overlays that might eat clicks */
+          .toast,.modal,.overlay,[data-overlay],[data-dialog] { pointer-events:none !important; }
+        </style>
         
         <button id="analyze-btn" type="button" class="btn btn-secondary" disabled>Analyze with AI</button>
         <button id="predict-btn" type="button" class="btn btn-primary" disabled>Predict W/P/S</button>
