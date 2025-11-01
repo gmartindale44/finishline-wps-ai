@@ -348,65 +348,69 @@
 
 
 
-        // Prefer OCR path if a file is selected
+        // If files selected ⇒ OCR first; else fall back to typed rows
 
-        if (state.files.length) {
+        const haveFiles = Array.isArray(state.files) && state.files.length > 0;
+
+        let horses = [];
+
+        if (haveFiles) {
 
           const images = await Promise.all(state.files.map(readAsBase64));
 
           // Convert base64 data URLs to just the base64 part for API
           const filesPayload = state.files.map((f, i) => {
             const b64 = images[i].split('base64,')[1] || images[i];
-            return { name: f.name, type: f.type, b64 };
+            return { data: b64, mime: f.type || "image/png" };
           });
 
-          const ocrRes = await fetch('/api/photo_extract_openai_b64', {
+          const resp = await fetch("/api/photo_extract_openai_b64", {
 
-            method: 'POST',
+            method: "POST",
 
-            headers: { 'Content-Type': 'application/json' },
+            headers: { "Content-Type": "application/json" },
 
             body: JSON.stringify({ files: filesPayload, meta })
 
           });
 
+          const json = await resp.json();
 
+          if (!resp.ok) throw new Error(json?.error || "OCR failed");
 
-          if (!ocrRes.ok) {
+          horses = Array.isArray(json.horses) ? json.horses : [];
 
-            const t = await ocrRes.text();
-
-            throw new Error(`OCR failed: ${t || ocrRes.status}`);
-
-          }
-
-
-
-          const ocr = await ocrRes.json();
-
-          // Expecting { horses: [...] }
-
-          if (Array.isArray(ocr?.horses) && ocr.horses.length) {
-
-            // Fill the table (you have a function for this in your code)
+          if (horses.length > 0) {
 
             if (typeof window.populateHorseRows === 'function') {
 
-              window.populateHorseRows(ocr.horses);
+              window.populateHorseRows(horses);
 
             }
 
           }
 
+        } else {
+
+          horses = readHorseRows();
+
         }
 
 
 
-        // Read current rows and analyze
+        if (!horses || horses.length === 0) {
 
-        const horses = readHorseRows();
+          // Friendly guidance instead of a dead-end
 
-        if (!horses.length) throw new Error('No horses to analyze.');
+          toast("I couldn't read any entries from that file.\n\nTips:\n• Upload a screenshot/PDF of the ENTRIES table (not the results).\n• Ensure columns show Horse, ML Odds, Jockey, Trainer.\n• Zoom in so text is sharp.\n• You can also type any rows by hand and Analyze again.");
+
+          state.lastAnalysis = null;
+
+          enable(predictBtnEl, false);
+
+          return;
+
+        }
 
 
 
@@ -460,7 +464,7 @@
 
 
 
-        toast(`Analysis complete — ${analysis.scores.length} horses scored. Confidence: ${analysis.confidence ?? 'n/a'}.`);
+        toast(`Analysis complete — ${horses.length} entries parsed and ready.`);
 
       } catch (err) {
 
