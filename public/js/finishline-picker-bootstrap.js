@@ -278,19 +278,22 @@ async function onAnalyzeClick() {
     const meta2 = collectMetaFromForm();
     FL_STATE.meta = meta2;
 
-    const accuracy = FORCED_ACCURACY;
+    const payload = { horses, meta: meta2 };
     const r = await fetch('/api/analyze', { 
       method:'POST', 
       headers:{'Content-Type':'application/json'}, 
-      body: JSON.stringify({ horses, meta: meta2, accuracy }) 
+      body: JSON.stringify(payload) 
     });
 
     const j = await safeJSON(r);
-    if(!r.ok || j.error){
-      throw new Error(j.error || 'Unknown error');
+
+    if(!r.ok || !j || !j.scores || j.error){
+      throw new Error(j?.error || 'No data returned');
     }
 
+    // ✅ store globally so predict can use it
     LAST_ANALYSIS = j;
+    window.latestAnalysis = j;
     FL_STATE.analysis = { scores: j.scores || [], picks: j.picks, confidence: j.meta?.confidence || j.confidence };
     
     // Cache and gate predict
@@ -301,6 +304,10 @@ async function onAnalyzeClick() {
     setChip('analyze', 'Done', 'done');
     enable(predictBtn, true);
     setChip('predict', 'Ready', 'ready');
+    
+    // Show success message with confidence
+    const conf = (j.meta?.confidence || j.confidence || 0) * 100;
+    alert(`✅ Analysis complete — ${j.scores.length} horses scored. Confidence: ${conf.toFixed(1)}%.`);
 
   } catch (err) {
     console.error('[Analyze] error', err);
