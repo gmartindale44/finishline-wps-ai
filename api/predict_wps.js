@@ -1,7 +1,7 @@
 import { scoreHorses, finalizeWPS } from './_openai.js';
 import { tavilyLookup } from './research.js';
 
-export const config = { runtime: 'nodejs' };
+export const config = { runtime: 'nodejs18.x' };
 
 function setCors(res){
   res.setHeader('Access-Control-Allow-Origin','*');

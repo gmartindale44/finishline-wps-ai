@@ -1,7 +1,7 @@
 // api/diag.js
 // --------------------------------------------------
 // Quick masked diagnostics so you can confirm keys & flags in Production/Preview.
-export const config = { runtime: 'nodejs' };
+export const config = { runtime: 'nodejs18.x' };
 
 export default async function handler(req, res) {
   const mask = v => (v ? '●●●● set' : '—');

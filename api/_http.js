@@ -1,4 +1,4 @@
-export const config = { runtime: 'nodejs' };
+export const config = { runtime: 'nodejs18.x' };
 
 export function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');

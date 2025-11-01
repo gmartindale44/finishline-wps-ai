@@ -1,4 +1,2 @@
-/* File picker CSS hardening - ensures picker is always accessible */
-#fl-picker-wrap { position: relative; z-index: 10005; }
-#fl-file-btn    { position: relative; z-index: 10010; pointer-events: auto !important; }
-#fl-file        { position: relative; z-index: 10011; }
+/* public/finishline-picker-guard.css */
+#analyze-btn, #analyze-with-ai, [data-analyze-btn] { pointer-events: auto; }

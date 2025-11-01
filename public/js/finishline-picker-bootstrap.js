@@ -489,13 +489,12 @@
         }
 
         // Persist analyzed state using the helper function
+        window.__fl_state = window.__fl_state || {};
+        window.__fl_state.parsedHorses = horses;
+        window.__fl_state.analyzed = true;
+        
         if (typeof window.__fl_markAnalyzeSuccess === 'function') {
           window.__fl_markAnalyzeSuccess(horses);
-        } else {
-          // Fallback if helper not available
-          window.__fl_state = window.__fl_state || {};
-          window.__fl_state.parsedHorses = horses;
-          window.__fl_state.analyzed = true;
         }
 
         state.parsedHorses = horses;
@@ -536,19 +535,15 @@
 
     predictBtnEl.addEventListener('click', async () => {
 
-      // Use the helper function if available, otherwise fallback
+      // Prefer parsed horses from __fl_state when available
       let horses;
-      if (typeof window.__fl_getHorsesForPrediction === 'function') {
+      if (window.__fl_state && Array.isArray(window.__fl_state.parsedHorses) && window.__fl_state.parsedHorses.length) {
+        horses = window.__fl_state.parsedHorses;
+      } else if (typeof window.__fl_getHorsesForPrediction === 'function') {
         horses = window.__fl_getHorsesForPrediction(readHorsesFromTable);
       } else {
-        // Fallback implementation
-        if (window.__fl_state?.analyzed &&
-            Array.isArray(window.__fl_state.parsedHorses) &&
-            window.__fl_state.parsedHorses.length) {
-          horses = window.__fl_state.parsedHorses;
-        } else {
-          horses = readHorsesFromTable();
-        }
+        // Fallback: try to read from table
+        horses = readHorsesFromTable();
       }
 
       if (!horses?.length) {

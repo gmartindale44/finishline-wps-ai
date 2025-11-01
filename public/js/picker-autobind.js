@@ -1,93 +1,114 @@
-/* public/js/picker-autobind.js */
-(() => {
-  const ST = (window.__fl_state = window.__fl_state || { pickedFiles: [], analyzed:false, parsedHorses:null });
+// public/js/picker-autobind.js
+(function () {
+  function ready(fn){ if(document.readyState!=='loading'){ fn(); } else { document.addEventListener('DOMContentLoaded', fn); } }
 
-  const find = {
-    input() {
-      const horsePanel = Array.from(document.querySelectorAll('*'))
-        .find(n => /horse data/i.test(n.textContent||''));
-      return (horsePanel && horsePanel.querySelector('input[type="file"]')) ||
-             document.querySelector('input[type="file"]');
-    },
-    analyzeBtn() {
-      return document.querySelector('#analyze-btn,#analyze-with-ai,[data-analyze-btn]') ||
-             Array.from(document.querySelectorAll('button'))
-               .find(b => /analyze/i.test(b.textContent||''));
-    },
-    label() {
-      return document.querySelector('#file-selected-label') ||
-             Array.from(document.querySelectorAll('span,div'))
-               .find(n => /no file selected|loaded \d+ file/i.test(n.textContent||''));
-    },
-    proxy() {
-      return Array.from(document.querySelectorAll('label,button,span,div'))
-        .find(n => /choose photos|pdf/i.test(n.textContent||''));
+  ready(function () {
+    // App-wide state (durable across UI mutations)
+    window.__fl_state = window.__fl_state || { pickedFiles: [], analyzed:false, parsedHorses:null };
+
+    function q(sel, root){ return (root||document).querySelector(sel); }
+
+    function findInput(){
+      // Prefer an input[type=file] within the Horse Data region; fallback to any file input.
+      const horsePanels = Array.from(document.querySelectorAll('section,div,form,fieldset,main,article'));
+      const panel = horsePanels.find(n => /horse\s*data/i.test((n.getAttribute('aria-label')||'') + ' ' + (n.querySelector('h2,h3,h4')?.textContent||'') + ' ' + (n.textContent||'').slice(0,200)));
+      return (panel && panel.querySelector('input[type="file"]')) || q('input[type="file"]');
     }
-  };
 
-  function setAnalyzeEnabled(on) { const b = find.analyzeBtn(); if (b) b.disabled = !on; }
-  function updateLabel() {
-    const n = ST.pickedFiles.length;
-    const lbl = find.label();
-    if (lbl) lbl.textContent = n ? `Loaded ${n} file${n>1?'s':''}` : 'No file selected';
-    setAnalyzeEnabled(n > 0);
-  }
-  function onFiles(list) {
-    ST.pickedFiles = Array.from(list||[]);
-    ST.analyzed = false;
-    updateLabel();
-  }
+    function findAnalyzeBtn(){
+      return q('#analyze-btn,#analyze-with-ai,[data-analyze-btn]') ||
+             Array.from(document.querySelectorAll('button,input[type="button"],input[type="submit"]'))
+               .find(b => /analyze/i.test(b.value||b.textContent||''));
+    }
 
-  function bindInput(input) {
-    if (!input) return;
-    const handler = () => onFiles(input.files);
-    input.addEventListener('change', handler, true);
-    input.addEventListener('input',  handler, true);
-  }
+    function findFileLabel(){
+      return q('#file-selected-label,[data-file-selected-label]') ||
+             Array.from(document.querySelectorAll('span,div,small,p'))
+               .find(n => /no file selected|loaded\s+\d+\s*file/i.test((n.textContent||'').toLowerCase()));
+    }
 
-  function bindProxy(input) {
-    const proxy = find.proxy();
-    if (!proxy || !input) return;
-    const clicker = (e) => {
-      e.preventDefault(); e.stopPropagation();
-      try { input.value = ''; } catch{}
-      (input.showPicker || input.click).call(input);
-      // Small poll for swallowed events
-      let t=0; const id=setInterval(()=>{ t++; if ((input.files||[]).length){ onFiles(input.files); clearInterval(id); }
-        if (t>40) clearInterval(id); }, 50);
-    };
-    proxy.addEventListener('click', clicker, true);
-    proxy.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); clicker(e); }
-    }, true);
-  }
+    function findChooseProxy(){
+      return q('[data-fl-file-btn],[data-choose-file],[data-choose-photo]') ||
+             Array.from(document.querySelectorAll('label,button,span,div,a'))
+               .find(n => /choose\s*photos|choose\s*photo|choose\s*file|pdf/i.test((n.textContent||'').toLowerCase()));
+    }
 
-  function wire() {
-    const input = find.input();
-    if (!input) return;
-    bindInput(input);
-    bindProxy(input);
-    onFiles(input.files); // initial sync
-  }
+    function setAnalyzeEnabled(enable){
+      const btn = findAnalyzeBtn();
+      if (!btn) return;
+      btn.disabled = !enable;
+      btn.ariaDisabled = (!enable).toString();
+      btn.classList.toggle('disabled', !enable);
+    }
 
-  // Global delegates (survive DOM swaps)
-  document.addEventListener('change', (e) => {
-    const t = e.target;
-    if (t?.type === 'file' && t.files) onFiles(t.files);
-  }, true);
-  document.addEventListener('input', (e) => {
-    const t = e.target;
-    if (t?.type === 'file' && t.files) onFiles(t.files);
-  }, true);
+    function updateLabel(){
+      const lbl = findFileLabel();
+      const n = window.__fl_state.pickedFiles.length;
+      if (lbl) lbl.textContent = n ? `Loaded ${n} file${n>1?'s':''}` : 'No file selected';
+      setAnalyzeEnabled(n > 0);
+    }
 
-  new MutationObserver(wire).observe(document.documentElement, { childList:true, subtree:true });
-  document.addEventListener('DOMContentLoaded', wire);
-  wire();
+    function onFiles(files){
+      window.__fl_state.pickedFiles = Array.from(files||[]);
+      window.__fl_state.analyzed = false;
+      updateLabel();
+      console.log('[picker] files:', window.__fl_state.pickedFiles.map(f=>f.name));
+    }
 
-  window.__fl_diag = () => ({
-    pickedFiles: ST.pickedFiles.map(f=>({name:f.name,size:f.size})),
-    analyzed: ST.analyzed,
-    parsedHorses: Array.isArray(ST.parsedHorses)?ST.parsedHorses.length:0
+    function bindInput(input) {
+      if (!input) return;
+      const handler = () => onFiles(input.files);
+      input.addEventListener('change', handler, true);
+      input.addEventListener('input',  handler, true);
+    }
+
+    function bind(input){
+      if (!input) return;
+
+      // Defensive z-index/pointer events (non-invasive)
+      input.style.pointerEvents = 'auto';
+      input.style.position = input.style.position || 'relative';
+      input.style.zIndex = Math.max( (parseInt(getComputedStyle(input).zIndex)||0), 10011 ).toString();
+
+      // Robust event listeners
+      const handler = () => onFiles(input.files);
+      input.addEventListener('change', handler, true);
+      input.addEventListener('input',  handler, true);
+
+      // Proxy trigger always opens the native picker
+      const proxy = findChooseProxy();
+      if (proxy) {
+        const open = (e) => {
+          e && (e.preventDefault(), e.stopPropagation());
+          try { input.value = ''; } catch {}
+          if (typeof input.showPicker === 'function') input.showPicker(); else input.click();
+
+          // Poll in case the site UI swallows the 'change' event
+          let t=0; const id=setInterval(()=>{
+            t++;
+            if ((input.files||[]).length){ onFiles(input.files); clearInterval(id); }
+            if (t>40) clearInterval(id);
+          }, 50);
+        };
+        proxy.addEventListener('click', open, true);
+        proxy.addEventListener('keydown', (e)=>{ if(e.key==='Enter'||e.key===' '){ open(e); } }, true);
+      }
+
+      // Initial sync on first bind
+      onFiles(input.files);
+    }
+
+    // Rebind on UI mutations (hot-reloads / partial rerenders)
+    const mo = new MutationObserver(() => bind(findInput()));
+    mo.observe(document.documentElement, { childList:true, subtree:true });
+
+    bind(findInput());
+
+    // DevTools helper
+    window.__fl_diag = () => ({
+      pickedFiles: window.__fl_state.pickedFiles.map(f=>({name:f.name,size:f.size})),
+      analyzed: window.__fl_state.analyzed,
+      parsedHorses: Array.isArray(window.__fl_state.parsedHorses) ? window.__fl_state.parsedHorses.length : 0
+    });
   });
 })();
-
