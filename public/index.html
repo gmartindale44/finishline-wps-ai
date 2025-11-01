@@ -59,23 +59,30 @@
       <div class="controls">
         <!-- ===== HORSE DATA: ROBUST FILE PICKER ===== -->
         <div id="fl-picker-wrap" class="fl-picker-row">
-          <button id="fl-file-proxy" type="button" class="fl-file-btn">Choose Photos / PDF</button>
+          <!-- Primary trigger: label-for relationship works without JS -->
+          <label id="fl-file-proxy" for="fl-file" class="fl-file-btn" tabindex="0" role="button" aria-controls="fl-file">
+            Choose Photos / PDF
+          </label>
           <span id="file-selected-label" class="fl-file-label">No file selected</span>
-          <!-- Keep the input in the DOM; we toggle visibility with CSS so it isn't replaced by frameworks -->
-          <input id="fl-file" type="file" multiple
-                 accept=".png,.jpg,.jpeg,.webp,.pdf,image/png,image/jpeg,application/pdf"
-                 class="fl-visually-hidden" />
+
+          <!-- Primary hidden input (stays in DOM; not removed) -->
+          <input id="fl-file" type="file" multiple hidden
+                 accept=".png,.jpg,.jpeg,.webp,.pdf,image/png,image/jpeg,application/pdf" />
+
+          <!-- Backup visible input (auto-shown if primary fails; also shown with ?debug=picker) -->
+          <input id="fl-file-backup" type="file" multiple class="fl-file-backup"
+                 accept=".png,.jpg,.jpeg,.webp,.pdf,image/png,image/jpeg,application/pdf" />
         </div>
         <style id="fl-picker-guard">
-          .fl-picker-row { display:flex; align-items:center; gap:.75rem; position:relative; z-index:10005; }
-          .fl-file-btn { padding:.55rem .9rem; border-radius:.6rem; background:#2a2f3a; color:#fff;
-                         cursor:pointer; user-select:none; position:relative; z-index:10010;
-                         border:1px solid rgba(255,255,255,.12); }
+          .fl-picker-row { display:flex; align-items:center; gap:.75rem; position:relative; z-index: 10005; }
+          .fl-file-btn   { padding:.55rem .9rem; border-radius:.6rem; background:#2a2f3a; color:#fff; cursor:pointer;
+                           user-select:none; position:relative; z-index:10010; border:1px solid rgba(255,255,255,.12); }
           .fl-file-btn:hover { filter:brightness(1.1); }
           .fl-file-label { font-size:.9rem; opacity:.85; }
-          .fl-visually-hidden { position:fixed; left:-9999px; top:auto; width:1px; height:1px; overflow:hidden; }
-          /* If anything overlays the area, it won't eat clicks */
-          .toast,.modal,.overlay,[data-overlay],[data-dialog] { pointer-events:none !important; }
+          /* backup input is hidden by default; we'll unhide if primary fails */
+          .fl-file-backup { position:absolute; left:-9999px; width:1px; height:1px; opacity:0; }
+          /* common overlays that may steal clicks */
+          .overlay,.modal,.toast,[data-overlay],[data-dialog] { pointer-events:none !important; }
         </style>
         
         <button id="analyze-btn" type="button" class="btn btn-secondary" disabled>Analyze with AI</button>

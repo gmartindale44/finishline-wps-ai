@@ -23,15 +23,14 @@
 
 
   // ---------- GLOBAL STATE (durable, explicit) ----------
-
-  window.__fl_state = window.__fl_state || {
+  // Note: State is managed in the file picker IIFE below
+  const state = window.__fl_state || {
     pickedFiles: [],
     parsedHorses: null,
     analyzed: false,
     ui: {}
   };
-
-  const state = window.__fl_state;
+  window.__fl_state = state;
 
   // Lock predict button initially
   if (predictBtnEl && !state.analyzed) {
@@ -190,11 +189,11 @@
 
 
 
-  // ---------- FILE PICKER (robust, button-based) ----------
+  // ---------- FILE PICKER (robust, label-based with backup) ----------
 
   (() => {
-    // Shared state for the page
-    const st = (window.__fl_state = window.__fl_state || {
+    // Durable state shared with rest of app
+    const ST = (window.__fl_state = window.__fl_state || {
       pickedFiles: [],
       parsedHorses: null,
       analyzed: false,
@@ -202,74 +201,133 @@
     });
 
     function $(id){ return document.getElementById(id); }
-    function enableAnalyze(enable){
-      // Try common IDs/selectors from prior versions
-      const btn = $('analyze-btn') || document.querySelector('#analyze-with-ai, [data-analyze-btn], button#analyze, button[name="analyze"]');
+    function q(sel){ return document.querySelector(sel); }
+
+    // Try multiple selectors for the Analyze button (adjust if you have a known ID)
+    function enableAnalyze(enable) {
+      const btn = $('analyze-btn') || q('#analyze-with-ai, [data-analyze-btn], button#analyze, button[name="analyze"]');
       if (btn) btn.disabled = !enable;
     }
 
     function updateLabel() {
       const label = $('file-selected-label');
-      const n = st.pickedFiles?.length || 0;
+      const n = ST.pickedFiles?.length || 0;
       if (label) label.textContent = n ? `Loaded ${n} file${n>1?'s':''}` : 'No file selected';
       enableAnalyze(n > 0);
     }
 
     function bindPicker() {
-      const proxy = $('fl-file-proxy');
-      const input = $('fl-file');
-      if (!proxy || !input) return;
+      const proxy   = $('fl-file-proxy');
+      const primary = $('fl-file');
+      const backup  = $('fl-file-backup');
 
-      // Always ensure input is enabled and present
-      input.disabled = false;
+      if (!proxy || !primary || !backup) return;
 
-      // If you select the same file twice, browsers won't fire "change".
-      // Clearing the value BEFORE opening guarantees change will fire.
-      proxy.onclick = () => {
-        input.value = '';
-        // run in microtask so the clear lands before open()
-        queueMicrotask(() => input.click());
-      };
+      // z-index/pointer safety
+      proxy.style.zIndex = '10010';
 
-      input.onchange = () => {
-        st.pickedFiles = Array.from(input.files || []);
-        st.analyzed = false; // new files mean new analysis
+      // Primary "change" handler → persist files and enable analyze
+      const onChosen = (files) => {
+        ST.pickedFiles = Array.from(files || []);
+        ST.analyzed = false;
         updateLabel();
       };
+
+      primary.onchange = () => onChosen(primary.files);
+      backup.onchange  = () => onChosen(backup.files);
+
+      // If selecting the same file again, some browsers won't fire "change".
+      // We clear the value *before* opening so change will fire.
+      const openPrimary = () => {
+        try {
+          primary.value = '';
+        } catch {}
+        // Prefer native showPicker if available (some browsers)
+        if (typeof primary.showPicker === 'function') {
+          primary.showPicker();
+        } else {
+          primary.click();
+        }
+      };
+
+      // Click / keyboard handlers on the label
+      proxy.addEventListener('click', (e) => {
+        e.preventDefault(); e.stopPropagation();
+
+        // Try primary first with a short timeout to detect failure
+        let fired = false;
+        const t = setTimeout(() => {
+          if (!fired && (!primary.files || primary.files.length === 0)) {
+            // Promote backup to visible if primary seems blocked
+            backup.style.position = 'static';
+            backup.style.opacity  = '1';
+            backup.focus();
+            backup.click();
+          }
+        }, 900);
+
+        const prevCount = (primary.files || []).length;
+        const onTempChange = () => {
+          fired = true;
+          clearTimeout(t);
+          primary.removeEventListener('change', onTempChange);
+        };
+        primary.addEventListener('change', onTempChange);
+
+        openPrimary();
+
+        // Extra guard: if the element under the cursor isn't the proxy, log it
+        const rect = proxy.getBoundingClientRect();
+        const el = document.elementFromPoint(rect.left + 5, rect.top + 5);
+        if (el && el !== proxy) {
+          console.debug('[picker] overlay element on top of proxy:', el);
+        }
+      });
+
+      proxy.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          proxy.click();
+        }
+      });
+
+      // Debug mode: show backup input if ?debug=picker
+      const isDebug = new URLSearchParams(location.search).get('debug') === 'picker';
+      if (isDebug) {
+        backup.style.position = 'static';
+        backup.style.opacity  = '1';
+      }
+
+      updateLabel();
     }
 
-    // Rebind on DOM changes in case a framework re-rendered the row
+    // Rebind when DOM mutates (prevents "lost" input on dynamic renders)
     const mo = new MutationObserver(() => bindPicker());
     mo.observe(document.body || document.documentElement, { childList:true, subtree:true });
     document.addEventListener('DOMContentLoaded', bindPicker);
     bindPicker();
 
-    // Expose a tiny diag helper if you need it
-    window.__fl_diag = () => ({
-      pickedFiles: st.pickedFiles.map(f => ({name:f.name, size:f.size})),
-      analyzed: !!st.analyzed,
-      parsedHorses: Array.isArray(st.parsedHorses) ? st.parsedHorses.length : 0
-    });
+    // Helpers for the rest of the app:
 
-    // --- Hook these into your existing Analyze/Predict handlers ---
-
-    // Call this at the end of a successful ANALYZE:
-    window.__fl_markAnalyzeSuccess = (parsedHorses=[]) => {
-      st.parsedHorses = parsedHorses;
-      st.analyzed = true;
-      // Do NOT clear st.pickedFiles so Predict can rely on it if needed
-      const input = $('fl-file');
-      if (input) input.value = ''; // allows re-selecting same file later
-      enableAnalyze(false); // optional: disable Analyze until user picks new files
+    window.__fl_markAnalyzeSuccess = (parsed=[]) => {
+      ST.parsedHorses = parsed;
+      ST.analyzed = true;
+      // Do NOT clear ST.pickedFiles; only clear the primary input value so user can reselect same file later
+      const primary = $('fl-file');
+      if (primary) primary.value = '';
+      enableAnalyze(false); // optional: disable analyze until new file is chosen
     };
 
-    // Use this in PREDICT to gather horses (prefers analyzed set):
     window.__fl_getHorsesForPrediction = (fallbackReaderFn) => {
-      if (st.analyzed && Array.isArray(st.parsedHorses) && st.parsedHorses.length) {
-        return st.parsedHorses;
-      }
+      if (ST.analyzed && Array.isArray(ST.parsedHorses) && ST.parsedHorses.length) return ST.parsedHorses;
       return typeof fallbackReaderFn === 'function' ? fallbackReaderFn() : [];
     };
+
+    window.__fl_diag = () => ({
+      pickedFiles: ST.pickedFiles.map(f => ({ name:f.name, size:f.size })),
+      analyzed: !!ST.analyzed,
+      parsedHorses: Array.isArray(ST.parsedHorses) ? ST.parsedHorses.length : 0
+    });
   })();
 
 
