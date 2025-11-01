@@ -25,11 +25,13 @@ export async function scoreHorses({ horses = [], meta = {}, research = {}, accur
 
   const schema = {
     type: "object",
+    additionalProperties: false,
     properties: {
       scores: {
         type: "array",
         items: {
           type: "object",
+          additionalProperties: false,
           properties: {
             name: { type: "string" },
             win: { type: "number" },
