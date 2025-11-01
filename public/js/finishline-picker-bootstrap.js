@@ -186,21 +186,87 @@
 
   // ---------- FILE PICKER ----------
 
-  if (fileInput) {
+  // ✅ Robust, re-selectable file picker
 
-    fileInput.addEventListener('change', () => {
+  (() => {
 
-      state.files = Array.from(fileInput.files || []);
+    const input = document.getElementById('fl-file')
 
-      const n = state.files.length;
+      || document.getElementById('photo-picker')
 
-      if (fileLabel) fileLabel.textContent = n ? `Loaded ${n} file${n>1?'s':''}` : 'No file selected';
+      || document.querySelector('input[type="file"]');
 
-      enable(analyzeBtnEl, true);
+    const btn = document.getElementById('fl-file-btn')
+
+      || document.querySelector('[data-action="open-file"]')
+
+      || document.querySelector('button');
+
+    const label = document.getElementById('file-selected-label')
+
+      || document.getElementById('picker-status');
+
+
+
+    if (!input || !btn) return;
+
+
+
+    // Always clickable and visible priority
+
+    btn.style.pointerEvents = 'auto';
+
+    btn.style.zIndex = 2;
+
+
+
+    // Button opens the native file picker
+
+    btn.addEventListener('click', (e) => {
+
+      e.preventDefault();
+
+      e.stopPropagation();
+
+      input.disabled = false;
+
+      input.style.pointerEvents = 'auto';
+
+      input.click();
 
     });
 
-  }
+
+
+    // When a file is selected
+
+    input.addEventListener('change', () => {
+
+      state.files = Array.from(input.files || []);
+
+      const n = state.files.length;
+
+      if (label) label.textContent = n ? `Loaded ${n} file${n>1?'s':''}` : 'No file selected';
+
+      enable(analyzeBtnEl, !!n);
+
+    });
+
+
+
+    // Helper to clear file input (to allow same file re-selection)
+
+    window.__fl_resetFileInput = function resetFileInput() {
+
+      try { input.value = ''; } catch {}
+
+      if (label) label.textContent = 'No file selected';
+
+      state.files = [];
+
+    };
+
+  })();
 
 
 
