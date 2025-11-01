@@ -8,7 +8,7 @@
 
   // ---------- DOM ----------
 
-  const fileInput = document.getElementById('photo-picker');
+  const fileInput = document.getElementById('file-input') || document.getElementById('photo-picker');
 
   const fileLabel = document.getElementById('file-selected-label') || document.getElementById('picker-status');
 
@@ -136,17 +136,17 @@
 
     // Adapt selectors to your markup if they differ
 
-    const rows = Array.from(document.querySelectorAll('[data-horse-row]'));
+    const rows = Array.from(document.querySelectorAll('[data-horse-row], .horse-row'));
 
     return rows.map(r => ({
 
-      name: r.querySelector('[data-horse-name]')?.value?.trim() || '',
+      name: (r.querySelector('[data-horse-name], .horse-name, input[placeholder*="Horse Name"], input[placeholder*="Name"]') || r.querySelector('input:first-of-type'))?.value?.trim() || '',
 
-      odds: r.querySelector('[data-horse-odds]')?.value?.trim() || '',
+      odds: (r.querySelector('[data-horse-odds], .ml-odds, input[placeholder*="Odds"], input[placeholder*="ML"]') || r.querySelector('input:nth-of-type(2)'))?.value?.trim() || '',
 
-      jockey: r.querySelector('[data-horse-jockey]')?.value?.trim() || '',
+      jockey: (r.querySelector('[data-horse-jockey], .jockey, input[placeholder*="Jockey"]') || r.querySelector('input:nth-of-type(3)'))?.value?.trim() || '',
 
-      trainer: r.querySelector('[data-horse-trainer]')?.value?.trim() || ''
+      trainer: (r.querySelector('[data-horse-trainer], .trainer, input[placeholder*="Trainer"]') || r.querySelector('input:nth-of-type(4)'))?.value?.trim() || ''
 
     })).filter(h => h.name);
 
@@ -234,13 +234,19 @@
 
           const images = await Promise.all(state.files.map(readAsBase64));
 
+          // Convert base64 data URLs to just the base64 part for API
+          const filesPayload = state.files.map((f, i) => {
+            const b64 = images[i].split('base64,')[1] || images[i];
+            return { name: f.name, type: f.type, b64 };
+          });
+
           const ocrRes = await fetch('/api/photo_extract_openai_b64', {
 
             method: 'POST',
 
             headers: { 'Content-Type': 'application/json' },
 
-            body: JSON.stringify({ images, meta })
+            body: JSON.stringify({ files: filesPayload, meta })
 
           });
 
