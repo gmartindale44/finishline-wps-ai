@@ -20,9 +20,9 @@ export default async function handler(req, res){
     }
 
     // Fetch researched factors (self-reference - works on Vercel and local)
-    const factorsUrl = typeof window === 'undefined' && process.env.VERCEL_URL 
-      ? `https://${process.env.VERCEL_URL}/api/factors`
-      : '/api/factors';
+    const host = req.headers.host || 'localhost:3000';
+    const protocol = process.env.VERCEL_URL ? 'https' : 'http';
+    const factorsUrl = `${protocol}://${host}/api/factors`;
     const r = await fetch(factorsUrl, {
       method:'POST',
       headers:{'Content-Type':'application/json'},

@@ -22,9 +22,9 @@ export default async function handler(req,res){
       return res.status(400).json({ error:'No horses provided' });
     }
     // Fallback: call analyze (self-reference - works on Vercel and local)
-    const analyzeUrl = typeof window === 'undefined' && process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}/api/analyze`
-      : '/api/analyze';
+    const host = req.headers.host || 'localhost:3000';
+    const protocol = process.env.VERCEL_URL ? 'https' : 'http';
+    const analyzeUrl = `${protocol}://${host}/api/analyze`;
     const r = await fetch(analyzeUrl, {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ horses, meta })
