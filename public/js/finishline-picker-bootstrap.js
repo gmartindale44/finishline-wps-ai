@@ -13,6 +13,7 @@ const state = { phase: 'idle', lastAnalysis: null };
 let pickedFiles = [];
 let analysisReady = false; // gate for Predict
 let lastAnalyzedHorses = []; // for predict payload
+let LAST_ANALYSIS = null; // Store full analysis response for predict
 
 // ===== CONFIG =====
 const MAX_HORSES = 24;
@@ -197,6 +198,11 @@ function readAsBase64(file) {
 }
 
 // ===== API =====
+async function safeJSON(res){
+  const txt = await res.text();
+  try { return JSON.parse(txt); } catch { return { error: txt.slice(0,200) }; }
+}
+
 async function postJsonSafe(url, payload) {
   const res = await fetch(url, {
     method: 'POST',
@@ -204,23 +210,14 @@ async function postJsonSafe(url, payload) {
     body: JSON.stringify(payload),
   });
 
-  // Always try text first; then parse JSON safely.
-  const text = await res.text();
-  let data;
-  try {
-    data = JSON.parse(text);
-  } catch {
-    // Show the raw page title or first 200 chars to help debugging,
-    // but keep the app from crashing on .json() parse errors.
-    throw new Error(`Non-JSON response (${res.status}): ${text.slice(0, 200)}`);
-  }
+  const j = await safeJSON(res);
 
-  if (!res.ok || data?.ok === false) {
-    const msg = data?.error || `HTTP ${res.status}`;
+  if (!res.ok || j?.ok === false) {
+    const msg = j?.error || `HTTP ${res.status}`;
     throw new Error(msg);
   }
 
-  return data; // { ok:true, ... }
+  return j; // { ok:true, ... }
 }
 
 // ===== ANALYZE =====
@@ -279,9 +276,19 @@ async function onAnalyzeClick() {
     const meta2 = collectMetaFromForm();
     FL_STATE.meta = meta2;
 
-    const data = await postJsonSafe("/api/analyze", { horses, meta: meta2 });
+    const r = await fetch('/api/analyze', { 
+      method:'POST', 
+      headers:{'Content-Type':'application/json'}, 
+      body: JSON.stringify({ horses, meta: meta2 }) 
+    });
 
-    FL_STATE.analysis = { scores: data.scores || [], notes: data.notes || '', version: data.version || 'A2' };
+    const j = await safeJSON(r);
+    if(!r.ok || j.error){
+      throw new Error(j.error || 'Unknown error');
+    }
+
+    LAST_ANALYSIS = j;
+    FL_STATE.analysis = { scores: j.scores || [], notes: j.notes || '', version: j.version || 'A2' };
     
     // Cache and gate predict
     lastAnalyzedHorses = horses;
@@ -319,16 +326,22 @@ async function onPredictClick() {
     setChip('predict', 'Working...', 'working');
     enable(predictBtn, false);
 
-    const data = await postJsonSafe("/api/predict_wps", { 
-      scores: FL_STATE.analysis.scores, 
-      meta: FL_STATE.meta 
+    const r = await fetch('/api/predict_wps', {
+      method:'POST', 
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ lastAnalysis: LAST_ANALYSIS })
     });
 
-    const predictions = data.predictions || {};
-    const win = predictions.win || '—';
-    const place = predictions.place || '—';
-    const show = predictions.show || '—';
-    const confidence = (Number(data.confidence||0)*100).toFixed(1) + "%";
+    const j = await safeJSON(r);
+    if(!r.ok || j.error){
+      throw new Error(j.error || 'Unknown error');
+    }
+
+    const picks = j.picks || {};
+    const win = picks.win || '—';
+    const place = picks.place || '—';
+    const show = picks.show || '—';
+    const confidence = (Number(j.confidence||0)*100).toFixed(1) + "%";
 
     const msg = [
       '⭐ Predictions:',
