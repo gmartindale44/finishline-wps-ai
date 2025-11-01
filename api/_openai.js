@@ -166,13 +166,13 @@ export async function extractEntriesFromImages({ files, meta = {} }) {
     name: "entries",
     schema: {
       type: "object",
-      additionalProperties: false,
+      additionalProperties: true,
       properties: {
         horses: {
           type: "array",
           items: {
             type: "object",
-            additionalProperties: false,
+            additionalProperties: true,
             properties: {
               name: { type: "string" },
               odds: { type: "string" },      // keep original fractional string like "5/1" or "EVS"
@@ -216,12 +216,23 @@ export async function extractEntriesFromImages({ files, meta = {} }) {
     model,
     messages: msg,
     temperature: 0.2,
-    response_format: { type: "json_schema", json_schema: { name: schema.name, schema: schema.schema, strict: true } },
+    response_format: { type: "json_schema", json_schema: { name: schema.name, schema: schema.schema, strict: false } },
   });
 
-  const raw = resp.choices?.[0]?.message?.content || "{}";
+  let raw = "{}";
+  try {
+    raw = resp?.choices?.[0]?.message?.content || "{}";
+  } catch (e) {
+    console.error("⚠️ No message content from model:", e);
+  }
+
   let parsed = {};
-  try { parsed = JSON.parse(raw); } catch { parsed = { horses: [] }; }
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    console.error("⚠️ JSON parse error:", err, "raw:", raw.slice(0, 200));
+    parsed = { horses: [] };
+  }
   const horses = Array.isArray(parsed.horses) ? parsed.horses : [];
 
   // Post-normalize (dedupe by name, fix common OCR odds mistakes)

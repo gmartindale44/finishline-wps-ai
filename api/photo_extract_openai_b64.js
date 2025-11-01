@@ -45,7 +45,15 @@ export default async function handler(req, res) {
 
   } catch (err) {
     console.error('[photo_extract_openai_b64] error', err);
+    const msg = typeof err?.message === "string" ? err.message : String(err);
     const status = err?.status || err?.statusCode || 500;
-    return fail(res, status, String(err?.message || err || 'OCR failed'));
+    return fail(res, status, `OCR failed — ${msg}`, {
+      error: `OCR failed — ${msg}`,
+      detail: {
+        hint: "Ensure FINISHLINE_OPENAI_API_KEY is set and the model supports image input.",
+        envKeys: Object.keys(process.env).filter(k => k.includes("OPENAI")),
+        model: process.env.FINISHLINE_OPENAI_MODEL
+      }
+    });
   }
 }
