@@ -1,9 +1,10 @@
 import OpenAI from "openai";
 import { setCors, ok, fail, badRequest } from './_http.js';
+import { resolveOpenAIKey } from './_openai.js';
 
 export const config = { runtime: 'nodejs' };
 
-const OPENAI_KEY = process.env.FINISHLINE_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
+const OPENAI_KEY = resolveOpenAIKey();
 const OCR_MODEL = process.env.FINISHLINE_OPENAI_MODEL || process.env.OPENAI_OCR_MODEL || 'gpt-4o-mini';
 
 const SYSTEM = `You extract horse race tables into strict JSON only.

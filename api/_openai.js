@@ -1,16 +1,31 @@
 import OpenAI from 'openai';
 
+export function resolveOpenAIKey() {
+  const key =
+    process.env.FINISHLINE_OPENAI_API_KEY ||
+    process.env.OPENAI_API_KEY ||
+    '';
+  return key.trim();
+}
+
+// Export which env name we actually used (handy in logs)
+export const OPENAI_KEY_NAME = process.env.FINISHLINE_OPENAI_API_KEY
+  ? 'FINISHLINE_OPENAI_API_KEY'
+  : (process.env.OPENAI_API_KEY ? 'OPENAI_API_KEY' : '(none)');
+
 function getClient() {
-  const key = process.env.OPENAI_API_KEY;
+  const key = resolveOpenAIKey();
   if (!key) {
-    const e = new Error('Missing OPENAI_API_KEY');
+    const e = new Error(
+      `Missing OpenAI API key. Checked FINISHLINE_OPENAI_API_KEY and OPENAI_API_KEY (used: ${OPENAI_KEY_NAME}).`
+    );
     e.status = 500;
     throw e;
   }
   return new OpenAI({ apiKey: key });
 }
 
-async function jsonCompletion({ system, user, model = 'gpt-4o-mini', schemaHint }) {
+async function jsonCompletion({ system, user, model = 'gpt-4o-mini' }) {
   const client = getClient();
   try {
     const r = await client.chat.completions.create({
@@ -28,7 +43,6 @@ async function jsonCompletion({ system, user, model = 'gpt-4o-mini', schemaHint 
       const parsed = JSON.parse(txt);
       return { ok: true, data: parsed };
     } catch (parseErr) {
-      // Never throw raw here—bubble as a structured error so API can still return JSON.
       return { ok: false, error: 'Parse failed', raw: txt, detail: String(parseErr) };
     }
   } catch (err) {
@@ -36,10 +50,6 @@ async function jsonCompletion({ system, user, model = 'gpt-4o-mini', schemaHint 
   }
 }
 
-/**
- * scoreHorses({ horses, meta }) -> { scores: [...], horseCount, features }
- * Keeps the old export name so frontend stays untouched.
- */
 export async function scoreHorses({ horses = [], meta = {} }) {
   if (!Array.isArray(horses) || horses.length === 0) {
     const e = new Error('No horses provided');
@@ -48,8 +58,8 @@ export async function scoreHorses({ horses = [], meta = {} }) {
   }
 
   const system = `You are a handicapping assistant. Return STRICT JSON with keys:
-  - scores: array of { horse, win, place, show }
-  - features: optional debugging info
+  - "scores": array of { "horse": string, "win": number, "place": number, "show": number }
+  - "features": optional debugging info
   DO NOT include prose, only JSON.`;
 
   const user = { horses, meta };
@@ -74,10 +84,6 @@ export async function scoreHorses({ horses = [], meta = {} }) {
   return data;
 }
 
-/**
- * finalizeWPS({ scores, meta }) -> { predictions: {win, place, show}, confidence, notes? }
- * Kept name to avoid breaking existing imports.
- */
 export async function finalizeWPS({ scores = [], meta = {} }) {
   if (!Array.isArray(scores) || scores.length === 0) {
     const e = new Error('No scores to finalize');
