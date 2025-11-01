@@ -197,27 +197,30 @@ function readAsBase64(file) {
 }
 
 // ===== API =====
-async function postJSON(url, payload) {
+async function postJsonSafe(url, payload) {
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type':'application/json' },
-    body: JSON.stringify(payload)
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
   });
 
+  // Always try text first; then parse JSON safely.
   const text = await res.text();
-  let json;
-  try { 
-    json = JSON.parse(text); 
-  } catch (e) {
-    throw new Error(`Non-JSON response (${res.status}): ${text.slice(0,120)}`);
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    // Show the raw page title or first 200 chars to help debugging,
+    // but keep the app from crashing on .json() parse errors.
+    throw new Error(`Non-JSON response (${res.status}): ${text.slice(0, 200)}`);
   }
 
-  if (!res.ok || json?.ok === false) {
-    const msg = json?.error || json?.message || `HTTP ${res.status}`;
+  if (!res.ok || data?.ok === false) {
+    const msg = data?.error || `HTTP ${res.status}`;
     throw new Error(msg);
   }
 
-  return json;
+  return data; // { ok:true, ... }
 }
 
 // ===== ANALYZE =====
@@ -276,16 +279,9 @@ async function onAnalyzeClick() {
     const meta2 = collectMetaFromForm();
     FL_STATE.meta = meta2;
 
-    const resp = await fetch("/api/analyze", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ horses, meta: meta2 })
-    });
+    const data = await postJsonSafe("/api/analyze", { horses, meta: meta2 });
 
-    const data = await resp.json();
-    if (!data?.ok) throw new Error(data?.error || "Analyze failed");
-
-    FL_STATE.analysis = { scores: data.scores, notes: data.notes, version: data.version };
+    FL_STATE.analysis = { scores: data.scores || [], notes: data.notes || '', version: data.version || 'A2' };
     
     // Cache and gate predict
     lastAnalyzedHorses = horses;
@@ -323,18 +319,15 @@ async function onPredictClick() {
     setChip('predict', 'Working...', 'working');
     enable(predictBtn, false);
 
-    const resp = await fetch("/api/predict_wps", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ analysis: FL_STATE.analysis, meta: FL_STATE.meta })
+    const data = await postJsonSafe("/api/predict_wps", { 
+      scores: FL_STATE.analysis.scores, 
+      meta: FL_STATE.meta 
     });
 
-    const data = await resp.json();
-    if (!data?.ok) throw new Error(data?.error || "Predict failed");
-
-    const win = data.picks?.win?.name || '—';
-    const place = data.picks?.place?.name || '—';
-    const show = data.picks?.show?.name || '—';
+    const predictions = data.predictions || {};
+    const win = predictions.win || '—';
+    const place = predictions.place || '—';
+    const show = predictions.show || '—';
     const confidence = (Number(data.confidence||0)*100).toFixed(1) + "%";
 
     const msg = [
