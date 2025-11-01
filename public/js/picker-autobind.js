@@ -55,13 +55,6 @@
       console.log('[picker] files:', window.__fl_state.pickedFiles.map(f=>f.name));
     }
 
-    function bindInput(input) {
-      if (!input) return;
-      const handler = () => onFiles(input.files);
-      input.addEventListener('change', handler, true);
-      input.addEventListener('input',  handler, true);
-    }
-
     function bind(input){
       if (!input) return;
 
