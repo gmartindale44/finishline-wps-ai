@@ -56,9 +56,21 @@
       <div id="horse-rows" class="rows"></div>
 
       <div class="controls">
-        <input id="file-input" type="file" accept=".png,.jpg,.jpeg,.webp,.pdf" multiple style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;" />
-        <button id="choose-btn" type="button" class="btn">Choose Photos / PDF</button>
-        <span id="file-selected-label" class="muted" style="margin-left:8px;">No file selected.</span>
+        <!-- ✅ Robust file picker (drop-in) -->
+        <div id="fl-picker-wrap" class="picker-row" style="display:flex;gap:.5rem;align-items:center;">
+          <button id="fl-file-btn" type="button" class="btn btn-secondary" style="position:relative;z-index:5;">
+            Choose Photos / PDF
+          </button>
+          <input
+            id="fl-file"
+            type="file"
+            accept="image/*,application/pdf"
+            multiple
+            style="position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0;"
+            aria-hidden="true"
+          />
+          <span id="file-selected-label" class="chip chip-info">No file selected</span>
+        </div>
         
         <button id="analyze-btn" type="button" class="btn btn-secondary" disabled>Analyze with AI</button>
         <button id="predict-btn" type="button" class="btn btn-primary" disabled>Predict W/P/S</button>

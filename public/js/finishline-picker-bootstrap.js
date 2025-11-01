@@ -26,17 +26,17 @@
 
   // ---------- STATE ----------
 
-  const state = {
+  const state = window.__fl_state || {
 
     files: [],
 
-    horses: [],       // current table rows
+    lastAnalysis: null,
 
-    analysis: null,   // last successful analysis
-
-    lock: false
+    ready: false,
 
   };
+
+  window.__fl_state = state;
 
 
 
@@ -60,17 +60,39 @@
 
   // ---------- HELPERS ----------
 
-  function enable(el, yes = true) {
+  function $(sel, root=document) { return root.querySelector(sel); }
 
-    if (!el) return;
+  function enable(el, yes=true){ if(!el) return; el.disabled = !yes; el.classList.toggle('disabled', !yes); }
 
-    el.disabled = !yes;
+  // —— CSS guard so overlays can't block the button
 
-    el.classList.toggle('opacity-50', !yes);
+  (() => {
 
-    el.classList.toggle('cursor-not-allowed', !yes);
+    const id = 'fl-picker-zfix';
 
-  }
+    if (!document.getElementById(id)) {
+
+      const s = document.createElement('style');
+
+      s.id = id;
+
+      s.textContent = `
+
+        #fl-file-btn { position: relative; z-index: 5; pointer-events: auto !important; }
+
+        #fl-picker-wrap { position: relative; z-index: 4; }
+
+        /* If any overlay exists, keep it below the picker */
+
+        .overlay, .modal, .toast { z-index: 3 !important; }
+
+      `;
+
+      document.head.appendChild(s);
+
+    }
+
+  })();
 
 
 
@@ -184,43 +206,33 @@
 
 
 
-  // ---------- FILE PICKER ----------
+  // ---------- FILE PICKER (robust) ----------
 
-  // ✅ Robust, re-selectable file picker
+  function bindFilePicker() {
 
-  (() => {
+    const wrap  = $('#fl-picker-wrap');
 
-    const input = document.getElementById('fl-file')
+    const btn   = $('#fl-file-btn');
 
-      || document.getElementById('photo-picker')
+    const input = $('#fl-file');
 
-      || document.querySelector('input[type="file"]');
+    const label = $('#file-selected-label') || $('#picker-status');
 
-    const btn = document.getElementById('fl-file-btn')
-
-      || document.querySelector('[data-action="open-file"]')
-
-      || document.querySelector('button');
-
-    const label = document.getElementById('file-selected-label')
-
-      || document.getElementById('picker-status');
+    const analyzeBtnEl = $('[data-action="analyze"]') || $('#analyze-btn') || $('#analyze');
 
 
 
-    if (!input || !btn) return;
+    if (!wrap || !btn || !input) return false;
 
 
 
-    // Always clickable and visible priority
+    // Clean old listeners if hot-reload replaced nodes
 
-    btn.style.pointerEvents = 'auto';
+    btn.onclick = null;
 
-    btn.style.zIndex = 2;
+    input.onchange = null;
 
 
-
-    // Button opens the native file picker
 
     btn.addEventListener('click', (e) => {
 
@@ -230,15 +242,11 @@
 
       input.disabled = false;
 
-      input.style.pointerEvents = 'auto';
-
-      input.click();
+      input.click();     // user gesture -> allowed
 
     });
 
 
-
-    // When a file is selected
 
     input.addEventListener('change', () => {
 
@@ -248,25 +256,71 @@
 
       if (label) label.textContent = n ? `Loaded ${n} file${n>1?'s':''}` : 'No file selected';
 
-      enable(analyzeBtnEl, !!n);
+      enable(analyzeBtnEl, n > 0);
 
     });
 
 
 
-    // Helper to clear file input (to allow same file re-selection)
+    // Allow re-selecting the SAME file after analysis by clearing input
 
     window.__fl_resetFileInput = function resetFileInput() {
 
       try { input.value = ''; } catch {}
 
+      state.files = [];
+
       if (label) label.textContent = 'No file selected';
 
-      state.files = [];
+      enable(analyzeBtnEl, false);
 
     };
 
-  })();
+
+
+    // Quick diagnostics you can run in DevTools:  __fl_diag()
+
+    window.__fl_diag = () => ({
+
+      wrap: !!wrap, btn: !!btn, input: !!input, label: !!label,
+
+      filesCount: state.files?.length || 0,
+
+      analyzeEnabled: !!analyzeBtnEl && !analyzeBtnEl.disabled
+
+    });
+
+
+
+    return true;
+
+  }
+
+
+
+  // Bind on first paint and re-bind on DOM replacements
+
+  function ensurePickerBound() {
+
+    if (bindFilePicker()) return;
+
+    const ro = new MutationObserver(() => bindFilePicker());
+
+    ro.observe(document.documentElement, { childList: true, subtree: true });
+
+  }
+
+
+
+  if (document.readyState === 'loading') {
+
+    document.addEventListener('DOMContentLoaded', ensurePickerBound, { once: true });
+
+  } else {
+
+    ensurePickerBound();
+
+  }
 
 
 
