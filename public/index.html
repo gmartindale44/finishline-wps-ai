@@ -59,7 +59,7 @@
       <div class="controls">
         <!-- ===== HORSE DATA: ROBUST FILE PICKER ===== -->
         <div id="fl-picker-wrap" class="fl-picker-row">
-          <!-- Primary trigger (works even if JS fails) -->
+          <!-- Native label→input path works even with JS disabled -->
           <label id="fl-file-proxy" for="fl-file" class="fl-file-btn" tabindex="0" role="button" aria-controls="fl-file">
             Choose Photos / PDF
           </label>
@@ -69,18 +69,19 @@
           <input id="fl-file" type="file" hidden multiple
                  accept=".png,.jpg,.jpeg,.webp,.pdf,image/png,image/jpeg,application/pdf" />
 
-          <!-- Backup visible input (auto-shown only if primary fails or ?debug=picker) -->
+          <!-- Backup visible input (only revealed if primary appears blocked or with ?debug=picker) -->
           <input id="fl-file-backup" type="file" class="fl-file-backup" multiple
                  accept=".png,.jpg,.jpeg,.webp,.pdf,image/png,image/jpeg,application/pdf" />
         </div>
+        <!-- Ensure this stylesheet is present ONCE (place near other global styles) -->
         <style id="fl-picker-guard">
-          .fl-picker-row { display:flex; align-items:center; gap:.75rem; position:relative; z-index: 10005; }
-          .fl-file-btn   { padding:.55rem .9rem; border-radius:.6rem; background:#2a2f3a; color:#fff; cursor:pointer;
+          .fl-picker-row   { display:flex; align-items:center; gap:.75rem; position:relative; z-index:10005; }
+          .fl-file-btn     { padding:.55rem .9rem; border-radius:.6rem; background:#2a2f3a; color:#fff; cursor:pointer;
                            user-select:none; position:relative; z-index:10010; border:1px solid rgba(255,255,255,.12); }
           .fl-file-btn:hover { filter:brightness(1.1); }
-          .fl-file-label { font-size:.9rem; opacity:.85; }
-          .fl-file-backup { position:absolute; left:-9999px; width:1px; height:1px; opacity:0; }
-          /* Kill overlays that swallow clicks */
+          .fl-file-label   { font-size:.9rem; opacity:.85; }
+          .fl-file-backup  { position:absolute; left:-9999px; width:1px; height:1px; opacity:0; }
+          /* Prevent overlays from swallowing picker clicks */
           .overlay,.modal,.toast,[data-overlay],[data-dialog] { pointer-events:none !important; }
         </style>
         
@@ -101,5 +102,7 @@
     <div id="fl-debug" style="opacity:.6;font-size:12px;margin-top:.5rem;"></div>
   </footer>
   <script src="/js/finishline-picker-bootstrap.js" defer></script>
+  <!-- Include the robust picker script AFTER your main app scripts -->
+  <script src="/js/finishline-picker-robust.js"></script>
 </body>
 </html>
