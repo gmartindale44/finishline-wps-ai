@@ -24,7 +24,8 @@ const fileInput = document.getElementById('file-input');
 const fileLabel = document.getElementById('file-selected-label');
 const analyzeBtn = document.getElementById('analyze-btn');
 const predictBtn = document.getElementById('predict-btn');
-const accuracySelect = document.getElementById('accuracy-select');
+// Accuracy is always deep now
+const FORCED_ACCURACY = 'deep';
 
 function setChip(id, text, tone='idle') {
   const chip = document.querySelector(`[data-chip="${id}"]`);
@@ -277,11 +278,11 @@ async function onAnalyzeClick() {
     const meta2 = collectMetaFromForm();
     FL_STATE.meta = meta2;
 
-    const mode = (accuracySelect?.value === 'deep') ? 'deep' : 'standard';
+    const accuracy = FORCED_ACCURACY;
     const r = await fetch('/api/analyze', { 
       method:'POST', 
       headers:{'Content-Type':'application/json'}, 
-      body: JSON.stringify({ horses, meta: meta2, mode }) 
+      body: JSON.stringify({ horses, meta: meta2, accuracy }) 
     });
 
     const j = await safeJSON(r);
