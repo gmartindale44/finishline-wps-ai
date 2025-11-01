@@ -1,15 +1,19 @@
 import OpenAI from "openai";
 import { impliedFromOdds, normalizeProbs } from "./research.js";
 
-export const OPENAI_KEY_NAME = "FINISHLINE_OPENAI_API_KEY";
+export const OPENAI_KEY_NAME = 'FINISHLINE_OPENAI_API_KEY';
 
 export function resolveOpenAIKey() {
-  const k = process.env.FINISHLINE_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
-  if (!k) {
-    const checked = ["FINISHLINE_OPENAI_API_KEY", "OPENAI_API_KEY"].join(", ");
-    throw new Error(`Missing OpenAI API key. Checked: ${checked}`);
+  // Prefer project key, fallback to default OPENAI_API_KEY
+  const key = process.env[OPENAI_KEY_NAME] || process.env.OPENAI_API_KEY;
+  if (!key || typeof key !== 'string' || key.trim().length < 20) {
+    const tried = [OPENAI_KEY_NAME, 'OPENAI_API_KEY'].filter(Boolean).join(', ');
+    const hint =
+      'Missing OpenAI API key. Ensure the key is set for BOTH Production & Preview in Vercel → Settings → Environment Variables.';
+    const note = `Tried: ${tried}`;
+    throw new Error(`${hint} ${note}`);
   }
-  return k;
+  return key.trim();
 }
 
 export function client() {
@@ -260,4 +264,47 @@ export async function extractEntriesFromImages({ files, meta = {} }) {
     });
   }
   return { horses: out, meta, notes: Array.isArray(parsed.notes) ? parsed.notes : [] };
+}
+
+// Minimal OpenAI client (no SDK dependency assumptions)
+export async function openaiJSON({ url, body }) {
+  const apiKey = resolveOpenAIKey();
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    throw new Error(`OpenAI HTTP ${res.status}: ${txt || res.statusText}`);
+  }
+  return res.json();
+}
+
+// Turn parsed text into normalized horse rows: [{name, odds, jockey, trainer}]
+export function normalizeHorsesFromText(lines) {
+  // very forgiving parser: "Name | ML | Jockey | Trainer" or with spaces
+  const out = [];
+  for (const raw of lines) {
+    const line = String(raw || '').trim().replace(/\s+/g, ' ');
+    if (!line) continue;
+    // try: split by pipe first, else collapse multiple spaces
+    let cols = line.includes('|')
+      ? line.split('|').map(s => s.trim())
+      : line.split(/\s{2,}/).map(s => s.trim());
+    // Heuristics: expect at least "name" + something
+    const [name, odds, jockey, trainer] = [
+      cols[0] || '',
+      cols[1] || '',
+      cols[2] || '',
+      cols[3] || '',
+    ].map(s => s.trim());
+    if (name && name.length > 1) {
+      out.push({ name, odds, jockey, trainer });
+    }
+  }
+  return out;
 }

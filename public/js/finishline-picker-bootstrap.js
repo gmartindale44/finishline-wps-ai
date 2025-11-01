@@ -34,9 +34,23 @@
 
     ready: false,
 
+    analyzedOk: false,
+
   };
 
   window.__fl_state = state;
+
+  // Lock predict button initially
+
+  if (predictBtnEl) {
+
+    if (!state.analyzedOk) {
+
+      predictBtnEl.setAttribute('disabled', '');
+
+    }
+
+  }
 
 
 
@@ -376,7 +390,7 @@
 
           const json = await resp.json();
 
-          if (!resp.ok) throw new Error(json?.error || "OCR failed");
+          if (!resp.ok || !json.ok) throw new Error(json?.error || "OCR failed");
 
           horses = Array.isArray(json.horses) ? json.horses : [];
 
@@ -452,6 +466,9 @@
 
         sessionStorage.setItem('fl_last_analysis', JSON.stringify(analysis));
 
+        // State guard: only unlock predict on successful analyze
+        window.__fl_state = window.__fl_state || {};
+        window.__fl_state.analyzedOk = true;
         enable(predictBtnEl, true);
 
 
