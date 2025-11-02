@@ -109,7 +109,7 @@ export default async function handler(req, res) {
     const mean = have.length ? (have.reduce((a, b) => a + b, 0) / have.length) : 0;
     const filled = speedRaw.map(v => (v == null ? mean : v));
     const z = zScores(filled);                                 // can be negative/positive
-    const speedScore = z.map(v => 0.5 + Math.max(Math.min(v, 2), -2) / 4); // clamp z to [-2,2] then scale → [0..1]
+    const speedScore = z.map(v => 0.5 + Math.max(Math.min(v, 2.5), -2.5) / 5); // clamp z to [-2.5,2.5] then scale → [0..1]
 
     // Bias: small bump for sprint/turf & sprint post position
     const miles = toMiles(distance_input);
@@ -122,6 +122,12 @@ export default async function handler(req, res) {
       // very light surface-distance interplay
       if (surf.includes('turf') && sprint) b += (z[i] || 0) * 0.05;
 
+      // surface bias for routes: dirt slight boost, turf slight penalty
+      if (!sprint) {
+        if (surf.includes('dirt')) b += 0.02;
+        if (surf.includes('turf')) b -= 0.02;
+      }
+
       // sprint post bias: slight inside preference, slight penalty outside
       const post = Number(h?.post);
       if (!Number.isNaN(post) && sprint) {
@@ -133,7 +139,7 @@ export default async function handler(req, res) {
     });
 
     // Dynamic weights
-    const W = sprint ? { o: 0.40, s: 0.50, b: 0.10 } : { o: 0.45, s: 0.45, b: 0.10 };
+    const W = sprint ? { o: 0.40, s: 0.50, b: 0.10 } : { o: 0.40, s: 0.50, b: 0.10 };
 
     // Composite
     const comp = horses.map((h, i) =>
@@ -169,8 +175,9 @@ export default async function handler(req, res) {
       };
     });
 
-    // Confidence: mean composite, clamped 8%–85%
-    const confidence = Math.max(0.08, Math.min(0.85, ord.reduce((a, b) => a + b.v, 0) / (ord.length || 1)));
+    // Confidence: mean composite ** 0.9, clamped 8%–85%
+    const meanComp = ord.reduce((a, b) => a + b.v, 0) / (ord.length || 1);
+    const confidence = Math.max(0.08, Math.min(0.85, Math.pow(meanComp, 0.9)));
 
     return res.status(200).json({ picks, confidence, meta: { track, surface, distance_mi: miles } });
   } catch (err) {
