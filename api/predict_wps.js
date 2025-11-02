@@ -209,12 +209,12 @@ export default async function handler(req, res) {
     const top6 = fullRanking.slice(0, 6);
     const top6Names = top6.map(o => horses[o.i]?.name || '').filter(Boolean);
 
-    function ticketConfidence(legs, probs, ranking) {
+    function ticketConfidence(legs, probs, fullRanking) {
       let conf = 1;
       legs.forEach((leg) => {
         const legProbs = leg.map(name => {
-          const rankIdx = ranking.findIndex(r => r.name === name);
-          return rankIdx >= 0 ? probs[rankIdx] : 0;
+          const rankEntry = fullRanking.find(r => horses[r.i]?.name === name);
+          return rankEntry ? probs[rankEntry.i] : 0;
         });
         if (legProbs.length > 0) {
           const legMax = Math.max(...legProbs);
@@ -268,15 +268,15 @@ export default async function handler(req, res) {
     const tickets = {
       trifecta: trifecta.map(t => ({
         ...t,
-        confidence: ticketConfidence(t.legs, probs, ranking),
+        confidence: ticketConfidence(t.legs, probs, fullRanking),
       })),
       superfecta: superfecta.map(t => ({
         ...t,
-        confidence: ticketConfidence(t.legs, probs, ranking),
+        confidence: ticketConfidence(t.legs, probs, fullRanking),
       })),
       superHighFive: superHighFive.map(t => ({
         ...t,
-        confidence: ticketConfidence(t.legs, probs, ranking),
+        confidence: ticketConfidence(t.legs, probs, fullRanking),
       })),
     };
 
