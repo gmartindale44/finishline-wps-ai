@@ -5,7 +5,7 @@
 
   // Ensure a root exists (idempotent)
   function ensureRoot() {
-    let root = document.getElementById('fl-results-root');
+    let root = document.getElementById('fl-results-root') || document.getElementById('results-panel-root');
     if (!root) {
       root = document.createElement('div');
       root.id = 'fl-results-root';
