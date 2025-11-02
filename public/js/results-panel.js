@@ -425,7 +425,7 @@
             <div style="font-size:13px;opacity:0.75;color:#b8bdd4;">Bankroll</div>
             <input id="fl-bk" type="range" min="50" max="500" step="10" value="${BK_DEFAULT}" style="width:120px;accent-color:#8b5cf6;" />
             <div id="fl-bk-val" style="font-weight:600;color:#dfe3ff;min-width:50px;text-align:right;">$${BK_DEFAULT}</div>
-            <button id="fl-copy-slip" class="fl-button" style="padding:6px 12px;font-size:13px;">Copy Bet Slip</button>
+            <button id="fl-copy-slip" class="fl-button" style="padding:6px 12px;font-size:13px;background:#5c86ff;border-color:#5c86ff;color:#fff;">Copy Bet Slip</button>
           </div>
         </div>
         <ul id="fl-plan-lines" class="fl-list" style="margin:8px 0 6px 0;padding-left:20px;"></ul>
@@ -521,11 +521,11 @@
 
     // Render exotics if available
     if (tickets) {
-      renderExotics(tickets);
+      renderExotics(tickets, pred.strategy?.recommended);
     }
 
     // Render strategy if available (with fallback)
-    renderStrategy(pred.strategy || null, { confidence: pred.confidence });
+    renderStrategy(pred.strategy || null, { confidence: pred.confidence, picks: picks || pred.picks });
     
     // Diagnostics: log strategy payload
     try {
