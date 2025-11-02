@@ -475,39 +475,49 @@
           });
         }
 
-        // Get toggle states
-        const useDistance = document.getElementById('use-distance')?.checked ?? true;
-        const useSurface = document.getElementById('use-surface')?.checked ?? true;
-        const usePriors = document.getElementById('use-priors')?.checked ?? true;
+        // Sync inputs to state before predict
+        syncInputsToState();
+
+        // Build payload for Model v2
+        const payload = {
+          horses: horses.map(h => ({
+            name: h.name,
+            odds: h.odds_norm || h.odds_raw || h.odds,
+            post: h.post || null,
+          })),
+          track: window.__fl_state.track || meta.track || '',
+          surface: window.__fl_state.surface || meta.surface || '',
+          distance_input: window.__fl_state.distance_input || meta.distance || '',
+          speedFigs: window.__fl_state.speedFigs || {},
+        };
+
+        __fl_diag('predict payload', payload);
 
         const r = await fetch('/api/predict_wps', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            features,
-            useDistance,
-            useSurface,
-            usePriors,
-            track: meta.track,
-            distance: meta.distance,
-            surface: meta.surface,
-          }),
+          body: JSON.stringify(payload),
         });
 
         const data = await r.json();
 
         if (!r.ok) {
-          if (data.error === 'insufficient_features' || data.reason) {
-            toast(data.reason || 'Not enough usable signals—try adding Speed/PP photo or enable priors.', 'warn');
+          if (data.error === 'insufficient_features' || data.reason || data.error === 'prediction_error') {
+            toast(data.message || data.reason || 'Prediction failed. Check your inputs.', 'warn');
             return;
           }
-          throw new Error(data?.error || `Predict failed: ${r.status}`);
+          throw new Error(data?.error || data?.message || `Predict failed: ${r.status}`);
         }
 
-        // New response format: { win, place, show } or { predictions: { win: {name, odds}, ... } }
-        const winName = data.predictions?.win?.name || data.win || null;
-        const placeName = data.predictions?.place?.name || data.place || null;
-        const showName = data.predictions?.show?.name || data.show || null;
+        // Model v2 response format: { picks: [{slot, name, odds, reasons}], confidence, meta }
+        const picks = data.picks || [];
+        const winPick = picks.find(p => p.slot === 'Win') || picks[0];
+        const placePick = picks.find(p => p.slot === 'Place') || picks[1];
+        const showPick = picks.find(p => p.slot === 'Show') || picks[2];
+
+        const winName = winPick?.name || null;
+        const placeName = placePick?.name || null;
+        const showName = showPick?.name || null;
 
         // Validate response
         if (!winName || !placeName || !showName) {
@@ -515,8 +525,10 @@
           throw new Error('Predict returned null results. Check that at least 3 horses have valid names and odds.');
         }
 
-        // Use server-provided confidence directly (already 0-100 range)
-        const confPct = typeof data.confidence === 'number' && data.confidence >= 0 ? data.confidence : 7;
+        // Confidence is 0-1 range, convert to 0-100
+        const confPct = typeof data.confidence === 'number' && data.confidence >= 0 
+          ? Math.round(data.confidence * 100) 
+          : 7;
 
         // Store prediction in localStorage
         try {
@@ -525,14 +537,21 @@
           console.warn('[Predict] Could not save to localStorage:', e);
         }
         
-        // Build horses array with odds from predictions response
-        const horsesForDisplay = (data.horses || horses || []).map(h => ({
-          name: h.horse || h.name || '',
-          odds: h.odds || '',
-          speedFig: h.speedFig || null,
-          prob: h.prob || null,
+        // Build reasons object from picks (only show non-empty reasons)
+        const reasons = {};
+        picks.forEach(p => {
+          if (p.reasons && p.reasons.length > 0) {
+            reasons[p.name] = p.reasons;
+          }
+        });
+
+        // Build horses array for display
+        const horsesForDisplay = horses.map(h => ({
+          name: h.name,
+          odds: h.odds_norm || h.odds_raw || h.odds,
+          speedFig: window.__fl_state.speedFigs?.[h.name] || h.speedFig || null,
         }));
-        
+
         // Show persistent results panel with reasons
         if (window.FLResults?.show) {
           window.FLResults.show({
@@ -541,15 +560,14 @@
             show: showName,
             confidence: confPct,
             horses: horsesForDisplay,
-            reasons: data.reasons || {},
+            reasons: reasons,
           });
-          
+
           console.log('[Predict] Results displayed in panel', { win: winName, place: placeName, show: showName, confidence: confPct });
         } else {
           // Fallback to toast if panel not available
           toast(
-            data?.message ||
-              `Predictions ready.\nWin: ${data.win}\nPlace: ${data.place}\nShow: ${data.show}\nConfidence: ${confidence > 0 ? confidence.toFixed(2) : '—'}`,
+            `Predictions ready.\nWin: ${winName}\nPlace: ${placeName}\nShow: ${showName}\nConfidence: ${confPct > 0 ? confPct + '%' : '—'}`,
             'success'
           );
         }
