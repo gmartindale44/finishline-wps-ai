@@ -331,7 +331,7 @@
             horses: horsesForDisplay,
           });
           
-          console.log('[Predict] Results displayed in panel', { win: data.win, place: data.place, show: data.show, confidence });
+          console.log('[Predict] Results displayed in panel', { win: winName, place: placeName, show: showName, confidence: confPct });
         } else {
           // Fallback to toast if panel not available
           toast(
