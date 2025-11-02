@@ -82,6 +82,9 @@
         copy();
       } else if (e.target.matches('[data-pin]')) {
         togglePin();
+      } else if (e.target.matches('[data-tab]')) {
+        const tab = e.target.getAttribute('data-tab');
+        switchTab(tab);
       }
     });
 
@@ -124,10 +127,80 @@
     `;
   }
 
+  function switchTab(tab) {
+    if (!elements) return;
+    if (tab === 'predictions') {
+      elements.tabPredictions.style.borderBottomColor = '#8b5cf6';
+      elements.tabPredictions.style.color = '#dfe3ff';
+      elements.tabExotics.style.borderBottomColor = 'transparent';
+      elements.tabExotics.style.color = '#b8bdd4';
+      elements.tabContentPredictions.style.display = 'block';
+      elements.tabContentExotics.style.display = 'none';
+    } else if (tab === 'exotics') {
+      elements.tabPredictions.style.borderBottomColor = 'transparent';
+      elements.tabPredictions.style.color = '#b8bdd4';
+      elements.tabExotics.style.borderBottomColor = '#8b5cf6';
+      elements.tabExotics.style.color = '#dfe3ff';
+      elements.tabContentPredictions.style.display = 'none';
+      elements.tabContentExotics.style.display = 'block';
+    }
+  }
+
+  function renderExotics(tickets) {
+    if (!elements || !elements.exoticsContent) return;
+    if (!tickets || (!tickets.trifecta && !tickets.superfecta && !tickets.superHighFive)) {
+      elements.exoticsContent.innerHTML = '<p style="opacity:0.7;text-align:center;padding:20px;">No exotic ticket suggestions available.</p>';
+      return;
+    }
+
+    let html = '';
+
+    // Trifecta
+    if (tickets.trifecta && tickets.trifecta.length > 0) {
+      html += '<div style="margin-bottom:20px;"><h4 style="font-size:15px;font-weight:700;margin-bottom:8px;color:#dfe3ff;">Trifecta Ideas</h4>';
+      tickets.trifecta.forEach(t => {
+        const confPct = Math.round((t.confidence || 0) * 100);
+        html += `<div style="padding:10px;background:rgba(124,92,255,0.1);border:1px solid rgba(124,92,255,0.3);border-radius:10px;margin-bottom:8px;">
+          <div style="font-weight:600;color:#dfe3ff;margin-bottom:4px;">${t.label}</div>
+          <div style="font-size:12px;opacity:0.75;">~confidence ${confPct}%</div>
+        </div>`;
+      });
+      html += '</div>';
+    }
+
+    // Superfecta
+    if (tickets.superfecta && tickets.superfecta.length > 0) {
+      html += '<div style="margin-bottom:20px;"><h4 style="font-size:15px;font-weight:700;margin-bottom:8px;color:#dfe3ff;">Superfecta Ideas</h4>';
+      tickets.superfecta.forEach(t => {
+        const confPct = Math.round((t.confidence || 0) * 100);
+        html += `<div style="padding:10px;background:rgba(124,92,255,0.1);border:1px solid rgba(124,92,255,0.3);border-radius:10px;margin-bottom:8px;">
+          <div style="font-weight:600;color:#dfe3ff;margin-bottom:4px;">${t.label}</div>
+          <div style="font-size:12px;opacity:0.75;">~confidence ${confPct}%</div>
+        </div>`;
+      });
+      html += '</div>';
+    }
+
+    // Super High Five
+    if (tickets.superHighFive && tickets.superHighFive.length > 0) {
+      html += '<div style="margin-bottom:20px;"><h4 style="font-size:15px;font-weight:700;margin-bottom:8px;color:#dfe3ff;">Super High Five Ideas</h4>';
+      tickets.superHighFive.forEach(t => {
+        const confPct = Math.round((t.confidence || 0) * 100);
+        html += `<div style="padding:10px;background:rgba(124,92,255,0.1);border:1px solid rgba(124,92,255,0.3);border-radius:10px;margin-bottom:8px;">
+          <div style="font-weight:600;color:#dfe3ff;margin-bottom:4px;">${t.label}</div>
+          <div style="font-size:12px;opacity:0.75;">~confidence ${confPct}%</div>
+        </div>`;
+      });
+      html += '</div>';
+    }
+
+    elements.exoticsContent.innerHTML = html;
+  }
+
   function render(pred) {
     ensure();
 
-    const { win, place, show, confidence, horses = [] } = pred || {};
+    const { win, place, show, confidence, horses = [], reasons = {}, tickets } = pred || {};
 
     const getOdds = (name) => {
       if (!name) return '';
@@ -150,7 +223,6 @@
     elements.confBar.style.width = `${pct}%`;
 
     // Reasons chips (show for winner) - now with +/- deltas
-    const reasons = pred.reasons || {};
     const winnerReasons = reasons[win] || [];
     
     if (winnerReasons.length > 0 && elements.reasonsSection && elements.reasonsChips) {
@@ -172,6 +244,11 @@
     const isPinned = localStorage.getItem('fl_results_pinned') === '1';
     elements.pinBtn.textContent = isPinned ? 'Unpin' : 'Pin';
 
+    // Render exotics if available
+    if (tickets) {
+      renderExotics(tickets);
+    }
+
     // Open and apply pinned state
     elements.root.classList.add(clsOpen);
     if (isPinned) {
@@ -182,6 +259,9 @@
 
     elements.dialog.setAttribute('aria-hidden', 'false');
     elements.closeBtn.focus({ preventScroll: true });
+
+    // Reset to predictions tab
+    switchTab('predictions');
   }
 
   function hide() {

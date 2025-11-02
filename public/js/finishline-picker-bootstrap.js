@@ -260,29 +260,6 @@
         const mainPayload = await mainResp.json();
         const entries = mainPayload?.entries || mainPayload?.data?.entries || [];
 
-        // Process speed file if provided
-        let speedData = [];
-        if (speedFile) {
-          toast('Processing speed/PP photo...', 'info');
-          let speedB64, speedMime;
-          if (speedFile.type === 'application/pdf') {
-            ({ b64: speedB64, mime: speedMime } = await pdfFirstPageToDataURL(speedFile));
-          } else {
-            ({ b64: speedB64, mime: speedMime } = await downscaleImageToDataURL(speedFile));
-          }
-
-          const speedResp = await fetch("/api/photo_extract_openai_b64", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ imagesB64: [speedB64], kind: "speed" })
-          });
-
-          if (speedResp.ok) {
-            const speedPayload = await speedResp.json();
-            speedData = speedPayload?.speed || [];
-          }
-        }
-
         // Normalize entries to { name, odds, jockey, trainer, speedFig } format
         const normalizedHorses = Array.isArray(entries) ? entries.map(e => {
           // Handle case-insensitive keys from OCR
@@ -299,20 +276,16 @@
           };
         }).filter(h => h.name && h.name.length > 1) : [];
 
-        // Merge speed data by name
-        if (speedData.length > 0) {
-          const speedMap = new Map();
-          speedData.forEach(s => {
-            const key = horseKey(s.name);
-            if (key && s.speedFig != null) {
-              speedMap.set(key, Number(s.speedFig));
-            }
-          });
-
+        // Merge speedFigs from main OCR response (extracted from main image)
+        if (mainPayload?.speedFigs) {
+          mergeSpeedFigsIntoState(mainPayload.speedFigs);
+          
+          // Also merge into normalized horses if not already present
           normalizedHorses.forEach(h => {
             const key = horseKey(h.name);
-            if (speedMap.has(key) && !h.speedFig) {
-              h.speedFig = speedMap.get(key);
+            const speedFigFromState = window.__fl_state.speedFigs?.[key] || window.__fl_state.speedFigs?.[h.name];
+            if (speedFigFromState && !h.speedFig) {
+              h.speedFig = speedFigFromState;
             }
           });
         }
