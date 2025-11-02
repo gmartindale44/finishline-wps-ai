@@ -7,7 +7,6 @@
     surface: null,
     distance_input: null, // raw user distance string (miles OR furlongs)
     track: null,
-    speedFile: null,
     features: {},
   });
 
