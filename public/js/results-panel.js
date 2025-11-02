@@ -36,15 +36,19 @@
           <div id="fl-badge-place" class="fl-badge"></div>
           <div id="fl-badge-show" class="fl-badge"></div>
         </section>
-        <section class="fl-results__confidence">
-          <div class="fl-results__confidence-label">
-            <span>Confidence:</span>
-            <strong id="fl-conf-pct">0%</strong>
-          </div>
-          <div class="fl-progress">
-            <div id="fl-conf-bar" class="fl-progress__bar"></div>
-          </div>
-        </section>
+          <section class="fl-results__confidence">
+            <div class="fl-results__confidence-label">
+              <span>Confidence:</span>
+              <strong id="fl-conf-pct">0%</strong>
+            </div>
+            <div class="fl-progress">
+              <div id="fl-conf-bar" class="fl-progress__bar"></div>
+            </div>
+          </section>
+          <section id="fl-reasons" class="fl-results__reasons" style="margin-top:12px;display:none;">
+            <div style="font-size:13px;opacity:0.8;margin-bottom:6px;">Why these picks?</div>
+            <div id="fl-reasons-chips" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+          </section>
       </div>
     `;
 
@@ -61,6 +65,8 @@
       badgeShow: wrap.querySelector('#fl-badge-show'),
       confPct: wrap.querySelector('#fl-conf-pct'),
       confBar: wrap.querySelector('#fl-conf-bar'),
+      reasonsSection: wrap.querySelector('#fl-reasons'),
+      reasonsChips: wrap.querySelector('#fl-reasons-chips'),
     };
 
     // Event listeners
@@ -137,6 +143,19 @@
     const pct = Math.max(0, Math.min(100, Number(confidence) || 0));
     elements.confPct.textContent = `${pct.toFixed(0)}%`;
     elements.confBar.style.width = `${pct}%`;
+
+    // Reasons chips (show for winner)
+    const reasons = pred.reasons || {};
+    const winnerReasons = reasons[win] || [];
+    
+    if (winnerReasons.length > 0 && elements.reasonsSection && elements.reasonsChips) {
+      elements.reasonsChips.innerHTML = winnerReasons
+        .map(reason => `<span class="fl-reason-chip" style="display:inline-block;padding:4px 10px;background:rgba(92,134,255,0.15);border:1px solid rgba(92,134,255,0.3);border-radius:12px;font-size:12px;color:#b8bdd4;">${reason}</span>`)
+        .join('');
+      elements.reasonsSection.style.display = 'block';
+    } else if (elements.reasonsSection) {
+      elements.reasonsSection.style.display = 'none';
+    }
 
     // Update pin button text
     const isPinned = localStorage.getItem('fl_results_pinned') === '1';

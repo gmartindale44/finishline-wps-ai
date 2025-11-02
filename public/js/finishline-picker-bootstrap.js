@@ -170,7 +170,7 @@
         const payload = await resp.json();
         const entries = payload?.entries || payload?.data?.entries || [];
 
-        // Normalize entries to { name, odds, jockey, trainer } format
+        // Normalize entries to { name, odds, jockey, trainer, speedFig } format
         const normalizedHorses = Array.isArray(entries) ? entries.map(e => {
           // Handle case-insensitive keys from OCR
           const lower = {};
@@ -182,6 +182,7 @@
             odds: String(lower.odds || lower.ml_odds || lower.price || lower.odd || ''),
             jockey: String(lower.jockey || lower.rider || lower.j || ''),
             trainer: String(lower.trainer || lower.trainer_name || lower.t || ''),
+            speedFig: typeof lower.speedfig === 'number' ? lower.speedfig : (lower.speedfig ? Number(lower.speedfig) : null),
           };
         }).filter(h => h.name && h.name.length > 1) : [];
 
@@ -275,16 +276,20 @@
           date: (document.getElementById('race-date')?.value || '').trim(),
         };
 
+        // Convert horses to entries format with speedFig
+        const entries = horses.map(h => ({
+          horse: h.name,
+          odds: h.odds_norm || h.odds_raw || h.odds,
+          jockey: h.jockey || '',
+          trainer: h.trainer || '',
+          speedFig: h.speedFig || null,
+        }));
+
         const r = await fetch('/api/predict_wps', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            horses: horses.map(h => ({
-              name: h.name,
-              odds: h.odds_norm || h.odds_raw || h.odds,
-              jockey: h.jockey || '',
-              trainer: h.trainer || '',
-            })),
+            entries,
             meta,
           }),
         });
@@ -308,20 +313,14 @@
         const confPct = typeof data.confidence === 'number' && data.confidence >= 0 ? data.confidence : 7;
         
         // Build horses array with odds from predictions response
-        const horsesForDisplay = horses || [];
+        const horsesForDisplay = (data.horses || horses || []).map(h => ({
+          name: h.horse || h.name || '',
+          odds: h.odds || '',
+          speedFig: h.speedFig || null,
+          prob: h.prob || null,
+        }));
         
-        // Enhance with odds from predictions if available
-        if (data.predictions) {
-          const winHorse = horsesForDisplay.find(h => (h.name || '').toLowerCase() === (winName || '').toLowerCase());
-          const placeHorse = horsesForDisplay.find(h => (h.name || '').toLowerCase() === (placeName || '').toLowerCase());
-          const showHorse = horsesForDisplay.find(h => (h.name || '').toLowerCase() === (showName || '').toLowerCase());
-          
-          if (data.predictions.win?.odds && winHorse) winHorse.odds = data.predictions.win.odds;
-          if (data.predictions.place?.odds && placeHorse) placeHorse.odds = data.predictions.place.odds;
-          if (data.predictions.show?.odds && showHorse) showHorse.odds = data.predictions.show.odds;
-        }
-        
-        // Show persistent results panel instead of toast
+        // Show persistent results panel with reasons
         if (window.FLResults?.show) {
           window.FLResults.show({
             win: winName,
@@ -329,6 +328,7 @@
             show: showName,
             confidence: confPct,
             horses: horsesForDisplay,
+            reasons: data.reasons || {},
           });
           
           console.log('[Predict] Results displayed in panel', { win: winName, place: placeName, show: showName, confidence: confPct });

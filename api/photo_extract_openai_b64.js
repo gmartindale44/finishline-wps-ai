@@ -28,7 +28,7 @@ export default async function handler(req, res) {
     }
 
     const content = [
-      { type: "text", text: "Extract a JSON object {entries:[{horse, odds, jockey, trainer}...]} strictly. No prose." },
+      { type: "text", text: "Extract a JSON object {entries:[{horse, odds, jockey, trainer, speedFig}...]} strictly. Include speedFig if present (e.g., from '(114*)' format). No prose." },
       ...imagesB64.map(b64 => ({ type: "image_url", image_url: { url: `data:image/png;base64,${b64}` } }))
     ];
 
@@ -41,6 +41,20 @@ export default async function handler(req, res) {
     const text = r?.choices?.[0]?.message?.content ?? "{}";
     let json;
     try { json = JSON.parse(text); } catch { json = { raw: text }; }
+
+    // Normalize entries to ensure speedFig is present
+    if (json.entries && Array.isArray(json.entries)) {
+      json.entries = json.entries.map(e => ({
+        horse: e.horse || e.name || '',
+        jockey: e.jockey || '',
+        trainer: e.trainer || '',
+        odds: e.odds || '',
+        speedFig: typeof e.speedFig === 'number' ? e.speedFig : (e.speedFig ? Number(e.speedFig) : null),
+      }));
+    }
+
+    // Ensure notes structure
+    if (!json.notes) json.notes = { alsoRans: [] };
 
     return res.status(200).json({ ok: true, model, ...json });
   } catch (err) {
