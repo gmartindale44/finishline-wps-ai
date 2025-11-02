@@ -1,6 +1,4 @@
 import { setCors } from './_http.js';
-import { readFileSync } from 'fs';
-import { join } from 'path';
 
 export const config = { runtime: 'nodejs' };
 
@@ -9,24 +7,50 @@ function json(res, status, data) {
   res.status(status).json(data);
 }
 
-// Load priors
+// Load priors (inline for Vercel compatibility)
+const DEFAULT_PRIORS = {
+  jockey: {
+    "javier castellano": 0.17,
+    "ricardo santana": 0.16,
+    "john c kimmel": 0.11,
+    "irad ortiz jr": 0.18,
+    "jose ortiz": 0.16,
+    "florent geroux": 0.14,
+    "joel rosario": 0.15
+  },
+  trainer: {
+    "chad brown": 0.24,
+    "bill mott": 0.18,
+    "john c kimmel": 0.12,
+    "bob baffert": 0.22,
+    "todd pletcher": 0.20,
+    "steve asmussen": 0.16,
+    "brad cox": 0.19
+  },
+  default: {
+    jockey: 0.12,
+    trainer: 0.12
+  }
+};
+
 let priors = null;
-function getPriors() {
+async function getPriors() {
   if (priors) return priors;
   try {
-    const priorsPath = join(process.cwd(), 'public', 'data', 'priors.json');
-    const data = readFileSync(priorsPath, 'utf8');
-    priors = JSON.parse(data);
-    return priors;
+    // Try to fetch from public URL (works in Vercel)
+    const baseUrl = process.env.VERCEL_URL 
+      ? `https://${process.env.VERCEL_URL}` 
+      : (process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000');
+    const resp = await fetch(`${baseUrl}/data/priors.json`);
+    if (resp.ok) {
+      priors = await resp.json();
+      return priors;
+    }
   } catch (e) {
-    console.warn('[predict_wps] Could not load priors.json, using defaults');
-    priors = {
-      jockey: {},
-      trainer: {},
-      default: { jockey: 0.12, trainer: 0.12 },
-    };
-    return priors;
+    console.warn('[predict_wps] Could not fetch priors.json, using defaults', e.message);
   }
+  priors = DEFAULT_PRIORS;
+  return priors;
 }
 
 // Name normalization
@@ -107,7 +131,7 @@ export default async function handler(req, res) {
       return json(res, 400, { error: 'Need at least 3 horses' });
     }
 
-    const priorsData = getPriors();
+    const priorsData = await getPriors();
 
     // Build per-horse signal components
     const scoresA = []; // Odds model
