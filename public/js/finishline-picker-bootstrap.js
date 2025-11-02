@@ -582,6 +582,7 @@
         : { horses: [] };
 
       const horses = (form && Array.isArray(form.horses)) ? form.horses : [];
+      console.debug('[FL] predict click -> horses collected:', horses.length, horses);
       if (horses.length < 3) {
         toast('Predict failed: Need at least 3 horses', 'error');
         return;
@@ -635,19 +636,17 @@
   }
 
   // === Binding (robust) =====================================================
+  // Use event delegation so even re-rendered buttons fire predict.
   function bindPredict() {
-    const bindOne = (btn) => {
-      if (!btn || btn.__flBound) return;
-      btn.addEventListener('click', predictNow, { passive: true });
-      btn.__flBound = true;
-    };
-    // Bind current
-    document.querySelectorAll('[data-action="predict-wps"], #predict-wps, #predictWpsBtn').forEach(bindOne);
-    // Bind future (DOM mutations)
-    const mo = new MutationObserver(() => {
-      document.querySelectorAll('[data-action="predict-wps"], #predict-wps, #predictWpsBtn').forEach(bindOne);
-    });
-    mo.observe(document.body, { childList: true, subtree: true });
+    if (document.__flDelegatedPredict) return;
+    document.addEventListener('click', (ev) => {
+      const btn = ev.target.closest('[data-action="predict-wps"], #predict-wps, #predictWpsBtn');
+      if (!btn) return;
+      console.debug('[FL] predict button click detected', btn);
+      predictNow();
+    }, { capture: true, passive: true });
+    document.__flDelegatedPredict = true;
+    console.debug('[FL] delegated predict binding active');
   }
 
   // Kickoff
