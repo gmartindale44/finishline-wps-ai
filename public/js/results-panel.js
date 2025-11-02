@@ -198,6 +198,12 @@
   }
 
   function render(pred) {
+    // Guard: ensure modal root exists before rendering
+    if (!root || !document.body.contains(root)) {
+      console.warn('[FLResults] Modal root not available; skipping render.');
+      return;
+    }
+
     ensure();
 
     const { win, place, show, confidence, horses = [], reasons = {}, tickets } = pred || {};
@@ -351,13 +357,27 @@
     }
   }
 
-  // Public API
+  // Public API (null-safe)
   window.FLResults = {
     show(pred) {
-      lastPred = pred;
-      render(pred);
+      try {
+        if (!pred || typeof pred !== 'object') {
+          console.warn('[FLResults] Invalid prediction data');
+          return;
+        }
+        lastPred = pred;
+        render(pred);
+      } catch (err) {
+        console.error('[FLResults] show() error:', err);
+      }
     },
-    hide,
+    hide() {
+      try {
+        hide();
+      } catch (err) {
+        console.error('[FLResults] hide() error:', err);
+      }
+    },
   };
 })();
 

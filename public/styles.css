@@ -116,6 +116,37 @@ input,select{width:100%;padding:10px 12px;border:1px solid var(--border);border-
 .foot{max-width:1080px;margin:32px auto 48px;padding:0 20px;color:var(--muted)}
 .muted{color:var(--muted)}
 .remove-btn{background:#231b3e;color:#ffb4c2;border:1px solid rgba(255,90,122,.3)}
+/* ─────────────────────────────────────────────────
+   FinishLine toast (non-blocking notifications)
+   ───────────────────────────────────────────────── */
+.fl-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%) translateY(16px);
+  background: rgba(110, 78, 238, 0.95); /* fits dark theme (purple-ish) */
+  color: #fff;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 14px;
+  line-height: 1.4;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.35);
+  opacity: 0;
+  z-index: 9999;
+  transition: opacity 180ms ease, transform 180ms ease;
+  pointer-events: none;
+  max-width: 90%;
+  text-align: center;
+}
+.fl-toast-in {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+.fl-toast-out {
+  opacity: 0;
+  transform: translateX(-50%) translateY(16px);
+}
+
 /* Ensure status badges and overlays don't block clicks */
 .badge,
 .status-badge,

@@ -91,6 +91,29 @@
     catch { console.log(`[FL] ${label}:`, obj); }
   }
 
+  // ─────────────────────────────────────────────
+  // Toast helper (lightweight, no deps)
+  // ─────────────────────────────────────────────
+  function showToast(message, opts = {}) {
+    try {
+      const dur = opts.durationMs ?? 3000;
+      const el = document.createElement('div');
+      el.className = 'fl-toast';
+      el.textContent = message || 'Notice';
+      document.body.appendChild(el);
+      // force reflow for animation
+      void el.offsetWidth;
+      el.classList.add('fl-toast-in');
+      setTimeout(() => {
+        el.classList.remove('fl-toast-in');
+        el.classList.add('fl-toast-out');
+        setTimeout(() => el.remove(), 250);
+      }, dur);
+    } catch (e) {
+      console.warn('[FinishLine] toast error:', e);
+    }
+  }
+
   function qAnalyze() {
     return document.querySelector('[data-fl-analyze]') || document.getElementById('analyze-btn') || document.querySelector('button.analyze');
   }
@@ -401,13 +424,13 @@
     const horses = getHorsesForPrediction();
 
     if (!horses || horses.length < 3) {
-      toast('Not enough horses to predict. Analyze first or add rows. (Need at least 3 with name + odds)', 'error');
+      showToast('Not enough horses to predict. Analyze first or add rows. (Need at least 3 with name + odds)');
       return;
     }
 
     await withBusy(predictBtn, async () => {
       try {
-        toast('Generating predictions...', 'info');
+        showToast('Generating predictions...');
         
         // Collect meta from form
         const meta = {
@@ -464,24 +487,42 @@
 
         __fl_diag('predict payload', payload);
 
-        const r = await fetch('/api/predict_wps', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
+        let r;
+        let data = null;
+        try {
+          r = await fetch('/api/predict_wps', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
 
-        const data = await r.json();
-
-        if (!r.ok) {
-          if (data.error === 'insufficient_features' || data.reason || data.error === 'prediction_error') {
-            toast(data.message || data.reason || 'Prediction failed. Check your inputs.', 'warn');
+          // Robust JSON parsing
+          try {
+            const text = await r.text();
+            data = text ? JSON.parse(text) : null;
+          } catch (parseErr) {
+            console.error('[Predict] JSON parse error:', parseErr);
+            showToast('Prediction response parse error – check console.');
             return;
           }
-          throw new Error(data?.error || data?.message || `Predict failed: ${r.status}`);
+        } catch (fetchErr) {
+          console.error('[Predict] Fetch error:', fetchErr);
+          showToast('Prediction failed (connection error).');
+          return;
+        }
+
+        if (!r.ok) {
+          console.error('[Predict] Error response:', data);
+          if (data?.error === 'insufficient_features' || data?.reason || data?.error === 'prediction_error') {
+            showToast(data.message || data.reason || 'Prediction failed. Check your inputs.');
+            return;
+          }
+          showToast(`Prediction failed: ${data?.error || data?.message || `HTTP ${r.status}`}`);
+          return;
         }
 
         // Model v2 response format: { picks: [{slot, name, odds, reasons}], confidence, meta }
-        const picks = data.picks || [];
+        const picks = data?.picks || [];
         const winPick = picks.find(p => p.slot === 'Win') || picks[0];
         const placePick = picks.find(p => p.slot === 'Place') || picks[1];
         const showPick = picks.find(p => p.slot === 'Show') || picks[2];
@@ -493,7 +534,8 @@
         // Validate response
         if (!winName || !placeName || !showName) {
           console.error('[Predict] Invalid response:', data);
-          throw new Error('Predict returned null results. Check that at least 3 horses have valid names and odds.');
+          showToast('Predict returned invalid results. Check that at least 3 horses have valid names and odds.');
+          return;
         }
 
         // Confidence is 0-1 range, convert to 0-100
@@ -523,29 +565,31 @@
           speedFig: window.__fl_state.speedFigs?.[h.name] || h.speedFig || null,
         }));
 
-        // Show persistent results panel with reasons and tickets
-        if (window.FLResults?.show) {
-          window.FLResults.show({
-            win: winName,
-            place: placeName,
-            show: showName,
-            confidence: confPct,
-            horses: horsesForDisplay,
-            reasons: reasons,
-            tickets: data.tickets || null,
-          });
+        // Show persistent results panel with reasons and tickets (null-safe)
+        try {
+          if (window.FLResults?.show) {
+            window.FLResults.show({
+              win: winName,
+              place: placeName,
+              show: showName,
+              confidence: confPct,
+              horses: horsesForDisplay,
+              reasons: reasons,
+              tickets: data.tickets || null,
+            });
 
-          console.log('[Predict] Results displayed in panel', { win: winName, place: placeName, show: showName, confidence: confPct, tickets: data.tickets });
-        } else {
-          // Fallback to toast if panel not available
-          toast(
-            `Predictions ready.\nWin: ${winName}\nPlace: ${placeName}\nShow: ${showName}\nConfidence: ${confPct > 0 ? confPct + '%' : '—'}`,
-            'success'
-          );
+            console.log('[Predict] Results displayed in panel', { win: winName, place: placeName, show: showName, confidence: confPct, tickets: data.tickets });
+          } else {
+            // Fallback to toast if panel not available
+            showToast(`Predictions ready. Win: ${winName}, Place: ${placeName}, Show: ${showName}`);
+          }
+        } catch (modalErr) {
+          console.error('[Predict] Modal render error:', modalErr);
+          showToast('Prediction display error – check console.');
         }
       } catch (e) {
-        console.error('[Predict]', e);
-        toast(`Predict failed: ${e.message}`, 'error');
+        console.error('[Predict] Unexpected error:', e);
+        showToast(`Prediction failed: ${e?.message || 'Unknown error'}`);
       }
     });
   }
