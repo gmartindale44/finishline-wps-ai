@@ -1,2 +1,4 @@
-/* public/finishline-picker-guard.css */
-#analyze-btn, #analyze-with-ai, [data-analyze-btn] { pointer-events: auto; }
+/* Ensures the picker button/input are always clickable above overlays */
+#fl-picker-wrap { position: relative; z-index: 10000; }
+[data-fl-file-btn] { position: relative; z-index: 10010; pointer-events: auto !important; }
+#fl-file { position: relative; z-index: 10011; pointer-events: auto !important; }

@@ -488,10 +488,15 @@
           console.debug('[Analyze] analyzed scores length:', analysis.scores?.length || 0);
         }
 
-        // Persist analyzed state using the helper function
+        // Persist analyzed state - DO NOT clear parsedHorses
         window.__fl_state = window.__fl_state || {};
         window.__fl_state.parsedHorses = horses;
         window.__fl_state.analyzed = true;
+        
+        // Only clear the file input value so same file can be re-selected
+        const wrap = document.querySelector('#fl-picker-wrap') || document;
+        const input = wrap.querySelector('input[type="file"]') || document.querySelector('input[type="file"]');
+        if (input) input.value = '';
         
         if (typeof window.__fl_markAnalyzeSuccess === 'function') {
           window.__fl_markAnalyzeSuccess(horses);
@@ -536,18 +541,19 @@
     predictBtnEl.addEventListener('click', async () => {
 
       // Prefer parsed horses from __fl_state when available
-      let horses;
-      if (window.__fl_state && Array.isArray(window.__fl_state.parsedHorses) && window.__fl_state.parsedHorses.length) {
-        horses = window.__fl_state.parsedHorses;
-      } else if (typeof window.__fl_getHorsesForPrediction === 'function') {
-        horses = window.__fl_getHorsesForPrediction(readHorsesFromTable);
-      } else {
-        // Fallback: try to read from table
-        horses = readHorsesFromTable();
+      function getHorsesForPrediction() {
+        const st = window.__fl_state || {};
+        if (Array.isArray(st.parsedHorses) && st.parsedHorses.length > 0) {
+          return st.parsedHorses;
+        }
+        // Fallback to reading from table if needed
+        return readHorsesFromTable(); // existing function
       }
 
-      if (!horses?.length) {
-        alert('Please analyze first (no horses available).');
+      const horses = getHorsesForPrediction();
+
+      if (!horses || horses.length === 0) {
+        alert('No horses provided');
         return;
       }
 

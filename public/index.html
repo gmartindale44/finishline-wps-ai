@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>FinishLine WPS AI</title>
   <link rel="stylesheet" href="./styles.css" />
-  <link rel="stylesheet" href="./finishline-picker-guard.css" />
+  <link rel="stylesheet" href="/finishline-picker-guard.css" />
 </head>
 <body>
   <header class="hero">
@@ -58,20 +58,10 @@
 
       <div class="controls">
         <!-- ===== HORSE DATA: ROBUST FILE PICKER ===== -->
-        <div id="fl-picker-wrap" class="fl-picker-row">
-          <!-- Native label→input path works even with JS disabled -->
-          <label id="fl-file-proxy" for="fl-file" class="fl-file-btn" tabindex="0" role="button" aria-controls="fl-file">
-            Choose Photos / PDF
-          </label>
-          <span id="file-selected-label" class="fl-file-label">No file selected</span>
-
-          <!-- Primary hidden input (never removed from DOM) -->
-          <input id="fl-file" type="file" hidden multiple
-                 accept=".png,.jpg,.jpeg,.webp,.pdf,image/png,image/jpeg,application/pdf" />
-
-          <!-- Backup visible input (only revealed if primary appears blocked or with ?debug=picker) -->
-          <input id="fl-file-backup" type="file" class="fl-file-backup" multiple
-                 accept=".png,.jpg,.jpeg,.webp,.pdf,image/png,image/jpeg,application/pdf" />
+        <div id="fl-picker-wrap" class="picker-row">
+          <button type="button" data-fl-file-btn>Choose Photos / PDF</button>
+          <input id="fl-file" type="file" accept=".png,.jpg,.jpeg,.webp,.pdf,image/*,application/pdf" hidden multiple>
+          <span id="file-selected-label">No file selected</span>
         </div>
         <!-- Ensure this stylesheet is present ONCE (place near other global styles) -->
         <style id="fl-picker-guard">
