@@ -5,15 +5,12 @@ export const OPENAI_KEY_NAME = 'FINISHLINE_OPENAI_API_KEY';
 
 export function resolveOpenAIKey() {
   // Prefer project key, fallback to default OPENAI_API_KEY
-  const key = process.env[OPENAI_KEY_NAME] || process.env.OPENAI_API_KEY;
-  if (!key || typeof key !== 'string' || key.trim().length < 20) {
-    const tried = [OPENAI_KEY_NAME, 'OPENAI_API_KEY'].filter(Boolean).join(', ');
-    const hint =
-      'Missing OpenAI API key. Ensure the key is set for BOTH Production & Preview in Vercel → Settings → Environment Variables.';
-    const note = `Tried: ${tried}`;
-    throw new Error(`${hint} ${note}`);
-  }
+  const key = process.env[OPENAI_KEY_NAME] || process.env.OPENAI_API_KEY || '';
   return key.trim();
+}
+
+export function resolveOpenAIModel(def = 'gpt-4o-mini') {
+  return process.env.FINISHLINE_OPENAI_MODEL || def;
 }
 
 export function client() {
