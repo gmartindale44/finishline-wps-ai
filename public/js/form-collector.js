@@ -1,41 +1,66 @@
-// FinishLine WPS — resilient Horse Data collector
+// FinishLine WPS — Resilient Horse Data collector
 
-window.FLForm = window.FLForm || {};
+// Turns the visible "Horse Data" grid into { horses: [{name, odds, trainer, jockey}] }
 
-window.FLForm.collect = function collect() {
-  const root = document.querySelector('[data-fl-horses]') || document.body;
+// Works even if markup shifts between previews.
 
-  const inputs = [...root.querySelectorAll('input,textarea,select')].filter(el => el.offsetParent && el.type !== 'hidden');
+(function () {
+  function findHorsePanel() {
+    // Prefer an explicit marker if present
+    const marker = document.querySelector('[data-fl-horses]');
+    if (marker) return marker;
 
-  const rows = new Map();
+    // Fallback: locate by heading text
+    const nodes = [...document.querySelectorAll('*')];
+    const hit = nodes.find(n => /horse\s*data/i.test(n.textContent || ''));
+    return hit ? hit.closest('section,div,form') || hit.parentElement : document.body;
+  }
 
-  inputs.forEach(el => {
-    const row = (el.closest('[data-horse-row]') || el.closest('[class*="row"],[class*="grid"],div')) || el;
+  function bucketByRow(elems) {
+    const buckets = new Map();
+    elems.forEach(el => {
+      const rowEl = el.closest('[data-horse-row]') || el.closest('[class*="row"],[class*="grid"]') || el.parentElement || el;
+      const key = rowEl.getAttribute && rowEl.getAttribute('data-horse-row') || Math.round(rowEl.getBoundingClientRect().top / 8);
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key).push(el);
+    });
+    return [...buckets.values()];
+  }
 
-    const key = row.getAttribute('data-horse-row') || Math.round(row.getBoundingClientRect().top / 8);
+  function scrapeHorses(root) {
+    const inputs = [...root.querySelectorAll('input,textarea,select')]
+      .filter(el => el && el.offsetParent && el.type !== 'hidden');
+    const rows = bucketByRow(inputs);
+    const horses = [];
 
-    if (!rows.has(key)) rows.set(key, []);
+    rows.forEach(cols => {
+      const vals = cols.map(el => (el.value || '').trim()).filter(Boolean);
+      // Heuristic: [name, odds, trainer?, jockey?] — keep if odds looks numeric/fractional
+      if (vals.length >= 2 && /\d/.test(vals[1])) {
+        const [name, odds, trainer = '', jockey = ''] = vals;
+        horses.push({ name, odds, trainer, jockey });
+      }
+    });
 
-    rows.get(key).push(el);
-  });
-
-  const horses = [];
-
-  [...rows.values()].forEach(cols => {
-    const vals = cols.map(el => (el.value || '').trim()).filter(Boolean);
-
-    if (vals.length >= 2) {
-      const [name, odds, trainer = '', jockey = ''] = vals;
-
-      if (/\d/.test(odds)) horses.push({ name, odds, trainer, jockey });
+    // Deduplicate by name, keep order, max 12
+    const seen = new Set();
+    const uniq = [];
+    for (const h of horses) {
+      if (h.name && !seen.has(h.name)) {
+        seen.add(h.name);
+        uniq.push(h);
+      }
     }
-  });
+    return uniq.slice(0, 12);
+  }
 
-  const uniq = [];
+  window.FLForm = window.FLForm || {};
+  window.FLForm.collect = function collect() {
+    const root = findHorsePanel();
+    const horses = scrapeHorses(root);
+    return { horses };
+  };
 
-  const seen = new Set();
-
-  for (const h of horses) { if (h.name && !seen.has(h.name)) { seen.add(h.name); uniq.push(h); } }
-
-  return { horses: uniq.slice(0, 12) };
-};
+  // Debug hook
+  console.debug('[FL] form-collector loaded');
+})();

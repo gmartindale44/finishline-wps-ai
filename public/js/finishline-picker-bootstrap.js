@@ -569,138 +569,89 @@
 
   if (analyzeBtn) analyzeBtn.addEventListener('click', onAnalyze);
 
-  // ─────────────────────────────────────────────────────────────
-  // Bulletproof Predict binding + API fallback (snake/kebab)
-  // ─────────────────────────────────────────────────────────────
-  (function() {
-    const toast = (m, ok = false) => {
-      try {
-        let t = document.getElementById('fl-toast');
-        if (!t) {
-          t = document.createElement('div');
-          t.id = 'fl-toast';
-          Object.assign(t.style, {
-            position: 'fixed',
-            right: '16px',
-            bottom: '16px',
-            padding: '10px 14px',
-            borderRadius: '10px',
-            color: '#fff',
-            background: ok ? 'rgba(18,160,90,.95)' : 'rgba(210,64,64,.95)',
-            zIndex: 99999
-          });
-          document.body.appendChild(t);
-        }
-        t.textContent = m;
-        t.style.opacity = '1';
-        setTimeout(() => { t.style.opacity = '0'; }, 2200);
-      } catch {}
+  // === Utilities ============================================================
+  function toast(msg, type = 'error') {
+    try { window.FLToast && window.FLToast.show(msg, type); }
+    catch (e) { console[type === 'error' ? 'error' : 'log']('[FL toast]', msg); }
+  }
+
+  async function predictNow() {
+    try {
+      const form = (window.FLForm && typeof window.FLForm.collect === 'function')
+        ? window.FLForm.collect()
+        : { horses: [] };
+
+      const horses = (form && Array.isArray(form.horses)) ? form.horses : [];
+      if (horses.length < 3) {
+        toast('Predict failed: Need at least 3 horses', 'error');
+        return;
+      }
+
+      // Optional: read race meta if present
+      const dateEl = document.querySelector('input[name="race_date"], [placeholder*="mm/dd"]');
+      const trackEl = document.querySelector('input[name="track"], [placeholder*="Churchill"], [placeholder*="Aqueduct"]');
+      const surfaceEl = document.querySelector('select[name="surface"]');
+      const distEl = document.querySelector('input[name="distance"], [placeholder*="miles"], [placeholder*="furl"]');
+
+      const payload = {
+        race: {
+          date: dateEl?.value || '',
+          track: trackEl?.value || '',
+          surface: surfaceEl?.value || '',
+          distance: distEl?.value || ''
+        },
+        horses
+      };
+
+      const res = await fetch('/api/predict_wps', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        const t = await res.text();
+        throw new Error(`API ${res.status}: ${t}`);
+      }
+
+      const data = await res.json();
+      // Strategy/exotics may be omitted by older previews; results-panel has fallbacks
+      console.debug('[FL] predict payload ok', data);
+      if (window.FLResults && typeof window.FLResults.show === 'function') {
+        window.FLResults.show({
+          picks: data.picks || null,
+          confidence: data.confidence || null,
+          why: data.why || null,
+          strategy: data.strategy || null,
+          exotic: data.exotics || data.exotic || null
+        });
+      } else {
+        toast('Renderer missing. Please refresh.', 'error');
+      }
+    } catch (e) {
+      console.error('[FL] predict failed', e);
+      toast(`Predict failed: ${e.message || e}`, 'error');
+    }
+  }
+
+  // === Binding (robust) =====================================================
+  function bindPredict() {
+    const bindOne = (btn) => {
+      if (!btn || btn.__flBound) return;
+      btn.addEventListener('click', predictNow, { passive: true });
+      btn.__flBound = true;
     };
-
-    async function predictWPS() {
-      try {
-        syncInputsToState();
-        const horses = getHorsesForPrediction();
-
-        const collect = window.FLForm && window.FLForm.collect;
-        const payload = collect ? collect() : (horses && horses.length >= 3 ? {
-          horses: horses.map(h => ({
-            name: h.name,
-            odds: h.odds_norm || h.odds_raw || h.odds,
-            post: h.post || null,
-          })),
-          track: window.__fl_state.track || '',
-          surface: window.__fl_state.surface || '',
-          distance_input: window.__fl_state.distance_input || '',
-          speedFigs: window.__fl_state.speedFigs || {},
-        } : null);
-
-        if (!payload || !Array.isArray(payload.horses) || payload.horses.length < 3) {
-          throw new Error('Need ≥3 horses');
-        }
-
-        const hit = async (url) => {
-          const res = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
-          if (!res.ok) throw new Error(url + ' → ' + res.status);
-          return res.json();
-        };
-
-        let data;
-        try {
-          data = await hit('/api/predict_wps');
-        } catch {
-          data = await hit('/api/predict-wps');
-        }
-
-        if (window.FLResults && window.FLResults.show) {
-          window.FLResults.show({
-            picks: data.picks || null,
-            strategy: data.strategy || null,
-            tickets: data.tickets || null,
-            confidence: data.confidence || null,
-            meta: { from: 'predict_wps', ts: Date.now() }
-          });
-          toast('Prediction ready', true);
-        } else {
-          console.warn('FLResults.show missing');
-          toast('Renderer missing');
-        }
-      } catch (e) {
-        console.error(e);
-        toast('Predict failed: ' + e.message);
-      }
-    }
-
-    window.FLHandlers = Object.assign(window.FLHandlers || {}, { predictWPS });
-
-    const qSel = '#predictWpsBtn, #predictWPS, [data-action="predict-wps"]';
-
-    function bindDirect() {
-      const b = document.querySelector(qSel);
-      if (b && !b.__flBound) {
-        b.addEventListener('click', predictWPS, { capture: true });
-        b.__flBound = true;
-      }
-    }
-
-    function bindDelegated() {
-      if (document.__flDel) return;
-      document.__flDel = true;
-      document.addEventListener('click', (e) => {
-        const t = e.target.closest && e.target.closest(qSel);
-        if (!t) return;
-        e.preventDefault();
-        predictWPS();
-      }, true);
-    }
-
-    function observeRebind() {
-      if (document.__flObs) return;
-      const mo = new MutationObserver(() => bindDirect());
-      mo.observe(document.body, { childList: true, subtree: true });
-      document.__flObs = mo;
-    }
-
-    function init() {
-      bindDirect();
-      bindDelegated();
-      observeRebind();
-    }
-
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', init, { once: true });
-    } else {
-      init();
-    }
-
-    window.__FL_DIAG__ = () => ({
-      btn: !!document.querySelector(qSel),
-      resultsShow: !!(window.FLResults && window.FLResults.show),
-      formCollect: !!(window.FLForm && window.FLForm.collect)
+    // Bind current
+    document.querySelectorAll('[data-action="predict-wps"], #predict-wps, #predictWpsBtn').forEach(bindOne);
+    // Bind future (DOM mutations)
+    const mo = new MutationObserver(() => {
+      document.querySelectorAll('[data-action="predict-wps"], #predict-wps, #predictWpsBtn').forEach(bindOne);
     });
-  })();
+    mo.observe(document.body, { childList: true, subtree: true });
+  }
+
+  // Kickoff
+  document.readyState === 'loading'
+    ? document.addEventListener('DOMContentLoaded', bindPredict)
+    : bindPredict();
 })();
