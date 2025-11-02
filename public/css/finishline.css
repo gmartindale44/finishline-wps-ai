@@ -201,3 +201,97 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* ─────────────────────────────────────────────────
+   Strategy card styling
+   ───────────────────────────────────────────────── */
+.fl-strategy-card {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+.fl-strategy-title {
+  font-weight: 600;
+  margin-bottom: 6px;
+  font-size: 16px;
+  color: #dfe3ff;
+}
+
+.fl-strategy-reco {
+  margin-bottom: 8px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 14px;
+  color: #dfe3ff;
+}
+
+.fl-strategy-reco .fl-badge {
+  display: inline-block;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(110,78,238,0.2);
+  border: 1px solid rgba(110,78,238,0.35);
+  color: #dfe3ff;
+}
+
+.fl-strategy-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.fl-strategy-chips .fl-chip {
+  display: inline-block;
+  padding: 4px 10px;
+  background: rgba(92,134,255,0.15);
+  border: 1px solid rgba(92,134,255,0.3);
+  border-radius: 12px;
+  font-size: 12px;
+  color: #b8bdd4;
+}
+
+.fl-strategy-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0,1fr));
+  gap: 6px 14px;
+  font-size: 13px;
+  opacity: 0.9;
+  margin-bottom: 8px;
+  color: #b8bdd4;
+}
+
+.fl-strategy-metrics strong {
+  color: #dfe3ff;
+}
+
+.fl-strategy-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-top: 8px;
+}
+
+.fl-strategy-table th,
+.fl-strategy-table td {
+  text-align: left;
+  padding: 6px 8px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  color: #b8bdd4;
+}
+
+.fl-strategy-table thead th {
+  border-top: none;
+  opacity: 0.9;
+  font-weight: 600;
+  color: #dfe3ff;
+}
+
+.fl-strategy-table tbody tr:hover {
+  background: rgba(255,255,255,0.02);
+}
+

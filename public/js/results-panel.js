@@ -72,6 +72,7 @@
       tabContentPredictions: wrap.querySelector('#fl-tab-predictions'),
       tabContentExotics: wrap.querySelector('#fl-tab-exotics'),
       exoticsContent: wrap.querySelector('#fl-exotics-content'),
+      strategyWrap: wrap.querySelector('[data-fl-strategy]') || wrap.querySelector('#fl-strategy'),
     };
 
     // Event listeners
@@ -237,6 +238,82 @@
     elements.exoticsContent.innerHTML = html;
   }
 
+  function renderStrategy(strategy) {
+    if (!elements || !elements.strategyWrap || !strategy) return;
+
+    const s = strategy;
+    const wrap = elements.strategyWrap;
+
+    wrap.innerHTML = '';
+
+    const card = document.createElement('div');
+    card.className = 'fl-strategy-card';
+
+    const h = document.createElement('div');
+    h.className = 'fl-strategy-title';
+    h.textContent = 'FinishLine AI Betting Strategy';
+    card.appendChild(h);
+
+    const reco = document.createElement('div');
+    reco.className = 'fl-strategy-reco';
+    reco.innerHTML = `<span class="fl-badge">Recommended</span> <strong>${s.recommended || 'Across the Board'}</strong>`;
+    card.appendChild(reco);
+
+    // rationale chips
+    if (Array.isArray(s.rationale) && s.rationale.length) {
+      const chips = document.createElement('div');
+      chips.className = 'fl-strategy-chips';
+      s.rationale.forEach(r => {
+        const c = document.createElement('span');
+        c.className = 'fl-chip';
+        c.textContent = r;
+        chips.appendChild(c);
+      });
+      card.appendChild(chips);
+    }
+
+    // small metrics row
+    if (s.metrics) {
+      const m = document.createElement('div');
+      m.className = 'fl-strategy-metrics';
+      const pct = (v) => `${Math.round((Number(v)||0)*100)}%`;
+      m.innerHTML = `
+        <div>Confidence: <strong>${pct(s.metrics.confidence)}</strong></div>
+        <div>Top-3 mass: <strong>${pct(s.metrics.top3Mass)}</strong></div>
+        <div>Gap #1→#2: <strong>${(s.metrics.gap12*100).toFixed(1)}%</strong></div>
+        <div>Gap #2→#3: <strong>${(s.metrics.gap23*100).toFixed(1)}%</strong></div>
+      `;
+      card.appendChild(m);
+    }
+
+    // Bet Types by Profit Potential (static table w/ emojis)
+    if (Array.isArray(s.betTypesTable)) {
+      const tbl = document.createElement('table');
+      tbl.className = 'fl-strategy-table';
+      tbl.innerHTML = `
+        <thead>
+          <tr><th>Strategy</th><th>Best For</th><th>Description</th></tr>
+        </thead>
+        <tbody></tbody>
+      `;
+      const tb = tbl.querySelector('tbody');
+      s.betTypesTable.forEach(row => {
+        const tr = document.createElement('tr');
+        const t = document.createElement('td');
+        t.textContent = `${row.icon || ''} ${row.type}`;
+        const b = document.createElement('td');
+        b.textContent = row.bestFor || '';
+        const d = document.createElement('td');
+        d.textContent = row.desc || '';
+        tr.appendChild(t); tr.appendChild(b); tr.appendChild(d);
+        tb.appendChild(tr);
+      });
+      card.appendChild(tbl);
+    }
+
+    wrap.appendChild(card);
+  }
+
   function render(pred) {
     // Guard: ensure modal root exists before rendering
     if (!root || !document.body.contains(root)) {
@@ -293,6 +370,11 @@
     // Render exotics if available
     if (tickets) {
       renderExotics(tickets);
+    }
+
+    // Render strategy if available
+    if (pred.strategy) {
+      renderStrategy(pred.strategy);
     }
 
     // Open and apply pinned state
@@ -357,6 +439,16 @@
           const confPct = Math.round((t.confidence || 0) * 100);
           lines.push(`  ${t.label} (~${confPct}%)`);
         });
+      }
+    }
+
+    // Add strategy summary
+    if (lastPred && lastPred.strategy) {
+      lines.push('');
+      lines.push('Strategy:');
+      lines.push(`  Recommended: ${lastPred.strategy.recommended || 'Across the Board'}`);
+      if (lastPred.strategy.rationale && lastPred.strategy.rationale.length > 0) {
+        lines.push(`  Why: ${lastPred.strategy.rationale.join('; ')}`);
       }
     }
 

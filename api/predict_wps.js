@@ -302,11 +302,67 @@ export default async function handler(req, res) {
     const meanComp = ord.reduce((a, b) => a + b.v, 0) / (ord.length || 1);
     const confidence = Math.max(0.08, Math.min(0.85, Math.pow(meanComp, 0.9)));
 
+    // ─────────────────────────────────────────────
+    // Strategy suggestion (FinishLine AI Betting Strategy)
+    // ─────────────────────────────────────────────
+    const P1 = ranking[0]?.prob || 0;
+    const P2 = ranking[1]?.prob || 0;
+    const P3 = ranking[2]?.prob || 0;
+    const gap12 = Math.max(0, P1 - P2);
+    const gap23 = Math.max(0, P2 - P3);
+    const top3Mass = P1 + P2 + P3;
+
+    // Static "bet types by profit potential" table (copy-safe for UI)
+    const betTypesTable = [
+      { type: 'Trifecta Box (AI Top 3)', icon: '🔥', bestFor: 'Max profit', desc: 'Leverages AI\'s strength at identifying the 3 right horses even if order flips.' },
+      { type: 'Across the Board',        icon: '🛡️', bestFor: 'Consistency', desc: 'Always collects if top pick finishes top 3. Ideal for low variance bankroll play.' },
+      { type: 'Win Only',                icon: '🎯', bestFor: 'Confidence plays', desc: 'When AI confidence > 68%, Win-only yields clean edge.' },
+      { type: 'Exacta Box (Top 3)',      icon: '⚖️', bestFor: 'Middle ground', desc: 'Works when AI has correct pair but misses trifecta.' },
+    ];
+
+    // Dynamic recommendation rules (simple & explainable)
+    let recommended = 'Across the Board';
+    let rationale = [];
+
+    if (confidence >= 0.68 && gap12 >= 0.08) {
+      recommended = 'Win Only';
+      rationale.push('Top pick clear vs #2 (gap≥8%)', `Confidence ${Math.round(confidence*100)}%`);
+    }
+    if (top3Mass >= 0.72 && gap12 <= 0.06 && gap23 <= 0.06) {
+      recommended = 'Trifecta Box (AI Top 3)';
+      rationale = [`Top-3 mass ${(top3Mass*100).toFixed(0)}%`, 'Order risk high (gaps ≤6%)'];
+    } else if (top3Mass >= 0.62 && gap12 <= 0.08) {
+      // good for exacta box if top three dominate but #1 not a runaway
+      if (recommended !== 'Trifecta Box (AI Top 3)') {
+        recommended = 'Exacta Box (Top 3)';
+        rationale = [`Top-3 mass ${(top3Mass*100).toFixed(0)}%`, 'Two-horse finish likely among Top 3'];
+      }
+    }
+    // If confidence is modest but top3Mass still strong, ATB provides steady cashing.
+    if (confidence < 0.58 && top3Mass >= 0.55) {
+      recommended = 'Across the Board';
+      rationale = [`Confidence ${Math.round(confidence*100)}%`, `Top-3 mass ${(top3Mass*100).toFixed(0)}%`];
+    }
+
+    const strategy = {
+      recommended,
+      rationale,
+      betTypesTable,
+      metrics: {
+        confidence,
+        top3Mass,
+        gap12,
+        gap23,
+        top: ranking.slice(0, 6).map(r => ({ name: r.name, prob: r.prob, comp: r.comp }))
+      }
+    };
+
     return res.status(200).json({
       picks,
       confidence,
       ranking,
       tickets,
+      strategy,
       meta: { track, surface, distance_mi: miles }
     });
   } catch (err) {
