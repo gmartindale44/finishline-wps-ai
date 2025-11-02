@@ -153,16 +153,34 @@
       return;
     }
 
+    const fmtPct = (v) => {
+      const p = Math.max(0, Math.min(1, Number(v || 0)));
+      return (p * 100).toFixed(0) + '%';
+    };
+
     let html = '';
 
     // Trifecta
     if (tickets.trifecta && tickets.trifecta.length > 0) {
       html += '<div style="margin-bottom:20px;"><h4 style="font-size:15px;font-weight:700;margin-bottom:8px;color:#dfe3ff;">Trifecta Ideas</h4>';
-      tickets.trifecta.forEach(t => {
-        const confPct = Math.round((t.confidence || 0) * 100);
-        html += `<div style="padding:10px;background:rgba(124,92,255,0.1);border:1px solid rgba(124,92,255,0.3);border-radius:10px;margin-bottom:8px;">
-          <div style="font-weight:600;color:#dfe3ff;margin-bottom:4px;">${t.label}</div>
-          <div style="font-size:12px;opacity:0.75;">~confidence ${confPct}%</div>
+      tickets.trifecta.forEach(ticket => {
+        let ticketText = '';
+        let confText = '';
+
+        if (typeof ticket === 'string') {
+          // Back-compat: older API returns plain strings
+          ticketText = ticket;
+        } else if (ticket && typeof ticket === 'object') {
+          // New API: { text, confidence }
+          ticketText = ticket.text || '';
+          if (ticket.confidence != null) {
+            confText = ' ~' + fmtPct(ticket.confidence);
+          }
+        }
+
+        html += `<div class="fl-ticket-line" style="padding:10px;background:rgba(124,92,255,0.1);border:1px solid rgba(124,92,255,0.3);border-radius:10px;margin-bottom:8px;">
+          <span style="font-weight:600;color:#dfe3ff;">${ticketText}</span>
+          ${confText ? `<span class="fl-ticket-conf" style="opacity:0.9;font-variant-numeric:tabular-nums;">${confText}</span>` : ''}
         </div>`;
       });
       html += '</div>';
@@ -171,11 +189,22 @@
     // Superfecta
     if (tickets.superfecta && tickets.superfecta.length > 0) {
       html += '<div style="margin-bottom:20px;"><h4 style="font-size:15px;font-weight:700;margin-bottom:8px;color:#dfe3ff;">Superfecta Ideas</h4>';
-      tickets.superfecta.forEach(t => {
-        const confPct = Math.round((t.confidence || 0) * 100);
-        html += `<div style="padding:10px;background:rgba(124,92,255,0.1);border:1px solid rgba(124,92,255,0.3);border-radius:10px;margin-bottom:8px;">
-          <div style="font-weight:600;color:#dfe3ff;margin-bottom:4px;">${t.label}</div>
-          <div style="font-size:12px;opacity:0.75;">~confidence ${confPct}%</div>
+      tickets.superfecta.forEach(ticket => {
+        let ticketText = '';
+        let confText = '';
+
+        if (typeof ticket === 'string') {
+          ticketText = ticket;
+        } else if (ticket && typeof ticket === 'object') {
+          ticketText = ticket.text || '';
+          if (ticket.confidence != null) {
+            confText = ' ~' + fmtPct(ticket.confidence);
+          }
+        }
+
+        html += `<div class="fl-ticket-line" style="padding:10px;background:rgba(124,92,255,0.1);border:1px solid rgba(124,92,255,0.3);border-radius:10px;margin-bottom:8px;">
+          <span style="font-weight:600;color:#dfe3ff;">${ticketText}</span>
+          ${confText ? `<span class="fl-ticket-conf" style="opacity:0.9;font-variant-numeric:tabular-nums;">${confText}</span>` : ''}
         </div>`;
       });
       html += '</div>';
@@ -184,11 +213,22 @@
     // Super High Five
     if (tickets.superHighFive && tickets.superHighFive.length > 0) {
       html += '<div style="margin-bottom:20px;"><h4 style="font-size:15px;font-weight:700;margin-bottom:8px;color:#dfe3ff;">Super High Five Ideas</h4>';
-      tickets.superHighFive.forEach(t => {
-        const confPct = Math.round((t.confidence || 0) * 100);
-        html += `<div style="padding:10px;background:rgba(124,92,255,0.1);border:1px solid rgba(124,92,255,0.3);border-radius:10px;margin-bottom:8px;">
-          <div style="font-weight:600;color:#dfe3ff;margin-bottom:4px;">${t.label}</div>
-          <div style="font-size:12px;opacity:0.75;">~confidence ${confPct}%</div>
+      tickets.superHighFive.forEach(ticket => {
+        let ticketText = '';
+        let confText = '';
+
+        if (typeof ticket === 'string') {
+          ticketText = ticket;
+        } else if (ticket && typeof ticket === 'object') {
+          ticketText = ticket.text || '';
+          if (ticket.confidence != null) {
+            confText = ' ~' + fmtPct(ticket.confidence);
+          }
+        }
+
+        html += `<div class="fl-ticket-line" style="padding:10px;background:rgba(124,92,255,0.1);border:1px solid rgba(124,92,255,0.3);border-radius:10px;margin-bottom:8px;">
+          <span style="font-weight:600;color:#dfe3ff;">${ticketText}</span>
+          ${confText ? `<span class="fl-ticket-conf" style="opacity:0.9;font-variant-numeric:tabular-nums;">${confText}</span>` : ''}
         </div>`;
       });
       html += '</div>';

@@ -205,80 +205,98 @@ export default async function handler(req, res) {
       };
     });
 
-    // Build exotic ticket variants
-    const top6 = fullRanking.slice(0, 6);
-    const top6Names = top6.map(o => horses[o.i]?.name || '').filter(Boolean);
+    // ─────────────────────────────────────────────────────────────
+    // Exotic ticket generator with confidence estimates
+    //   - We treat per-horse `prob` (soft) as independent-ish and
+    //     build an approximate ticket probability:
+    //       per-leg contribution = (sum(prob[leg horses not yet used])) / legSetSize
+    //     Then multiply contributions across legs.
+    //   - This is intentionally lightweight for serverless performance and
+    //     acts as a relative strength indicator between variants.
+    // ─────────────────────────────────────────────────────────────
+    function legsToText(legs) {
+      // legs: [ ['A'], ['B'], ['C','D'] ] -> "A / B / C,D"
+      return legs.map(set => set.join(',')).join(' / ');
+    }
 
-    function ticketConfidence(legs, probs, fullRanking) {
-      let conf = 1;
-      legs.forEach((leg) => {
-        const legProbs = leg.map(name => {
-          const rankEntry = fullRanking.find(r => horses[r.i]?.name === name);
-          return rankEntry ? probs[rankEntry.i] : 0;
-        });
-        if (legProbs.length > 0) {
-          const legMax = Math.max(...legProbs);
-          const legSize = leg.length;
-          conf *= (legMax / legSize);
+    function computeTicketConfidence(legs, probMap) {
+      // legs: array of arrays of names
+      // probMap: { name -> prob }
+      const used = new Set();
+      let conf = 1.0;
+
+      for (const set of legs) {
+        // exclude already-used names to roughly enforce order/no-repeat
+        const available = set.filter(n => !used.has(n));
+        const denom = Math.max(1, available.length);
+        let legMass = 0;
+
+        for (const n of available) legMass += (probMap[n] || 0);
+
+        // divide by choice count to reflect selection within the leg
+        const legConf = Math.max(0, Math.min(1, legMass / denom));
+        conf *= legConf;
+
+        // greedily mark the highest-prob pick in this leg as "used" for next legs
+        // (prevents double counting the same standout across legs)
+        let best = null, bestP = -1;
+        for (const n of available) {
+          const p = probMap[n] || 0;
+          if (p > bestP) { bestP = p; best = n; }
         }
-      });
-      return Math.max(0, Math.min(1, conf));
+        if (best) used.add(best);
+      }
+
+      // soften extremes
+      return Math.max(0.01, Math.min(0.95, Math.pow(conf, 0.9)));
     }
 
-    // Trifecta variants
-    const trifecta = [];
-    if (top6Names.length >= 3) {
-      trifecta.push({
-        legs: [[top6Names[0]], [top6Names[1]], [top6Names[2], top6Names[3]]],
-        label: `${top6Names[0]} / ${top6Names[1]} / ${top6Names[2]},${top6Names[3]}`,
-      });
-      trifecta.push({
-        legs: [[top6Names[0], top6Names[1], top6Names[2]]],
-        label: `BOX ${top6Names[0]}-${top6Names[1]}-${top6Names[2]}`,
-      });
+    function buildExoticTicketsWithConfidence(ranking) {
+      // ranking: [{ name, prob, ... }] sorted desc
+      const top = ranking.map(r => r.name);
+      const [H1, H2, H3, H4, H5, H6] = top;
+      const names = [H1, H2, H3, H4, H5, H6].filter(Boolean);
+      const probMap = Object.fromEntries(ranking.map(r => [r.name, r.prob || 0]));
+      if (!names.length) return { trifecta: [], superfecta: [], superHighFive: [] };
+
+      // Build as legs (arrays), then map to {text, confidence}
+      const trifectaLegs = [
+        [[H1], [H2], [H3, H4].filter(Boolean)],
+        [[H1, H2, H3].filter(Boolean)] // BOX 3
+      ].filter(legs => legs.every(set => set && set.length));
+
+      const superfectaLegs = [
+        [[H1], [H2], [H3, H4].filter(Boolean), [H3, H4, H5].filter(Boolean)],
+        [[H1], [H1, H2].filter(Boolean), [H2, H3, H4].filter(Boolean), [H3, H4, H5].filter(Boolean)]
+      ].filter(legs => legs.every(set => set && set.length));
+
+      const h5a = [[H1], [H2], [H3], [H4, H5].filter(Boolean), [H4, H5, H6].filter(Boolean)];
+      const h5b = [[H1], [H2, H3].filter(Boolean), [H2, H3, H4].filter(Boolean), [H4, H5].filter(Boolean), [H5, H6].filter(Boolean)];
+      const superHighFiveLegs = [h5a, h5b].filter(legs => legs.every(set => set && set.length));
+
+      function annotate(legsArr, labelForBox = null) {
+        return legsArr.map(legs => {
+          const text = (legs.length === 1 && labelForBox)
+            ? `${labelForBox} ${legs[0].join(',')}`
+            : legsToText(legs);
+          const confidence = computeTicketConfidence(legs, probMap);
+          return { text, confidence };
+        });
+      }
+
+      const trifecta = [
+        ...annotate(trifectaLegs.slice(0, 1) || []),
+        ...annotate(trifectaLegs.slice(1) || [], 'BOX')
+      ].filter(Boolean);
+
+      const superfecta = annotate(superfectaLegs);
+      const superHighFive = annotate(superHighFiveLegs);
+
+      return { trifecta, superfecta, superHighFive };
     }
 
-    // Superfecta variants
-    const superfecta = [];
-    if (top6Names.length >= 5) {
-      superfecta.push({
-        legs: [[top6Names[0]], [top6Names[1]], [top6Names[2], top6Names[3]], [top6Names[3], top6Names[4], top6Names[5]]],
-        label: `${top6Names[0]} / ${top6Names[1]} / ${top6Names[2]},${top6Names[3]} / ${top6Names[3]},${top6Names[4]},${top6Names[5]}`,
-      });
-      superfecta.push({
-        legs: [[top6Names[0]], [top6Names[0], top6Names[1]], [top6Names[1], top6Names[2], top6Names[3]], [top6Names[3], top6Names[4], top6Names[5]]],
-        label: `${top6Names[0]} / ${top6Names[0]},${top6Names[1]} / ${top6Names[1]},${top6Names[2]},${top6Names[3]} / ${top6Names[3]},${top6Names[4]},${top6Names[5]}`,
-      });
-    }
-
-    // Super High Five variants
-    const superHighFive = [];
-    if (top6Names.length >= 6) {
-      superHighFive.push({
-        legs: [[top6Names[0]], [top6Names[1]], [top6Names[2]], [top6Names[3], top6Names[4]], [top6Names[4], top6Names[5]]],
-        label: `${top6Names[0]} / ${top6Names[1]} / ${top6Names[2]} / ${top6Names[3]},${top6Names[4]} / ${top6Names[4]},${top6Names[5]}`,
-      });
-      superHighFive.push({
-        legs: [[top6Names[0]], [top6Names[1], top6Names[2]], [top6Names[1], top6Names[2], top6Names[3]], [top6Names[4]], [top6Names[5]]],
-        label: `${top6Names[0]} / ${top6Names[1]},${top6Names[2]} / ${top6Names[1]},${top6Names[2]},${top6Names[3]} / ${top6Names[4]} / ${top6Names[5]}`,
-      });
-    }
-
-    // Add confidence to tickets
-    const tickets = {
-      trifecta: trifecta.map(t => ({
-        ...t,
-        confidence: ticketConfidence(t.legs, probs, fullRanking),
-      })),
-      superfecta: superfecta.map(t => ({
-        ...t,
-        confidence: ticketConfidence(t.legs, probs, fullRanking),
-      })),
-      superHighFive: superHighFive.map(t => ({
-        ...t,
-        confidence: ticketConfidence(t.legs, probs, fullRanking),
-      })),
-    };
+    // Build exotic tickets with confidence
+    const tickets = buildExoticTicketsWithConfidence(ranking);
 
     // Confidence: mean composite ** 0.9, clamped 8%–85%
     const meanComp = ord.reduce((a, b) => a + b.v, 0) / (ord.length || 1);
