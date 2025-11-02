@@ -1,0 +1,183 @@
+/* FinishLine Results Panel Styles */
+
+.fl-results {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 10020;
+}
+
+.fl-results--open {
+  display: flex;
+}
+
+.fl-results__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(2px);
+}
+
+.fl-results__dialog {
+  position: relative;
+  width: min(720px, 92vw);
+  background: #0f1120;
+  color: #e7e9f5;
+  border: 1px solid #2a2f4a;
+  border-radius: 16px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  padding: 20px 22px;
+}
+
+.fl-results__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.fl-results__title {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+.fl-results__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.fl-button {
+  appearance: none;
+  border: 1px solid #39406a;
+  background: #1a1f3a;
+  color: #dfe3ff;
+  padding: 8px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+  transition: background 0.2s;
+}
+
+.fl-button:hover {
+  background: #23294d;
+}
+
+.fl-button:focus {
+  outline: 2px solid #5c86ff;
+  outline-offset: 2px;
+}
+
+.fl-button--ghost {
+  background: transparent;
+}
+
+.fl-button--ghost:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.fl-results__badges {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin: 14px 0;
+}
+
+@media (min-width: 560px) {
+  .fl-results__badges {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+}
+
+.fl-badge {
+  border: 1px solid #2c3258;
+  border-radius: 14px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: #121531;
+}
+
+.fl-badge__rank {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.fl-badge__name {
+  font-size: 18px;
+  font-weight: 800;
+  color: #e7e9f5;
+}
+
+.fl-badge__meta {
+  opacity: 0.85;
+  font-size: 13px;
+  color: #b8bdd4;
+}
+
+.fl-badge--gold {
+  outline: 2px solid #7c5cff40;
+}
+
+.fl-badge--silver {
+  outline: 2px solid #5c86ff40;
+}
+
+.fl-badge--bronze {
+  outline: 2px solid #ff996640;
+}
+
+.fl-results__confidence {
+  margin-top: 16px;
+}
+
+.fl-results__confidence-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.fl-results__confidence-label strong {
+  font-size: 16px;
+  color: #e7e9f5;
+}
+
+.fl-progress {
+  height: 10px;
+  border-radius: 999px;
+  background: #21264a;
+  overflow: hidden;
+  margin-top: 6px;
+}
+
+.fl-progress__bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #8b5cf6, #22d3ee);
+  transition: width 0.4s ease;
+}
+
+/* Pinned mode */
+.fl-results--pinned {
+  inset: auto;
+  left: auto;
+  right: 16px;
+  bottom: 16px;
+  top: auto;
+}
+
+.fl-results--pinned .fl-results__backdrop {
+  display: none;
+}
+
+.fl-results--pinned .fl-results__dialog {
+  width: min(420px, 92vw);
+}
+

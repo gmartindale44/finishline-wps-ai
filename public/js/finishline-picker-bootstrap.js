@@ -299,12 +299,34 @@
           throw new Error('Predict returned null results. Check that at least 3 horses have valid names and odds.');
         }
 
-        const confidence = typeof data.confidence === 'number' && data.confidence > 0 ? data.confidence : 0;
-        toast(
-          data?.message ||
-            `Predictions ready.\nWin: ${data.win}\nPlace: ${data.place}\nShow: ${data.show}\nConfidence: ${confidence > 0 ? confidence.toFixed(2) : '—'}`,
-          'success'
-        );
+        // Confidence may be 0-1 or 0-100; normalize to 0-100
+        let confidence = typeof data.confidence === 'number' && data.confidence > 0 ? data.confidence : 0;
+        if (confidence <= 1) {
+          confidence = confidence * 100; // Convert decimal to percentage
+        }
+        
+        // Show persistent results panel instead of toast
+        if (window.FLResults?.show) {
+          // Get horses for odds display
+          const horsesForDisplay = horses || [];
+          
+          window.FLResults.show({
+            win: data.win,
+            place: data.place,
+            show: data.show,
+            confidence: confidence, // Now in 0-100 range
+            horses: horsesForDisplay,
+          });
+          
+          console.log('[Predict] Results displayed in panel', { win: data.win, place: data.place, show: data.show, confidence });
+        } else {
+          // Fallback to toast if panel not available
+          toast(
+            data?.message ||
+              `Predictions ready.\nWin: ${data.win}\nPlace: ${data.place}\nShow: ${data.show}\nConfidence: ${confidence > 0 ? confidence.toFixed(2) : '—'}`,
+            'success'
+          );
+        }
       } catch (e) {
         console.error('[Predict]', e);
         toast(`Predict failed: ${e.message}`, 'error');

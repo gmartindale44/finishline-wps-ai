@@ -6,6 +6,7 @@
   <title>FinishLine WPS AI</title>
   <link rel="stylesheet" href="./styles.css" />
   <link rel="stylesheet" href="/finishline-picker-guard.css" />
+  <link rel="stylesheet" href="/css/finishline.css" />
 </head>
 <body>
   <header class="hero">
@@ -84,6 +85,8 @@
   </footer>
   <!-- Progress toast container -->
   <div id="fl-toast" style="position:fixed;bottom:20px;right:20px;max-width:400px;padding:12px;background:#2a2f3a;color:#fff;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:10000;display:none;"></div>
+  <!-- Results panel container -->
+  <div id="fl-results-root" aria-live="polite"></div>
   <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.4.168/build/pdf.min.js" defer></script>
   <script>
     window.addEventListener('DOMContentLoaded', () => {
@@ -93,6 +96,7 @@
     });
   </script>
   <script src="/js/table.js" defer></script>
+  <script src="/js/results-panel.js" defer></script>
   <script src="/js/finishline-picker-bootstrap.js" defer></script>
   <script src="/js/picker-autobind.js" defer></script>
 </body>
