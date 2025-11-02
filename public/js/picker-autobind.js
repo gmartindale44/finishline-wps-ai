@@ -6,6 +6,8 @@
     pickedFiles: [],
     analyzed: false,
     parsedHorses: [],
+    speedFile: null,
+    features: {},
   });
 
   // Prevent multiple binders: abort previous listeners if we re-init
@@ -31,6 +33,18 @@
 
   function $analyze() {
     return document.querySelector('[data-fl-analyze]') || document.getElementById('analyze-btn');
+  }
+
+  function $speedBtn() {
+    return document.getElementById('fl-speed-btn');
+  }
+
+  function $speedInput() {
+    return document.getElementById('fl-speed-file');
+  }
+
+  function $speedLabel() {
+    return document.getElementById('speed-file-label');
   }
 
   function enable(el, on = true) {
@@ -75,6 +89,28 @@
 
     // If we already parsed horses earlier, keep Analyze enabled
     enable(analyze, (input.files && input.files.length > 0) || (state.parsedHorses && state.parsedHorses.length > 0));
+
+    // Bind speed file picker
+    const speedBtn = $speedBtn();
+    const speedInput = $speedInput();
+    const speedLabel = $speedLabel();
+
+    if (speedBtn && speedInput && speedLabel) {
+      speedBtn.addEventListener('click', () => speedInput.click(), { signal: abort.signal, passive: true });
+      
+      speedInput.addEventListener('change', () => {
+        const file = speedInput.files && speedInput.files[0];
+        state.speedFile = file || null;
+        if (speedLabel) {
+          speedLabel.textContent = file ? `Loaded: ${file.name}` : 'No file selected';
+        }
+      }, { signal: abort.signal, passive: true });
+
+      if (speedInput.files && speedInput.files[0]) {
+        state.speedFile = speedInput.files[0];
+        speedLabel.textContent = `Loaded: ${speedInput.files[0].name}`;
+      }
+    }
   }
 
   // Bind once now; do NOT re-bind via MutationObserver (prevents double dialogs)
