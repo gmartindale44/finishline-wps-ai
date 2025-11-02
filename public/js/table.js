@@ -153,6 +153,34 @@
     return s;
   }
 
+  // Wire up Add Horse button
+  function initAddButton() {
+    const addBtn = getAddButton();
+    if (addBtn) {
+      // Remove existing listeners to prevent duplicates
+      const newBtn = addBtn.cloneNode(true);
+      addBtn.parentNode.replaceChild(newBtn, addBtn);
+      
+      newBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        const container = getContainer();
+        if (!container) return;
+        
+        // Create a new empty row
+        const currentRows = container.querySelectorAll('.horse-row, [data-horse-row]');
+        const newRow = createRow({}, currentRows.length);
+        container.appendChild(newRow);
+      });
+    }
+  }
+
+  // Initialize on DOM ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAddButton);
+  } else {
+    initAddButton();
+  }
+
   // Export to window for global access
   window.__fl_table = {
     renderHorsesToTable,
@@ -161,6 +189,7 @@
     normalizeOdds,
     getContainer,
     getAddButton,
+    initAddButton,
   };
 })();
 
