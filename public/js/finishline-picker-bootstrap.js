@@ -94,24 +94,32 @@
   // ─────────────────────────────────────────────
   // Toast helper (lightweight, no deps)
   // ─────────────────────────────────────────────
-  function showToast(message, opts = {}) {
+  function flToast(msg, type = 'error') {
     try {
-      const dur = opts.durationMs ?? 3000;
-      const el = document.createElement('div');
-      el.className = 'fl-toast';
-      el.textContent = message || 'Notice';
-      document.body.appendChild(el);
-      // force reflow for animation
-      void el.offsetWidth;
-      el.classList.add('fl-toast-in');
-      setTimeout(() => {
-        el.classList.remove('fl-toast-in');
-        el.classList.add('fl-toast-out');
-        setTimeout(() => el.remove(), 250);
-      }, dur);
-    } catch (e) {
-      console.warn('[FinishLine] toast error:', e);
-    }
+      const id = 'fl-toast';
+      let el = document.getElementById(id);
+      if (!el) {
+        el = document.createElement('div');
+        el.id = id;
+        el.style.position = 'fixed';
+        el.style.right = '16px';
+        el.style.bottom = '16px';
+        el.style.padding = '10px 14px';
+        el.style.borderRadius = '10px';
+        el.style.backdropFilter = 'blur(8px)';
+        el.style.zIndex = '99999';
+        el.style.color = '#fff';
+        document.body.appendChild(el);
+      }
+      el.style.background = type === 'ok' ? 'rgba(16,155,89,.9)' : 'rgba(200,60,60,.9)';
+      el.innerText = msg;
+      el.style.opacity = '1';
+      setTimeout(() => { el.style.transition = 'opacity .4s'; el.style.opacity = '0'; }, 3000);
+    } catch {}
+  }
+
+  function showToast(message, opts = {}) {
+    flToast(message, opts.type === 'ok' ? 'ok' : 'error');
   }
 
   function qAnalyze() {
@@ -417,197 +425,141 @@
     return null;
   }
 
-  async function onPredict() {
-    const predictBtn = qPredict();
+  async function handlePredictWPS() {
+    const btn = document.querySelector('[data-action="predict-wps"]') || qPredict() || null;
+    try {
+      window.FLUI?.setBusy?.(true, 'Generating predictions...');
 
-    // Get horses with priority order
-    const horses = getHorsesForPrediction();
+      // Build payload safely - use existing form collection logic
+      syncInputsToState();
+      const horses = getHorsesForPrediction();
+      
+      if (!horses || !Array.isArray(horses) || horses.length < 3) {
+        throw new Error('Not enough horses in the form payload.');
+      }
 
-    if (!horses || horses.length < 3) {
-      showToast('Not enough horses to predict. Analyze first or add rows. (Need at least 3 with name + odds)');
-      return;
-    }
+      const payload = {
+        horses: horses.map(h => ({
+          name: h.name,
+          odds: h.odds_norm || h.odds_raw || h.odds,
+          post: h.post || null,
+        })),
+        track: window.__fl_state.track || '',
+        surface: window.__fl_state.surface || '',
+        distance_input: window.__fl_state.distance_input || '',
+        speedFigs: window.__fl_state.speedFigs || {},
+      };
 
-    await withBusy(predictBtn, async () => {
-      try {
-        showToast('Generating predictions...');
-        
-        // Collect meta from form
-        const meta = {
-          track: (document.getElementById('race-track')?.value || '').trim(),
-          surface: (document.getElementById('race-surface')?.value || '').trim(),
-          distance: (document.getElementById('race-distance')?.value || '').trim(),
-          date: (document.getElementById('race-date')?.value || '').trim(),
-        };
+      __fl_diag('predict payload', payload);
 
-        // Get features or build from horses
-        let features = window.__fl_state.features || {};
-        if (Object.keys(features).length === 0) {
-          // Fallback: build from current horses
-          features = {};
-          horses.forEach(h => {
-            const key = horseKey(h.name);
-            const decOdds = h.odds_norm || h.odds_raw || h.odds;
-            let implied = null;
-            if (decOdds) {
-              const match = String(decOdds).match(/^(\d+)\s*\/\s*(\d+)$/);
-              if (match) {
-                const num = Number(match[1]);
-                const den = Number(match[2] || 1);
-                const decimal = num / den;
-                implied = 1 / (decimal + 1);
-              }
-            }
-            features[key] = {
-              name: h.name,
-              odds: decOdds,
-              implied,
-              speed: h.speedFig || null,
-              jockey: h.jockey || '',
-              trainer: h.trainer || '',
-            };
-          });
-        }
+      const res = await fetch('/api/predict_wps', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
 
-        // Sync inputs to state before predict
-        syncInputsToState();
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(`API ${res.status}: ${text || 'non-200 response'}`);
+      }
 
-        // Build payload for Model v2
-        const payload = {
-          horses: horses.map(h => ({
-            name: h.name,
-            odds: h.odds_norm || h.odds_raw || h.odds,
-            post: h.post || null,
-          })),
-          track: window.__fl_state.track || meta.track || '',
-          surface: window.__fl_state.surface || meta.surface || '',
-          distance_input: window.__fl_state.distance_input || meta.distance || '',
-          speedFigs: window.__fl_state.speedFigs || {},
-        };
+      /** @type {{picks:any, strategy:any, tickets?:any, confidence?:number}} */
+      const data = await res.json();
 
-        __fl_diag('predict payload', payload);
+      // Defensive defaults
+      const safePicks = data?.picks && Array.isArray(data.picks)
+        ? data.picks
+        : null;
 
-        let r;
-        let data = null;
-        try {
-          r = await fetch('/api/predict_wps', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-          });
+      const safeStrategy = data?.strategy && typeof data.strategy === 'object'
+        ? data.strategy
+        : null; // Let renderer create fallback card
 
-          // Robust JSON parsing
-          try {
-            const text = await r.text();
-            data = text ? JSON.parse(text) : null;
-          } catch (parseErr) {
-            console.error('[Predict] JSON parse error:', parseErr);
-            if (window.FLResults?.show) {
-              window.FLResults.show({ error: true, message: 'Prediction response parse error. Please try again.' });
-            } else {
-              showToast('Prediction response parse error – check console.');
-            }
-            return;
-          }
-        } catch (fetchErr) {
-          console.error('[Predict] Fetch error:', fetchErr);
-          if (window.FLResults?.show) {
-            window.FLResults.show({ error: true, message: 'Prediction failed (connection error). Please check your internet connection.' });
-          } else {
-            showToast('Prediction failed (connection error).');
-          }
-          return;
-        }
+      const exotics = data?.tickets && typeof data.tickets === 'object'
+        ? data.tickets
+        : null;
 
-        if (!r.ok || data?.error) {
-          console.warn('[Predict] Error response:', data);
-          const errorMsg = data?.message || data?.reason || `HTTP ${r.status}` || 'Prediction failed';
-          if (window.FLResults?.show) {
-            window.FLResults.show({ error: true, message: errorMsg });
-          } else {
-            showToast(`Prediction failed: ${errorMsg}`);
-          }
-          return;
-        }
+      // Convert picks array to win/place/show format for display
+      let winName = null, placeName = null, showName = null, confPct = null;
+      if (safePicks && Array.isArray(safePicks)) {
+        const winPick = safePicks.find(p => p.slot === 'Win') || safePicks[0];
+        const placePick = safePicks.find(p => p.slot === 'Place') || safePicks[1];
+        const showPick = safePicks.find(p => p.slot === 'Show') || safePicks[2];
+        winName = winPick?.name || null;
+        placeName = placePick?.name || null;
+        showName = showPick?.name || null;
+      }
 
-        // Model v2 response format: { picks: [{slot, name, odds, reasons}], confidence, meta }
-        const picks = data?.picks || [];
-        const winPick = picks.find(p => p.slot === 'Win') || picks[0];
-        const placePick = picks.find(p => p.slot === 'Place') || picks[1];
-        const showPick = picks.find(p => p.slot === 'Show') || picks[2];
+      confPct = typeof data?.confidence === 'number' && data.confidence >= 0
+        ? Math.round(data.confidence * 100)
+        : null;
 
-        const winName = winPick?.name || null;
-        const placeName = placePick?.name || null;
-        const showName = showPick?.name || null;
-
-        // Validate response
-        if (!winName || !placeName || !showName) {
-          console.error('[Predict] Invalid response:', data);
-          showToast('Predict returned invalid results. Check that at least 3 horses have valid names and odds.');
-          return;
-        }
-
-        // Confidence is 0-1 range, convert to 0-100
-        const confPct = typeof data.confidence === 'number' && data.confidence >= 0 
-          ? Math.round(data.confidence * 100) 
-          : 7;
-
-        // Store prediction in localStorage
-        try {
-          localStorage.setItem('prediction', JSON.stringify(data));
-        } catch (e) {
-          console.warn('[Predict] Could not save to localStorage:', e);
-        }
-        
-        // Build reasons object from picks (only show non-empty reasons)
-        const reasons = {};
-        picks.forEach(p => {
+      // Build reasons object
+      const reasons = {};
+      if (safePicks && Array.isArray(safePicks)) {
+        safePicks.forEach(p => {
           if (p.reasons && p.reasons.length > 0) {
             reasons[p.name] = p.reasons;
           }
         });
-
-        // Build horses array for display
-        const horsesForDisplay = horses.map(h => ({
-          name: h.name,
-          odds: h.odds_norm || h.odds_raw || h.odds,
-          speedFig: window.__fl_state.speedFigs?.[h.name] || h.speedFig || null,
-        }));
-
-        // Show persistent results panel with reasons and tickets (null-safe)
-        try {
-          if (window.FLResults?.show) {
-            window.FLResults.show({
-              win: winName,
-              place: placeName,
-              show: showName,
-              confidence: confPct,
-              horses: horsesForDisplay,
-              reasons: reasons,
-              tickets: data.tickets || null,
-              strategy: data.strategy || null,
-              picks: data.picks || picks || null,
-            });
-
-            console.log('[Predict] Results displayed in panel', { win: winName, place: placeName, show: showName, confidence: confPct, tickets: data.tickets, strategy: data.strategy ? 'present' : 'missing' });
-          } else {
-            // Fallback to toast if panel not available
-            showToast(`Predictions ready. Win: ${winName}, Place: ${placeName}, Show: ${showName}`);
-          }
-        } catch (modalErr) {
-          console.error('[Predict] Modal render error:', modalErr);
-          showToast('Prediction display error – check console.');
-        }
-      } catch (e) {
-        console.error('[Predict] Unexpected error:', e);
-        showToast(`Prediction failed: ${e?.message || 'Unknown error'}`);
       }
-    });
+
+      // Build horses array for display
+      const horsesForDisplay = horses.map(h => ({
+        name: h.name,
+        odds: h.odds_norm || h.odds_raw || h.odds,
+        speedFig: window.__fl_state.speedFigs?.[h.name] || h.speedFig || null,
+      }));
+
+      // Show panel
+      window.FLResults?.show?.({
+        win: winName,
+        place: placeName,
+        show: showName,
+        confidence: confPct,
+        horses: horsesForDisplay,
+        reasons: reasons,
+        picks: safePicks,
+        strategy: safeStrategy,
+        tickets: exotics,
+        meta: { from: 'predict_wps', ts: Date.now() }
+      });
+
+      console.info('[FinishLine] prediction success', { hasStrategy: !!safeStrategy, hasExotics: !!exotics });
+
+    } catch (err) {
+      console.error('[FinishLine] prediction failed', err);
+      flToast('Prediction failed. Check console.', 'error');
+      // Render a graceful error card instead of doing nothing:
+      try {
+        window.FLResults?.show?.({
+          picks: null,
+          strategy: null,
+          tickets: null,
+          error: { message: (err && err.message) || 'Prediction failed' }
+        });
+      } catch {}
+    } finally {
+      window.FLUI?.setBusy?.(false);
+      if (btn) btn.blur();
+    }
+  }
+
+  async function onPredict() {
+    return handlePredictWPS();
   }
 
   const analyzeBtn = qAnalyze();
   const predictBtn = qPredict();
 
   if (analyzeBtn) analyzeBtn.addEventListener('click', onAnalyze);
-  if (predictBtn) predictBtn.addEventListener('click', onPredict);
+  
+  // Ensure the click binding uses the new handler once, guard against double binds
+  (function bindPredictOnce() {
+    const key = '__fl_bound_predict__';
+    if (window[key]) return;
+    window[key] = true;
+    const btn = document.querySelector('[data-action="predict-wps"]') || predictBtn;
+    if (btn) btn.addEventListener('click', (e) => { e.preventDefault(); handlePredictWPS(); });
+  })();
 })();

@@ -376,16 +376,18 @@ export default async function handler(req, res) {
       }
     };
 
-    return res.status(200).json({
-      picks,
-      confidence,
-      ranking,
-      tickets,
-      strategy: finalStrategy,
+    // Guarantee shape:
+    const out = {
+      picks: picks ?? null,
+      strategy: finalStrategy ?? null,
+      tickets: tickets ?? null,
+      confidence: confidence ?? null,
+      ranking: ranking ?? null,
       meta: { track, surface, distance_mi: miles }
-    });
+    };
+    return res.status(200).json(out);
   } catch (err) {
-    console.error('[predict_wps] Error:', err);
-    return res.status(500).json({ error: 'prediction_error', message: String(err?.message || err) });
+    console.error('[API] predict_wps failed', err);
+    return res.status(500).json({ error: 'predict_wps failed', detail: String(err?.message || err) });
   }
 }

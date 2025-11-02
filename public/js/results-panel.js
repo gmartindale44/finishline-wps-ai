@@ -15,6 +15,21 @@
   const clsOpen = 'fl-results--open';
   const clsPinned = 'fl-results--pinned';
 
+  function buildFallbackStrategy(conf = 0) {
+    const betTypesTable = [
+      { name: 'Trifecta Box (Top 3)', bestFor: 'Max profit', desc: "Leverages AI's strength at identifying the 3 right horses even if order flips." },
+      { name: 'Across the Board', bestFor: 'Consistency', desc: 'Collects if top pick finishes top 3. Good for low variance.' },
+      { name: 'Win Only', bestFor: 'Confidence plays', desc: 'When AI confidence is high, go clean Win.' },
+      { name: 'Exacta Box (Top 3)', bestFor: 'Middle ground', desc: 'Good when top pair is strong, but trifecta is shaky.' }
+    ];
+    const recommended = conf >= 0.68 ? 'Win Only' : 'Across the Board';
+    return {
+      header: { recommended, confidence: Math.round(conf * 100) },
+      betTypesTable,
+      suggested: { bankroll: 200, lines: [] }
+    };
+  }
+
   function ensure() {
     if (elements) return;
 
@@ -275,28 +290,52 @@
     elements.exoticsContent.innerHTML = html;
   }
 
-  function renderStrategy(strategy, fallbackData = {}) {
-    if (!elements || !elements.strategyWrap) return;
+  function renderStrategy({ picks, strategy, exotics, error }) {
+    const root = document.querySelector('#fl-results-strategy');
+    if (!root && !elements?.strategyWrap) return;
+    const strategyWrap = root || elements.strategyWrap;
+    if (!strategyWrap) return;
 
-    // Fallback: synthesize minimal strategy if missing
-    let s = strategy;
-    if (!s) {
-      const betTypesTable = [
-        { type: 'Trifecta Box (AI Top 3)', icon: '🔥', bestFor: 'Max profit', desc: 'Leverages AI\'s strength at identifying the 3 right horses even if order flips.' },
-        { type: 'Across the Board',        icon: '🛡️', bestFor: 'Consistency', desc: 'Always collects if top pick finishes top 3. Ideal for low variance bankroll play.' },
-        { type: 'Win Only',                icon: '🎯', bestFor: 'Confidence plays', desc: 'When AI confidence > 68%, Win-only yields clean edge.' },
-        { type: 'Exacta Box (Top 3)',      icon: '⚖️', bestFor: 'Middle ground', desc: 'Works when AI has correct pair but misses trifecta.' },
-      ];
-      const conf = Number(fallbackData.confidence || 0);
-      // Naive heuristic: if conf high choose Win, else default to ATB
-      const recommended = conf >= 0.7 ? 'Win Only' : 'Across the Board';
+    // Error card
+    if (error && error.message) {
+      strategyWrap.innerHTML = `
+        <div class="fl-card" style="padding:16px;border:1px solid rgba(255,99,99,0.3);background:rgba(200,60,60,0.1);border-radius:10px;">
+          <div style="color:#ff6b6b;font-weight:600;margin-bottom:8px;">Prediction Error</div>
+          <div style="font-size:13px;opacity:0.8;color:#b8bdd4;">${error.message}</div>
+          <div style="font-size:11px;opacity:0.6;margin-top:8px;color:#b8bdd4;">We handled this gracefully—try again or check console logs.</div>
+        </div>`;
+      return;
+    }
+
+    const conf = (picks && (typeof picks === 'object' && (picks.confidence ?? picks.top3Confidence))) 
+      ? Number((picks.confidence ?? picks.top3Confidence)) / 100 
+      : (typeof picks === 'number' ? picks / 100 : 0.0);
+    const safe = strategy && typeof strategy === 'object' ? strategy : buildFallbackStrategy(conf);
+
+    // Convert safe strategy to expected format
+    let s = safe;
+    if (safe.header) {
+      // Convert from new format to old format
       s = {
-        recommended,
-        rationale: [`Confidence ${Math.round(conf * 100)}%`],
-        betTypesTable,
+        recommended: safe.header.recommended || 'Across the Board',
+        rationale: [`Confidence ${safe.header.confidence || 0}%`],
+        betTypesTable: safe.betTypesTable?.map(bt => ({
+          type: bt.name || bt.type || '',
+          icon: bt.icon || '',
+          bestFor: bt.bestFor || '',
+          desc: bt.desc || ''
+        })) || [],
         metrics: { confidence: conf, top3Mass: null, gap12: null, gap23: null, top: [] }
       };
-      console.info('[FLResults] Using client-side fallback strategy');
+    }
+    
+    if (!s.betTypesTable || !Array.isArray(s.betTypesTable)) {
+      s.betTypesTable = [
+        { type: 'Trifecta Box (AI Top 3)', icon: '🔥', bestFor: 'Max profit', desc: 'Leverages AI\'s strength at identifying the 3 right horses even if order flips.' },
+        { type: 'Across the Board', icon: '🛡️', bestFor: 'Consistency', desc: 'Always collects if top pick finishes top 3. Ideal for low variance bankroll play.' },
+        { type: 'Win Only', icon: '🎯', bestFor: 'Confidence plays', desc: 'When AI confidence > 68%, Win-only yields clean edge.' },
+        { type: 'Exacta Box (Top 3)', icon: '⚖️', bestFor: 'Middle ground', desc: 'Works when AI has correct pair but misses trifecta.' },
+      ];
     }
 
     // --- bankroll state (default 200, range 50-500) ---
@@ -447,7 +486,7 @@
 
       function renderPlan() {
         if (!linesEl) return;
-        const lines = planLinesFor(rec, picks, bankroll);
+        const lines = planLinesFor(rec, picksData, bankroll);
         linesEl.innerHTML = lines.map(l => `<li style="margin:4px 0;color:#b8bdd4;font-size:13px;">${l}</li>`).join('');
       }
 
@@ -492,10 +531,11 @@
     fillBadge(elements.badgePlace, '🥈 Place', place, getOdds(place), 'fl-badge--silver');
     fillBadge(elements.badgeShow, '🥉 Show', show, getOdds(show), 'fl-badge--bronze');
 
-    // Confidence
-    const pct = Math.max(0, Math.min(100, Number(confidence) || 0));
-    elements.confPct.textContent = `${pct.toFixed(0)}%`;
-    elements.confBar.style.width = `${pct}%`;
+    // Confidence - guard against undefined
+    const confPct = (pred?.picks?.confidence ?? pred?.confidence ?? confidence ?? 0);
+    const pct = Math.max(0, Math.min(100, Number(confPct) || 0));
+    if (elements.confPct) elements.confPct.textContent = `${pct.toFixed(0)}%`;
+    if (elements.confBar) elements.confBar.style.width = `${pct}%`;
 
     // Reasons chips (show for winner) - now with +/- deltas
     const winnerReasons = reasons[win] || [];
