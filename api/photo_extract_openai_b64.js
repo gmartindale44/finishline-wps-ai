@@ -1,114 +1,50 @@
-// api/photo_extract_openai_b64.js
-
-export const config = { runtime: 'nodejs' };
-
-import { resolveOpenAIKey, resolveOpenAIModel } from './_openai.js';
-
-function setCors(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-}
-
-function bad(res, code, msg, detail) {
-  return res.status(code).json({ error: msg, detail });
-}
-
-function ok(res, data) {
-  return res.status(200).json(data);
-}
+export const config = {
+  runtime: "nodejs",
+  api: { bodyParser: { sizeLimit: "15mb" } }
+};
 
 export default async function handler(req, res) {
-  setCors(res);
-  if (req.method === 'OPTIONS') return res.status(200).end();
-
-  console.log('[OCR] Request:', req.method, req.url, { hasBody: !!req.body });
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   try {
-    if (req.method !== 'POST') return bad(res, 405, 'Method not allowed');
-
-    const { b64, mime } = req.body || {};
-
-    if (!b64 || !mime) return bad(res, 400, 'Missing b64 or mime');
-
-    if (!/^image\/(png|jpe?g|webp)$/.test(mime)) {
-      return bad(res, 415, 'Unsupported mime', { mime });
+    const { imagesB64 } = req.body || {};
+    if (!Array.isArray(imagesB64) || imagesB64.length === 0) {
+      return res.status(400).json({ error: "No imagesB64 provided" });
     }
 
-    const estBytes = Math.ceil((b64.length * 3) / 4);
-    if (estBytes > 2.5 * 1024 * 1024) {
-      return bad(res, 413, 'Image too large after client compress (max ~2.5MB)', { estBytes });
-    }
+    console.log("[OCR] req", { count: imagesB64.length });
 
-    const apiKey = resolveOpenAIKey();
-    const model = resolveOpenAIModel('gpt-4o-mini');
-
-    if (!apiKey) return bad(res, 500, 'OpenAI key missing');
-
-    const body = {
-      model,
-      messages: [
-        {
-          role: 'system',
-          content: 'You are an OCR engine. Extract all readable text exactly as seen. Do not summarize.',
-        },
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: 'Extract all text.' },
-            {
-              type: 'image_url',
-              image_url: { url: `data:${mime};base64,${b64}` },
-            },
-          ],
-        },
-      ],
-      temperature: 0,
-      max_tokens: 2048,
-    };
-
-    async function call() {
-      const r = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
-      });
-
-      if (!r.ok) {
-        const t = await r.text().catch(() => '');
-        throw new Error(`OpenAI ${r.status}: ${t || r.statusText}`);
-      }
-
-      const j = await r.json();
-      const txt = (j.choices?.[0]?.message?.content || '').trim();
-      return txt;
-    }
-
-    let text = '';
+    // Prefer project helper, else fallback
+    let openai, model = process.env.FINISHLINE_OPENAI_MODEL || "gpt-4o-mini";
     try {
-      text = await call();
-    } catch (e) {
-      // simple 1 retry on 429/5xx
-      if (/\b(429|5\d\d)\b/.test(String(e))) {
-        await new Promise(r => setTimeout(r, 600));
-        text = await call();
-      } else {
-        throw e;
-      }
+      const mod = await import("./_openai.js");
+      openai = mod.client ? mod.client() : (mod.default?.client?.() ?? null);
+    } catch { /* ignore, fallback below */ }
+    if (!openai) {
+      const { default: OpenAI } = await import("openai");
+      const key = process.env.FINISHLINE_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
+      if (!key) return res.status(500).json({ error: "Missing OPENAI API key" });
+      openai = new OpenAI({ apiKey: key });
     }
 
-    if (!text) {
-      console.error('[OCR] Empty result');
-      return bad(res, 502, 'Empty OCR result');
-    }
+    const content = [
+      { type: "text", text: "Extract horse entries as JSON array with fields: horse, odds, jockey, trainer. Return {entries:[...]}. Be concise and accurate." },
+      ...imagesB64.map(b64 => ({ type: "image_url", image_url: { url: `data:image/png;base64,${b64}` } }))
+    ];
 
-    console.log('[OCR] Success, text length:', text.length);
-    return ok(res, { text });
+    const r = await openai.chat.completions.create({
+      model,
+      messages: [{ role: "user", content }],
+      response_format: { type: "json_object" }
+    });
+
+    const text = r?.choices?.[0]?.message?.content ?? "{}";
+    let json;
+    try { json = JSON.parse(text); } catch { json = { raw: text }; }
+
+    return res.status(200).json({ ok: true, model, data: json });
   } catch (err) {
-    console.error('[OCR ERROR]', err);
-    return bad(res, 500, 'OCR pipeline error', String(err?.stack || err));
+    console.error("[OCR] err", err?.message);
+    return res.status(500).json({ error: err?.message || "OCR failed" });
   }
 }

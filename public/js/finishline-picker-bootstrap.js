@@ -152,45 +152,50 @@
         }
 
         toast('Sending to OCR...', 'info');
-        const r = await fetch('/api/photo_extract_openai_b64', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ b64, mime }),
+        
+        // Convert to imagesB64 array format
+        const imagesB64 = [b64];
+        
+        const resp = await fetch("/api/photo_extract_openai_b64", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imagesB64 })
         });
 
-        let data;
-        try {
-          data = await r.json();
-        } catch (e) {
-          throw new Error(`Invalid JSON response: ${r.status} ${r.statusText}`);
+        if (!resp.ok) {
+          const t = await resp.text();
+          throw new Error(`OCR ${resp.status}: ${t}`);
         }
 
-        if (!r.ok) {
-          const errorMsg = data?.error || 'Unknown error';
-          const detail = data?.detail ? `\nDetails: ${data.detail}` : '';
-          toast(`OCR failed (${r.status}): ${errorMsg}${detail}`, 'error');
-          console.error('[OCR]', r.status, data);
+        const payload = await resp.json();
+        const entries = payload?.data?.entries || payload?.entries || [];
+
+        if (!Array.isArray(entries) || entries.length === 0) {
+          console.warn("OCR returned no entries", payload);
+          toast('No horse entries found in OCR result. Try a different image.', 'warn');
           return;
         }
 
-        const text = data.text || '';
-        if (!text || text.length < 10) {
-          toast('OCR produced too little text. Try a clearer image.', 'warn');
+        // Map entries to horses format (handle both 'horse' and 'name' fields)
+        const horses = entries.map(e => ({
+          name: e.horse || e.name || '',
+          odds: e.odds || '',
+          jockey: e.jockey || '',
+          trainer: e.trainer || ''
+        })).filter(h => h.name);
+
+        if (horses.length === 0) {
+          toast('No valid horses found in OCR entries.', 'warn');
           return;
         }
 
-        toast('Parsing horses from text...', 'info');
-        const horses = parseHorsesFromText(text);
-        if (!horses || horses.length === 0) {
-          toast('No horses found in OCR text. Try a different image.', 'warn');
-          return;
-        }
-
+        window.__fl_state.parsedHorses = horses;
+        window.__fl_state.analyzed = true;
         state.parsedHorses = horses;
         state.analyzed = true;
 
         enable(predictBtn, true);
-        toast(`Analysis complete — ${horses.length} entries parsed and ready.`, 'success');
+        toast(`Analysis complete — ${horses.length} entries parsed.`, 'success');
       } catch (e) {
         console.error('[Analyze]', e);
         toast(`Analyze failed: ${e.message}`, 'error');
