@@ -492,9 +492,9 @@
 
   async function handlePredictWPS() {
     try {
+      console.log('[FinishLine] handlePredictWPS() start');
       window.FLUI.setBusy(true, 'Generating predictions…');
 
-      // Collect payload (defensively)
       syncInputsToState();
       const horses = getHorsesForPrediction();
 
@@ -525,24 +525,26 @@
       });
 
       if (!res.ok) {
-        const text = await res.text().catch(() => '');
-        throw new Error(`API ${res.status}: ${text || 'non-200 response'}`);
+        const txt = await res.text().catch(() => '');
+        throw new Error(`API ${res.status}: ${txt || 'non-200'}`);
       }
 
       const data = await res.json();
 
-      // Pass through with fallbacks; renderer will defend
-      window.FLResults && typeof window.FLResults.show === 'function'
-        ? window.FLResults.show({
-            picks: data?.picks ?? null,
-            strategy: data?.strategy ?? null,
-            tickets: data?.tickets ?? null,
-            confidence: data?.confidence ?? null,
-            meta: { from: 'predict_wps', ts: Date.now() }
-          })
-        : console.warn('[FinishLine] FLResults.show is missing');
+      console.log('[FinishLine] prediction success', { hasStrategy: !!data?.strategy });
 
-      console.info('[FinishLine] prediction success', { hasStrategy: !!data?.strategy });
+      if (window.FLResults && typeof window.FLResults.show === 'function') {
+        window.FLResults.show({
+          picks: data?.picks ?? null,
+          strategy: data?.strategy ?? null,
+          tickets: data?.tickets ?? null,
+          confidence: data?.confidence ?? null,
+          meta: { from: 'predict_wps', ts: Date.now() }
+        });
+      } else {
+        console.warn('[FinishLine] FLResults.show is missing');
+        window.flToast('Renderer missing. See console.', 'error');
+      }
 
     } catch (err) {
       console.error('[FinishLine] prediction failed', err);
@@ -564,27 +566,34 @@
 
   if (analyzeBtn) analyzeBtn.addEventListener('click', onAnalyze);
 
-  // Bind once on DOM ready + repair-bind if markup changes
-  (function FL_Bind_Predict() {
-    const KEY = '__fl_bound_predict__';
-    function bind() {
-      if (window[KEY]) return;
-      const btn = document.querySelector('[data-action="predict-wps"]') || document.getElementById('predict-btn') || predictBtn;
-      if (!btn) {
-        console.warn('[FinishLine] Predict button not found yet — retrying…');
-        return;
-      }
-      btn.addEventListener('click', (e) => { e.preventDefault(); handlePredictWPS(); });
-      window[KEY] = true;
-      console.log('[FinishLine] Predict bound');
+  // Delegated binding (survives re-renders and missing initial DOM)
+  (function FL_DelegatedBind() {
+    const CLICKED_FLAG = '__fl_predict_clicked__';
+    function onClick(e) {
+      const target = e.target.closest('[data-action="predict-wps"]');
+      if (!target) return;
+      e.preventDefault();
+      e.stopPropagation();
+
+      // simple debounce
+      if (target[CLICKED_FLAG]) return;
+      target[CLICKED_FLAG] = true;
+      setTimeout(() => { target[CLICKED_FLAG] = false; }, 600);
+
+      console.log('[FinishLine] Predict click captured');
+      handlePredictWPS();
     }
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', bind);
-    } else {
-      bind();
-    }
-    // safety rebind in case of dynamic re-render
-    setTimeout(bind, 1000);
-    setTimeout(bind, 3000);
+
+    document.addEventListener('click', onClick, true);
+
+    // Diag helper
+    window.__FL_DIAG__ = () => ({
+      btn: !!document.querySelector('[data-action="predict-wps"]'),
+      resultsShow: !!(window.FLResults && window.FLResults.show),
+      formCollect: !!(window.FLForm && window.FLForm.collect),
+      readyState: document.readyState
+    });
+
+    console.log('[FinishLine] Delegated predict binder ready');
   })();
 })();
