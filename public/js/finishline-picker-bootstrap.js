@@ -15,6 +15,8 @@
 
   function enable(el, on = true) {
     if (!el) return;
+    // Idempotent: no-op if already set
+    if (el.disabled === !on && el.classList.contains('disabled') === !on) return;
     el.disabled = !on;
     el.classList.toggle('disabled', !on);
     el.setAttribute('aria-disabled', String(!on));
