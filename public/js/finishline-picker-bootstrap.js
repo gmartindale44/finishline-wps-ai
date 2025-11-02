@@ -490,11 +490,10 @@
     return null;
   }
 
-  async function handlePredictWPS() {
+  // ===== Core predict handler =====
+  async function predictWPS() {
     try {
-      console.log('[FinishLine] handlePredictWPS() start');
-      window.FLUI.setBusy(true, 'Generating predictions…');
-
+      console.log('[FinishLine] predictWPS()');
       syncInputsToState();
       const horses = getHorsesForPrediction();
 
@@ -513,7 +512,7 @@
           };
 
       if (!payload || !Array.isArray(payload.horses) || payload.horses.length < 3) {
-        throw new Error('Form is incomplete — need at least 3 horses.');
+        throw new Error('Need at least 3 horses before predicting.');
       }
 
       __fl_diag('predict payload', payload);
@@ -525,36 +524,40 @@
       });
 
       if (!res.ok) {
-        const txt = await res.text().catch(() => '');
-        throw new Error(`API ${res.status}: ${txt || 'non-200'}`);
+        throw new Error('API ' + res.status);
       }
 
       const data = await res.json();
 
-      console.log('[FinishLine] prediction success', { hasStrategy: !!data?.strategy });
+      console.log('[FinishLine] predict success', { strategy: !!data?.strategy, picks: !!data?.picks });
 
       if (window.FLResults && typeof window.FLResults.show === 'function') {
         window.FLResults.show({
-          picks: data?.picks ?? null,
-          strategy: data?.strategy ?? null,
-          tickets: data?.tickets ?? null,
-          confidence: data?.confidence ?? null,
+          picks: data.picks || null,
+          strategy: data.strategy || null,
+          tickets: data.tickets || null,
+          confidence: data.confidence || null,
           meta: { from: 'predict_wps', ts: Date.now() }
         });
       } else {
-        console.warn('[FinishLine] FLResults.show is missing');
-        window.flToast('Renderer missing. See console.', 'error');
+        console.warn('[FinishLine] FLResults.show missing');
+        window.flToast('Renderer missing (see console).');
       }
 
     } catch (err) {
-      console.error('[FinishLine] prediction failed', err);
-      window.flToast('Prediction failed. See console.', 'error');
+      console.error('[FinishLine] predict failed', err);
+      window.flToast('Prediction failed: ' + (err?.message || err), false);
       try {
         window.FLResults?.show?.({ picks: null, strategy: null, tickets: null, error: { message: String(err?.message || err) } });
       } catch {}
-    } finally {
-      window.FLUI.setBusy(false);
     }
+  }
+
+  // Expose for inline fallback
+  window.FLHandlers = Object.assign(window.FLHandlers || {}, { predictWPS });
+
+  async function handlePredictWPS() {
+    return predictWPS();
   }
 
   async function onPredict() {
@@ -566,34 +569,57 @@
 
   if (analyzeBtn) analyzeBtn.addEventListener('click', onAnalyze);
 
-  // Delegated binding (survives re-renders and missing initial DOM)
-  (function FL_DelegatedBind() {
-    const CLICKED_FLAG = '__fl_predict_clicked__';
-    function onClick(e) {
-      const target = e.target.closest('[data-action="predict-wps"]');
-      if (!target) return;
+  // ===== Binding strategy (triple-layer) =====
+  function bindDirect() {
+    const btn = document.getElementById('predictWpsBtn');
+    if (!btn) return false;
+    if (!btn.__fl_bound) {
+      btn.addEventListener('click', predictWPS, { capture: true });
+      btn.__fl_bound = true;
+      console.log('[FinishLine] Bound direct click to #predictWpsBtn');
+    }
+    return true;
+  }
+
+  function bindDelegated() {
+    if (document.__fl_delegate_bound) return;
+    document.addEventListener('click', (e) => {
+      const t = e.target && e.target.closest && e.target.closest('#predictWpsBtn,[data-action="predict-wps"]');
+      if (!t) return;
       e.preventDefault();
       e.stopPropagation();
+      console.log('[FinishLine] Delegated click captured');
+      predictWPS();
+    }, true);
+    document.__fl_delegate_bound = true;
+    console.log('[FinishLine] Delegated binder ready');
+  }
 
-      // simple debounce
-      if (target[CLICKED_FLAG]) return;
-      target[CLICKED_FLAG] = true;
-      setTimeout(() => { target[CLICKED_FLAG] = false; }, 600);
+  function observeRebind() {
+    if (document.__fl_observer) return;
+    const mo = new MutationObserver(() => bindDirect());
+    mo.observe(document.body, { childList: true, subtree: true });
+    document.__fl_observer = mo;
+    console.log('[FinishLine] MutationObserver rebind enabled');
+  }
 
-      console.log('[FinishLine] Predict click captured');
-      handlePredictWPS();
-    }
+  function initPredictBinding() {
+    bindDirect();       // try direct
+    bindDelegated();    // also delegated
+    observeRebind();    // and auto-rebind on DOM swaps
+  }
 
-    document.addEventListener('click', onClick, true);
+  // Init on DOM ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initPredictBinding, { once: true });
+  } else {
+    initPredictBinding();
+  }
 
-    // Diag helper
-    window.__FL_DIAG__ = () => ({
-      btn: !!document.querySelector('[data-action="predict-wps"]'),
-      resultsShow: !!(window.FLResults && window.FLResults.show),
-      formCollect: !!(window.FLForm && window.FLForm.collect),
-      readyState: document.readyState
-    });
-
-    console.log('[FinishLine] Delegated predict binder ready');
-  })();
+  // Quick console probe
+  window.__FL_DIAG__ = () => ({
+    btn: !!document.getElementById('predictWpsBtn'),
+    resultsShow: !!(window.FLResults && window.FLResults.show),
+    formCollect: !!(window.FLForm && window.FLForm.collect)
+  });
 })();

@@ -3,11 +3,20 @@
 (function () {
   'use strict';
 
-  const root = document.getElementById('fl-results-root');
-  if (!root) {
-    console.error('[FLResults] Container #fl-results-root not found');
-    return;
+  // Ensure a root exists (idempotent)
+  function ensureRoot() {
+    let root = document.getElementById('fl-results-root');
+    if (!root) {
+      root = document.createElement('div');
+      root.id = 'fl-results-root';
+      root.setAttribute('aria-live', 'polite');
+      document.body.appendChild(root);
+      console.log('[FLResults] Created missing root container');
+    }
+    return root;
   }
+
+  const root = ensureRoot();
 
   let elements = null;
   let lastPred = null;
@@ -509,7 +518,8 @@
 
   function render(pred) {
     // Guard: ensure modal root exists before rendering
-    if (!root || !document.body.contains(root)) {
+    const currentRoot = ensureRoot();
+    if (!currentRoot || !document.body.contains(currentRoot)) {
       console.warn('[FLResults] Modal root not available; skipping render.');
       return;
     }
