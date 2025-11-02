@@ -1,260 +1,180 @@
-import { setCors } from './_http.js';
-
+// api/predict_wps.js
 export const config = { runtime: 'nodejs' };
 
-function json(res, status, data) {
-  setCors(res);
-  res.status(status).json(data);
+// --- CORS helper (adjust origin if you want to restrict) ---
+function setCORS(res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 }
 
-// Load priors (inline for Vercel compatibility)
-const DEFAULT_PRIORS = {
-  jockey: {
-    "javier castellano": 0.17,
-    "ricardo santana": 0.16,
-    "john c kimmel": 0.11,
-    "irad ortiz jr": 0.18,
-    "jose ortiz": 0.16,
-    "florent geroux": 0.14,
-    "joel rosario": 0.15
-  },
-  trainer: {
-    "chad brown": 0.24,
-    "bill mott": 0.18,
-    "john c kimmel": 0.12,
-    "bob baffert": 0.22,
-    "todd pletcher": 0.20,
-    "steve asmussen": 0.16,
-    "brad cox": 0.19
-  },
-  default: {
-    jockey: 0.12,
-    trainer: 0.12
+// --- Odds parsing: supports "3/1", "9-5", or plain number like "1.8" ---
+function parseOddsFraction(frac) {
+  if (!frac) return null;
+  const s = String(frac).trim().toLowerCase();
+  if (s.includes('/')) {
+    const [a, b] = s.split('/').map(Number);
+    if (a > 0 && b > 0) return a / b;
   }
-};
-
-// Use embedded priors (reliable in all environments)
-function getPriors() {
-  return DEFAULT_PRIORS;
-}
-
-// Name normalization
-function normName(s) {
-  return (s || "")
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, ' ')
-    .replace(/\b(st|jr|sr|iii|ii)\b/g, '')
-    .trim();
-}
-
-// Parse distance to miles
-function parseDistance(text) {
-  if (!text) return null;
-  const t = String(text).toLowerCase().replace(/[^0-9/ .]/g, '').trim();
-  if (!t) return null;
-
-  const parts = t.split(' ');
-  let total = 0;
-  for (const p of parts) {
-    if (p.includes('/')) {
-      const [a, b] = p.split('/');
-      const f = parseFloat(a) / parseFloat(b || 1);
-      if (isFinite(f)) total += f;
-    } else {
-      const n = parseFloat(p);
-      if (isFinite(n)) total += n;
-    }
+  if (s.includes('-')) {
+    const [a, b] = s.split('-').map(Number);
+    if (a > 0 && b > 0) return a / b;
   }
-  return isFinite(total) && total > 0 ? total : null;
+  const n = Number(s);
+  if (!Number.isNaN(n) && n > 0) return n;
+  return null;
+}
+function impliedProbFromOdds(frac) {
+  const p = parseOddsFraction(frac);
+  return p ? (1 / (1 + p)) : 0.5;
 }
 
-// Z-score helper
-function zscore(x, mean, sd) {
-  if (x == null || !isFinite(x) || sd === 0 || !isFinite(sd)) return 0;
-  return (x - mean) / sd;
+// --- Distance conversion (mirrors client) ---
+function toMiles(distanceInput) {
+  if (!distanceInput) return null;
+  const raw = String(distanceInput).trim().toLowerCase();
+
+  const f = raw.match(/(\d+(?:\.\d+)?)(\s*)f(?:urlong[s]?)?/);
+  if (f) return parseFloat(f[1]) * 0.125;
+
+  const mix = raw.match(/(\d+)\s+(\d+)\/(\d+)/);
+  if (mix) return parseInt(mix[1], 10) + (parseInt(mix[2], 10) / parseInt(mix[3], 10));
+
+  const dec = raw.match(/-?\d+(\.\d+)?/);
+  return dec ? parseFloat(dec[0]) : null;
 }
 
-// Inverse rank (lower rank = higher value)
-function rank(values, inverse = false) {
-  const indexed = values.map((v, i) => ({ v: v == null ? -Infinity : v, i }));
-  indexed.sort((a, b) => (inverse ? a.v - b.v : b.v - a.v));
-  const ranks = new Array(values.length).fill(null);
-  indexed.forEach((item, pos) => {
-    ranks[item.i] = pos;
-  });
-  return ranks;
+// --- Math helpers ---
+function zScores(vs) {
+  if (!vs.length) return [];
+  const m = vs.reduce((a, b) => a + b, 0) / vs.length;
+  const sd = Math.sqrt(vs.reduce((a, b) => a + (b - m) * (b - m), 0) / vs.length) || 1;
+  return vs.map(v => (v - m) / sd);
+}
+function normalizeRanks(arr) {
+  const n = arr.length;
+  const o = arr.map((v, i) => ({ v, i })).sort((a, b) => b.v - a.v);
+  const r = new Array(n);
+  o.forEach((row, idx) => { r[row.i] = 1 - idx / (n - 1 || 1); });
+  return r;
 }
 
-// Z-score of inverse rank
-function zInvRank(values) {
-  const ranks = rank(values, true); // lower rank (smaller value) = better for odds
-  const rankMean = ranks.reduce((a, b) => a + (b == null ? 0 : b), 0) / ranks.length;
-  const rankSd = Math.sqrt(ranks.reduce((a, b) => a + (b == null ? rankMean : (b - rankMean)) ** 2, 0) / ranks.length) || 1;
-  return ranks.map(r => zscore(r, rankMean, rankSd));
+// --- Robust body parse for Vercel Node ---
+async function parseJSONBody(req) {
+  if (req.body && typeof req.body === 'object') return req.body;
+  if (req.body && typeof req.body === 'string') {
+    try { return JSON.parse(req.body); } catch { /* fallthrough */ }
+  }
+  // Fallback: accumulate stream (older runtimes)
+  const chunks = [];
+  for await (const c of req) chunks.push(c);
+  const raw = Buffer.concat(chunks).toString('utf8');
+  try { return JSON.parse(raw); } catch { return {}; }
 }
 
 export default async function handler(req, res) {
-  setCors(res);
+  setCORS(res);
   if (req.method === 'OPTIONS') return res.status(200).end();
 
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'method_not_allowed' });
+  }
+
   try {
-    const body = req.method === 'POST' ? req.body : null;
-    if (!body) return json(res, 400, { error: 'Empty body' });
+    const body = await parseJSONBody(req);
+    const {
+      horses = [],               // [{ name, odds, post? }]
+      track = null,
+      surface = null,
+      distance_input = null,     // string: miles or furlongs
+      speedFigs = {}             // { "Horse Name": 113 }
+    } = body || {};
 
-    const features = body.features || {};
-    const useDistance = body.useDistance !== false;
-    const useSurface = body.useSurface !== false;
-    const usePriors = body.usePriors !== false;
-
-    if (!features || typeof features !== 'object' || Object.keys(features).length === 0) {
-      return json(res, 400, { error: 'No features provided' });
+    if (!Array.isArray(horses) || horses.length < 3) {
+      return res.status(400).json({ error: 'Need at least 3 horses' });
     }
 
-    // Convert features object to array
-    const entries = Object.values(features);
-    if (entries.length < 3) {
-      return json(res, 400, { error: 'Need at least 3 horses' });
-    }
+    // Odds → implied probabilities → inverse rank (normalized 0–1)
+    const oddsImpl = horses.map(h => impliedProbFromOdds(h?.odds));
+    const oddsScore = normalizeRanks(oddsImpl);
 
-    const priorsData = getPriors();
+    // Speed figs: fill missing with mean, then z-score → map to [0..1]
+    const speedRaw = horses.map(h => {
+      const nm = String(h?.name || '').toLowerCase();
+      const key = Object.keys(speedFigs).find(k => String(k).toLowerCase() === nm);
+      const val = key ? Number(speedFigs[key]) : NaN;
+      return Number.isNaN(val) ? null : val;
+    });
+    const have = speedRaw.filter(v => v != null);
+    const mean = have.length ? (have.reduce((a, b) => a + b, 0) / have.length) : 0;
+    const filled = speedRaw.map(v => (v == null ? mean : v));
+    const z = zScores(filled);                                 // can be negative/positive
+    const speedScore = z.map(v => 0.5 + Math.max(Math.min(v, 2), -2) / 4); // clamp z to [-2,2] then scale → [0..1]
 
-    // Build per-horse signal components
-    const scoresA = []; // Odds model
-    const scoresB = []; // Speed model
-    const scoresC = []; // J/T priors
-    const scoresD = []; // Distance/Surface fit
+    // Bias: small bump for sprint/turf & sprint post position
+    const miles = toMiles(distance_input);
+    const sprint = (miles != null && miles < 1.0);
+    const surf = String(surface || '').toLowerCase();
 
-    // A) Odds model
-    const implied = entries.map(e => e.implied ?? null);
-    const oddsZInv = zInvRank(implied);
-    entries.forEach((e, i) => {
-      scoresA.push(oddsZInv[i] ?? 0);
+    const bias = horses.map((h, i) => {
+      let b = 0.5;
+
+      // very light surface-distance interplay
+      if (surf.includes('turf') && sprint) b += (z[i] || 0) * 0.05;
+
+      // sprint post bias: slight inside preference, slight penalty outside
+      const post = Number(h?.post);
+      if (!Number.isNaN(post) && sprint) {
+        if (post <= 4) b += 0.04;
+        if (post >= 9) b -= 0.04;
+      }
+
+      return Math.max(0, Math.min(1, b));
     });
 
-    // B) Speed model
-    const speed = entries.map(e => e.speed ?? null);
-    const speedValid = speed.filter(s => s != null);
-    const speedMean = speedValid.length > 0 ? speedValid.reduce((a, b) => a + b, 0) / speedValid.length : 0;
-    const speedSd = speedValid.length > 1
-      ? Math.sqrt(speedValid.reduce((a, b) => a + (b - speedMean) ** 2, 0) / speedValid.length)
-      : 1;
-    entries.forEach((e, i) => {
-      scoresB.push(zscore(e.speed ?? null, speedMean, speedSd));
+    // Dynamic weights
+    const W = sprint ? { o: 0.40, s: 0.50, b: 0.10 } : { o: 0.45, s: 0.45, b: 0.10 };
+
+    // Composite
+    const comp = horses.map((h, i) =>
+      W.o * oddsScore[i] + W.s * speedScore[i] + W.b * bias[i]
+    );
+
+    // Order & tie-break by speedScore
+    const ord = comp
+      .map((v, i) => ({ i, v, spd: speedScore[i] }))
+      .sort((a, b) => (b.v - a.v) || (b.spd - a.spd))
+      .slice(0, 3);
+
+    const slots = ['Win', 'Place', 'Show'];
+    const picks = ord.map((o, idx) => {
+      const hs = horses[o.i] || {};
+      const reasons = [];
+
+      const ro = oddsScore[o.i] - 0.5;
+      if (Math.abs(ro) > 0.05) reasons.push(`odds rank inv ${ro > 0 ? '+' : ''}${ro.toFixed(2)}`);
+
+      const rz = z[o.i] || 0;
+      if (Math.abs(rz) > 0.25) reasons.push(`speedFig z ${rz > 0 ? '+' : ''}${rz.toFixed(2)}`);
+
+      if (sprint) reasons.push('dist adj');
+      if (surf) reasons.push('surf adj');
+      if (!Number.isNaN(Number(hs.post))) reasons.push('post adj');
+
+      return {
+        slot: slots[idx],
+        name: hs.name,
+        odds: hs.odds || '',
+        reasons
+      };
     });
 
-    // C) J/T priors
-    entries.forEach((e) => {
-      const jockeyNorm = normName(e.jockey || '');
-      const trainerNorm = normName(e.trainer || '');
-      const pj = priorsData.jockey[jockeyNorm] ?? priorsData.default.jockey;
-      const pt = priorsData.trainer[trainerNorm] ?? priorsData.default.trainer;
-      scoresC.push(0.5 * pj + 0.5 * pt);
-    });
+    // Confidence: mean composite, clamped 8%–85%
+    const confidence = Math.max(0.08, Math.min(0.85, ord.reduce((a, b) => a + b.v, 0) / (ord.length || 1)));
 
-    // D) Distance/Surface fit
-    const distAdj = useDistance && body.distance ? 0.05 : 0;
-    const surfAdj = useSurface && body.surface ? 0.05 : 0;
-    const scoreD = distAdj + surfAdj;
-    entries.forEach(() => scoresD.push(scoreD));
-
-    // Coverage-aware weights
-    const hasA = scoresA.some(s => s !== 0);
-    const hasB = scoresB.some(s => s !== 0);
-    const hasC = usePriors && scoresC.some(s => s > 0);
-    const hasD = useDistance || useSurface;
-
-    const totalWeight = (hasA ? 0.35 : 0) + (hasB ? 0.35 : 0) + (hasC ? 0.20 : 0) + (hasD ? 0.10 : 0);
-
-    if (totalWeight < 0.1) {
-      return json(res, 400, {
-        error: 'insufficient_features',
-        reason: 'Not enough usable signals—try adding Speed/PP photo or enable priors.',
-      });
-    }
-
-    // Normalize weights
-    const wA = hasA ? 0.35 / totalWeight : 0;
-    const wB = hasB ? 0.35 / totalWeight : 0;
-    const wC = hasC ? 0.20 / totalWeight : 0;
-    const wD = hasD ? 0.10 / totalWeight : 0;
-
-    // Combine scores
-    const finalScores = entries.map((e, i) => {
-      return wA * scoresA[i] + wB * scoresB[i] + wC * scoresC[i] + wD * scoresD[i];
-    });
-
-    // Softmax with temperature
-    const T = 0.35;
-    const min = Math.min(...finalScores);
-    const max = Math.max(...finalScores);
-    const scaled = finalScores.map(s => (max === min ? 0.5 : (s - min) / (max - min)));
-    const exps = scaled.map(s => Math.exp(s / T));
-    const Z = exps.reduce((a, b) => a + b, 0);
-    const probs = exps.map(e => e / Z);
-
-    // Rank by probability
-    const order = probs.map((p, i) => ({ p, i })).sort((a, b) => b.p - a.p).map(o => o.i);
-
-    const winIdx = order[0];
-    const placeIdx = order[1];
-    const showIdx = order[2];
-
-    const winner = entries[winIdx];
-    const place = entries[placeIdx];
-    const show = entries[showIdx];
-
-    // Confidence calculation
-    const signalCount = (hasA ? 1 : 0) + (hasB ? 1 : 0) + (hasC ? 1 : 0) + (hasD ? 1 : 0);
-    const coverage = signalCount / (4 * entries.length);
-    const medianProb = [...probs].sort((a, b) => a - b)[Math.floor(probs.length / 2)];
-    const consensus = probs[winIdx] - medianProb > 0 ? (probs[winIdx] - medianProb) / probs[winIdx] : 0;
-    const confidence = Math.round(100 * (0.5 * coverage + 0.5 * consensus));
-
-    // Compute factor deltas for winner
-    const meanA = scoresA.reduce((a, b) => a + b, 0) / scoresA.length;
-    const meanB = scoresB.reduce((a, b) => a + b, 0) / scoresB.length;
-    const meanC = scoresC.reduce((a, b) => a + b, 0) / scoresC.length;
-    const meanD = scoresD[0] || 0;
-
-    const winnerDeltas = {
-      'odds rank inv': scoresA[winIdx] - meanA,
-      'odds imp': (entries[winIdx].implied ?? 0) - (implied.reduce((a, b) => a + (b ?? 0), 0) / implied.length),
-      'speedFig z': scoresB[winIdx] - meanB,
-      'speedFig rank inv': 0, // TODO: implement if needed
-      'jockey prior': scoresC[winIdx] - meanC,
-      'trainer prior': scoresC[winIdx] - meanC, // Combined in scoreC
-      'dist adj': scoresD[winIdx] - meanD,
-      'surface adj': scoresD[winIdx] - meanD, // Combined in scoreD
-    };
-
-    const reasons = Object.entries(winnerDeltas)
-      .filter(([k, v]) => Math.abs(v) >= 0.15)
-      .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
-      .slice(0, 5)
-      .map(([k, v]) => `${k} ${v >= 0 ? '+' : ''}${v.toFixed(2)}`);
-
-    return json(res, 200, {
-      win: winner.name,
-      place: place.name,
-      show: show.name,
-      predictions: {
-        win: { name: winner.name, odds: winner.odds || null },
-        place: { name: place.name, odds: place.odds || null },
-        show: { name: show.name, odds: show.odds || null },
-      },
-      horses: entries.map((e, i) => ({
-        name: e.name,
-        horse: e.name,
-        odds: e.odds,
-        speedFig: e.speed,
-        prob: Math.round(probs[i] * 1000) / 10,
-      })),
-      reasons: { [winner.name]: reasons },
-      confidence: Math.max(3, Math.min(99, confidence)),
-    });
+    return res.status(200).json({ picks, confidence, meta: { track, surface, distance_mi: miles } });
   } catch (err) {
     console.error('[predict_wps] Error:', err);
-    console.error('[predict_wps] Stack:', err?.stack);
-    return json(res, 500, { error: 'Prediction failure', detail: String(err?.message || err) });
+    return res.status(500).json({ error: 'prediction_error', message: String(err?.message || err) });
   }
 }

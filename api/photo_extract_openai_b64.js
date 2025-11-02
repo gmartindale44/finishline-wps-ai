@@ -49,15 +49,34 @@ export default async function handler(req, res) {
     let json;
     try { json = JSON.parse(text); } catch { json = { raw: text }; }
 
+    // Extract speed figures from text (for main or speed kind)
+    function extractSpeedFigsFromText(text) {
+      const map = {};
+      // Matches: Horse Name (113) or Horse Name (113*)
+      const re = /([A-Za-z0-9'&.\-\s]+?)\s*\(\s*(\d{2,3})\s*\*?\s*\)/g;
+      let m;
+      while ((m = re.exec(text)) !== null) {
+        const name = m[1].trim().replace(/\s+/g, ' ');
+        const fig = Number(m[2]);
+        if (fig) map[name] = fig;
+      }
+      return map;
+    }
+
     if (kind === "speed") {
       // Normalize speed table
+      let speedFigs = {};
       if (json.speed && Array.isArray(json.speed)) {
-        json.speed = json.speed.map(s => ({
-          name: String(s.name || s.horse || '').trim(),
-          speedFig: typeof s.speedFig === 'number' ? s.speedFig : (s.speedFig ? Number(s.speedFig) : null),
-        })).filter(s => s.name && s.name.length > 1);
+        json.speed.forEach(s => {
+          const name = String(s.name || s.horse || '').trim();
+          const fig = typeof s.speedFig === 'number' ? s.speedFig : (s.speedFig ? Number(s.speedFig) : null);
+          if (name && fig) speedFigs[name] = fig;
+        });
       }
-      return res.status(200).json({ ok: true, model, speed: json.speed || [] });
+      // Also extract from raw text
+      const textFigs = extractSpeedFigsFromText(text);
+      speedFigs = { ...speedFigs, ...textFigs };
+      return res.status(200).json({ ok: true, model, speed: Object.keys(speedFigs).map(n => ({ name: n, speedFig: speedFigs[n] })), speedFigs });
     } else {
       // Normalize entries to ensure speedFig is present
       if (json.entries && Array.isArray(json.entries)) {
@@ -70,10 +89,13 @@ export default async function handler(req, res) {
         }));
       }
 
+      // Extract speedFigs from text
+      const speedFigs = extractSpeedFigsFromText(text);
+
       // Ensure notes structure
       if (!json.notes) json.notes = { alsoRans: [] };
 
-      return res.status(200).json({ ok: true, model, ...json });
+      return res.status(200).json({ ok: true, model, ...json, speedFigs });
     }
   } catch (err) {
     console.error("[OCR] err", err?.message);

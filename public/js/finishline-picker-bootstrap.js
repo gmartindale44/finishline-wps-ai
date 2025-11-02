@@ -2,7 +2,11 @@
   const state = (window.__fl_state = window.__fl_state || {
     pickedFiles: [],
     analyzed: false,
-    parsedHorses: [],
+    parsedHorses: [],     // [{ name, odds, jockey?, trainer?, post? }]
+    speedFigs: {},        // { "Horse Name": 113, ... }
+    surface: null,
+    distance_input: null, // raw user distance string (miles OR furlongs)
+    track: null,
     speedFile: null,
     features: {},
   });
@@ -18,6 +22,74 @@
 
   function horseKey(name) {
     return normName(name);
+  }
+
+  // === Mirror inputs into __fl_state ===
+  function syncInputsToState() {
+    const track = document.getElementById('race-track')?.value?.trim();
+    const surface = document.getElementById('race-surface')?.value?.trim();
+    const distance = document.getElementById('race-distance')?.value?.trim();
+    if (track) window.__fl_state.track = track;
+    if (surface) window.__fl_state.surface = surface;
+    if (distance) window.__fl_state.distance_input = distance;
+  }
+
+  // === Simple normalized fuzzy-similarity (Dice coefficient over bigrams) ===
+  function __fl_similarity(a, b) {
+    if (!a || !b) return 0;
+    a = String(a).toLowerCase().trim();
+    b = String(b).toLowerCase().trim();
+    if (a === b) return 1;
+    const bigrams = s => {
+      const out = new Map();
+      for (let i = 0; i < s.length - 1; i++) {
+        const bg = s.slice(i, i + 2);
+        out.set(bg, (out.get(bg) || 0) + 1);
+      }
+      return out;
+    };
+    const A = bigrams(a), B = bigrams(b);
+    let overlap = 0, sizeA = 0, sizeB = 0;
+    A.forEach(v => { sizeA += v; });
+    B.forEach(v => { sizeB += v; });
+    A.forEach((v, k) => {
+      if (B.has(k)) overlap += Math.min(v, B.get(k));
+    });
+    const denom = sizeA + sizeB;
+    return denom ? (2 * overlap) / denom : 0;
+  }
+
+  // === Merge OCR speed figs into state (case-insensitive; fuzzy >= 0.85) ===
+  function mergeSpeedFigsIntoState(ocrSpeedFigs) {
+    if (!ocrSpeedFigs || typeof ocrSpeedFigs !== 'object') return;
+    const existing = window.__fl_state.speedFigs || {};
+    const names = window.__fl_state.parsedHorses?.map(h => h.name) || [];
+    const out = { ...existing };
+
+    Object.entries(ocrSpeedFigs).forEach(([rawName, fig]) => {
+      if (!fig) return;
+      // exact case-insensitive first
+      const exact = names.find(n => n && n.toLowerCase().trim() === rawName.toLowerCase().trim());
+      if (exact) {
+        out[exact] = Number(fig);
+        return;
+      }
+      // fuzzy match
+      let best = null, bestScore = 0;
+      for (const n of names) {
+        const s = __fl_similarity(n, rawName);
+        if (s > bestScore) { best = n; bestScore = s; }
+      }
+      if (best && bestScore >= 0.85) out[best] = Number(fig);
+    });
+
+    window.__fl_state.speedFigs = out;
+  }
+
+  // === Tiny diag ===
+  function __fl_diag(label, obj) {
+    try { console.log(`[FL] ${label}:`, JSON.parse(JSON.stringify(obj))); }
+    catch { console.log(`[FL] ${label}:`, obj); }
   }
 
   function qAnalyze() {
@@ -280,6 +352,14 @@
         state.parsedHorses = normalizedHorses;
         state.features = features;
         state.analyzed = true;
+
+        // Merge speed figs if present in response
+        if (mainPayload?.speedFigs || payload?.speedFigs) {
+          mergeSpeedFigsIntoState(mainPayload?.speedFigs || payload?.speedFigs);
+        }
+
+        // Sync inputs to state
+        syncInputsToState();
 
         // Render horses to table
         if (typeof window.__fl_table !== 'undefined' && window.__fl_table.renderHorsesToTable) {
