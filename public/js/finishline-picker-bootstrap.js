@@ -576,6 +576,7 @@
   }
 
   async function predictNow() {
+    console.debug('[FL] predictNow() invoked');
     try {
       const form = (window.FLForm && typeof window.FLForm.collect === 'function')
         ? window.FLForm.collect()
@@ -603,6 +604,8 @@
         },
         horses
       };
+
+      console.debug('[FL] fetch(/api/predict_wps) sent', payload);
 
       const res = await fetch('/api/predict_wps', {
         method: 'POST',
@@ -635,22 +638,66 @@
     }
   }
 
-  // === Binding (robust) =====================================================
-  // Use event delegation so even re-rendered buttons fire predict.
+  // expose for inline onclick / console
+  window.FLPredict = predictNow;
+
+  // === Binding (bombproof) ==================================================
   function bindPredict() {
-    if (document.__flDelegatedPredict) return;
-    document.addEventListener('click', (ev) => {
-      const btn = ev.target.closest('[data-action="predict-wps"], #predict-wps, #predictWpsBtn');
-      if (!btn) return;
-      console.debug('[FL] predict button click detected', btn);
-      predictNow();
-    }, { capture: true, passive: true });
-    document.__flDelegatedPredict = true;
-    console.debug('[FL] delegated predict binding active');
+    // 1) Delegated capture listener (fires even if overlays receive the click)
+    if (!document.__flDelegatedPredict) {
+      document.addEventListener('click', (ev) => {
+        const target = ev.target;
+        const btn = target.closest && target.closest('[data-action="predict-wps"], #predict-wps');
+        if (btn) {
+          console.debug('[FL] delegated click detected on predict button');
+          predictNow();
+          return;
+        }
+        // Fallback: if user clicks in control bar, still try to run if button is visible
+        const ctrlBar = target.closest && target.closest('.controls, .footer, .actions');
+        if (ctrlBar) {
+          const pbtn = document.getElementById('predict-wps');
+          if (pbtn && pbtn.offsetParent !== null) {
+            console.debug('[FL] control-bar click fallback -> attempting predict');
+            predictNow();
+          }
+        }
+      }, { capture: true, passive: true });
+      document.__flDelegatedPredict = true;
+      console.debug('[FL] delegated predict binding active');
+    }
+
+    // 2) Direct listener on the element (handles keyboard focus/enter, etc.)
+    const pbtn = document.getElementById('predict-wps');
+    if (pbtn && !pbtn.__flDirect) {
+      pbtn.addEventListener('click', () => {
+        console.debug('[FL] direct click listener fired');
+        predictNow();
+      }, { passive: true });
+      pbtn.__flDirect = true;
+      console.debug('[FL] direct predict binding active');
+    }
+
+    // 3) Safety: rebinder — in case the button is re-rendered
+    if (!window.__flPredictRebinder) {
+      window.__flPredictRebinder = setInterval(() => {
+        const btn = document.getElementById('predict-wps');
+        if (btn && !btn.__flDirect) {
+          console.debug('[FL] rebinder attaching direct listener');
+          btn.addEventListener('click', () => {
+            console.debug('[FL] direct click listener (rebind) fired');
+            predictNow();
+          }, { passive: true });
+          btn.__flDirect = true;
+        }
+      }, 1500);
+    }
   }
 
-  // Kickoff
-  document.readyState === 'loading'
-    ? document.addEventListener('DOMContentLoaded', bindPredict)
-    : bindPredict();
+  // Kickoff after DOM ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bindPredict);
+  } else {
+    bindPredict();
+  }
 })();

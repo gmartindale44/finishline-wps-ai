@@ -155,6 +155,18 @@ input,select{width:100%;padding:10px 12px;border:1px solid var(--border);border-
   z-index: 20;
 }
 
+/* --- Additions: ensure predict button is clickable above any overlays --- */
+#predict-wps {
+  position: relative;
+  z-index: 10;           /* sit above modals/tooltips that might overlap */
+  pointer-events: auto;  /* always receive clicks */
+}
+
+/* If any generic overlay is present, don't steal clicks by default */
+.overlay, .veil, .scrim {
+  pointer-events: none;
+}
+
 /* Keep floating controls below buttons */
 .fl-fab,
 .floating-filter {
