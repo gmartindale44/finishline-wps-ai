@@ -31,11 +31,16 @@
             <button class="fl-button fl-button--ghost" data-close aria-label="Close">✕</button>
           </div>
         </header>
-        <section class="fl-results__badges">
-          <div id="fl-badge-win" class="fl-badge"></div>
-          <div id="fl-badge-place" class="fl-badge"></div>
-          <div id="fl-badge-show" class="fl-badge"></div>
-        </section>
+        <div class="fl-results__tabs" style="display:flex;gap:8px;margin-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.1);">
+          <button class="fl-tab" data-tab="predictions" style="padding:8px 12px;background:transparent;border:none;border-bottom:2px solid #8b5cf6;color:#dfe3ff;cursor:pointer;font-weight:600;">Predictions</button>
+          <button class="fl-tab" data-tab="exotics" style="padding:8px 12px;background:transparent;border:none;border-bottom:2px solid transparent;color:#b8bdd4;cursor:pointer;">Exotic Ideas</button>
+        </div>
+        <div id="fl-tab-predictions" class="fl-tab-content">
+          <section class="fl-results__badges">
+            <div id="fl-badge-win" class="fl-badge"></div>
+            <div id="fl-badge-place" class="fl-badge"></div>
+            <div id="fl-badge-show" class="fl-badge"></div>
+          </section>
           <section class="fl-results__confidence">
             <div class="fl-results__confidence-label">
               <span>Confidence:</span>
@@ -49,6 +54,11 @@
             <div style="font-size:13px;opacity:0.8;margin-bottom:6px;">Why these picks?</div>
             <div id="fl-reasons-chips" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
           </section>
+        </div>
+        <div id="fl-tab-exotics" class="fl-tab-content" style="display:none;">
+          <div id="fl-exotics-content"></div>
+        </div>
+        <div id="fl-strategy" data-fl-strategy style="margin-top:16px;"></div>
       </div>
     `;
 
