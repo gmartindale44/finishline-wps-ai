@@ -57,26 +57,17 @@
       <div id="horse-rows" class="rows"></div>
 
       <div class="controls">
-        <!-- ===== HORSE DATA: ROBUST FILE PICKER ===== -->
-        <div id="fl-picker-wrap" class="picker-row">
-          <button type="button" data-fl-file-btn>Choose Photos / PDF</button>
-          <input id="fl-file" type="file" accept=".png,.jpg,.jpeg,.webp,.pdf,image/*,application/pdf" hidden multiple>
-          <span id="file-selected-label">No file selected</span>
+        <!-- File picker UI -->
+        <div id="fl-picker-wrap" class="flex items-center gap-2">
+          <button type="button" data-fl-file-btn class="btn">Choose Photos / PDF</button>
+          <span id="file-selected-label" class="text-sm opacity-80">No file selected</span>
+          <!-- Hidden file input -->
+          <input id="fl-file" type="file" hidden accept="image/*,application/pdf" multiple>
         </div>
-        <!-- Ensure this stylesheet is present ONCE (place near other global styles) -->
-        <style id="fl-picker-guard">
-          .fl-picker-row   { display:flex; align-items:center; gap:.75rem; position:relative; z-index:10005; }
-          .fl-file-btn     { padding:.55rem .9rem; border-radius:.6rem; background:#2a2f3a; color:#fff; cursor:pointer;
-                           user-select:none; position:relative; z-index:10010; border:1px solid rgba(255,255,255,.12); }
-          .fl-file-btn:hover { filter:brightness(1.1); }
-          .fl-file-label   { font-size:.9rem; opacity:.85; }
-          .fl-file-backup  { position:absolute; left:-9999px; width:1px; height:1px; opacity:0; }
-          /* Prevent overlays from swallowing picker clicks */
-          .overlay,.modal,.toast,[data-overlay],[data-dialog] { pointer-events:none !important; }
-        </style>
         
-        <button id="analyze-btn" type="button" class="btn btn-secondary" disabled>Analyze with AI</button>
-        <button id="predict-btn" type="button" class="btn btn-primary" disabled>Predict W/P/S</button>
+        <!-- Action buttons (keep your styling; just ensure these data hooks exist) -->
+        <button type="button" data-fl-analyze id="analyze-btn" class="btn btn-secondary disabled" disabled>Analyze with AI</button>
+        <button type="button" data-fl-predict id="predict-btn" class="btn btn-primary disabled" disabled>Predict W/P/S</button>
         
         <div class="chips">
           <span data-chip="choose" class="chip chip--idle">Idle</span>
