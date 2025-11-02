@@ -33,24 +33,9 @@ const DEFAULT_PRIORS = {
   }
 };
 
-let priors = null;
-async function getPriors() {
-  if (priors) return priors;
-  try {
-    // Try to fetch from public URL (works in Vercel)
-    const baseUrl = process.env.VERCEL_URL 
-      ? `https://${process.env.VERCEL_URL}` 
-      : (process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000');
-    const resp = await fetch(`${baseUrl}/data/priors.json`);
-    if (resp.ok) {
-      priors = await resp.json();
-      return priors;
-    }
-  } catch (e) {
-    console.warn('[predict_wps] Could not fetch priors.json, using defaults', e.message);
-  }
-  priors = DEFAULT_PRIORS;
-  return priors;
+// Use embedded priors (reliable in all environments)
+function getPriors() {
+  return DEFAULT_PRIORS;
 }
 
 // Name normalization
@@ -131,7 +116,7 @@ export default async function handler(req, res) {
       return json(res, 400, { error: 'Need at least 3 horses' });
     }
 
-    const priorsData = await getPriors();
+    const priorsData = getPriors();
 
     // Build per-horse signal components
     const scoresA = []; // Odds model
