@@ -12,14 +12,14 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "No imagesB64 provided" });
     }
 
-    console.log("[OCR] req", { count: imagesB64.length });
+    const model = process.env.FINISHLINE_OPENAI_MODEL || "gpt-4o-mini";
 
-    // Prefer project helper, else fallback
-    let openai, model = process.env.FINISHLINE_OPENAI_MODEL || "gpt-4o-mini";
+    // Prefer helper if present, else fallback client
+    let openai;
     try {
       const mod = await import("./_openai.js");
-      openai = mod.client ? mod.client() : (mod.default?.client?.() ?? null);
-    } catch { /* ignore, fallback below */ }
+      openai = mod.getOpenAIClient ? mod.getOpenAIClient() : (mod.default?.getOpenAIClient?.() ?? null);
+    } catch {}
     if (!openai) {
       const { default: OpenAI } = await import("openai");
       const key = process.env.FINISHLINE_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
@@ -28,7 +28,7 @@ export default async function handler(req, res) {
     }
 
     const content = [
-      { type: "text", text: "Extract horse entries as JSON array with fields: horse, odds, jockey, trainer. Return {entries:[...]}. Be concise and accurate." },
+      { type: "text", text: "Extract a JSON object {entries:[{horse, odds, jockey, trainer}...]} strictly. No prose." },
       ...imagesB64.map(b64 => ({ type: "image_url", image_url: { url: `data:image/png;base64,${b64}` } }))
     ];
 
@@ -42,7 +42,7 @@ export default async function handler(req, res) {
     let json;
     try { json = JSON.parse(text); } catch { json = { raw: text }; }
 
-    return res.status(200).json({ ok: true, model, data: json });
+    return res.status(200).json({ ok: true, model, ...json });
   } catch (err) {
     console.error("[OCR] err", err?.message);
     return res.status(500).json({ error: err?.message || "OCR failed" });

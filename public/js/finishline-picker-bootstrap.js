@@ -168,34 +168,15 @@
         }
 
         const payload = await resp.json();
-        const entries = payload?.data?.entries || payload?.entries || [];
+        const entries = payload?.entries || payload?.data?.entries || [];
 
-        if (!Array.isArray(entries) || entries.length === 0) {
-          console.warn("OCR returned no entries", payload);
-          toast('No horse entries found in OCR result. Try a different image.', 'warn');
-          return;
-        }
-
-        // Map entries to horses format (handle both 'horse' and 'name' fields)
-        const horses = entries.map(e => ({
-          name: e.horse || e.name || '',
-          odds: e.odds || '',
-          jockey: e.jockey || '',
-          trainer: e.trainer || ''
-        })).filter(h => h.name);
-
-        if (horses.length === 0) {
-          toast('No valid horses found in OCR entries.', 'warn');
-          return;
-        }
-
-        window.__fl_state.parsedHorses = horses;
+        window.__fl_state.parsedHorses = Array.isArray(entries) ? entries : [];
         window.__fl_state.analyzed = true;
-        state.parsedHorses = horses;
+        state.parsedHorses = window.__fl_state.parsedHorses;
         state.analyzed = true;
 
         enable(predictBtn, true);
-        toast(`Analysis complete — ${horses.length} entries parsed.`, 'success');
+        toast(`Analysis complete — ${window.__fl_state.parsedHorses.length} entries parsed.`, 'success');
       } catch (e) {
         console.error('[Analyze]', e);
         toast(`Analyze failed: ${e.message}`, 'error');
