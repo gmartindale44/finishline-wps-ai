@@ -20,4 +20,5 @@ RELIABILITY*.md
 NEW_SCHEMA*.md
 *.log
 legacy_api/
+!api/**
 
