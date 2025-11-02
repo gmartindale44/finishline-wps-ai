@@ -1,6 +1,6 @@
 // api/photo_extract_openai_b64.js
 // --------------------------------------------------
-export const config = { runtime: 'nodejs18.x' };
+export const config = { runtime: 'nodejs' };
 
 import { openaiJSON, normalizeHorsesFromText } from './_openai.js';
 

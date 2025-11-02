@@ -1,6 +1,6 @@
 import { resolveOpenAIKey } from './_openai.js';
 
-export const config = { runtime: 'nodejs18.x' };
+export const config = { runtime: 'nodejs' };
 
 // Basic CORS
 function setCors(res){
