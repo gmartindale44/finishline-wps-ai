@@ -3,7 +3,22 @@
     pickedFiles: [],
     analyzed: false,
     parsedHorses: [],
+    speedFile: null,
+    features: {},
   });
+
+  // Name normalization helpers
+  function normName(s) {
+    return (s || "")
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}]+/gu, ' ')
+      .replace(/\b(st|jr|sr|iii|ii)\b/g, '')
+      .trim();
+  }
+
+  function horseKey(name) {
+    return normName(name);
+  }
 
   function qAnalyze() {
     return document.querySelector('[data-fl-analyze]') || document.getElementById('analyze-btn') || document.querySelector('button.analyze');
@@ -139,36 +154,63 @@
 
     await withBusy(analyzeBtn, async () => {
       try {
-        toast('Processing file...', 'info');
-        const file = state.pickedFiles[0]; // Process first file only
+        toast('Processing files...', 'info');
+        const mainFile = state.pickedFiles[0];
+        const speedFile = state.speedFile;
 
-        let b64, mime;
-        if (file.type === 'application/pdf') {
-          toast('Extracting first page from PDF...', 'info');
-          ({ b64, mime } = await pdfFirstPageToDataURL(file));
-        } else {
-          toast('Preparing image...', 'info');
-          ({ b64, mime } = await downscaleImageToDataURL(file));
+        if (!mainFile) {
+          toast('Please choose at least one image or PDF first.', 'warn');
+          return;
         }
 
-        toast('Sending to OCR...', 'info');
+        // Process main file
+        let mainB64, mainMime;
+        if (mainFile.type === 'application/pdf') {
+          toast('Extracting first page from main PDF...', 'info');
+          ({ b64: mainB64, mime: mainMime } = await pdfFirstPageToDataURL(mainFile));
+        } else {
+          toast('Preparing main image...', 'info');
+          ({ b64: mainB64, mime: mainMime } = await downscaleImageToDataURL(mainFile));
+        }
+
+        toast('Sending main image to OCR...', 'info');
         
-        // Convert to imagesB64 array format
-        const imagesB64 = [b64];
-        
-        const resp = await fetch("/api/photo_extract_openai_b64", {
+        const mainResp = await fetch("/api/photo_extract_openai_b64", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ imagesB64 })
+          body: JSON.stringify({ imagesB64: [mainB64], kind: "main" })
         });
 
-        if (!resp.ok) {
-          const t = await resp.text();
-          throw new Error(`OCR ${resp.status}: ${t}`);
+        if (!mainResp.ok) {
+          const t = await mainResp.text();
+          throw new Error(`OCR ${mainResp.status}: ${t}`);
         }
 
-        const payload = await resp.json();
-        const entries = payload?.entries || payload?.data?.entries || [];
+        const mainPayload = await mainResp.json();
+        const entries = mainPayload?.entries || mainPayload?.data?.entries || [];
+
+        // Process speed file if provided
+        let speedData = [];
+        if (speedFile) {
+          toast('Processing speed/PP photo...', 'info');
+          let speedB64, speedMime;
+          if (speedFile.type === 'application/pdf') {
+            ({ b64: speedB64, mime: speedMime } = await pdfFirstPageToDataURL(speedFile));
+          } else {
+            ({ b64: speedB64, mime: speedMime } = await downscaleImageToDataURL(speedFile));
+          }
+
+          const speedResp = await fetch("/api/photo_extract_openai_b64", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ imagesB64: [speedB64], kind: "speed" })
+          });
+
+          if (speedResp.ok) {
+            const speedPayload = await speedResp.json();
+            speedData = speedPayload?.speed || [];
+          }
+        }
 
         // Normalize entries to { name, odds, jockey, trainer, speedFig } format
         const normalizedHorses = Array.isArray(entries) ? entries.map(e => {
@@ -186,9 +228,57 @@
           };
         }).filter(h => h.name && h.name.length > 1) : [];
 
+        // Merge speed data by name
+        if (speedData.length > 0) {
+          const speedMap = new Map();
+          speedData.forEach(s => {
+            const key = horseKey(s.name);
+            if (key && s.speedFig != null) {
+              speedMap.set(key, Number(s.speedFig));
+            }
+          });
+
+          normalizedHorses.forEach(h => {
+            const key = horseKey(h.name);
+            if (speedMap.has(key) && !h.speedFig) {
+              h.speedFig = speedMap.get(key);
+            }
+          });
+        }
+
+        // Convert odds to decimal for features
+        function oddsToDecimal(oddsStr) {
+          if (!oddsStr) return null;
+          const match = String(oddsStr).match(/^(\d+)\s*\/\s*(\d+)$/);
+          if (match) {
+            const num = Number(match[1]);
+            const den = Number(match[2] || 1);
+            return num / den;
+          }
+          const num = Number(oddsStr);
+          return isFinite(num) && num > 0 ? num : null;
+        }
+
+        // Build features object
+        const features = {};
+        normalizedHorses.forEach(h => {
+          const key = horseKey(h.name);
+          const decOdds = oddsToDecimal(h.odds);
+          features[key] = {
+            name: h.name,
+            odds: decOdds,
+            implied: decOdds != null ? 1 / (decOdds + 1) : null,
+            speed: h.speedFig,
+            jockey: h.jockey || '',
+            trainer: h.trainer || '',
+          };
+        });
+
         window.__fl_state.parsedHorses = normalizedHorses;
+        window.__fl_state.features = features;
         window.__fl_state.analyzed = true;
         state.parsedHorses = normalizedHorses;
+        state.features = features;
         state.analyzed = true;
 
         // Render horses to table
@@ -276,27 +366,63 @@
           date: (document.getElementById('race-date')?.value || '').trim(),
         };
 
-        // Convert horses to entries format with speedFig
-        const entries = horses.map(h => ({
-          horse: h.name,
-          odds: h.odds_norm || h.odds_raw || h.odds,
-          jockey: h.jockey || '',
-          trainer: h.trainer || '',
-          speedFig: h.speedFig || null,
-        }));
+        // Get features or build from horses
+        let features = window.__fl_state.features || {};
+        if (Object.keys(features).length === 0) {
+          // Fallback: build from current horses
+          features = {};
+          horses.forEach(h => {
+            const key = horseKey(h.name);
+            const decOdds = h.odds_norm || h.odds_raw || h.odds;
+            let implied = null;
+            if (decOdds) {
+              const match = String(decOdds).match(/^(\d+)\s*\/\s*(\d+)$/);
+              if (match) {
+                const num = Number(match[1]);
+                const den = Number(match[2] || 1);
+                const decimal = num / den;
+                implied = 1 / (decimal + 1);
+              }
+            }
+            features[key] = {
+              name: h.name,
+              odds: decOdds,
+              implied,
+              speed: h.speedFig || null,
+              jockey: h.jockey || '',
+              trainer: h.trainer || '',
+            };
+          });
+        }
+
+        // Get toggle states
+        const useDistance = document.getElementById('use-distance')?.checked ?? true;
+        const useSurface = document.getElementById('use-surface')?.checked ?? true;
+        const usePriors = document.getElementById('use-priors')?.checked ?? true;
 
         const r = await fetch('/api/predict_wps', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            entries,
-            meta,
+            features,
+            useDistance,
+            useSurface,
+            usePriors,
+            track: meta.track,
+            distance: meta.distance,
+            surface: meta.surface,
           }),
         });
 
         const data = await r.json();
 
-        if (!r.ok) throw new Error(data?.error || `Predict failed: ${r.status}`);
+        if (!r.ok) {
+          if (data.error === 'insufficient_features' || data.reason) {
+            toast(data.reason || 'Not enough usable signals—try adding Speed/PP photo or enable priors.', 'warn');
+            return;
+          }
+          throw new Error(data?.error || `Predict failed: ${r.status}`);
+        }
 
         // New response format: { win, place, show } or { predictions: { win: {name, odds}, ... } }
         const winName = data.predictions?.win?.name || data.win || null;
@@ -311,6 +437,13 @@
 
         // Use server-provided confidence directly (already 0-100 range)
         const confPct = typeof data.confidence === 'number' && data.confidence >= 0 ? data.confidence : 7;
+
+        // Store prediction in localStorage
+        try {
+          localStorage.setItem('prediction', JSON.stringify(data));
+        } catch (e) {
+          console.warn('[Predict] Could not save to localStorage:', e);
+        }
         
         // Build horses array with odds from predictions response
         const horsesForDisplay = (data.horses || horses || []).map(h => ({

@@ -144,13 +144,19 @@
     elements.confPct.textContent = `${pct.toFixed(0)}%`;
     elements.confBar.style.width = `${pct}%`;
 
-    // Reasons chips (show for winner)
+    // Reasons chips (show for winner) - now with +/- deltas
     const reasons = pred.reasons || {};
     const winnerReasons = reasons[win] || [];
     
     if (winnerReasons.length > 0 && elements.reasonsSection && elements.reasonsChips) {
       elements.reasonsChips.innerHTML = winnerReasons
-        .map(reason => `<span class="fl-reason-chip" style="display:inline-block;padding:4px 10px;background:rgba(92,134,255,0.15);border:1px solid rgba(92,134,255,0.3);border-radius:12px;font-size:12px;color:#b8bdd4;">${reason}</span>`)
+        .map(reason => {
+          // Format: "factor +0.25" or "factor -0.15"
+          const isPositive = reason.includes('+') || (!reason.includes('-') && !reason.includes('0.00'));
+          const chipColor = isPositive ? 'rgba(92,134,255,0.15)' : 'rgba(255,153,102,0.15)';
+          const chipBorder = isPositive ? 'rgba(92,134,255,0.3)' : 'rgba(255,153,102,0.3)';
+          return `<span class="fl-reason-chip" style="display:inline-block;padding:4px 10px;background:${chipColor};border:1px solid ${chipBorder};border-radius:12px;font-size:12px;color:#b8bdd4;">${reason}</span>`;
+        })
         .join('');
       elements.reasonsSection.style.display = 'block';
     } else if (elements.reasonsSection) {

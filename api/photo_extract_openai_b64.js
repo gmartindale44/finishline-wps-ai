@@ -7,7 +7,7 @@ export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   try {
-    const { imagesB64 } = req.body || {};
+    const { imagesB64, kind = "main" } = req.body || {};
     if (!Array.isArray(imagesB64) || imagesB64.length === 0) {
       return res.status(400).json({ error: "No imagesB64 provided" });
     }
@@ -27,8 +27,15 @@ export default async function handler(req, res) {
       openai = new OpenAI({ apiKey: key });
     }
 
+    let promptText;
+    if (kind === "speed") {
+      promptText = "Extract a JSON object {speed:[{name, speedFig}...]} from this Speed Figure table. Match horse names and their speed figures. Return only JSON, no prose.";
+    } else {
+      promptText = "Extract a JSON object {entries:[{horse, odds, jockey, trainer, speedFig}...]} strictly. Include speedFig if present (e.g., from '(114*)' format). No prose.";
+    }
+
     const content = [
-      { type: "text", text: "Extract a JSON object {entries:[{horse, odds, jockey, trainer, speedFig}...]} strictly. Include speedFig if present (e.g., from '(114*)' format). No prose." },
+      { type: "text", text: promptText },
       ...imagesB64.map(b64 => ({ type: "image_url", image_url: { url: `data:image/png;base64,${b64}` } }))
     ];
 
@@ -42,21 +49,32 @@ export default async function handler(req, res) {
     let json;
     try { json = JSON.parse(text); } catch { json = { raw: text }; }
 
-    // Normalize entries to ensure speedFig is present
-    if (json.entries && Array.isArray(json.entries)) {
-      json.entries = json.entries.map(e => ({
-        horse: e.horse || e.name || '',
-        jockey: e.jockey || '',
-        trainer: e.trainer || '',
-        odds: e.odds || '',
-        speedFig: typeof e.speedFig === 'number' ? e.speedFig : (e.speedFig ? Number(e.speedFig) : null),
-      }));
+    if (kind === "speed") {
+      // Normalize speed table
+      if (json.speed && Array.isArray(json.speed)) {
+        json.speed = json.speed.map(s => ({
+          name: String(s.name || s.horse || '').trim(),
+          speedFig: typeof s.speedFig === 'number' ? s.speedFig : (s.speedFig ? Number(s.speedFig) : null),
+        })).filter(s => s.name && s.name.length > 1);
+      }
+      return res.status(200).json({ ok: true, model, speed: json.speed || [] });
+    } else {
+      // Normalize entries to ensure speedFig is present
+      if (json.entries && Array.isArray(json.entries)) {
+        json.entries = json.entries.map(e => ({
+          horse: e.horse || e.name || '',
+          jockey: e.jockey || '',
+          trainer: e.trainer || '',
+          odds: e.odds || '',
+          speedFig: typeof e.speedFig === 'number' ? e.speedFig : (e.speedFig ? Number(e.speedFig) : null),
+        }));
+      }
+
+      // Ensure notes structure
+      if (!json.notes) json.notes = { alsoRans: [] };
+
+      return res.status(200).json({ ok: true, model, ...json });
     }
-
-    // Ensure notes structure
-    if (!json.notes) json.notes = { alsoRans: [] };
-
-    return res.status(200).json({ ok: true, model, ...json });
   } catch (err) {
     console.error("[OCR] err", err?.message);
     return res.status(500).json({ error: err?.message || "OCR failed" });
