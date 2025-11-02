@@ -332,3 +332,25 @@
   font-style: italic;
 }
 
+.fl-list {
+  list-style-type: disc;
+  padding-left: 20px;
+  margin: 8px 0;
+}
+
+.fl-list li {
+  margin: 4px 0;
+  color: #b8bdd4;
+  font-size: 13px;
+}
+
+/* Range input styling */
+input[type="range"] {
+  accent-color: #8b5cf6;
+  cursor: pointer;
+}
+
+input[type="range"]:hover {
+  accent-color: #9d6dff;
+}
+

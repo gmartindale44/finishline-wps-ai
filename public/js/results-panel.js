@@ -178,7 +178,7 @@
     }
   }
 
-  function renderExotics(tickets) {
+  function renderExotics(tickets, recommended = '') {
     if (!elements || !elements.exoticsContent) return;
     if (!tickets || (!tickets.trifecta && !tickets.superfecta && !tickets.superHighFive)) {
       elements.exoticsContent.innerHTML = '<p style="opacity:0.7;text-align:center;padding:20px;">No exotic ticket suggestions available.</p>';
@@ -190,11 +190,14 @@
       return (p * 100).toFixed(0) + '%';
     };
 
+    const isRec = (type) => recommended && type && recommended.toLowerCase().includes(type.toLowerCase());
+
     let html = '';
 
     // Trifecta
     if (tickets.trifecta && tickets.trifecta.length > 0) {
-      html += '<div style="margin-bottom:20px;"><h4 style="font-size:15px;font-weight:700;margin-bottom:8px;color:#dfe3ff;">Trifecta Ideas</h4>';
+      const title = `Trifecta Ideas${isRec('Trifecta') ? ' • Recommended' : ''}`;
+      html += `<div style="margin-bottom:20px;"><h4 style="font-size:15px;font-weight:700;margin-bottom:8px;color:#dfe3ff;">${title}</h4>`;
       tickets.trifecta.forEach(ticket => {
         let ticketText = '';
         let confText = '';
@@ -242,6 +245,9 @@
       html += '</div>';
     }
 
+    // Exacta (if we have exacta tickets in future)
+    // For now, skip if not present
+    
     // Super High Five
     if (tickets.superHighFive && tickets.superHighFive.length > 0) {
       html += '<div style="margin-bottom:20px;"><h4 style="font-size:15px;font-weight:700;margin-bottom:8px;color:#dfe3ff;">Super High Five Ideas</h4>';
@@ -291,6 +297,49 @@
         metrics: { confidence: conf, top3Mass: null, gap12: null, gap23: null, top: [] }
       };
       console.info('[FLResults] Using client-side fallback strategy');
+    }
+
+    // --- bankroll state (default 200, range 50-500) ---
+    const BK_DEFAULT = 200;
+    let bankroll = BK_DEFAULT;
+
+    function planLinesFor(recommended, picks, bk) {
+      // scale from the $200 template we already show:
+      const top3 = (picks || []).slice(0, 3).map(p => p?.name).filter(Boolean);
+      const top = top3[0] || 'Top Pick';
+      const pct = {
+        'Across the Board': { win: 0.25, place: 0.25, show: 0.25, exacta: 0.25, tri: 0 },
+        'Win Only': { win: 1.00, place: 0, show: 0, exacta: 0, tri: 0 },
+        'Exacta Box (Top 3)': { win: 0.60, place: 0, show: 0, exacta: 0.40, tri: 0 },
+        'Trifecta Box (AI Top 3)': { win: 0.40, place: 0, show: 0, exacta: 0, tri: 0.60 },
+      }[recommended] || { win: 0.50, place: 0, show: 0, exacta: 0.50, tri: 0 };
+
+      const asDollars = (x) => Math.max(2, Math.round(x / 2) * 2); // even $ and ≥ $2
+      const win = asDollars(bk * (pct.win || 0));
+      const plc = asDollars(bk * (pct.place || 0));
+      const shw = asDollars(bk * (pct.show || 0));
+      const exBox = asDollars(bk * (pct.exacta || 0));
+      const triBx = asDollars(bk * (pct.tri || 0));
+
+      const lines = [];
+      if (win > 1) lines.push(`WIN ${top} — $${win}`);
+      if (plc > 1) lines.push(`PLACE ${top} — $${plc}`);
+      if (shw > 1) lines.push(`SHOW ${top} — $${shw}`);
+      if (exBox > 1 && top3.length === 3) lines.push(`EXACTA BOX ${top3.join(', ')} — $${exBox} total`);
+      if (triBx > 1 && top3.length === 3) lines.push(`TRIFECTA BOX ${top3.join(', ')} — $${triBx} total`);
+      return lines;
+    }
+
+    function copyBetSlip(lines) {
+      const txt = `FinishLine AI Bet Slip\nTrack: ${window.__fl_state?.track || ''}\nDistance: ${window.__fl_state?.distance_input || ''}\nSurface: ${window.__fl_state?.surface || ''}\n---\n` + lines.join('\n');
+      navigator.clipboard?.writeText(txt).then(() => {
+        const btn = elements.strategyWrap?.querySelector('#fl-copy-slip');
+        if (btn) {
+          const orig = btn.textContent;
+          btn.textContent = 'Copied!';
+          setTimeout(() => { btn.textContent = orig; }, 2000);
+        }
+      }).catch(() => {});
     }
 
     const wrap = elements.strategyWrap;
@@ -365,58 +414,56 @@
         card.appendChild(tbl);
       }
 
-      // Suggested $200 Plan (race-specific, simple presets)
+      // Suggested Plan with bankroll slider (race-specific, dynamic)
       const plan = document.createElement('div');
       plan.className = 'fl-strategy-plan';
-      const top = (s.metrics?.top || []).map(x => x.name);
-      const H1 = top[0] || 'Top 1';
-      const H2 = top[1] || 'Top 2';
-      const H3 = top[2] || 'Top 3';
-      const H4 = top[3] || 'Top 4';
-      const H5 = top[4] || 'Top 5';
-      const H6 = top[5] || 'Top 6';
-      
-      let lines = [];
-      const rec = (s.recommended || '').toLowerCase();
-      
-      if (rec.includes('trifecta box')) {
-        lines = [
-          `Win ${H1} — $60`,
-          `Tri BOX ${H1},${H2},${H3} — $0.50 base × 6 = $3 → stake $90 total (multiple units)`,
-          `Super (part-wheel) ${H1} / ${H2} / (${H3},${H4}) / (${H3},${H4},${H5}) — $0.10 base × combos ≈ $50`
-        ];
-      } else if (rec.includes('across the board')) {
-        lines = [
-          `ATB on ${H1} — Win/Place/Show $50 each = $150`,
-          `Exacta ${H1} → ${H2},${H3} — $25 each = $50`
-        ];
-      } else if (rec.includes('win only')) {
-        lines = [
-          `Win ${H1} — $160`,
-          `Saver Exacta ${H1} → ${H2} — $40`
-        ];
-      } else if (rec.includes('exacta box')) {
-        lines = [
-          `Win ${H1} — $80`,
-          `Exacta BOX ${H1},${H2},${H3} — $2 base × 6 = $12 → stake $60 total`,
-          `Tri ${H1} → ${H2} → ${H3},${H4} — $0.50 units = $60`
-        ];
-      } else {
-        lines = [
-          `Win ${H1} — $100`,
-          `Exacta ${H1} → ${H2},${H3} — $50 total`,
-          `Tri ${H1} → ${H2} → ${H3},${H4} — $50`
-        ];
-      }
       
       plan.innerHTML = `
-        <h4>Suggested $200 Plan</h4>
-        <ul>${lines.map(l => `<li>${l}</li>`).join('')}</ul>
-        <div class="fl-note">Adjust stakes upward on higher confidence and toward exotics when Top-3 mass is high.</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <h4 style="margin:0;font-size:14px;font-weight:600;color:#dfe3ff;">Suggested Plan</h4>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <div style="font-size:13px;opacity:0.75;color:#b8bdd4;">Bankroll</div>
+            <input id="fl-bk" type="range" min="50" max="500" step="10" value="${BK_DEFAULT}" style="width:120px;accent-color:#8b5cf6;" />
+            <div id="fl-bk-val" style="font-weight:600;color:#dfe3ff;min-width:50px;text-align:right;">$${BK_DEFAULT}</div>
+            <button id="fl-copy-slip" class="fl-button" style="padding:6px 12px;font-size:13px;">Copy Bet Slip</button>
+          </div>
+        </div>
+        <ul id="fl-plan-lines" class="fl-list" style="margin:8px 0 6px 0;padding-left:20px;"></ul>
+        <div class="fl-note">Increase stakes with higher confidence; lean into exotics when Top-3 mass is high.</div>
       `;
       card.appendChild(plan);
 
       wrap.appendChild(card);
+
+      // Wire bankroll slider + live plan render
+      const linesEl = wrap.querySelector('#fl-plan-lines');
+      const bkEl = wrap.querySelector('#fl-bk');
+      const bkVal = wrap.querySelector('#fl-bk-val');
+      
+      // Get picks from the prediction data (need to extract from parent context)
+      // Try to get picks from lastPred or construct from strategy metrics
+      const picks = fallbackData.picks || (s.metrics?.top || []).slice(0, 3).map(t => ({ name: t.name || '' })).filter(p => p.name);
+      const rec = s.recommended || 'Across the Board';
+
+      function renderPlan() {
+        if (!linesEl) return;
+        const lines = planLinesFor(rec, picks, bankroll);
+        linesEl.innerHTML = lines.map(l => `<li style="margin:4px 0;color:#b8bdd4;font-size:13px;">${l}</li>`).join('');
+      }
+
+      renderPlan();
+
+      bkEl?.addEventListener('input', (e) => {
+        bankroll = Number(e?.target?.value || BK_DEFAULT);
+        if (bkVal) bkVal.textContent = `$${bankroll}`;
+        renderPlan();
+      });
+
+      wrap.querySelector('#fl-copy-slip')?.addEventListener('click', () => {
+        if (!linesEl) return;
+        const lines = Array.from(linesEl.querySelectorAll('li')).map(li => li.textContent);
+        copyBetSlip(lines);
+      });
     }
 
   function render(pred) {

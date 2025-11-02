@@ -502,22 +502,31 @@
             data = text ? JSON.parse(text) : null;
           } catch (parseErr) {
             console.error('[Predict] JSON parse error:', parseErr);
-            showToast('Prediction response parse error – check console.');
+            if (window.FLResults?.show) {
+              window.FLResults.show({ error: true, message: 'Prediction response parse error. Please try again.' });
+            } else {
+              showToast('Prediction response parse error – check console.');
+            }
             return;
           }
         } catch (fetchErr) {
           console.error('[Predict] Fetch error:', fetchErr);
-          showToast('Prediction failed (connection error).');
+          if (window.FLResults?.show) {
+            window.FLResults.show({ error: true, message: 'Prediction failed (connection error). Please check your internet connection.' });
+          } else {
+            showToast('Prediction failed (connection error).');
+          }
           return;
         }
 
-        if (!r.ok) {
-          console.error('[Predict] Error response:', data);
-          if (data?.error === 'insufficient_features' || data?.reason || data?.error === 'prediction_error') {
-            showToast(data.message || data.reason || 'Prediction failed. Check your inputs.');
-            return;
+        if (!r.ok || data?.error) {
+          console.warn('[Predict] Error response:', data);
+          const errorMsg = data?.message || data?.reason || `HTTP ${r.status}` || 'Prediction failed';
+          if (window.FLResults?.show) {
+            window.FLResults.show({ error: true, message: errorMsg });
+          } else {
+            showToast(`Prediction failed: ${errorMsg}`);
           }
-          showToast(`Prediction failed: ${data?.error || data?.message || `HTTP ${r.status}`}`);
           return;
         }
 
@@ -577,6 +586,7 @@
               reasons: reasons,
               tickets: data.tickets || null,
               strategy: data.strategy || null,
+              picks: data.picks || picks || null,
             });
 
             console.log('[Predict] Results displayed in panel', { win: winName, place: placeName, show: showName, confidence: confPct, tickets: data.tickets, strategy: data.strategy ? 'present' : 'missing' });
