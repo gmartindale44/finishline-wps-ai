@@ -1,4 +1,4 @@
-# Vercel Deployment Checklist
+.# Vercel Deployment Checklist
 
 ## Pre-Deployment Checks
 

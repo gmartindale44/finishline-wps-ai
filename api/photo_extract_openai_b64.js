@@ -2,10 +2,12 @@
 
 export const config = { runtime: 'nodejs' };
 
-import { resolveOpenAIKey } from './_openai.js';
+import { resolveOpenAIKey, resolveOpenAIModel } from './_openai.js';
 
-export function resolveOpenAIModel(def = 'gpt-4o-mini') {
-  return process.env.FINISHLINE_OPENAI_MODEL || def;
+function setCors(res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 }
 
 function bad(res, code, msg, detail) {
@@ -17,6 +19,11 @@ function ok(res, data) {
 }
 
 export default async function handler(req, res) {
+  setCors(res);
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
+  console.log('[OCR] Request:', req.method, req.url, { hasBody: !!req.body });
+
   try {
     if (req.method !== 'POST') return bad(res, 405, 'Method not allowed');
 
@@ -93,10 +100,15 @@ export default async function handler(req, res) {
       }
     }
 
-    if (!text) return bad(res, 502, 'Empty OCR result');
+    if (!text) {
+      console.error('[OCR] Empty result');
+      return bad(res, 502, 'Empty OCR result');
+    }
 
+    console.log('[OCR] Success, text length:', text.length);
     return ok(res, { text });
   } catch (err) {
+    console.error('[OCR ERROR]', err);
     return bad(res, 500, 'OCR pipeline error', String(err?.stack || err));
   }
 }
