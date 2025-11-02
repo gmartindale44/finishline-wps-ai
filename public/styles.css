@@ -147,6 +147,20 @@ input,select{width:100%;padding:10px 12px;border:1px solid var(--border);border-
   transform: translateX(-50%) translateY(16px);
 }
 
+/* Ensure Predict button is clickable above overlays */
+.prediction-actions,
+.btn.btn-primary[data-action="predict-wps"],
+#predictWpsBtn {
+  position: relative;
+  z-index: 10;
+}
+
+/* Keep floating controls below buttons */
+.fl-fab,
+.floating-filter {
+  z-index: 5;
+}
+
 /* Ensure status badges and overlays don't block clicks */
 .badge,
 .status-badge,
