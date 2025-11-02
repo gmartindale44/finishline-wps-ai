@@ -34,6 +34,7 @@
         <div class="fl-results__tabs" style="display:flex;gap:8px;margin-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.1);">
           <button class="fl-tab" data-tab="predictions" style="padding:8px 12px;background:transparent;border:none;border-bottom:2px solid #8b5cf6;color:#dfe3ff;cursor:pointer;font-weight:600;">Predictions</button>
           <button class="fl-tab" data-tab="exotics" style="padding:8px 12px;background:transparent;border:none;border-bottom:2px solid transparent;color:#b8bdd4;cursor:pointer;">Exotic Ideas</button>
+          <button class="fl-tab" data-tab="strategy" style="padding:8px 12px;background:transparent;border:none;border-bottom:2px solid transparent;color:#b8bdd4;cursor:pointer;">Strategy</button>
         </div>
         <div id="fl-tab-predictions" class="fl-tab-content">
           <section class="fl-results__badges">
@@ -58,7 +59,9 @@
         <div id="fl-tab-exotics" class="fl-tab-content" style="display:none;">
           <div id="fl-exotics-content"></div>
         </div>
-        <div id="fl-strategy" data-fl-strategy style="margin-top:16px;"></div>
+        <div id="fl-tab-strategy" class="fl-tab-content" style="display:none;">
+          <div id="fl-strategy" data-fl-strategy style="margin-top:16px;"></div>
+        </div>
       </div>
     `;
 
@@ -79,8 +82,10 @@
       reasonsChips: wrap.querySelector('#fl-reasons-chips'),
       tabPredictions: wrap.querySelector('[data-tab="predictions"]'),
       tabExotics: wrap.querySelector('[data-tab="exotics"]'),
+      tabStrategy: wrap.querySelector('[data-tab="strategy"]'),
       tabContentPredictions: wrap.querySelector('#fl-tab-predictions'),
       tabContentExotics: wrap.querySelector('#fl-tab-exotics'),
+      tabContentStrategy: wrap.querySelector('#fl-tab-strategy'),
       exoticsContent: wrap.querySelector('#fl-exotics-content'),
       strategyWrap: wrap.querySelector('[data-fl-strategy]') || wrap.querySelector('#fl-strategy'),
     };
@@ -93,9 +98,10 @@
         copy();
       } else if (e.target.matches('[data-pin]')) {
         togglePin();
-      } else if (e.target.matches('[data-tab]')) {
-        const tab = e.target.getAttribute('data-tab');
-        switchTab(tab);
+      } else if (e.target.matches('[data-tab]') || e.target.closest('[data-tab]')) {
+        const tabBtn = e.target.matches('[data-tab]') ? e.target : e.target.closest('[data-tab]');
+        const tab = tabBtn?.getAttribute('data-tab');
+        if (tab) switchTab(tab);
       }
     });
 
@@ -140,20 +146,35 @@
 
   function switchTab(tab) {
     if (!elements) return;
-    if (tab === 'predictions') {
+    
+    // Reset all tabs
+    const tabs = [elements.tabPredictions, elements.tabExotics, elements.tabStrategy].filter(Boolean);
+    const contents = [elements.tabContentPredictions, elements.tabContentExotics, elements.tabContentStrategy].filter(Boolean);
+    
+    tabs.forEach(t => {
+      if (t) {
+        t.style.borderBottomColor = 'transparent';
+        t.style.color = '#b8bdd4';
+      }
+    });
+    
+    contents.forEach(c => {
+      if (c) c.style.display = 'none';
+    });
+    
+    // Activate selected tab
+    if (tab === 'predictions' && elements.tabPredictions && elements.tabContentPredictions) {
       elements.tabPredictions.style.borderBottomColor = '#8b5cf6';
       elements.tabPredictions.style.color = '#dfe3ff';
-      elements.tabExotics.style.borderBottomColor = 'transparent';
-      elements.tabExotics.style.color = '#b8bdd4';
       elements.tabContentPredictions.style.display = 'block';
-      elements.tabContentExotics.style.display = 'none';
-    } else if (tab === 'exotics') {
-      elements.tabPredictions.style.borderBottomColor = 'transparent';
-      elements.tabPredictions.style.color = '#b8bdd4';
+    } else if (tab === 'exotics' && elements.tabExotics && elements.tabContentExotics) {
       elements.tabExotics.style.borderBottomColor = '#8b5cf6';
       elements.tabExotics.style.color = '#dfe3ff';
-      elements.tabContentPredictions.style.display = 'none';
       elements.tabContentExotics.style.display = 'block';
+    } else if (tab === 'strategy' && elements.tabStrategy && elements.tabContentStrategy) {
+      elements.tabStrategy.style.borderBottomColor = '#8b5cf6';
+      elements.tabStrategy.style.color = '#dfe3ff';
+      elements.tabContentStrategy.style.display = 'block';
     }
   }
 
@@ -306,23 +327,78 @@
         </thead>
         <tbody></tbody>
       `;
-      const tb = tbl.querySelector('tbody');
-      s.betTypesTable.forEach(row => {
-        const tr = document.createElement('tr');
-        const t = document.createElement('td');
-        t.textContent = `${row.icon || ''} ${row.type}`;
-        const b = document.createElement('td');
-        b.textContent = row.bestFor || '';
-        const d = document.createElement('td');
-        d.textContent = row.desc || '';
-        tr.appendChild(t); tr.appendChild(b); tr.appendChild(d);
-        tb.appendChild(tr);
-      });
-      card.appendChild(tbl);
-    }
+        const tb = tbl.querySelector('tbody');
+        s.betTypesTable.forEach(row => {
+          const tr = document.createElement('tr');
+          const t = document.createElement('td');
+          t.textContent = `${row.icon || ''} ${row.type}`;
+          const b = document.createElement('td');
+          b.textContent = row.bestFor || '';
+          const d = document.createElement('td');
+          d.textContent = row.desc || '';
+          tr.appendChild(t); tr.appendChild(b); tr.appendChild(d);
+          // Highlight recommended row
+          if ((row.type || '').toLowerCase() === (s.recommended || '').toLowerCase()) {
+            tr.classList.add('is-recommended');
+          }
+          tb.appendChild(tr);
+        });
+        card.appendChild(tbl);
+      }
 
-    wrap.appendChild(card);
-  }
+      // Suggested $200 Plan (race-specific, simple presets)
+      const plan = document.createElement('div');
+      plan.className = 'fl-strategy-plan';
+      const top = (s.metrics?.top || []).map(x => x.name);
+      const H1 = top[0] || 'Top 1';
+      const H2 = top[1] || 'Top 2';
+      const H3 = top[2] || 'Top 3';
+      const H4 = top[3] || 'Top 4';
+      const H5 = top[4] || 'Top 5';
+      const H6 = top[5] || 'Top 6';
+      
+      let lines = [];
+      const rec = (s.recommended || '').toLowerCase();
+      
+      if (rec.includes('trifecta box')) {
+        lines = [
+          `Win ${H1} — $60`,
+          `Tri BOX ${H1},${H2},${H3} — $0.50 base × 6 = $3 → stake $90 total (multiple units)`,
+          `Super (part-wheel) ${H1} / ${H2} / (${H3},${H4}) / (${H3},${H4},${H5}) — $0.10 base × combos ≈ $50`
+        ];
+      } else if (rec.includes('across the board')) {
+        lines = [
+          `ATB on ${H1} — Win/Place/Show $50 each = $150`,
+          `Exacta ${H1} → ${H2},${H3} — $25 each = $50`
+        ];
+      } else if (rec.includes('win only')) {
+        lines = [
+          `Win ${H1} — $160`,
+          `Saver Exacta ${H1} → ${H2} — $40`
+        ];
+      } else if (rec.includes('exacta box')) {
+        lines = [
+          `Win ${H1} — $80`,
+          `Exacta BOX ${H1},${H2},${H3} — $2 base × 6 = $12 → stake $60 total`,
+          `Tri ${H1} → ${H2} → ${H3},${H4} — $0.50 units = $60`
+        ];
+      } else {
+        lines = [
+          `Win ${H1} — $100`,
+          `Exacta ${H1} → ${H2},${H3} — $50 total`,
+          `Tri ${H1} → ${H2} → ${H3},${H4} — $50`
+        ];
+      }
+      
+      plan.innerHTML = `
+        <h4>Suggested $200 Plan</h4>
+        <ul>${lines.map(l => `<li>${l}</li>`).join('')}</ul>
+        <div class="fl-note">Adjust stakes upward on higher confidence and toward exotics when Top-3 mass is high.</div>
+      `;
+      card.appendChild(plan);
+
+      wrap.appendChild(card);
+    }
 
   function render(pred) {
     // Guard: ensure modal root exists before rendering

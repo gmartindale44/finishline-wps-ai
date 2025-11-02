@@ -295,3 +295,40 @@
   background: rgba(255,255,255,0.02);
 }
 
+.fl-strategy-table tr.is-recommended {
+  background: rgba(110,78,238,0.12);
+}
+
+.fl-strategy-plan {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+.fl-strategy-plan h4 {
+  margin: 10px 0 6px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #dfe3ff;
+}
+
+.fl-strategy-plan ul {
+  margin: 0 0 6px 16px;
+  padding: 0;
+  list-style-type: disc;
+}
+
+.fl-strategy-plan li {
+  margin: 4px 0;
+  color: #b8bdd4;
+  font-size: 13px;
+}
+
+.fl-note {
+  opacity: 0.8;
+  font-size: 12px;
+  color: #b8bdd4;
+  margin-top: 8px;
+  font-style: italic;
+}
+
