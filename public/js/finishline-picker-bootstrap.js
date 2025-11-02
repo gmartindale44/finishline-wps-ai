@@ -1,4 +1,69 @@
 (function () {
+  // Simple no-op UI busy shim so missing FLUI won't crash
+  (function FL_Init_Bootstrap() {
+    if (!window.FLUI) {
+      window.FLUI = {
+        setBusy: (flag, msg) => {
+          try {
+            const id = 'fl-busy';
+            let el = document.getElementById(id);
+            if (flag) {
+              if (!el) {
+                el = document.createElement('div');
+                el.id = id;
+                el.style.position = 'fixed';
+                el.style.left = '50%';
+                el.style.top = '20px';
+                el.style.transform = 'translateX(-50%)';
+                el.style.padding = '8px 12px';
+                el.style.borderRadius = '10px';
+                el.style.background = 'rgba(40,40,60,.9)';
+                el.style.color = '#fff';
+                el.style.zIndex = '99999';
+                el.style.fontSize = '12px';
+                document.body.appendChild(el);
+              }
+              el.textContent = msg || 'Working…';
+              el.style.display = 'block';
+            } else if (el) {
+              el.style.display = 'none';
+            }
+          } catch {}
+        }
+      };
+    }
+
+    // Small toast for visible errors
+    if (!window.flToast) {
+      window.flToast = function flToast(msg, type = 'error') {
+        try {
+          const id = 'fl-toast';
+          let el = document.getElementById(id);
+          if (!el) {
+            el = document.createElement('div');
+            el.id = id;
+            document.body.appendChild(el);
+            Object.assign(el.style, {
+              position: 'fixed',
+              right: '16px',
+              bottom: '16px',
+              padding: '10px 14px',
+              borderRadius: '10px',
+              backdropFilter: 'blur(8px)',
+              color: '#fff',
+              zIndex: 99999,
+              transition: 'opacity .4s'
+            });
+          }
+          el.style.background = type === 'ok' ? 'rgba(16,155,89,.9)' : 'rgba(200,60,60,.9)';
+          el.textContent = msg;
+          el.style.opacity = '1';
+          setTimeout(() => { el.style.opacity = '0'; }, 3000);
+        } catch {}
+      };
+    }
+  })();
+
   const state = (window.__fl_state = window.__fl_state || {
     pickedFiles: [],
     analyzed: false,
@@ -426,29 +491,30 @@
   }
 
   async function handlePredictWPS() {
-    const btn = document.querySelector('[data-action="predict-wps"]') || qPredict() || null;
     try {
-      window.FLUI?.setBusy?.(true, 'Generating predictions...');
+      window.FLUI.setBusy(true, 'Generating predictions…');
 
-      // Build payload safely - use existing form collection logic
+      // Collect payload (defensively)
       syncInputsToState();
       const horses = getHorsesForPrediction();
-      
-      if (!horses || !Array.isArray(horses) || horses.length < 3) {
-        throw new Error('Not enough horses in the form payload.');
-      }
 
-      const payload = {
-        horses: horses.map(h => ({
-          name: h.name,
-          odds: h.odds_norm || h.odds_raw || h.odds,
-          post: h.post || null,
-        })),
-        track: window.__fl_state.track || '',
-        surface: window.__fl_state.surface || '',
-        distance_input: window.__fl_state.distance_input || '',
-        speedFigs: window.__fl_state.speedFigs || {},
-      };
+      const payload = (window.FLForm && typeof window.FLForm.collect === 'function')
+        ? window.FLForm.collect()
+        : {
+            horses: horses ? horses.map(h => ({
+              name: h.name,
+              odds: h.odds_norm || h.odds_raw || h.odds,
+              post: h.post || null,
+            })) : [],
+            track: window.__fl_state.track || '',
+            surface: window.__fl_state.surface || '',
+            distance_input: window.__fl_state.distance_input || '',
+            speedFigs: window.__fl_state.speedFigs || {},
+          };
+
+      if (!payload || !Array.isArray(payload.horses) || payload.horses.length < 3) {
+        throw new Error('Form is incomplete — need at least 3 horses.');
+      }
 
       __fl_diag('predict payload', payload);
 
@@ -463,85 +529,29 @@
         throw new Error(`API ${res.status}: ${text || 'non-200 response'}`);
       }
 
-      /** @type {{picks:any, strategy:any, tickets?:any, confidence?:number}} */
       const data = await res.json();
 
-      // Defensive defaults
-      const safePicks = data?.picks && Array.isArray(data.picks)
-        ? data.picks
-        : null;
+      // Pass through with fallbacks; renderer will defend
+      window.FLResults && typeof window.FLResults.show === 'function'
+        ? window.FLResults.show({
+            picks: data?.picks ?? null,
+            strategy: data?.strategy ?? null,
+            tickets: data?.tickets ?? null,
+            confidence: data?.confidence ?? null,
+            meta: { from: 'predict_wps', ts: Date.now() }
+          })
+        : console.warn('[FinishLine] FLResults.show is missing');
 
-      const safeStrategy = data?.strategy && typeof data.strategy === 'object'
-        ? data.strategy
-        : null; // Let renderer create fallback card
-
-      const exotics = data?.tickets && typeof data.tickets === 'object'
-        ? data.tickets
-        : null;
-
-      // Convert picks array to win/place/show format for display
-      let winName = null, placeName = null, showName = null, confPct = null;
-      if (safePicks && Array.isArray(safePicks)) {
-        const winPick = safePicks.find(p => p.slot === 'Win') || safePicks[0];
-        const placePick = safePicks.find(p => p.slot === 'Place') || safePicks[1];
-        const showPick = safePicks.find(p => p.slot === 'Show') || safePicks[2];
-        winName = winPick?.name || null;
-        placeName = placePick?.name || null;
-        showName = showPick?.name || null;
-      }
-
-      confPct = typeof data?.confidence === 'number' && data.confidence >= 0
-        ? Math.round(data.confidence * 100)
-        : null;
-
-      // Build reasons object
-      const reasons = {};
-      if (safePicks && Array.isArray(safePicks)) {
-        safePicks.forEach(p => {
-          if (p.reasons && p.reasons.length > 0) {
-            reasons[p.name] = p.reasons;
-          }
-        });
-      }
-
-      // Build horses array for display
-      const horsesForDisplay = horses.map(h => ({
-        name: h.name,
-        odds: h.odds_norm || h.odds_raw || h.odds,
-        speedFig: window.__fl_state.speedFigs?.[h.name] || h.speedFig || null,
-      }));
-
-      // Show panel
-      window.FLResults?.show?.({
-        win: winName,
-        place: placeName,
-        show: showName,
-        confidence: confPct,
-        horses: horsesForDisplay,
-        reasons: reasons,
-        picks: safePicks,
-        strategy: safeStrategy,
-        tickets: exotics,
-        meta: { from: 'predict_wps', ts: Date.now() }
-      });
-
-      console.info('[FinishLine] prediction success', { hasStrategy: !!safeStrategy, hasExotics: !!exotics });
+      console.info('[FinishLine] prediction success', { hasStrategy: !!data?.strategy });
 
     } catch (err) {
       console.error('[FinishLine] prediction failed', err);
-      flToast('Prediction failed. Check console.', 'error');
-      // Render a graceful error card instead of doing nothing:
+      window.flToast('Prediction failed. See console.', 'error');
       try {
-        window.FLResults?.show?.({
-          picks: null,
-          strategy: null,
-          tickets: null,
-          error: { message: (err && err.message) || 'Prediction failed' }
-        });
+        window.FLResults?.show?.({ picks: null, strategy: null, tickets: null, error: { message: String(err?.message || err) } });
       } catch {}
     } finally {
-      window.FLUI?.setBusy?.(false);
-      if (btn) btn.blur();
+      window.FLUI.setBusy(false);
     }
   }
 
@@ -553,13 +563,28 @@
   const predictBtn = qPredict();
 
   if (analyzeBtn) analyzeBtn.addEventListener('click', onAnalyze);
-  
-  // Ensure the click binding uses the new handler once, guard against double binds
-  (function bindPredictOnce() {
-    const key = '__fl_bound_predict__';
-    if (window[key]) return;
-    window[key] = true;
-    const btn = document.querySelector('[data-action="predict-wps"]') || predictBtn;
-    if (btn) btn.addEventListener('click', (e) => { e.preventDefault(); handlePredictWPS(); });
+
+  // Bind once on DOM ready + repair-bind if markup changes
+  (function FL_Bind_Predict() {
+    const KEY = '__fl_bound_predict__';
+    function bind() {
+      if (window[KEY]) return;
+      const btn = document.querySelector('[data-action="predict-wps"]') || document.getElementById('predict-btn') || predictBtn;
+      if (!btn) {
+        console.warn('[FinishLine] Predict button not found yet — retrying…');
+        return;
+      }
+      btn.addEventListener('click', (e) => { e.preventDefault(); handlePredictWPS(); });
+      window[KEY] = true;
+      console.log('[FinishLine] Predict bound');
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', bind);
+    } else {
+      bind();
+    }
+    // safety rebind in case of dynamic re-render
+    setTimeout(bind, 1000);
+    setTimeout(bind, 3000);
   })();
 })();
