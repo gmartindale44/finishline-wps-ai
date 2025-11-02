@@ -6,7 +6,7 @@
     pickedFiles: [],
     analyzed: false,
     parsedHorses: [],
-    speedFile: null,
+    speedFigs: {},
     features: {},
   });
 
@@ -33,18 +33,6 @@
 
   function $analyze() {
     return document.querySelector('[data-fl-analyze]') || document.getElementById('analyze-btn');
-  }
-
-  function $speedBtn() {
-    return document.getElementById('fl-speed-btn');
-  }
-
-  function $speedInput() {
-    return document.getElementById('fl-speed-file');
-  }
-
-  function $speedLabel() {
-    return document.getElementById('speed-file-label');
   }
 
   function enable(el, on = true) {
