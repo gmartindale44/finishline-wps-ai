@@ -120,7 +120,11 @@
 
     const getOdds = (name) => {
       if (!name) return '';
-      const h = horses.find((x) => (x.name || '').toLowerCase() === (name || '').toLowerCase());
+      const h = horses.find((x) => {
+        const horseName = (x.name || x.horse || '').toLowerCase();
+        const targetName = (name || '').toLowerCase();
+        return horseName === targetName;
+      });
       return h?.odds || '';
     };
 

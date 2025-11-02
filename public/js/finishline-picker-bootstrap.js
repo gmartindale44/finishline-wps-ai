@@ -293,28 +293,41 @@
 
         if (!r.ok) throw new Error(data?.error || `Predict failed: ${r.status}`);
 
+        // New response format: { win, place, show } or { predictions: { win: {name, odds}, ... } }
+        const winName = data.predictions?.win?.name || data.win || null;
+        const placeName = data.predictions?.place?.name || data.place || null;
+        const showName = data.predictions?.show?.name || data.show || null;
+
         // Validate response
-        if (!data.win || !data.place || !data.show) {
+        if (!winName || !placeName || !showName) {
           console.error('[Predict] Invalid response:', data);
           throw new Error('Predict returned null results. Check that at least 3 horses have valid names and odds.');
         }
 
-        // Confidence may be 0-1 or 0-100; normalize to 0-100
-        let confidence = typeof data.confidence === 'number' && data.confidence > 0 ? data.confidence : 0;
-        if (confidence <= 1) {
-          confidence = confidence * 100; // Convert decimal to percentage
+        // Use server-provided confidence directly (already 0-100 range)
+        const confPct = typeof data.confidence === 'number' && data.confidence >= 0 ? data.confidence : 7;
+        
+        // Build horses array with odds from predictions response
+        const horsesForDisplay = horses || [];
+        
+        // Enhance with odds from predictions if available
+        if (data.predictions) {
+          const winHorse = horsesForDisplay.find(h => (h.name || '').toLowerCase() === (winName || '').toLowerCase());
+          const placeHorse = horsesForDisplay.find(h => (h.name || '').toLowerCase() === (placeName || '').toLowerCase());
+          const showHorse = horsesForDisplay.find(h => (h.name || '').toLowerCase() === (showName || '').toLowerCase());
+          
+          if (data.predictions.win?.odds && winHorse) winHorse.odds = data.predictions.win.odds;
+          if (data.predictions.place?.odds && placeHorse) placeHorse.odds = data.predictions.place.odds;
+          if (data.predictions.show?.odds && showHorse) showHorse.odds = data.predictions.show.odds;
         }
         
         // Show persistent results panel instead of toast
         if (window.FLResults?.show) {
-          // Get horses for odds display
-          const horsesForDisplay = horses || [];
-          
           window.FLResults.show({
-            win: data.win,
-            place: data.place,
-            show: data.show,
-            confidence: confidence, // Now in 0-100 range
+            win: winName,
+            place: placeName,
+            show: showName,
+            confidence: confPct,
             horses: horsesForDisplay,
           });
           
