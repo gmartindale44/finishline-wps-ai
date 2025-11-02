@@ -67,6 +67,11 @@
       confBar: wrap.querySelector('#fl-conf-bar'),
       reasonsSection: wrap.querySelector('#fl-reasons'),
       reasonsChips: wrap.querySelector('#fl-reasons-chips'),
+      tabPredictions: wrap.querySelector('[data-tab="predictions"]'),
+      tabExotics: wrap.querySelector('[data-tab="exotics"]'),
+      tabContentPredictions: wrap.querySelector('#fl-tab-predictions'),
+      tabContentExotics: wrap.querySelector('#fl-tab-exotics'),
+      exoticsContent: wrap.querySelector('#fl-exotics-content'),
     };
 
     // Event listeners
@@ -198,6 +203,36 @@
     lines.push(`Place: ${placeName}`);
     lines.push(`Show: ${showName}`);
     lines.push(`Confidence: ${conf}`);
+
+    // Add exotic tickets if available
+    if (lastPred && lastPred.tickets) {
+      lines.push('');
+      lines.push('Exotic Ticket Ideas:');
+      
+      if (lastPred.tickets.trifecta && lastPred.tickets.trifecta.length > 0) {
+        lines.push('Trifecta:');
+        lastPred.tickets.trifecta.forEach(t => {
+          const confPct = Math.round((t.confidence || 0) * 100);
+          lines.push(`  ${t.label} (~${confPct}%)`);
+        });
+      }
+      
+      if (lastPred.tickets.superfecta && lastPred.tickets.superfecta.length > 0) {
+        lines.push('Superfecta:');
+        lastPred.tickets.superfecta.forEach(t => {
+          const confPct = Math.round((t.confidence || 0) * 100);
+          lines.push(`  ${t.label} (~${confPct}%)`);
+        });
+      }
+      
+      if (lastPred.tickets.superHighFive && lastPred.tickets.superHighFive.length > 0) {
+        lines.push('Super High Five:');
+        lastPred.tickets.superHighFive.forEach(t => {
+          const confPct = Math.round((t.confidence || 0) * 100);
+          lines.push(`  ${t.label} (~${confPct}%)`);
+        });
+      }
+    }
 
     const text = lines.join('\n');
     navigator.clipboard

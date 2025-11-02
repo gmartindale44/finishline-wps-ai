@@ -226,9 +226,8 @@
 
     await withBusy(analyzeBtn, async () => {
       try {
-        toast('Processing files...', 'info');
+        toast('Processing file...', 'info');
         const mainFile = state.pickedFiles[0];
-        const speedFile = state.speedFile;
 
         if (!mainFile) {
           toast('Please choose at least one image or PDF first.', 'warn');
@@ -552,7 +551,7 @@
           speedFig: window.__fl_state.speedFigs?.[h.name] || h.speedFig || null,
         }));
 
-        // Show persistent results panel with reasons
+        // Show persistent results panel with reasons and tickets
         if (window.FLResults?.show) {
           window.FLResults.show({
             win: winName,
@@ -561,9 +560,10 @@
             confidence: confPct,
             horses: horsesForDisplay,
             reasons: reasons,
+            tickets: data.tickets || null,
           });
 
-          console.log('[Predict] Results displayed in panel', { win: winName, place: placeName, show: showName, confidence: confPct });
+          console.log('[Predict] Results displayed in panel', { win: winName, place: placeName, show: showName, confidence: confPct, tickets: data.tickets });
         } else {
           // Fallback to toast if panel not available
           toast(

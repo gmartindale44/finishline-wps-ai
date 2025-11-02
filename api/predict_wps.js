@@ -146,12 +146,42 @@ export default async function handler(req, res) {
       W.o * oddsScore[i] + W.s * speedScore[i] + W.b * bias[i]
     );
 
-    // Order & tie-break by speedScore
-    const ord = comp
+    // Full ranking: all horses sorted by composite
+    const fullRanking = comp
       .map((v, i) => ({ i, v, spd: speedScore[i] }))
-      .sort((a, b) => (b.v - a.v) || (b.spd - a.spd))
-      .slice(0, 3);
+      .sort((a, b) => (b.v - a.v) || (b.spd - a.spd));
 
+    // Normalize composites to probabilities (softmax-like)
+    const compSum = comp.reduce((a, b) => a + b, 0);
+    const probs = comp.map(v => (compSum > 0 ? v / compSum : 1 / comp.length));
+
+    // Build full ranking with reasons
+    const ranking = fullRanking.map((o) => {
+      const hs = horses[o.i] || {};
+      const reasons = [];
+
+      const ro = oddsScore[o.i] - 0.5;
+      if (Math.abs(ro) > 0.05) reasons.push(`odds rank inv ${ro > 0 ? '+' : ''}${ro.toFixed(2)}`);
+
+      const rz = z[o.i] || 0;
+      if (Math.abs(rz) > 0.25) reasons.push(`speedFig z ${rz > 0 ? '+' : ''}${rz.toFixed(2)}`);
+
+      if (sprint) reasons.push('dist adj');
+      if (surf) reasons.push('surf adj');
+      if (!Number.isNaN(Number(hs.post))) reasons.push('post adj');
+
+      return {
+        name: hs.name,
+        post: hs.post || null,
+        odds: hs.odds || '',
+        comp: o.v,
+        prob: probs[o.i],
+        reasons,
+      };
+    });
+
+    // Top 3 for W/P/S picks
+    const ord = fullRanking.slice(0, 3);
     const slots = ['Win', 'Place', 'Show'];
     const picks = ord.map((o, idx) => {
       const hs = horses[o.i] || {};
@@ -175,11 +205,92 @@ export default async function handler(req, res) {
       };
     });
 
+    // Build exotic ticket variants
+    const top6 = fullRanking.slice(0, 6);
+    const top6Names = top6.map(o => horses[o.i]?.name || '').filter(Boolean);
+
+    function ticketConfidence(legs, probs, ranking) {
+      let conf = 1;
+      legs.forEach((leg) => {
+        const legProbs = leg.map(name => {
+          const rankIdx = ranking.findIndex(r => r.name === name);
+          return rankIdx >= 0 ? probs[rankIdx] : 0;
+        });
+        if (legProbs.length > 0) {
+          const legMax = Math.max(...legProbs);
+          const legSize = leg.length;
+          conf *= (legMax / legSize);
+        }
+      });
+      return Math.max(0, Math.min(1, conf));
+    }
+
+    // Trifecta variants
+    const trifecta = [];
+    if (top6Names.length >= 3) {
+      trifecta.push({
+        legs: [[top6Names[0]], [top6Names[1]], [top6Names[2], top6Names[3]]],
+        label: `${top6Names[0]} / ${top6Names[1]} / ${top6Names[2]},${top6Names[3]}`,
+      });
+      trifecta.push({
+        legs: [[top6Names[0], top6Names[1], top6Names[2]]],
+        label: `BOX ${top6Names[0]}-${top6Names[1]}-${top6Names[2]}`,
+      });
+    }
+
+    // Superfecta variants
+    const superfecta = [];
+    if (top6Names.length >= 5) {
+      superfecta.push({
+        legs: [[top6Names[0]], [top6Names[1]], [top6Names[2], top6Names[3]], [top6Names[3], top6Names[4], top6Names[5]]],
+        label: `${top6Names[0]} / ${top6Names[1]} / ${top6Names[2]},${top6Names[3]} / ${top6Names[3]},${top6Names[4]},${top6Names[5]}`,
+      });
+      superfecta.push({
+        legs: [[top6Names[0]], [top6Names[0], top6Names[1]], [top6Names[1], top6Names[2], top6Names[3]], [top6Names[3], top6Names[4], top6Names[5]]],
+        label: `${top6Names[0]} / ${top6Names[0]},${top6Names[1]} / ${top6Names[1]},${top6Names[2]},${top6Names[3]} / ${top6Names[3]},${top6Names[4]},${top6Names[5]}`,
+      });
+    }
+
+    // Super High Five variants
+    const superHighFive = [];
+    if (top6Names.length >= 6) {
+      superHighFive.push({
+        legs: [[top6Names[0]], [top6Names[1]], [top6Names[2]], [top6Names[3], top6Names[4]], [top6Names[4], top6Names[5]]],
+        label: `${top6Names[0]} / ${top6Names[1]} / ${top6Names[2]} / ${top6Names[3]},${top6Names[4]} / ${top6Names[4]},${top6Names[5]}`,
+      });
+      superHighFive.push({
+        legs: [[top6Names[0]], [top6Names[1], top6Names[2]], [top6Names[1], top6Names[2], top6Names[3]], [top6Names[4]], [top6Names[5]]],
+        label: `${top6Names[0]} / ${top6Names[1]},${top6Names[2]} / ${top6Names[1]},${top6Names[2]},${top6Names[3]} / ${top6Names[4]} / ${top6Names[5]}`,
+      });
+    }
+
+    // Add confidence to tickets
+    const tickets = {
+      trifecta: trifecta.map(t => ({
+        ...t,
+        confidence: ticketConfidence(t.legs, probs, ranking),
+      })),
+      superfecta: superfecta.map(t => ({
+        ...t,
+        confidence: ticketConfidence(t.legs, probs, ranking),
+      })),
+      superHighFive: superHighFive.map(t => ({
+        ...t,
+        confidence: ticketConfidence(t.legs, probs, ranking),
+      })),
+    };
+
     // Confidence: mean composite ** 0.9, clamped 8%–85%
     const meanComp = ord.reduce((a, b) => a + b.v, 0) / (ord.length || 1);
     const confidence = Math.max(0.08, Math.min(0.85, Math.pow(meanComp, 0.9)));
 
-    return res.status(200).json({ picks, confidence, meta: { track, surface, distance_mi: miles } });
+    return res.status(200).json({
+      picks,
+      confidence,
+      ranking,
+      tickets,
+      meta: { track, surface, distance_mi: miles }
+    });
   } catch (err) {
     console.error('[predict_wps] Error:', err);
     return res.status(500).json({ error: 'prediction_error', message: String(err?.message || err) });
