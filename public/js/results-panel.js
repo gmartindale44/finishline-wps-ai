@@ -479,9 +479,11 @@
       const bkEl = wrap.querySelector('#fl-bk');
       const bkVal = wrap.querySelector('#fl-bk-val');
       
-      // Get picks from the prediction data (need to extract from parent context)
-      // Try to get picks from lastPred or construct from strategy metrics
-      const picks = fallbackData.picks || (s.metrics?.top || []).slice(0, 3).map(t => ({ name: t.name || '' })).filter(p => p.name);
+      // Get picks from the prediction data - use picks parameter or construct from strategy metrics
+      let picksData = picks;
+      if (!picksData || !Array.isArray(picksData)) {
+        picksData = (s.metrics?.top || []).slice(0, 3).map(t => ({ name: t.name || '' })).filter(p => p.name);
+      }
       const rec = s.recommended || 'Across the Board';
 
       function renderPlan() {
