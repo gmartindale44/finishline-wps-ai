@@ -269,12 +269,31 @@
     elements.exoticsContent.innerHTML = html;
   }
 
-  function renderStrategy(strategy) {
-    if (!elements || !elements.strategyWrap || !strategy) return;
+  function renderStrategy(strategy, fallbackData = {}) {
+    if (!elements || !elements.strategyWrap) return;
 
-    const s = strategy;
+    // Fallback: synthesize minimal strategy if missing
+    let s = strategy;
+    if (!s) {
+      const betTypesTable = [
+        { type: 'Trifecta Box (AI Top 3)', icon: '🔥', bestFor: 'Max profit', desc: 'Leverages AI\'s strength at identifying the 3 right horses even if order flips.' },
+        { type: 'Across the Board',        icon: '🛡️', bestFor: 'Consistency', desc: 'Always collects if top pick finishes top 3. Ideal for low variance bankroll play.' },
+        { type: 'Win Only',                icon: '🎯', bestFor: 'Confidence plays', desc: 'When AI confidence > 68%, Win-only yields clean edge.' },
+        { type: 'Exacta Box (Top 3)',      icon: '⚖️', bestFor: 'Middle ground', desc: 'Works when AI has correct pair but misses trifecta.' },
+      ];
+      const conf = Number(fallbackData.confidence || 0);
+      // Naive heuristic: if conf high choose Win, else default to ATB
+      const recommended = conf >= 0.7 ? 'Win Only' : 'Across the Board';
+      s = {
+        recommended,
+        rationale: [`Confidence ${Math.round(conf * 100)}%`],
+        betTypesTable,
+        metrics: { confidence: conf, top3Mass: null, gap12: null, gap23: null, top: [] }
+      };
+      console.info('[FLResults] Using client-side fallback strategy');
+    }
+
     const wrap = elements.strategyWrap;
-
     wrap.innerHTML = '';
 
     const card = document.createElement('div');
@@ -458,9 +477,21 @@
       renderExotics(tickets);
     }
 
-    // Render strategy if available
-    if (pred.strategy) {
-      renderStrategy(pred.strategy);
+    // Render strategy if available (with fallback)
+    renderStrategy(pred.strategy || null, { confidence: pred.confidence });
+    
+    // Diagnostics: log strategy payload
+    try {
+      console.debug('[FLResults] Strategy payload:', pred.strategy ? 'present' : 'missing (using fallback)');
+      if (pred.strategy) {
+        console.debug('[FLResults] Strategy details:', {
+          recommended: pred.strategy.recommended,
+          rationale: pred.strategy.rationale?.length || 0,
+          metrics: pred.strategy.metrics ? 'present' : 'missing'
+        });
+      }
+    } catch (e) {
+      // Ignore logging errors
     }
 
     // Open and apply pinned state

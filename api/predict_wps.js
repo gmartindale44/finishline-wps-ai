@@ -357,12 +357,31 @@ export default async function handler(req, res) {
       }
     };
 
+    // Ensure strategy is always present (double-check)
+    const finalStrategy = strategy || {
+      recommended: 'Across the Board',
+      rationale: ['Default strategy (no metrics available)'],
+      betTypesTable: [
+        { type: 'Across the Board', icon: '🛡️', bestFor: 'Consistency', desc: 'Always collects if top pick finishes top 3. Ideal for low variance bankroll play.' },
+        { type: 'Win Only', icon: '🎯', bestFor: 'Confidence plays', desc: 'When AI confidence > 68%, Win-only yields clean edge.' },
+        { type: 'Trifecta Box (AI Top 3)', icon: '🔥', bestFor: 'Max profit', desc: 'Leverages AI\'s strength at identifying the 3 right horses even if order flips.' },
+        { type: 'Exacta Box (Top 3)', icon: '⚖️', bestFor: 'Middle ground', desc: 'Works when AI has correct pair but misses trifecta.' },
+      ],
+      metrics: {
+        confidence: confidence || 0.5,
+        top3Mass: top3Mass || 0,
+        gap12: gap12 || 0,
+        gap23: gap23 || 0,
+        top: ranking.slice(0, 6).map(r => ({ name: r.name, prob: r.prob || 0, comp: r.comp || 0 }))
+      }
+    };
+
     return res.status(200).json({
       picks,
       confidence,
       ranking,
       tickets,
-      strategy,
+      strategy: finalStrategy,
       meta: { track, surface, distance_mi: miles }
     });
   } catch (err) {

@@ -576,9 +576,10 @@
               horses: horsesForDisplay,
               reasons: reasons,
               tickets: data.tickets || null,
+              strategy: data.strategy || null,
             });
 
-            console.log('[Predict] Results displayed in panel', { win: winName, place: placeName, show: showName, confidence: confPct, tickets: data.tickets });
+            console.log('[Predict] Results displayed in panel', { win: winName, place: placeName, show: showName, confidence: confPct, tickets: data.tickets, strategy: data.strategy ? 'present' : 'missing' });
           } else {
             // Fallback to toast if panel not available
             showToast(`Predictions ready. Win: ${winName}, Place: ${placeName}, Show: ${showName}`);
