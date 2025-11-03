@@ -1,4 +1,15 @@
+/* eslint-disable no-console */
 (function () {
+  // ---- Global State (safe namespace) ----
+  window.FLState = window.FLState || {
+    parsed: false,
+    picks: null,         // top-3 picks after Analyze
+    lastPayload: null,   // last request payload
+  };
+
+  const LOGTAG = '[FL bootstrap]';
+  const log = (...a) => console.log(LOGTAG, ...a);
+
   const state = (window.__fl_state = window.__fl_state || {
     pickedFiles: [],
     analyzed: false,
@@ -118,8 +129,80 @@
     return document.querySelector('[data-fl-analyze]') || document.getElementById('analyze-btn') || document.querySelector('button.analyze');
   }
 
+  // ---- Robust button finder ----
+  function findPredictBtn() {
+    // First, official selector
+    let btn = document.querySelector('[data-action="predict-wps"]');
+    if (btn) return btn;
+    
+    // Fallback: match visible button by text
+    const candidates = [...document.querySelectorAll('button, [role="button"], input[type="button"], input[type="submit"]')];
+    return candidates.find(x => (x.innerText || x.value || '').toLowerCase().includes('predict w/p/s'));
+  }
+
   function qPredict() {
-    return document.querySelector('[data-fl-predict]') || document.getElementById('predict-btn') || document.querySelector('button.predict');
+    return findPredictBtn() || document.querySelector('[data-fl-predict]') || document.getElementById('predict-btn') || document.querySelector('button.predict');
+  }
+
+  // ---- Enable/disable with authority ----
+  function setEnabled(btn, enabled) {
+    if (!btn) return;
+    if (enabled) {
+      btn.removeAttribute('disabled');
+      btn.classList.remove('is-disabled');
+      btn.style.pointerEvents = 'auto';
+    } else {
+      btn.setAttribute('disabled', 'true');
+      btn.classList.add('is-disabled');
+      btn.style.pointerEvents = 'none';
+    }
+  }
+
+  // ---- Build payload (prefer app builder, else fallback) ----
+  function buildPayload() {
+    if (typeof window.FLBuildPayload === 'function') {
+      try {
+        const p = window.FLBuildPayload();
+        if (p) return p;
+      } catch (e) { log('FLBuildPayload failed', e); }
+    }
+
+    // Minimal fallback from parsed state or DOM
+    if (window.FLState.picks && window.FLState.picks.length >= 3) {
+      syncInputsToState();
+      return { 
+        picks: window.FLState.picks.slice(0, 3),
+        race: {
+          track: window.__fl_state.track || '',
+          surface: window.__fl_state.surface || '',
+          distance: window.__fl_state.distance_input || ''
+        },
+        meta: { source: 'fl-state' } 
+      };
+    }
+
+    // Fallback: use existing getHorsesForPrediction logic
+    const horses = getHorsesForPrediction();
+    if (horses && horses.length >= 3) {
+      syncInputsToState();
+      return {
+        horses,
+        race: {
+          track: window.__fl_state.track || '',
+          surface: window.__fl_state.surface || '',
+          distance: window.__fl_state.distance_input || ''
+        },
+        meta: { source: 'form-collector' }
+      };
+    }
+
+    // DOM fallback (last resort)
+    const rows = [...document.querySelectorAll('[data-row], .horse-row, .grid [role="row"]')];
+    const names = rows.map(r => (r.innerText || '').split('\n')[0].trim()).filter(Boolean);
+    return { 
+      picks: names.slice(0, 3).map((n, i) => ({ rank: i + 1, name: n, odds: null })), 
+      meta: { source: 'dom-fallback' } 
+    };
   }
 
   function enable(el, on = true) {
@@ -346,6 +429,22 @@
         state.parsedHorses = normalizedHorses;
         state.features = features;
         state.analyzed = true;
+
+        // Update FLState and emit events
+        const top3 = normalizedHorses.slice(0, 3);
+        if (normalizedHorses.length >= 3) {
+          window.FLState.parsed = true;
+          window.FLState.picks = top3;
+          window.FLState.lastPayload = null; // Reset
+          document.dispatchEvent(new CustomEvent('fl:parsed', { 
+            detail: { picks: top3, count: normalizedHorses.length } 
+          }));
+          log('parsed=true, picks:', top3);
+        } else {
+          window.FLState.parsed = false;
+          window.FLState.picks = null;
+          document.dispatchEvent(new CustomEvent('fl:parse-error'));
+        }
 
         // Merge speed figs if present in response
         if (mainPayload?.speedFigs || payload?.speedFigs) {
@@ -584,9 +683,10 @@
               confidence: confPct,
               horses: horsesForDisplay,
               reasons: reasons,
-              tickets: data.tickets || null,
+              tickets: data.tickets || data.exotics || null,
+              exotics: data.exotics || data.tickets || null,
               strategy: data.strategy || null,
-              picks: data.picks || picks || null,
+              picks: data.picks || finalPicks || null,
             });
 
             console.log('[Predict] Results displayed in panel', { win: winName, place: placeName, show: showName, confidence: confPct, tickets: data.tickets, strategy: data.strategy ? 'present' : 'missing' });
@@ -598,16 +698,45 @@
           console.error('[Predict] Modal render error:', modalErr);
           showToast('Prediction display error – check console.');
         }
-      } catch (e) {
-        console.error('[Predict] Unexpected error:', e);
-        showToast(`Prediction failed: ${e?.message || 'Unknown error'}`);
-      }
-    });
+        } catch (err) {
+          console.error(LOGTAG, 'Predict failed', err);
+          showToast(`Predict failed: ${err.message}`);
+        }
+      });
+    } catch (err) {
+      console.error(LOGTAG, 'Predict setup failed', err);
+      showToast(`Predict failed: ${err.message}`);
+    }
   }
 
+  function bindPredict() {
+    const btn = qPredict();
+    if (!btn) {
+      log('Predict button not found yet');
+      return;
+    }
+    
+    // Enable when parsed=true & at least 3 picks known; else keep clickable to let API validate
+    setEnabled(btn, true);
+
+    if (!btn.__flBound) {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onPredict();
+      }, true);
+      btn.__flBound = true;
+      log('Predict bound');
+    }
+  }
+
+  // Observe DOM changes to rebind after re-renders
+  new MutationObserver(() => bindPredict()).observe(document.body, { childList: true, subtree: true });
+
   const analyzeBtn = qAnalyze();
-  const predictBtn = qPredict();
 
   if (analyzeBtn) analyzeBtn.addEventListener('click', onAnalyze);
-  if (predictBtn) predictBtn.addEventListener('click', onPredict);
+  
+  // Initial bind
+  bindPredict();
 })();

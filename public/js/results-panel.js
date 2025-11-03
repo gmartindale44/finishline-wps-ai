@@ -653,7 +653,7 @@
     }
   }
 
-  // Public API (null-safe)
+  // Public API (null-safe with fallbacks)
   window.FLResults = {
     show(pred) {
       try {
@@ -661,6 +661,26 @@
           console.warn('[FLResults] Invalid prediction data');
           return;
         }
+        
+        // Ensure strategy and exotics always exist
+        const has = (x) => x !== undefined && x !== null;
+        const conf = has(pred.confidence) ? Number(pred.confidence) : null;
+        pred.exotics = pred.exotics || pred.tickets || { trifecta: [], superfecta: [], superHighFive: [], sh5: [] };
+        pred.strategy = pred.strategy || {
+          recommended: conf >= 68 ? 'Win Only' : 'Across the Board',
+          metrics: { confidence: conf || 0, top3Mass: null, gaps: { g12: null, g23: null } },
+          betTypesTable: [
+            { name: 'Trifecta Box (Top 3)', bestFor: 'Max profit', desc: 'Leverages AI top-3 even if order flips.' },
+            { name: 'Across the Board', bestFor: 'Consistency', desc: 'Collects when top pick finishes top 3.' },
+            { name: 'Win Only', bestFor: 'Confidence plays', desc: 'Use when confidence ≥ 68%.' },
+            { name: 'Exacta Box (Top 3)', bestFor: 'Middle ground', desc: 'Right pair but miss trifecta.' },
+          ],
+          suggestedPlan: { bankroll: 200, legs: [] },
+        };
+        
+        const LOGTAG = '[FL results]';
+        console.log(LOGTAG, { picks: pred.picks, confidence: conf, exotics: !!pred.exotics, strategy: !!pred.strategy });
+        
         lastPred = pred;
         render(pred);
       } catch (err) {
