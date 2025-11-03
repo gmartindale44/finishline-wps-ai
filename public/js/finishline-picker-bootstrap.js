@@ -433,16 +433,20 @@
         // Update FLState and emit events
         const top3 = normalizedHorses.slice(0, 3);
         if (normalizedHorses.length >= 3) {
+          window.FLState = window.FLState || {};
           window.FLState.parsed = true;
           window.FLState.picks = top3;
+          window.FLState.phase = 'ready';
           window.FLState.lastPayload = null; // Reset
           document.dispatchEvent(new CustomEvent('fl:parsed', { 
             detail: { picks: top3, count: normalizedHorses.length } 
           }));
           log('parsed=true, picks:', top3);
         } else {
+          window.FLState = window.FLState || {};
           window.FLState.parsed = false;
           window.FLState.picks = null;
+          window.FLState.phase = 'idle';
           document.dispatchEvent(new CustomEvent('fl:parse-error'));
         }
 

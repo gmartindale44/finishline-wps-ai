@@ -67,8 +67,8 @@
         </div>
         
         <!-- Action buttons (keep your styling; just ensure these data hooks exist) -->
-        <button type="button" data-fl-analyze id="analyze-btn" class="btn btn-secondary disabled" disabled>Analyze with AI</button>
-        <button type="button" data-fl-predict id="predict-btn" class="btn btn-primary disabled" disabled>Predict W/P/S</button>
+        <button type="button" data-action="fl-analyze" data-fl-analyze id="analyze-btn" class="btn btn-secondary disabled" disabled>Analyze with AI</button>
+        <button type="button" data-action="predict-wps" data-fl-predict id="predict-btn" class="btn btn-primary disabled" disabled>Predict W/P/S</button>
         
         <div class="chips">
           <span data-chip="choose" class="chip chip--idle">Idle</span>
@@ -103,6 +103,7 @@
   <script type="module" src="/js/utils-distance.js" defer></script>
   <script src="/js/results-panel.js" defer></script>
   <script src="/js/finishline-picker-bootstrap.js" defer></script>
+  <script src="/js/fl-binders.js" defer></script>
   <script src="/js/picker-autobind.js" defer></script>
   <script>
     // Distance tooltip helper
