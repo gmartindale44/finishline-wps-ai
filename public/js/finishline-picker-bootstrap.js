@@ -75,6 +75,51 @@
     features: {},
   });
 
+  // ─────────────────────────────────────────────
+  // Central state machine (FLState)
+  // ─────────────────────────────────────────────
+  window.FLState = window.FLState || {
+    parsed: false,
+    picks: [],
+    errors: [],
+    busy: false
+  };
+
+  // State helpers
+  function setBusy(v) {
+    window.FLState.busy = !!v;
+    refreshPredictBtn();
+  }
+
+  function setParsed(v) {
+    window.FLState.parsed = !!v;
+    refreshPredictBtn();
+  }
+
+  function setPicks(arr) {
+    window.FLState.picks = Array.isArray(arr) ? arr : [];
+    refreshPredictBtn();
+  }
+
+  function canPredict() {
+    const s = window.FLState;
+    return !s.busy && s.parsed && s.picks && s.picks.length >= 3;
+  }
+
+  function refreshPredictBtn() {
+    const btn = document.querySelector('[data-action="predict-wps"]') || document.getElementById('predict-wps');
+    if (!btn) return;
+    const can = canPredict();
+    btn.disabled = !can;
+    btn.classList.toggle('is-disabled', !can);
+    btn.classList.toggle('disabled', !can);
+    if (window.FLState.busy) {
+      btn.textContent = 'Predicting…';
+    } else {
+      btn.textContent = 'Predict W/P/S';
+    }
+  }
+
   // Name normalization helpers
   function normName(s) {
     return (s || "")
@@ -420,6 +465,20 @@
         state.features = features;
         state.analyzed = true;
 
+        // Update FLState and emit events
+        if (normalizedHorses.length >= 3) {
+          setParsed(true);
+          setPicks(normalizedHorses.slice(0, 3));
+          document.dispatchEvent(new CustomEvent('fl:parsed', { 
+            detail: { count: normalizedHorses.length } 
+          }));
+        } else {
+          setParsed(false);
+          setPicks([]);
+          window.FLState.errors = ['parse failed: insufficient horses'];
+          document.dispatchEvent(new CustomEvent('fl:parse-error'));
+        }
+
         // Merge speed figs if present in response
         if (mainPayload?.speedFigs || payload?.speedFigs) {
           mergeSpeedFigsIntoState(mainPayload?.speedFigs || payload?.speedFigs);
@@ -449,9 +508,14 @@
         }
 
         enable(predictBtn, true);
+        refreshPredictBtn();
       } catch (e) {
         console.error('[Analyze]', e);
         toast(`Analyze failed: ${e.message}`, 'error');
+        setParsed(false);
+        setPicks([]);
+        window.FLState.errors = ['analyze failed: ' + (e.message || 'unknown')];
+        document.dispatchEvent(new CustomEvent('fl:parse-error'));
       }
     });
   }
@@ -575,14 +639,53 @@
     catch (e) { console[type === 'error' ? 'error' : 'log']('[FL toast]', msg); }
   }
 
+  // Fallback strategy builder (client-side)
+  function makeStrategyFallback(confidence, picks) {
+    const c = Number(confidence) || 0;
+    const recommended = (c >= 68) ? 'Win Only' : 'Across the Board';
+    return {
+      recommended,
+      metrics: { 
+        confidence: c, 
+        top3Mass: null, 
+        gaps: { g12: null, g23: null } 
+      },
+      betTypesTable: [
+        { name: 'Trifecta Box (Top 3)', bestFor: 'Max profit', desc: 'Leverages AI top-3 even if order flips.' },
+        { name: 'Across the Board', bestFor: 'Consistency', desc: 'Collects if top pick finished top 3.' },
+        { name: 'Win Only', bestFor: 'Confidence plays', desc: 'Use when confidence is high (≥68%).' },
+        { name: 'Exacta Box (Top 3)', bestFor: 'Middle ground', desc: 'Good when pair is right but trifecta misses.' }
+      ],
+      suggestedPlan: { bankroll: 200, legs: [] }
+    };
+  }
+
   async function predictNow() {
     console.debug('[FL] predictNow() invoked');
-    try {
-      const form = (window.FLForm && typeof window.FLForm.collect === 'function')
-        ? window.FLForm.collect()
-        : { horses: [] };
+    
+    // Guard: check if can predict
+    if (!canPredict()) {
+      console.debug('[FL] predict blocked: !canPredict()', {
+        busy: window.FLState.busy,
+        parsed: window.FLState.parsed,
+        picksCount: window.FLState.picks?.length || 0
+      });
+      toast('Please analyze first and ensure at least 3 horses are available.', 'warn');
+      return;
+    }
 
-      const horses = (form && Array.isArray(form.horses)) ? form.horses : [];
+    setBusy(true);
+    
+    try {
+      // Use FLState.picks if available, otherwise try form collector
+      let horses = window.FLState.picks || [];
+      if (horses.length < 3) {
+        const form = (window.FLForm && typeof window.FLForm.collect === 'function')
+          ? window.FLForm.collect()
+          : { horses: [] };
+        horses = (form && Array.isArray(form.horses)) ? form.horses : [];
+      }
+
       console.debug('[FL] predict click -> horses collected:', horses.length, horses);
       if (horses.length < 3) {
         toast('Predict failed: Need at least 3 horses', 'error');
@@ -598,14 +701,14 @@
       const payload = {
         race: {
           date: dateEl?.value || '',
-          track: trackEl?.value || '',
-          surface: surfaceEl?.value || '',
-          distance: distEl?.value || ''
+          track: trackEl?.value || window.__fl_state.track || '',
+          surface: surfaceEl?.value || window.__fl_state.surface || '',
+          distance: distEl?.value || window.__fl_state.distance_input || ''
         },
         horses
       };
 
-      console.debug('[FL] fetch(/api/predict_wps) sent', payload);
+      console.info('[FL] predict payload', payload);
 
       const res = await fetch('/api/predict_wps', {
         method: 'POST',
@@ -619,11 +722,17 @@
       }
 
       const data = await res.json();
+      
+      // Normalize: ensure strategy and exotics exist
+      data.strategy = data.strategy || makeStrategyFallback(data.confidence, window.FLState.picks || []);
+      data.exotics = data.exotics || data.tickets || { trifecta: [], superfecta: [], superHighFive: [] };
+
+      console.info('[FL] predict result', data);
+
       // Strategy/exotics may be omitted by older previews; results-panel has fallbacks
-      console.debug('[FL] predict payload ok', data);
       if (window.FLResults && typeof window.FLResults.show === 'function') {
         window.FLResults.show({
-          picks: data.picks || null,
+          picks: data.picks || window.FLState.picks || null,
           confidence: data.confidence || null,
           why: data.why || null,
           strategy: data.strategy || null,
@@ -635,14 +744,26 @@
     } catch (e) {
       console.error('[FL] predict failed', e);
       toast(`Predict failed: ${e.message || e}`, 'error');
+    } finally {
+      setBusy(false);
     }
   }
 
   // expose for inline onclick / console
   window.FLPredict = predictNow;
 
+  // Initialize button state on load
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => refreshPredictBtn());
+  } else {
+    refreshPredictBtn();
+  }
+
   // === Binding (bombproof) ==================================================
+  let boundPredict = false;
   function bindPredict() {
+    if (boundPredict) return;
+    boundPredict = true;
     // 1) Delegated capture listener (fires even if overlays receive the click)
     if (!document.__flDelegatedPredict) {
       document.addEventListener('click', (ev) => {

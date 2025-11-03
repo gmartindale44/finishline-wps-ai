@@ -376,11 +376,36 @@ export default async function handler(req, res) {
       }
     };
 
-    // Guarantee shape:
+    // Fallback strategy builder (server-side)
+    function makeStrategyFallback(conf, picksArr) {
+      const c = Number(conf) || 0;
+      const recommended = (c >= 68) ? 'Win Only' : 'Across the Board';
+      return {
+        recommended,
+        metrics: { 
+          confidence: c, 
+          top3Mass: null, 
+          gaps: { g12: null, g23: null } 
+        },
+        betTypesTable: [
+          { type: 'Trifecta Box (Top 3)', icon: '🔥', bestFor: 'Max profit', desc: 'Leverages AI top-3 even if order flips.' },
+          { type: 'Across the Board', icon: '🛡️', bestFor: 'Consistency', desc: 'Collects if top pick finished top 3.' },
+          { type: 'Win Only', icon: '🎯', bestFor: 'Confidence plays', desc: 'Use when confidence is high (≥68%).' },
+          { type: 'Exacta Box (Top 3)', icon: '⚖️', bestFor: 'Middle ground', desc: 'Good when pair is right but trifecta misses.' }
+        ],
+        suggestedPlan: { bankroll: 200, legs: [] }
+      };
+    }
+
+    // Guarantee shape with fallbacks:
+    const safeStrategy = finalStrategy || makeStrategyFallback(confidence, picks || []);
+    const safeTickets = tickets || { trifecta: [], superfecta: [], superHighFive: [] };
+    
     const out = {
       picks: picks ?? null,
-      strategy: finalStrategy ?? null,
-      tickets: tickets ?? null,
+      strategy: safeStrategy,
+      tickets: safeTickets,
+      exotics: safeTickets,  // alias for compatibility
       confidence: confidence ?? null,
       ranking: ranking ?? null,
       meta: { track, surface, distance_mi: miles }

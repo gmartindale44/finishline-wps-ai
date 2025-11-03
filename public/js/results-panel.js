@@ -204,8 +204,17 @@
 
   function renderExotics(tickets, recommended = '') {
     if (!elements || !elements.exoticsContent) return;
-    if (!tickets || (!tickets.trifecta && !tickets.superfecta && !tickets.superHighFive)) {
-      elements.exoticsContent.innerHTML = '<p style="opacity:0.7;text-align:center;padding:20px;">No exotic ticket suggestions available.</p>';
+    
+    // Ensure tickets object exists
+    const safeTickets = tickets || { trifecta: [], superfecta: [], superHighFive: [] };
+    
+    // Check if any tickets exist
+    const hasTickets = (safeTickets.trifecta && safeTickets.trifecta.length > 0) ||
+                      (safeTickets.superfecta && safeTickets.superfecta.length > 0) ||
+                      (safeTickets.superHighFive && safeTickets.superHighFive.length > 0);
+    
+    if (!hasTickets) {
+      elements.exoticsContent.innerHTML = '<p style="opacity:0.7;text-align:center;padding:20px;">No exotic ticket suggestions available for this race setup.</p>';
       return;
     }
 
@@ -219,10 +228,10 @@
     let html = '';
 
     // Trifecta
-    if (tickets.trifecta && tickets.trifecta.length > 0) {
+    if (safeTickets.trifecta && safeTickets.trifecta.length > 0) {
       const title = `Trifecta Ideas${isRec('Trifecta') ? ' • Recommended' : ''}`;
       html += `<div style="margin-bottom:20px;"><h4 style="font-size:15px;font-weight:700;margin-bottom:8px;color:#dfe3ff;">${title}</h4>`;
-      tickets.trifecta.forEach(ticket => {
+      safeTickets.trifecta.forEach(ticket => {
         let ticketText = '';
         let confText = '';
 
@@ -246,9 +255,9 @@
     }
 
     // Superfecta
-    if (tickets.superfecta && tickets.superfecta.length > 0) {
+    if (safeTickets.superfecta && safeTickets.superfecta.length > 0) {
       html += '<div style="margin-bottom:20px;"><h4 style="font-size:15px;font-weight:700;margin-bottom:8px;color:#dfe3ff;">Superfecta Ideas</h4>';
-      tickets.superfecta.forEach(ticket => {
+      safeTickets.superfecta.forEach(ticket => {
         let ticketText = '';
         let confText = '';
 
@@ -273,9 +282,9 @@
     // For now, skip if not present
     
     // Super High Five
-    if (tickets.superHighFive && tickets.superHighFive.length > 0) {
+    if (safeTickets.superHighFive && safeTickets.superHighFive.length > 0) {
       html += '<div style="margin-bottom:20px;"><h4 style="font-size:15px;font-weight:700;margin-bottom:8px;color:#dfe3ff;">Super High Five Ideas</h4>';
-      tickets.superHighFive.forEach(ticket => {
+      safeTickets.superHighFive.forEach(ticket => {
         let ticketText = '';
         let confText = '';
 
@@ -316,10 +325,15 @@
       return;
     }
 
+    // Ensure strategy and exotics always exist (fallback if missing)
     const conf = (picks && (typeof picks === 'object' && (picks.confidence ?? picks.top3Confidence))) 
       ? Number((picks.confidence ?? picks.top3Confidence)) / 100 
       : (typeof picks === 'number' ? picks / 100 : 0.0);
-    const safe = strategy && typeof strategy === 'object' ? strategy : buildFallbackStrategy(conf);
+    const safeStrategy = strategy && typeof strategy === 'object' ? strategy : buildFallbackStrategy(conf);
+    const safeExotics = exotics || { trifecta: [], superfecta: [], superHighFive: [] };
+    
+    // Use safeStrategy (renamed from safe to avoid confusion)
+    const safe = safeStrategy;
 
     // Convert safe strategy to expected format
     let s = safe;

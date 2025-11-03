@@ -167,6 +167,12 @@ input,select{width:100%;padding:10px 12px;border:1px solid var(--border);border-
   pointer-events: none;
 }
 
+/* Disabled state for predict button */
+.is-disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
 /* Keep floating controls below buttons */
 .fl-fab,
 .floating-filter {
