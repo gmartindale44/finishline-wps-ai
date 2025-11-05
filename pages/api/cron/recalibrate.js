@@ -6,8 +6,7 @@ import { redisKeys, redisHGetAll } from "../../../lib/redis.js";
 import { exec } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, "..", "..", "..");
 const CSV_PATH = path.join(root, "data", "finishline_tests_v1.csv");
 
