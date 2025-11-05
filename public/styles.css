@@ -322,3 +322,13 @@ button[disabled][aria-busy="true"] { opacity: 0.7; }
   0%,100% { opacity: .35; }
   50% { opacity: 1; }
 }
+
+/* Admin tools: hidden by default, shown only when FL_FLAGS.showAdminTools === true */
+[data-admin-tools] {
+  display: none !important;
+}
+
+[data-admin-tools][style*="display:block"],
+[data-admin-tools][style*="display: flex"] {
+  display: block !important;
+}
