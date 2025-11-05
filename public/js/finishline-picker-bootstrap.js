@@ -464,12 +464,21 @@
         showToast('Generating predictions...');
         
         // Collect meta from form
+        const rawDistance = (document.getElementById('race-distance')?.value || '').trim();
+        const normDistance = window.FL_parseDistance ? window.FL_parseDistance(rawDistance) : null;
+        
         const meta = {
           track: (document.getElementById('race-track')?.value || '').trim(),
           surface: (document.getElementById('race-surface')?.value || '').trim(),
-          distance: (document.getElementById('race-distance')?.value || '').trim(),
+          distance: normDistance ? normDistance.pretty : rawDistance,
           date: (document.getElementById('race-date')?.value || '').trim(),
         };
+        
+        // Add normalized distance fields if parsed
+        if (normDistance) {
+          meta.distance_furlongs = normDistance.distance_furlongs;
+          meta.distance_meters = normDistance.distance_meters;
+        }
 
         // Get features or build from horses
         let features = window.__fl_state.features || {};
@@ -515,6 +524,14 @@
           distance_input: window.__fl_state.distance_input || meta.distance || '',
           speedFigs: window.__fl_state.speedFigs || {},
         };
+        
+        // Add normalized distance fields if available
+        if (meta.distance_furlongs != null) {
+          payload.distance_furlongs = meta.distance_furlongs;
+        }
+        if (meta.distance_meters != null) {
+          payload.distance_meters = meta.distance_meters;
+        }
 
         __fl_diag('predict payload', payload);
 

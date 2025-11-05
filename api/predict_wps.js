@@ -4,6 +4,7 @@ export const config = { runtime: 'nodejs' };
 /* FL_CALIB_HELPERS */
 import fs from 'fs';
 import path from 'path';
+import { parseDistance } from '../lib/distance.js';
 const __CALIB_PATH = path.join(process.cwd(), 'data', 'model_params.json');
 function __loadParams(){ try{ return JSON.parse(fs.readFileSync(__CALIB_PATH,'utf8')); }catch{ return {reliability:[],temp_tau:1.0,policy:{}}; } }
 function __calConf(raw, rel){
@@ -60,6 +61,9 @@ function toMiles(distanceInput) {
   return dec ? parseFloat(dec[0]) : null;
 }
 
+// --- Distance normalization (preferred) ---
+// (parseDistance imported at top)
+
 // --- Math helpers ---
 function zScores(vs) {
   if (!vs.length) return [];
@@ -98,6 +102,19 @@ export default async function handler(req, res) {
 
   try {
     const body = await parseJSONBody(req);
+    
+    // Normalize distance if client didn't provide normalized values
+    if (!body.distance_furlongs || !body.distance_meters) {
+      const norm = parseDistance(body.distance || body.distance_input || '');
+      if (norm) {
+        body.distance_furlongs = norm.distance_furlongs;
+        body.distance_meters = norm.distance_meters;
+        // Keep pretty label for display
+        if (!body.distance && body.distance_input) {
+          body.distance = norm.pretty;
+        }
+      }
+    }
     const {
       horses = [],               // [{ name, odds, post? }]
       track = null,
