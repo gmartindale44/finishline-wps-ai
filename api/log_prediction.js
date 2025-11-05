@@ -1,6 +1,6 @@
 export const config = { runtime: 'nodejs' };
 
-import { redisHSet } from "../../lib/redis.js";
+import { redisHSet } from "../lib/redis.js";
 
 export default async function handler(req, res) {
   try {

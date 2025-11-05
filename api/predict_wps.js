@@ -392,7 +392,8 @@ export default async function handler(req, res) {
       }
     };
 
-    const response = {
+    // Calibration post-processor (gracefully no-ops if model_params.json is missing)
+    let calibratedResponse = {
       picks,
       confidence,
       ranking,
@@ -401,10 +402,54 @@ export default async function handler(req, res) {
       meta: { track, surface, distance_mi: miles }
     };
     
+    try {
+      const __p = __loadParams();
+      const __raw = confidence; // already 0..1 range
+      const __cal = __calConf(Math.max(0, Math.min(1, __raw)), __p.reliability);
+      const __mass = __soft([0, -1, -2], __p.temp_tau || 1.0);
+      
+      const __top3 = picks.slice(0, 3).map((p, i) => ({
+        ...p,
+        prob: Math.round(Math.max(0.0001, __mass[i]) * __cal * 100)
+      }));
+      
+      const __top3_mass = __top3.reduce((a, h) => a + (h.prob || 0), 0);
+      const __perc = Math.round(__cal * 100);
+      
+      let __band = '60-64';
+      if (__perc >= 65 && __perc < 70) __band = '65-69';
+      else if (__perc >= 70 && __perc < 75) __band = '70-74';
+      else if (__perc >= 75) __band = '75-79';
+      
+      const __policy = (__p.policy && __p.policy[__band]) || {};
+      const __reco = __tc(__policy.recommended || finalStrategy?.recommended || 'across the board');
+      
+      calibratedResponse = {
+        ...calibratedResponse,
+        picks: __top3,
+        confidence: __perc,
+        top3_mass: Math.round(__top3_mass),
+        strategy: {
+          ...finalStrategy,
+          recommended: __reco,
+          band: __band,
+          policy_stats: __policy.stats || null
+        },
+        meta: {
+          ...calibratedResponse.meta,
+          calibrated: !!(__p.reliability && __p.reliability.length),
+          model: 'calib-v1'
+        }
+      };
+    } catch (calibErr) {
+      console.warn('[predict_wps] Calibration error (using raw response):', calibErr?.message || calibErr);
+      // Fallback to original response if calibration fails
+    }
+    
     // Fire-and-forget Redis logging (non-blocking, no-op if Redis disabled)
     (async () => {
       try {
-        const { redisPushSafe, dayKey } = await import('../../lib/redis.js');
+        const { redisPushSafe, dayKey } = await import('../lib/redis.js');
         const k = dayKey('fl:predictions');
         const picksStr = picks && picks.length ? picks.map(p => p.name || p.slot || '').filter(Boolean).join('-') : null;
         await redisPushSafe(k, {
@@ -413,16 +458,16 @@ export default async function handler(req, res) {
           surface: surface || null,
           distance: distance_input || null,
           picks: picksStr,
-          confidence: confidence ?? null,
-          top3_mass: top3Mass ?? null,
-          strategy: finalStrategy?.recommended || null
+          confidence: calibratedResponse.confidence ?? null,
+          top3_mass: calibratedResponse.top3_mass ?? null,
+          strategy: calibratedResponse.strategy?.recommended || null
         });
       } catch (_) {
         // Ignore all errors - this is fire-and-forget
       }
     })();
     
-    return res.status(200).json(response);
+    return res.status(200).json(calibratedResponse);
   } catch (err) {
     console.error('[predict_wps] Error:', err);
     return res.status(500).json({ error: 'prediction_error', message: String(err?.message || err) });

@@ -2,12 +2,12 @@ export const config = { runtime: 'nodejs' };
 
 import fs from "node:fs/promises";
 import path from "node:path";
-import { redisKeys, redisHGetAll } from "../../../lib/redis.js";
+import { redisKeys, redisHGetAll } from "../../lib/redis.js";
 import { exec } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const root = path.join(__dirname, "..", "..", "..");
+const root = path.join(__dirname, "..", "..");
 const CSV_PATH = path.join(root, "data", "finishline_tests_v1.csv");
 
 function toRow(h) {

@@ -8,9 +8,7 @@
   "scripts": {
     "calibrate": "node scripts/calibrate.js",
     "backfill:calibrate": "node scripts/redis-backfill-to-csv.js",
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start"
+    "build": "echo \"no build step\""
   },
   "dependencies": {
     "@upstash/redis": "^1.28.2",
