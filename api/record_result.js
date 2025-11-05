@@ -1,26 +1,62 @@
 export const config = { runtime: 'nodejs' };
 
-import { redisHSet } from "../lib/redis.js";
+import { hset } from '../lib/redis.js';
+import { slugRaceId, parseROI } from '../lib/normalize.js';
 
 export default async function handler(req, res) {
   try {
-    if (req.method !== "POST") return res.status(405).json({ ok:false });
+    if (req.method !== 'POST') {
+      return res.status(405).json({ ok: false, error: 'Method not allowed' });
+    }
     
-    const { race_id, result="Miss", roi_percent="", notes="" } = req.body || {};
+    const body = req.body || {};
+    let { race_id, track, date, postTime, raceNo, result, roi_percent, notes } = body;
     
-    if (!race_id) return res.status(200).json({ ok:false, error:"race_id required" });
+    // Compute race_id if missing
+    if (!race_id) {
+      race_id = slugRaceId({ track, date, postTime, raceNo });
+    }
     
-    const ok = await redisHSet(`fl:pred:${race_id}`, {
-      status: "resolved",
-      result,
-      roi_percent: String(roi_percent),
+    if (!race_id) {
+      return res.status(200).json({
+        ok: false,
+        error: 'race_id required',
+        detail: 'Provide race_id or track/date/postTime/raceNo'
+      });
+    }
+    
+    // Normalize result to one of Hit|Partial|Miss
+    const normalizedResult = (result || 'Miss')
+      .trim()
+      .toLowerCase()
+      .replace(/^(hit|partial|miss).*$/i, (_, m) => m.charAt(0).toUpperCase() + m.slice(1));
+    
+    const finalResult = ['Hit', 'Partial', 'Miss'].includes(normalizedResult)
+      ? normalizedResult
+      : 'Miss';
+    
+    // Parse ROI
+    const parsedROI = parseROI(roi_percent);
+    
+    const log_key = `fl:pred:${race_id}`;
+    
+    await hset(log_key, {
+      status: 'resolved',
       resolved_ts: String(Date.now()),
-      notes
+      result: finalResult,
+      roi_percent: parsedROI !== null ? String(parsedROI) : '',
+      notes: notes || ''
     });
     
-    return res.status(200).json({ ok });
-  } catch(e) {
-    return res.status(200).json({ ok:false, error:String(e) });
+    return res.status(200).json({ ok: true, race_id });
+  } catch (e) {
+    const errorMsg = e?.message || String(e);
+    const isRedisError = errorMsg.includes('redis_unreachable');
+    
+    return res.status(200).json({
+      ok: false,
+      error: isRedisError ? 'Redis unavailable' : 'Failed to record result',
+      detail: errorMsg
+    });
   }
 }
-

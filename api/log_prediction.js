@@ -1,41 +1,50 @@
 export const config = { runtime: 'nodejs' };
 
-import { redisHSet } from "../lib/redis.js";
+import { hset } from '../lib/redis.js';
+import { slugRaceId } from '../lib/normalize.js';
 
 export default async function handler(req, res) {
   try {
-    if (req.method !== "POST") return res.status(405).json({ ok:false });
+    if (req.method !== 'POST') {
+      return res.status(405).json({ ok: false, error: 'Method not allowed' });
+    }
     
     const body = req.body || {};
+    const { track, date, postTime, raceNo, picks, confidence, top3_mass, strategy } = body;
     
-    // Required minimal fields:
-    // race_id (deterministic: `${track}:${date}:${raceNo}`), track, date, raceNo
-    // picks {win,place,show}, confidence, top3_mass, strategy, meta
-    // Example race_id if not provided:
-    const race_id = body.race_id || `${(body.track||'').trim()}:${(body.date||'').trim()}:${(body.raceNo||'').trim()}`;
+    // Build race_id using slugifier
+    const race_id = slugRaceId({ track, date, postTime, raceNo });
     
     const log_key = `fl:pred:${race_id}`;
     
     const payload = {
       race_id,
-      track: body.track || "",
-      date: body.date || "",
-      raceNo: String(body.raceNo||""),
-      picks: JSON.stringify(body.picks||{}),
-      confidence: String(body.confidence ?? ""),
-      top3_mass: String(body.top3_mass ?? ""),
-      strategy: body.strategy || "",
-      status: "pending",
+      track: track || '',
+      date: date || '',
+      postTime: postTime || '',
+      raceNo: String(raceNo || ''),
+      picks: JSON.stringify(picks || {}),
+      confidence: String(confidence ?? ''),
+      top3_mass: String(top3_mass ?? ''),
+      strategy: strategy || '',
+      status: 'pending',
       created_ts: String(Date.now()),
-      result: "",
-      roi_percent: "",
-      notes: body.notes || ""
+      result: '',
+      roi_percent: '',
+      notes: ''
     };
     
-    const ok = await redisHSet(log_key, payload);
-    return res.status(200).json({ ok, race_id });
-  } catch(e) {
-    return res.status(200).json({ ok:false, error:String(e) });
+    await hset(log_key, payload);
+    
+    return res.status(200).json({ ok: true, race_id });
+  } catch (e) {
+    const errorMsg = e?.message || String(e);
+    const isRedisError = errorMsg.includes('redis_unreachable');
+    
+    return res.status(200).json({
+      ok: false,
+      error: isRedisError ? 'Redis unavailable' : 'Failed to log prediction',
+      detail: errorMsg
+    });
   }
 }
-

@@ -62,9 +62,9 @@
         <div id="fl-tab-strategy" class="fl-tab-content" style="display:none;">
           <div id="fl-strategy" data-fl-strategy style="margin-top:16px;"></div>
         </div>
-        <div id="fl-log-result-section" style="margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.1);">
+        <div id="fl-log-result-section" data-admin-tools style="margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.1);display:none;">
           <details style="cursor:pointer;">
-            <summary style="font-size:13px;color:#b8bdd4;user-select:none;">📝 Log Result</summary>
+            <summary style="font-size:13px;color:#b8bdd4;user-select:none;">📝 Admin tools: Log Result</summary>
             <div style="margin-top:12px;padding:12px;background:rgba(0,0,0,0.2);border-radius:8px;">
               <div style="display:flex;flex-direction:column;gap:8px;">
                 <label style="font-size:12px;color:#b8bdd4;">
@@ -734,7 +734,8 @@
         if (elements.logRoi) elements.logRoi.value = '';
         if (elements.logNotes) elements.logNotes.value = '';
       } else {
-        throw new Error(data.error || 'Unknown error');
+        const errorText = data.error || data.detail || 'Failed to log result';
+        throw new Error(errorText);
       }
     } catch (e) {
       if (elements.logStatus) {

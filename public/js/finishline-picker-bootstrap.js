@@ -637,7 +637,8 @@
             const race = {
               track: (document.getElementById('race-track')?.value || '').trim(),
               date: (document.getElementById('race-date')?.value || '').trim(),
-              raceNo: '', // Not captured in current UI
+              postTime: (document.getElementById('race-time')?.value || document.getElementById('post-time')?.value || '').trim(),
+              raceNo: (document.getElementById('race-no')?.value || '').trim() || '',
               surface: (document.getElementById('race-surface')?.value || '').trim(),
               distance: (document.getElementById('race-distance')?.value || '').trim()
             };
@@ -657,12 +658,12 @@
               body: JSON.stringify({
                 track: race.track,
                 date: race.date,
+                postTime: race.postTime,
                 raceNo: race.raceNo,
                 picks,
                 confidence: confPct / 100, // Convert back to 0-1 for storage
                 top3_mass: top3_mass ? (typeof top3_mass === 'number' ? top3_mass / 100 : parseFloat(top3_mass) / 100) : null,
-                strategy,
-                notes: `Auto-logged from UI. Confidence: ${confPct}%`
+                strategy
               })
             });
           } catch (_) {
