@@ -119,9 +119,9 @@
             if (tooltip) { tooltip.remove(); tooltip = null; }
             return;
           }
-          const { toMiles } = await import('/js/utils-distance.js');
-          const miles = toMiles(value);
-          if (miles != null && !isNaN(miles)) {
+          const { parseDistanceToMiles } = await import('/js/utils-distance.js');
+          const miles = parseDistanceToMiles(value);
+          if (miles != null && !isNaN(miles) && miles > 0) {
             if (!tooltip) {
               tooltip = document.createElement('span');
               tooltip.style.cssText = 'font-size:11px;opacity:0.7;margin-left:6px;color:#b8bdd4;';
