@@ -1,22 +1,17 @@
 export const config = { runtime: 'nodejs' };
 
-import { getRedis } from '../../lib/redis.js';
-
-export default async function handler(_req, res) {
+export default async function handler(req, res) {
   try {
-    const redis = await getRedis();
-    if (!redis) {
-      return res.status(200).json({ ok: true, redis: 'disabled', ts: Date.now() });
-    }
+    const url = process.env.UPSTASH_REDIS_REST_URL;
+    const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+    if (!url || !token) return res.status(200).json({ ok:false, redis:"disabled", ts: Date.now() });
     
-    try {
-      await redis.ping();
-      return res.status(200).json({ ok: true, redis: 'connected', ts: Date.now() });
-    } catch (e) {
-      return res.status(200).json({ ok: true, redis: 'error', ts: Date.now(), error: String(e?.message || e) });
-    }
+    // minimal ping via REST
+    const r = await fetch(`${url}/GET/ping`, { headers: { Authorization: `Bearer ${token}` } });
+    const ok = r.ok;
+    return res.status(200).json({ ok, redis: ok ? "connected" : "unreachable", ts: Date.now() });
   } catch (e) {
-    return res.status(200).json({ ok: true, redis: 'disabled', ts: Date.now(), error: String(e?.message || e) });
+    return res.status(200).json({ ok:false, redis:"error", error: String(e?.message || e), ts: Date.now() });
   }
 }
 
