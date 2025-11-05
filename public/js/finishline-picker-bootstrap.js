@@ -552,7 +552,7 @@
 
         if (!r.ok || data?.error) {
           console.warn('[Predict] Error response:', data);
-          const errorMsg = data?.message || data?.reason || `HTTP ${r.status}` || 'Prediction failed';
+          const errorMsg = data?.error || data?.detail || data?.message || data?.reason || `HTTP ${r.status}` || 'Prediction failed';
           if (window.FLResults?.show) {
             window.FLResults.show({ error: true, message: errorMsg });
           } else {
