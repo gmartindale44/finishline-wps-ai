@@ -48,21 +48,17 @@ function isotonic(xs,ys,ws){
 }
 function learnParams(rows){
   if (!rows.length) return { reliability:[], temp_tau:1.0, policy:{} };
-  // Reliability curve
+  // Reliability
   const bins=new Map();
-  rows.forEach(r=>{ const b=bin(r.conf); if(!bins.has(b)) bins.set(b,{w:0,hit:0}); const o=bins.get(b); o.w++; o.hit += top3Hit(r)?1:0; });
+  rows.forEach(r=>{ const b=bin(r.conf); if(!bins.has(b)) bins.set(b,{w:0,hit:0}); const o=bins.get(b); o.w++; o.hit += (r.top3_success?1:0); });
   const xs=Array.from(bins.keys()).sort((a,b)=>a-b).map(b=>b/100);
   const ws=xs.map(x=>bins.get(Math.floor(x*100)).w);
   const ys=xs.map(x=>bins.get(Math.floor(x*100)).hit / bins.get(Math.floor(x*100)).w);
   const iso=isotonic(xs,ys,ws);
   const reliability=xs.map((x,i)=>({ c:x, p: iso[i] }));
 
-  // Temperature for rank mass (match empirical distribution)
-  const cnt={w1:0,w2:0,w3:0,t:0};
-  rows.forEach(r=>{ const i=r.pred.findIndex(h=>h===r.actual_win); if(i===0) cnt.w1++; else if(i===1) cnt.w2++; else if(i===2) cnt.w3++; cnt.t++; });
-  const p1=(cnt.w1||1)/Math.max(1,cnt.t), p2=(cnt.w2||1)/Math.max(1,cnt.t), p3=(cnt.w3||1)/Math.max(1,cnt.t);
-  function soft(t){ const L=[0,-1,-2].map(v=>v/Math.max(0.05,t)); const e=L.map(Math.exp); const Z=e.reduce((a,b)=>a+b,0); return e.map(v=>v/Z); }
-  let bestT=1.0, bestE=Infinity; for(let t=0.2;t<=2.0;t+=0.02){ const s=soft(t); const e=Math.abs(s[0]-p1)+Math.abs(s[1]-p2)+Math.abs(s[2]-p3); if(e<bestE){bestE=e;bestT=t;} }
+  // Rank mass temperature (skip without winner rank → neutral 1.0)
+  const temp_tau = 1.0;
 
   // Strategy policy by bands
   const bands=[{name:'60-64',lo:0.60,hi:0.649},{name:'65-69',lo:0.65,hi:0.699},{name:'70-74',lo:0.70,hi:0.749},{name:'75-79',lo:0.75,hi:0.799}];
@@ -72,15 +68,18 @@ function learnParams(rows){
     const cand=rows.filter(r=>r.conf>=b.lo && r.conf<=b.hi);
     const stats={};
     strat.forEach(s=>{
-      const S=cand.filter(r=>(r.reco||'').includes(s));
+      const S=cand.filter(r=>{
+        const v=(r.reco||'').toLowerCase();
+        return v===s || (s==='across the board' && v==='atb');
+      });
       const avg=S.length? S.reduce((a,r)=>a+(isFinite(r.roi)?r.roi:0),0)/S.length : -999;
-      stats[s]={n:S.length,avg_roi:avg};
+      stats[s]={ n:S.length, avg_roi:avg };
     });
-    let best='across the board',bestR=-Infinity; strat.forEach(s=>{ if(stats[s].avg_roi>bestR){bestR=stats[s].avg_roi;best=s;} });
-    policy[b.name]={stats,recommended:best};
+    let best='across the board',bestR=-Infinity; Object.keys(stats).forEach(s=>{ if(stats[s].avg_roi>bestR){bestR=stats[s].avg_roi; best=s;} });
+    policy[b.name]={ stats, recommended:best };
   });
 
-  return { reliability, temp_tau:bestT, policy };
+  return { reliability, temp_tau, policy };
 }
 function main(){
   if (!fs.existsSync(CSV)) {
