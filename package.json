@@ -7,11 +7,13 @@
   },
   "scripts": {
     "calibrate": "node scripts/calibrate.js",
+    "backfill:calibrate": "node scripts/redis-backfill-to-csv.js",
     "dev": "next dev",
     "build": "next build",
     "start": "next start"
   },
   "dependencies": {
+    "@upstash/redis": "^1.28.2",
     "formidable": "^3.5.1",
     "openai": "^4.0.0"
   }

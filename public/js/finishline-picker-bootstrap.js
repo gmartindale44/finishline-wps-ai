@@ -630,6 +630,20 @@
           showToast('Prediction display error – check console.');
         }
         pulse(predictBtn);
+        // Tiny "Logged" toast if flags are enabled (non-breaking)
+        if (window.FL_FLAGS) {
+          try {
+            const toastEl = document.createElement('div');
+            toastEl.textContent = 'Logged ✅';
+            toastEl.style.cssText = 'position:fixed;bottom:80px;right:20px;padding:6px 12px;background:rgba(0,255,120,0.2);color:#cfffdf;border-radius:6px;font-size:12px;z-index:10001;border:1px solid rgba(0,255,120,0.4);';
+            document.body.appendChild(toastEl);
+            setTimeout(() => {
+              try { toastEl.remove(); } catch (_) {}
+            }, 1500);
+          } catch (_) {
+            // Ignore if toast creation fails
+          }
+        }
       } catch (e) {
         console.error('[Predict] Unexpected error:', e);
         showToast(`Prediction failed: ${e?.message || 'Unknown error'}`);

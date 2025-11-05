@@ -392,14 +392,37 @@ export default async function handler(req, res) {
       }
     };
 
-    return res.status(200).json({
+    const response = {
       picks,
       confidence,
       ranking,
       tickets,
       strategy: finalStrategy,
       meta: { track, surface, distance_mi: miles }
-    });
+    };
+    
+    // Fire-and-forget Redis logging (non-blocking, no-op if Redis disabled)
+    (async () => {
+      try {
+        const { redisPushSafe, dayKey } = await import('../../lib/redis.js');
+        const k = dayKey('fl:predictions');
+        const picksStr = picks && picks.length ? picks.map(p => p.name || p.slot || '').filter(Boolean).join('-') : null;
+        await redisPushSafe(k, {
+          ts: Date.now(),
+          track: track || null,
+          surface: surface || null,
+          distance: distance_input || null,
+          picks: picksStr,
+          confidence: confidence ?? null,
+          top3_mass: top3Mass ?? null,
+          strategy: finalStrategy?.recommended || null
+        });
+      } catch (_) {
+        // Ignore all errors - this is fire-and-forget
+      }
+    })();
+    
+    return res.status(200).json(response);
   } catch (err) {
     console.error('[predict_wps] Error:', err);
     return res.status(500).json({ error: 'prediction_error', message: String(err?.message || err) });
