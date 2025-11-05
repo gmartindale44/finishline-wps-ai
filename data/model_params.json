@@ -1,0 +1,11 @@
+{
+  "reliability": [],
+  "temp_tau": 1.0,
+  "policy": {
+    "60-64": { "recommended": "across the board", "stats": null },
+    "65-69": { "recommended": "across the board", "stats": null },
+    "70-74": { "recommended": "across the board", "stats": null },
+    "75-79": { "recommended": "across the board", "stats": null }
+  }
+}
+
