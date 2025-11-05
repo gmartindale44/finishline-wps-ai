@@ -9,26 +9,28 @@ function parseCSV(text) {
   const hdr = lines[0]; const rows = lines.slice(1);
   const H = hdr.split(',').map(h => h.trim().toLowerCase());
   const F = (k) => H.findIndex(h => h === k || h.includes(k));
-  const f = {
-    pred1: F('pred1'), pred2: F('pred2'), pred3: F('pred3'),
-    conf: [F('conf_pct'), F('confidence')].find(i => i>=0),
-    actual_win: [F('actual_win'), F('win')].find(i => i>=0),
-    roi: F('roi'),
-    strategy_reco: F('strategy')
+  const idx = {
+    conf: F('confidence'),
+    picks: F('ai_picks'),
+    strat: F('strategy'),
+    result: F('result'),
+    roi: F('roi_percent')
   };
+  // Expect your schema; if not present, keep neutral by returning []
+  if (idx.conf<0 || idx.picks<0 || idx.strat<0 || idx.result<0 || idx.roi<0) return [];
   return rows.map(r=>{
     const c=r.split(',').map(x=>x.trim());
-    const conf = parseFloat(c[f.conf]||'0'); // percentage value
-    return {
-      conf: (isFinite(conf)? conf:0)/100,
-      pred: [c[f.pred1], c[f.pred2], c[f.pred3]].map(x=>(x||'').toLowerCase()),
-      actual_win: (c[f.actual_win]||'').toLowerCase(),
-      roi: parseFloat(c[f.roi]||'0'),
-      reco: (c[f.strategy_reco]||'').toLowerCase()
-    };
+    const conf = parseFloat(c[idx.conf]||'0'); // already 0..1
+    const picksStr = (c[idx.picks]||'').replace(/"/g,'').trim();
+    const pred = picksStr ? picksStr.split('-').map(x=>x.trim().toLowerCase()) : [];
+    const result = (c[idx.result]||'').toLowerCase(); // hit/partial/miss
+    const roi = parseFloat(String(c[idx.roi]||'0').replace('+',''));
+    const v = (c[idx.strat]||'').toLowerCase();
+    const reco = (v==='atb' ? 'across the board' : v);
+    const top3_success = /hit|partial/.test(result);
+    return { conf, pred, top3_success, roi, reco };
   });
 }
-function top3Hit(r){ return new Set(r.pred).has(r.actual_win); }
 function bin(x){ const b=Math.max(0,Math.min(99,Math.floor(x*100))); return Math.floor(b/2)*2; }
 function isotonic(xs,ys,ws){
   const blocks=[];
