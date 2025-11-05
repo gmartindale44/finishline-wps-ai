@@ -669,7 +669,7 @@
             const top3_mass = data.top3_mass || data.top3Mass || null;
             const strategy = data.strategy?.recommended || '';
             
-            await fetch("/api/log_prediction", {
+            const logResp = await fetch("/api/log_prediction", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
@@ -683,6 +683,19 @@
                 strategy
               })
             });
+            
+            // Store race key for potential archiving later
+            if (logResp.ok) {
+              try {
+                const logData = await logResp.json();
+                if (logData.ok && logData.race_id) {
+                  window.__fl_state = window.__fl_state || {};
+                  window.__fl_state.lastPendingKey = `fl:pred:${logData.race_id}`;
+                }
+              } catch (_) {
+                // Ignore JSON parse errors
+              }
+            }
           } catch (_) {
             // Ignore all errors - fire-and-forget
           }
@@ -714,4 +727,186 @@
 
   if (analyzeBtn) analyzeBtn.addEventListener('click', onAnalyze);
   if (predictBtn) predictBtn.addEventListener('click', onPredict);
+
+  // === New Race Reset Functionality ===
+  
+  async function archiveLastPendingIfAny() {
+    const key = window.__fl_state?.lastPendingKey;
+    if (!key) return;
+    
+    try {
+      await fetch('/api/close_race', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ race_key: key, status: 'archived' })
+      }).catch(() => {});
+      window.__fl_state.lastPendingKey = null;
+    } catch (err) {
+      console.debug('[NewRace] Archive skip:', err?.message || err);
+    }
+  }
+
+  function resetAppState() {
+    // Clear file inputs
+    const fileInputs = document.querySelectorAll('input[type="file"]');
+    fileInputs.forEach(input => {
+      input.value = '';
+    });
+
+    // Clear preview/thumbnails
+    const previewContainers = document.querySelectorAll('[data-fl-preview], #fl-preview, .preview-container');
+    previewContainers.forEach(container => {
+      container.innerHTML = '';
+    });
+
+    // Clear parsed horses containers
+    const parsedContainers = document.querySelectorAll('#fl-parsed-horses, .horse-list, [data-horse-list]');
+    parsedContainers.forEach(container => {
+      container.innerHTML = '';
+    });
+
+    // Clear horse rows
+    const horseRows = document.querySelectorAll('.horse-row, [data-horse-row]');
+    horseRows.forEach(row => {
+      // Clear inputs in the row
+      const inputs = row.querySelectorAll('input, select, textarea');
+      inputs.forEach(input => {
+        if (input.type !== 'button') {
+          input.value = '';
+        }
+      });
+    });
+
+    // Reset to single empty row if needed
+    const container = document.getElementById('horse-rows') || document.querySelector('.rows');
+    if (container) {
+      const existingRows = container.querySelectorAll('.horse-row, [data-horse-row]');
+      if (existingRows.length === 0) {
+        // Trigger add row to create one empty row
+        const addBtn = document.getElementById('add-row-btn') || document.querySelector('[data-add-horse]');
+        if (addBtn) {
+          addBtn.click();
+        }
+      }
+    }
+
+    // Reset global state (preserve lastPendingKey and flags)
+    window.__fl_state = {
+      phase: 'idle',
+      parsedHorses: [],
+      picks: null,
+      lastRaceId: null,
+      lastPendingKey: window.__fl_state?.lastPendingKey || null,
+      pickedFiles: [],
+      analyzed: false,
+      speedFigs: {},
+      surface: null,
+      distance_input: null,
+      track: null,
+      features: {}
+    };
+
+    // Clear UI elements
+    // Confidence bar
+    const confPct = document.getElementById('fl-conf-pct');
+    const confBar = document.getElementById('fl-conf-bar');
+    if (confPct) confPct.textContent = '0%';
+    if (confBar) {
+      confBar.style.width = '0%';
+      confBar.style.background = '#00e6a8'; // neutral green
+    }
+
+    // Hide/clear signal badge
+    const signalBadge = document.getElementById('fl-signal');
+    if (signalBadge) signalBadge.style.display = 'none';
+
+    // Disable Predict button
+    if (predictBtn) {
+      predictBtn.disabled = true;
+      predictBtn.classList.add('disabled');
+    }
+
+    // Remove working badges
+    const workingBadges = document.querySelectorAll('.working-badge, [id="fl-working-badge"]');
+    workingBadges.forEach(badge => badge.remove());
+
+    // Close/hide Results modal and clear content
+    if (window.FLResults?.hide) {
+      window.FLResults.hide();
+    }
+    const resultsRoot = document.getElementById('fl-results-root');
+    if (resultsRoot) {
+      const tabContents = resultsRoot.querySelectorAll('.fl-tab-content');
+      tabContents.forEach(tab => {
+        if (tab.id === 'fl-tab-predictions') {
+          const badges = tab.querySelectorAll('.fl-badge');
+          badges.forEach(b => b.innerHTML = '');
+        }
+        if (tab.id === 'fl-tab-exotics') {
+          const exoticsContent = tab.querySelector('#fl-exotics-content');
+          if (exoticsContent) exoticsContent.innerHTML = '';
+        }
+        if (tab.id === 'fl-tab-strategy') {
+          const strategyWrap = tab.querySelector('[data-fl-strategy], #fl-strategy');
+          if (strategyWrap) strategyWrap.innerHTML = '';
+        }
+      });
+    }
+
+    // Reset chips
+    const chips = document.querySelectorAll('[data-chip]');
+    chips.forEach(chip => {
+      chip.className = 'chip chip--idle';
+      chip.textContent = 'Idle';
+    });
+
+    // Reset file label
+    const fileLabel = document.getElementById('file-selected-label');
+    if (fileLabel) fileLabel.textContent = 'No file selected';
+
+    // Reset form inputs
+    const trackInput = document.getElementById('race-track');
+    const surfaceSelect = document.getElementById('race-surface');
+    const distanceInput = document.getElementById('race-distance');
+    const dateInput = document.getElementById('race-date');
+    if (trackInput) trackInput.value = '';
+    if (surfaceSelect) surfaceSelect.value = 'Dirt';
+    if (distanceInput) distanceInput.value = '';
+    if (dateInput) dateInput.value = '';
+
+    // Smooth scroll to top
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  async function onNewRace() {
+    try {
+      await archiveLastPendingIfAny();
+    } catch (err) {
+      console.debug('[NewRace] Archive skip:', err?.message || err);
+    }
+    resetAppState();
+    const newRaceBtn = document.querySelector('#fl-new-race');
+    if (newRaceBtn) pulse(newRaceBtn);
+  }
+
+  // Wire up click handler
+  document.addEventListener('click', (e) => {
+    if (e.target?.id === 'fl-new-race' || e.target.closest('#fl-new-race')) {
+      e.preventDefault();
+      onNewRace();
+    }
+  });
+
+  // Wire up keyboard shortcut (N key)
+  document.addEventListener('keydown', (e) => {
+    if ((e.key === 'n' || e.key === 'N') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      // Only trigger if not typing in an input/textarea
+      const activeEl = document.activeElement;
+      if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) {
+        return;
+      }
+      e.preventDefault();
+      onNewRace();
+    }
+  });
 })();

@@ -28,6 +28,7 @@
           <div class="fl-results__actions">
             <button class="fl-button" data-copy>Copy</button>
             <button class="fl-button fl-button--ghost" data-pin>Pin</button>
+            <button id="fl-new-race" class="fl-button fl-button--ghost">New Race</button>
             <button class="fl-button fl-button--ghost" data-close aria-label="Close">✕</button>
           </div>
         </header>

@@ -365,3 +365,13 @@ button[disabled][aria-busy="true"] { opacity: 0.7; }
   transition: width 0.8s ease, background 0.5s ease;
   background: #00e6a8; /* default green */
 }
+
+/* New Race button styling */
+#fl-new-race {
+  opacity: 0.95;
+  transition: transform 0.08s ease;
+}
+
+#fl-new-race:active {
+  transform: translateY(1px);
+}
