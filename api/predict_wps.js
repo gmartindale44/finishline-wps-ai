@@ -421,7 +421,13 @@ export default async function handler(req, res) {
       ranking,
       tickets,
       strategy: finalStrategy,
-      meta: { track, surface, distance_mi: miles }
+      meta: { 
+        track, 
+        surface, 
+        distance_mi: miles,
+        distance_furlongs: distance_furlongs || null,
+        distance_meters: distance_meters || null
+      }
     };
     
     try {
