@@ -237,6 +237,32 @@
     return out;
   }
 
+  // Helper: pulse effect on completion
+  function pulse(el) {
+    if (!el) return;
+    el.classList.add('is-complete');
+    setTimeout(() => el.classList.remove('is-complete'), 1600);
+  }
+
+  // Helper: mount working badge next to button
+  function mountWorkingBadge(el) {
+    if (!el) return { show: () => {}, hide: () => {} };
+    const id = 'fl-working-badge';
+    let badge = document.getElementById(id);
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.id = id;
+      badge.className = 'working-badge';
+      badge.innerHTML = '<span class="working-dot"></span> Working…';
+      badge.style.display = 'none';
+      el.insertAdjacentElement('afterend', badge);
+    }
+    return {
+      show: () => { badge.style.display = 'inline-flex'; },
+      hide: () => { badge.style.display = 'none'; }
+    };
+  }
+
   async function onAnalyze() {
     const analyzeBtn = qAnalyze();
     const predictBtn = qPredict();
@@ -246,7 +272,9 @@
       return;
     }
 
+    const badge = mountWorkingBadge(analyzeBtn);
     await withBusy(analyzeBtn, async () => {
+      badge.show();
       try {
         toast('Processing file...', 'info');
         const mainFile = state.pickedFiles[0];
@@ -376,9 +404,12 @@
         }
 
         enable(predictBtn, true);
+        pulse(analyzeBtn);
       } catch (e) {
         console.error('[Analyze]', e);
         toast(`Analyze failed: ${e.message}`, 'error');
+      } finally {
+        badge.hide();
       }
     });
   }
@@ -598,6 +629,7 @@
           console.error('[Predict] Modal render error:', modalErr);
           showToast('Prediction display error – check console.');
         }
+        pulse(predictBtn);
       } catch (e) {
         console.error('[Predict] Unexpected error:', e);
         showToast(`Prediction failed: ${e?.message || 'Unknown error'}`);

@@ -1,6 +1,22 @@
 // api/predict_wps.js
 export const config = { runtime: 'nodejs' };
 
+/* FL_CALIB_HELPERS */
+import fs from 'fs';
+import path from 'path';
+const __CALIB_PATH = path.join(process.cwd(), 'data', 'model_params.json');
+function __loadParams(){ try{ return JSON.parse(fs.readFileSync(__CALIB_PATH,'utf8')); }catch{ return {reliability:[],temp_tau:1.0,policy:{}}; } }
+function __calConf(raw, rel){
+  if(!rel?.length) return raw;
+  const arr=[...rel].sort((a,b)=>a.c-b.c);
+  if(raw<=arr[0].c) return arr[0].p;
+  if(raw>=arr[arr.length-1].c) return arr[arr.length-1].p;
+  for(let i=1;i<arr.length;i++){ const a=arr[i-1], b=arr[i]; if(raw<=b.c){ const t=(raw-a.c)/(b.c-a.c); return a.p*(1-t)+b.p*t; } }
+  return raw;
+}
+function __soft(scores, tau=1.0){ const ex=scores.map(s=>Math.exp(s/Math.max(0.05,tau))); const Z=ex.reduce((a,b)=>a+b,0); return ex.map(v=>v/Z); }
+function __tc(s){ return s ? s.replace(/\b\w/g,m=>m.toUpperCase()) : s; }
+
 // --- CORS helper (adjust origin if you want to restrict) ---
 function setCORS(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');

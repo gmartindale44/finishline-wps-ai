@@ -48,14 +48,26 @@
     l.textContent = n > 0 ? `Loaded ${n} file${n > 1 ? 's' : ''}` : 'No file selected';
   }
 
+  // Helper: pulse effect on completion
+  function pulse(el) {
+    if (!el) return;
+    el.classList.add('is-complete');
+    setTimeout(() => el.classList.remove('is-complete'), 1600);
+  }
+
   // Change handler -> update state + enable Analyze
   function onChange() {
     const input = $input();
     const analyze = $analyze();
+    const pickBtn = $btn();
     const files = Array.from((input && input.files) || []);
     state.pickedFiles = files;
     setLabel(files.length);
     enable(analyze, files.length > 0 || (state.parsedHorses && state.parsedHorses.length > 0));
+    // Pulse the pick button when files are selected
+    if (files.length > 0 && pickBtn) {
+      pulse(pickBtn);
+    }
   }
 
   // Single binding
