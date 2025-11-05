@@ -188,6 +188,58 @@
     `;
   }
 
+  function computeSignal(confPct, massPct) {
+    const c = Number.isFinite(confPct) ? confPct : NaN;
+    const m = Number.isFinite(massPct) ? massPct : NaN;
+    if (!Number.isFinite(c) || !Number.isFinite(m)) {
+      return { color: 'yellow', label: 'Caution', action: 'Light ATB ($1–$3) or Win-Only if Confidence ≥ 80%' };
+    }
+    if (c >= 75 && m >= 45) {
+      return { color: 'green', label: 'Good to bet', action: 'Full ATB or Trifecta Box play' };
+    }
+    if ((c >= 65 && c <= 74) || (m >= 35 && m <= 44) || (c >= 80 && m < 45)) {
+      return { color: 'yellow', label: 'Caution', action: 'Light ATB ($1–$3) or Win-Only if Confidence ≥ 80%' };
+    }
+    return { color: 'red', label: 'Skip', action: 'Skip (save bankroll) — chaotic field' };
+  }
+
+  function renderStoplightSignal(container, confPct, massPct) {
+    const sig = computeSignal(confPct, massPct);
+    const id = 'fl-signal';
+    let box = container.querySelector('#' + id);
+    if (!box) {
+      box = document.createElement('div');
+      box.id = id;
+      box.className = 'fl-signal';
+      box.innerHTML = `
+        <div class="fl-signal-row">
+          <span class="fl-signal-dot" aria-label="betting signal"></span>
+          <span class="fl-signal-text"></span>
+        </div>
+      `;
+      // Insert at the top of the Strategy card (just under the title line)
+      const header = container.querySelector('.fl-strategy-title') || container.querySelector('h3') || container.querySelector('h2') || container.firstElementChild;
+      if (header && header.parentNode) {
+        header.parentNode.insertBefore(box, header.nextSibling);
+      } else {
+        container.insertBefore(box, container.firstChild);
+      }
+    }
+    const dot = box.querySelector('.fl-signal-dot');
+    const txt = box.querySelector('.fl-signal-text');
+    dot.classList.remove('green', 'yellow', 'red');
+    dot.classList.add(sig.color);
+    dot.title = `${sig.label} · Uses Strategy Confidence & Top-3 mass`;
+    txt.textContent = `${sig.label} — ${sig.action}`;
+
+    // Color the active strategy row border to match signal
+    const activeRow = container.querySelector('.strategy-table .row.active, .strategy-table tr.is-recommended, .strategy-row.active');
+    if (activeRow) {
+      activeRow.classList.remove('sig-green', 'sig-yellow', 'sig-red');
+      activeRow.classList.add('sig-' + sig.color);
+    }
+  }
+
   function switchTab(tab) {
     if (!elements) return;
     
@@ -396,6 +448,11 @@
     h.className = 'fl-strategy-title';
     h.textContent = 'FinishLine AI Betting Strategy';
     card.appendChild(h);
+
+    // Render stop-light signal (extract metrics after card is created)
+    const strategyConfidencePct = s.metrics?.confidence != null ? Math.round((Number(s.metrics.confidence) || 0) * 100) : NaN;
+    const top3MassPct = s.metrics?.top3Mass != null ? Math.round((Number(s.metrics.top3Mass) || 0) * 100) : NaN;
+    renderStoplightSignal(card, strategyConfidencePct, top3MassPct);
 
     const reco = document.createElement('div');
     reco.className = 'fl-strategy-reco';
