@@ -509,6 +509,9 @@
           // Highlight recommended row
           if ((row.type || '').toLowerCase() === (s.recommended || '').toLowerCase()) {
             tr.classList.add('is-recommended');
+            // Apply signal color to active row border
+            const sig = computeSignal(strategyConfidencePct, top3MassPct);
+            tr.classList.add('sig-' + sig.color);
           }
           tb.appendChild(tr);
         });
