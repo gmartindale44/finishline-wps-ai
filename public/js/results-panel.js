@@ -124,6 +124,14 @@
       logStatus: wrap.querySelector('#fl-log-status'),
     };
 
+    // Show admin tools if flag is set
+    if (window.FL_FLAGS?.showAdminTools) {
+      const adminSection = wrap.querySelector('[data-admin-tools]');
+      if (adminSection) {
+        adminSection.style.display = 'block';
+      }
+    }
+
     // Event listeners
     wrap.addEventListener('click', (e) => {
       if (e.target.matches('[data-close]') || e.target.classList.contains('fl-results__backdrop')) {
