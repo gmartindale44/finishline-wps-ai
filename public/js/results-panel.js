@@ -596,10 +596,30 @@
     fillBadge(elements.badgePlace, '🥈 Place', place, getOdds(place), 'fl-badge--silver');
     fillBadge(elements.badgeShow, '🥉 Show', show, getOdds(show), 'fl-badge--bronze');
 
-    // Confidence
-    const pct = Math.max(0, Math.min(100, Number(confidence) || 0));
-    elements.confPct.textContent = `${pct.toFixed(0)}%`;
-    elements.confBar.style.width = `${pct}%`;
+    // Confidence - use calibrated value from strategy if available, otherwise fallback
+    let conf = Math.max(0, Math.min(100, Number(confidence) || 0));
+    
+    // Prefer strategy confidence if available (calibrated value)
+    if (pred.strategy?.metrics?.confidence != null) {
+      const stratConf = Number(pred.strategy.metrics.confidence);
+      if (!Number.isNaN(stratConf)) {
+        conf = Math.max(0, Math.min(100, Math.round(stratConf * 100)));
+      }
+    }
+    
+    // Dynamic color based on confidence level
+    let confColor = '#00e6a8'; // green default (≥ 68%)
+    if (conf < 60) {
+      confColor = '#ff4d4d'; // red (< 60)
+    } else if (conf < 68) {
+      confColor = '#ffcc00'; // yellow (60-67)
+    }
+    
+    // Update confidence display
+    elements.confPct.textContent = `${conf.toFixed(0)}%`;
+    elements.confBar.style.width = `${conf}%`;
+    elements.confBar.style.background = confColor;
+    elements.confBar.style.transition = 'width 0.8s ease, background 0.5s ease';
 
     // Reasons chips (show for winner) - now with +/- deltas
     const winnerReasons = reasons[win] || [];
