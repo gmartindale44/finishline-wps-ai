@@ -94,7 +94,7 @@ function main(){
     console.log('CSV has no data rows — keeping current params (neutral).');
     return;
   }
-  const rows=parseCSV(txt).filter(r=>r.pred[0] && r.actual_win);
+  const rows=parseCSV(txt).filter(r=>r.pred && r.pred.length>=3 && r.conf>0);
   const params=learnParams(rows);
   fs.mkdirSync(path.dirname(OUT), {recursive:true});
   fs.writeFileSync(OUT, JSON.stringify(params,null,2));
