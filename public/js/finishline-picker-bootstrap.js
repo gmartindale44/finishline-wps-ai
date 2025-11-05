@@ -630,6 +630,46 @@
           showToast('Prediction display error – check console.');
         }
         pulse(predictBtn);
+        
+        // Auto-log prediction to Redis (fire-and-forget)
+        (async () => {
+          try {
+            const race = {
+              track: (document.getElementById('race-track')?.value || '').trim(),
+              date: (document.getElementById('race-date')?.value || '').trim(),
+              raceNo: '', // Not captured in current UI
+              surface: (document.getElementById('race-surface')?.value || '').trim(),
+              distance: (document.getElementById('race-distance')?.value || '').trim()
+            };
+            
+            const picks = {
+              win: winPick?.name || winName || '',
+              place: placePick?.name || placeName || '',
+              show: showPick?.name || showName || ''
+            };
+            
+            const top3_mass = data.top3_mass || data.top3Mass || null;
+            const strategy = data.strategy?.recommended || '';
+            
+            await fetch("/api/log_prediction", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                track: race.track,
+                date: race.date,
+                raceNo: race.raceNo,
+                picks,
+                confidence: confPct / 100, // Convert back to 0-1 for storage
+                top3_mass: top3_mass ? (typeof top3_mass === 'number' ? top3_mass / 100 : parseFloat(top3_mass) / 100) : null,
+                strategy,
+                notes: `Auto-logged from UI. Confidence: ${confPct}%`
+              })
+            });
+          } catch (_) {
+            // Ignore all errors - fire-and-forget
+          }
+        })();
+        
         // Tiny "Logged" toast if flags are enabled (non-breaking)
         if (window.FL_FLAGS) {
           try {

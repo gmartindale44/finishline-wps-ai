@@ -62,6 +62,34 @@
         <div id="fl-tab-strategy" class="fl-tab-content" style="display:none;">
           <div id="fl-strategy" data-fl-strategy style="margin-top:16px;"></div>
         </div>
+        <div id="fl-log-result-section" style="margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.1);">
+          <details style="cursor:pointer;">
+            <summary style="font-size:13px;color:#b8bdd4;user-select:none;">📝 Log Result</summary>
+            <div style="margin-top:12px;padding:12px;background:rgba(0,0,0,0.2);border-radius:8px;">
+              <div style="display:flex;flex-direction:column;gap:8px;">
+                <label style="font-size:12px;color:#b8bdd4;">
+                  Race ID: <input type="text" id="fl-log-race-id" placeholder="track:date:raceNo" style="width:100%;padding:6px;background:#1a1a2e;border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#fff;margin-top:4px;" />
+                </label>
+                <label style="font-size:12px;color:#b8bdd4;">
+                  Result: 
+                  <select id="fl-log-result" style="width:100%;padding:6px;background:#1a1a2e;border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#fff;margin-top:4px;">
+                    <option value="Miss">Miss</option>
+                    <option value="Partial">Partial</option>
+                    <option value="Hit">Hit</option>
+                  </select>
+                </label>
+                <label style="font-size:12px;color:#b8bdd4;">
+                  ROI %: <input type="number" id="fl-log-roi" placeholder="e.g., +42 or -100" style="width:100%;padding:6px;background:#1a1a2e;border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#fff;margin-top:4px;" />
+                </label>
+                <label style="font-size:12px;color:#b8bdd4;">
+                  Notes: <textarea id="fl-log-notes" placeholder="Optional notes" rows="2" style="width:100%;padding:6px;background:#1a1a2e;border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:#fff;margin-top:4px;resize:vertical;"></textarea>
+                </label>
+                <button id="fl-log-submit" style="padding:8px 16px;background:#8b5cf6;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600;margin-top:4px;">Submit Result</button>
+                <div id="fl-log-status" style="font-size:11px;color:#b8bdd4;margin-top:4px;"></div>
+              </div>
+            </div>
+          </details>
+        </div>
       </div>
     `;
 
@@ -88,6 +116,12 @@
       tabContentStrategy: wrap.querySelector('#fl-tab-strategy'),
       exoticsContent: wrap.querySelector('#fl-exotics-content'),
       strategyWrap: wrap.querySelector('[data-fl-strategy]') || wrap.querySelector('#fl-strategy'),
+      logRaceId: wrap.querySelector('#fl-log-race-id'),
+      logResult: wrap.querySelector('#fl-log-result'),
+      logRoi: wrap.querySelector('#fl-log-roi'),
+      logNotes: wrap.querySelector('#fl-log-notes'),
+      logSubmit: wrap.querySelector('#fl-log-submit'),
+      logStatus: wrap.querySelector('#fl-log-status'),
     };
 
     // Event listeners
@@ -102,6 +136,8 @@
         const tabBtn = e.target.matches('[data-tab]') ? e.target : e.target.closest('[data-tab]');
         const tab = tabBtn?.getAttribute('data-tab');
         if (tab) switchTab(tab);
+      } else if (e.target.matches('#fl-log-submit')) {
+        handleLogResult();
       }
     });
 
@@ -650,6 +686,66 @@
     // Re-render to apply new state
     if (lastPred) {
       render(lastPred);
+    }
+  }
+
+  async function handleLogResult() {
+    if (!elements || !elements.logSubmit) return;
+    
+    const race_id = (elements.logRaceId?.value || '').trim();
+    const result = elements.logResult?.value || 'Miss';
+    const roi_percent = (elements.logRoi?.value || '').trim();
+    const notes = (elements.logNotes?.value || '').trim();
+    
+    if (!race_id) {
+      if (elements.logStatus) {
+        elements.logStatus.textContent = 'Error: Race ID required';
+        elements.logStatus.style.color = '#ff6b6b';
+        setTimeout(() => {
+          if (elements.logStatus) elements.logStatus.textContent = '';
+        }, 3000);
+      }
+      return;
+    }
+    
+    elements.logSubmit.disabled = true;
+    if (elements.logStatus) {
+      elements.logStatus.textContent = 'Submitting...';
+      elements.logStatus.style.color = '#b8bdd4';
+    }
+    
+    try {
+      const resp = await fetch('/api/record_result', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ race_id, result, roi_percent, notes })
+      });
+      
+      const data = await resp.json();
+      
+      if (data.ok) {
+        if (elements.logStatus) {
+          elements.logStatus.textContent = '✓ Result logged successfully';
+          elements.logStatus.style.color = '#51cf66';
+        }
+        // Clear form
+        if (elements.logRaceId) elements.logRaceId.value = '';
+        if (elements.logResult) elements.logResult.value = 'Miss';
+        if (elements.logRoi) elements.logRoi.value = '';
+        if (elements.logNotes) elements.logNotes.value = '';
+      } else {
+        throw new Error(data.error || 'Unknown error');
+      }
+    } catch (e) {
+      if (elements.logStatus) {
+        elements.logStatus.textContent = `Error: ${e.message || 'Failed to log result'}`;
+        elements.logStatus.style.color = '#ff6b6b';
+      }
+    } finally {
+      elements.logSubmit.disabled = false;
+      setTimeout(() => {
+        if (elements.logStatus) elements.logStatus.textContent = '';
+      }, 5000);
     }
   }
 
