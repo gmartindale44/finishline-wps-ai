@@ -119,7 +119,9 @@ export default async function handler(req, res) {
       horses = [],               // [{ name, odds, post? }]
       track = null,
       surface = null,
-      distance_input = null,     // string: miles or furlongs
+      distance_input = null,     // string: miles or furlongs (pretty label)
+      distance_furlongs = null,  // float: normalized furlongs
+      distance_meters = null,    // integer: normalized meters
       speedFigs = {}             // { "Horse Name": 113 }
     } = body || {};
 
@@ -145,7 +147,10 @@ export default async function handler(req, res) {
     const speedScore = z.map(v => 0.5 + Math.max(Math.min(v, 2.5), -2.5) / 5); // clamp z to [-2.5,2.5] then scale → [0..1]
 
     // Bias: small bump for sprint/turf & sprint post position
-    const miles = toMiles(distance_input);
+    // Prefer normalized distance_furlongs if available, otherwise convert legacy distance_input
+    const miles = distance_furlongs != null 
+      ? distance_furlongs / 8  // Convert furlongs to miles
+      : toMiles(distance_input);
     const sprint = (miles != null && miles < 1.0);
     const surf = String(surface || '').toLowerCase();
 
