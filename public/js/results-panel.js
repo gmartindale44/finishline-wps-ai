@@ -871,6 +871,8 @@
           console.warn('[FLResults] Invalid prediction data');
           return;
         }
+        // Ensure root exists before rendering
+        ensureResultsRoot();
         lastPred = pred;
         render(pred);
       } catch (err) {
