@@ -3,8 +3,8 @@
 (function () {
   'use strict';
 
-  // Defensive mount helpers
-  export function ensureResultsRoot() {
+  // Defensive mount helper
+  function ensureResultsRoot() {
     let root = document.getElementById('fl-results-root');
     if (!root) {
       root = document.createElement('div');
@@ -14,11 +14,6 @@
       document.body.appendChild(root);
     }
     return root;
-  }
-
-  export function openResultsPanel() {
-    const mount = mountResultsPanel();
-    if (mount?.show) mount.show();
   }
 
   const root = ensureResultsRoot();
@@ -887,6 +882,19 @@
         hide();
       } catch (err) {
         console.error('[FLResults] hide() error:', err);
+      }
+    },
+    ensureResultsRoot() {
+      return ensureResultsRoot();
+    },
+    openResultsPanel() {
+      ensureResultsRoot();
+      if (elements) {
+        show();
+      } else {
+        // Force ensure/mount if not already done
+        ensure();
+        if (elements) show();
       }
     },
   };

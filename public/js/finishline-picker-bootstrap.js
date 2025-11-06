@@ -102,6 +102,13 @@ import { mountTrackCombobox } from './track-combobox.js';
       const el = document.createElement('div');
       el.className = 'fl-toast';
       el.textContent = message || 'Notice';
+      
+      // Add click handler if provided
+      if (opts.onClick) {
+        el.style.cursor = 'pointer';
+        el.addEventListener('click', opts.onClick);
+      }
+      
       document.body.appendChild(el);
       // force reflow for animation
       void el.offsetWidth;
@@ -646,6 +653,7 @@ import { mountTrackCombobox } from './track-combobox.js';
         }));
 
         // Show persistent results panel with reasons and tickets (null-safe)
+        let panelShown = false;
         try {
           if (window.FLResults?.show) {
             window.FLResults.show({
@@ -659,15 +667,36 @@ import { mountTrackCombobox } from './track-combobox.js';
               strategy: data.strategy || null,
               picks: data.picks || picks || null,
             });
-
+            panelShown = true;
             console.log('[Predict] Results displayed in panel', { win: winName, place: placeName, show: showName, confidence: confPct, tickets: data.tickets, strategy: data.strategy ? 'present' : 'missing' });
-          } else {
-            // Fallback to toast if panel not available
-            showToast(`Predictions ready. Win: ${winName}, Place: ${placeName}, Show: ${showName}`);
           }
         } catch (modalErr) {
           console.error('[Predict] Modal render error:', modalErr);
-          showToast('Prediction display error – check console.');
+        }
+
+        if (!panelShown) {
+          // Fallback: show toast with action to open results
+          showToast(`Predictions ready. Win: ${winName}, Place: ${placeName}, Show: ${showName}. Click to open results.`, {
+            durationMs: 5000,
+            onClick: () => {
+              try {
+                if (window.FLResults?.openResultsPanel) {
+                  window.FLResults.openResultsPanel();
+                } else if (window.FLResults?.show) {
+                  // Try to show with minimal data
+                  window.FLResults.show({
+                    win: winName,
+                    place: placeName,
+                    show: showName,
+                    confidence: confPct,
+                    horses: horsesForDisplay,
+                  });
+                }
+              } catch (err) {
+                console.error('[Predict] Fallback open failed:', err);
+              }
+            }
+          });
         }
         pulse(predictBtn);
         
@@ -853,12 +882,13 @@ import { mountTrackCombobox } from './track-combobox.js';
     const workingBadges = document.querySelectorAll('.working-badge, [id="fl-working-badge"]');
     workingBadges.forEach(badge => badge.remove());
 
-    // Close/hide Results modal and clear content
+    // Close/hide Results modal and clear content (but preserve root container)
     if (window.FLResults?.hide) {
       window.FLResults.hide();
     }
     const resultsRoot = document.getElementById('fl-results-root');
     if (resultsRoot) {
+      // Clear content but preserve root container
       const tabContents = resultsRoot.querySelectorAll('.fl-tab-content');
       tabContents.forEach(tab => {
         if (tab.id === 'fl-tab-predictions') {
@@ -874,6 +904,11 @@ import { mountTrackCombobox } from './track-combobox.js';
           if (strategyWrap) strategyWrap.innerHTML = '';
         }
       });
+      // Do NOT remove the root container - just hide the panel
+      const panel = resultsRoot.querySelector('.fl-results');
+      if (panel) {
+        panel.classList.remove('fl-results--open', 'fl-results--pinned');
+      }
     }
 
     // Reset chips
