@@ -10,7 +10,6 @@
       root = document.createElement('div');
       root.id = 'fl-results-root';
       root.setAttribute('aria-live', 'polite');
-      root.dataset.mounted = '0';
       document.body.appendChild(root);
     }
     return root;
@@ -454,21 +453,15 @@
     const card = document.createElement('div');
     card.className = 'fl-strategy-card';
 
-    const header = document.createElement('div');
-    header.id = 'fl-strategy-header';
-    header.className = 'fl-strategy-header';
-    
     const h = document.createElement('div');
     h.className = 'fl-strategy-title';
     h.textContent = 'FinishLine AI Betting Strategy';
-    header.appendChild(h);
-    
-    card.appendChild(header);
+    card.appendChild(h);
 
     // Render stop-light signal (extract metrics after card is created)
     const strategyConfidencePct = s.metrics?.confidence != null ? Math.round((Number(s.metrics.confidence) || 0) * 100) : NaN;
     const top3MassPct = s.metrics?.top3Mass != null ? Math.round((Number(s.metrics.top3Mass) || 0) * 100) : NaN;
-    renderStoplightSignal(header, strategyConfidencePct, top3MassPct);
+    renderStoplightSignal(card, strategyConfidencePct, top3MassPct);
 
     const reco = document.createElement('div');
     reco.className = 'fl-strategy-reco';
@@ -555,14 +548,6 @@
 
       wrap.appendChild(card);
 
-      // Mount calibration tracker
-      try {
-        const { mountCalibrationTracker } = await import('./components/calibration-tracker.js');
-        mountCalibrationTracker('#fl-strategy-header');
-      } catch (err) {
-        console.debug('[Strategy] Calibration tracker not available:', err?.message || err);
-      }
-
       // Wire bankroll slider + live plan render
       const linesEl = wrap.querySelector('#fl-plan-lines');
       const bkEl = wrap.querySelector('#fl-bk');
@@ -596,8 +581,7 @@
 
   function render(pred) {
     // Guard: ensure modal root exists before rendering
-    const currentRoot = ensureResultsRoot();
-    if (!currentRoot || !document.body.contains(currentRoot)) {
+    if (!root || !document.body.contains(root)) {
       console.warn('[FLResults] Modal root not available; skipping render.');
       return;
     }
@@ -871,8 +855,6 @@
           console.warn('[FLResults] Invalid prediction data');
           return;
         }
-        // Ensure root exists before rendering
-        ensureResultsRoot();
         lastPred = pred;
         render(pred);
       } catch (err) {
@@ -884,19 +866,6 @@
         hide();
       } catch (err) {
         console.error('[FLResults] hide() error:', err);
-      }
-    },
-    ensureResultsRoot() {
-      return ensureResultsRoot();
-    },
-    openResultsPanel() {
-      ensureResultsRoot();
-      if (elements) {
-        show();
-      } else {
-        // Force ensure/mount if not already done
-        ensure();
-        if (elements) show();
       }
     },
   };

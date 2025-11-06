@@ -102,13 +102,6 @@ import { mountTrackCombobox } from './track-combobox.js';
       const el = document.createElement('div');
       el.className = 'fl-toast';
       el.textContent = message || 'Notice';
-      
-      // Add click handler if provided
-      if (opts.onClick) {
-        el.style.cursor = 'pointer';
-        el.addEventListener('click', opts.onClick);
-      }
-      
       document.body.appendChild(el);
       // force reflow for animation
       void el.offsetWidth;
@@ -460,33 +453,12 @@ import { mountTrackCombobox } from './track-combobox.js';
   async function onPredict() {
     const predictBtn = qPredict();
 
-    // Guard: disable button during request
-    if (predictBtn?.disabled) return;
-
     // Get horses with priority order
     const horses = getHorsesForPrediction();
 
     if (!horses || horses.length < 3) {
       showToast('Not enough horses to predict. Analyze first or add rows. (Need at least 3 with name + odds)');
       return;
-    }
-
-    // Defensive: ensure results root exists before making request
-    try {
-      if (typeof window.FLResults?.ensureResultsRoot === 'function') {
-        window.FLResults.ensureResultsRoot();
-      } else {
-        // Fallback: ensure root exists
-        let root = document.getElementById('fl-results-root');
-        if (!root) {
-          root = document.createElement('div');
-          root.id = 'fl-results-root';
-          root.setAttribute('aria-live', 'polite');
-          document.body.appendChild(root);
-        }
-      }
-    } catch (err) {
-      console.debug('[Predict] Root ensure skip:', err?.message || err);
     }
 
     await withBusy(predictBtn, async () => {
@@ -653,50 +625,28 @@ import { mountTrackCombobox } from './track-combobox.js';
         }));
 
         // Show persistent results panel with reasons and tickets (null-safe)
-        let panelShown = false;
         try {
           if (window.FLResults?.show) {
             window.FLResults.show({
               win: winName,
               place: placeName,
               show: showName,
-              confidence: confPct,
+              confidence: confPct / 100, // Convert to 0-1 range for results-panel
               horses: horsesForDisplay,
               reasons: reasons,
               tickets: data.tickets || null,
               strategy: data.strategy || null,
               picks: data.picks || picks || null,
             });
-            panelShown = true;
+
             console.log('[Predict] Results displayed in panel', { win: winName, place: placeName, show: showName, confidence: confPct, tickets: data.tickets, strategy: data.strategy ? 'present' : 'missing' });
+          } else {
+            // Fallback to toast if panel not available
+            showToast(`Predictions ready. Win: ${winName}, Place: ${placeName}, Show: ${showName}`);
           }
         } catch (modalErr) {
           console.error('[Predict] Modal render error:', modalErr);
-        }
-
-        if (!panelShown) {
-          // Fallback: show toast with action to open results
-          showToast(`Predictions ready. Win: ${winName}, Place: ${placeName}, Show: ${showName}. Click to open results.`, {
-            durationMs: 5000,
-            onClick: () => {
-              try {
-                if (window.FLResults?.openResultsPanel) {
-                  window.FLResults.openResultsPanel();
-                } else if (window.FLResults?.show) {
-                  // Try to show with minimal data
-                  window.FLResults.show({
-                    win: winName,
-                    place: placeName,
-                    show: showName,
-                    confidence: confPct,
-                    horses: horsesForDisplay,
-                  });
-                }
-              } catch (err) {
-                console.error('[Predict] Fallback open failed:', err);
-              }
-            }
-          });
+          showToast('Prediction display error – check console.');
         }
         pulse(predictBtn);
         
