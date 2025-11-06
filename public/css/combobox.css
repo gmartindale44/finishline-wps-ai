@@ -1,0 +1,41 @@
+/* Basic dropdown */
+.fl-combobox {
+  position: relative;
+}
+
+.fl-combobox-list {
+  position: absolute;
+  z-index: 40;
+  top: 100%;
+  left: 0;
+  right: 0;
+  max-height: 14rem;
+  overflow-y: auto;
+  background: #101016;
+  border: 1px solid #2a2a3a;
+  border-radius: 0.5rem;
+  margin-top: 0.25rem;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+
+.fl-combobox-item {
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.fl-combobox-item:hover,
+.fl-combobox-item[aria-selected="true"] {
+  background: #1a1a28;
+}
+
+.fl-combobox-section {
+  padding: 6px 12px;
+  font-size: 12px;
+  color: #9aa0a6;
+  border-top: 1px solid #202030;
+}
+
+.fl-combobox-hidden {
+  display: none;
+}
+

@@ -1,3 +1,5 @@
+import { mountTrackCombobox } from './track-combobox.js';
+
 (function () {
   const state = (window.__fl_state = window.__fl_state || {
     pickedFiles: [],
@@ -909,4 +911,26 @@
       onNewRace();
     }
   });
+
+  // Mount track combobox on DOM ready
+  function initTrackCombobox() {
+    const trackInput = document.getElementById('race-track') || document.querySelector('input[name="track"], #track, [data-fl-field="track"]');
+    if (trackInput && !trackInput.closest('.fl-combobox')) {
+      mountTrackCombobox(trackInput, {
+        onChange: (val) => {
+          // Normalize into global state if used
+          if (window.__fl_state) {
+            window.__fl_state.track = val || '';
+          }
+        }
+      });
+    }
+  }
+
+  // Initialize on DOM ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initTrackCombobox);
+  } else {
+    initTrackCombobox();
+  }
 })();
