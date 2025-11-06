@@ -445,10 +445,16 @@
     const card = document.createElement('div');
     card.className = 'fl-strategy-card';
 
+    const header = document.createElement('div');
+    header.id = 'fl-strategy-header';
+    header.className = 'fl-strategy-header';
+    
     const h = document.createElement('div');
     h.className = 'fl-strategy-title';
     h.textContent = 'FinishLine AI Betting Strategy';
-    card.appendChild(h);
+    header.appendChild(h);
+    
+    card.appendChild(header);
 
     // Render stop-light signal (extract metrics after card is created)
     const strategyConfidencePct = s.metrics?.confidence != null ? Math.round((Number(s.metrics.confidence) || 0) * 100) : NaN;
@@ -539,6 +545,14 @@
       card.appendChild(plan);
 
       wrap.appendChild(card);
+
+      // Mount calibration tracker
+      try {
+        const { mountCalibrationTracker } = await import('./components/calibration-tracker.js');
+        mountCalibrationTracker('#fl-strategy-header');
+      } catch (err) {
+        console.debug('[Strategy] Calibration tracker not available:', err?.message || err);
+      }
 
       // Wire bankroll slider + live plan render
       const linesEl = wrap.querySelector('#fl-plan-lines');
