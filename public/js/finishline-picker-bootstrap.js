@@ -453,12 +453,33 @@ import { mountTrackCombobox } from './track-combobox.js';
   async function onPredict() {
     const predictBtn = qPredict();
 
+    // Guard: disable button during request
+    if (predictBtn?.disabled) return;
+
     // Get horses with priority order
     const horses = getHorsesForPrediction();
 
     if (!horses || horses.length < 3) {
       showToast('Not enough horses to predict. Analyze first or add rows. (Need at least 3 with name + odds)');
       return;
+    }
+
+    // Defensive: ensure results root exists before making request
+    try {
+      if (typeof window.FLResults?.ensureResultsRoot === 'function') {
+        window.FLResults.ensureResultsRoot();
+      } else {
+        // Fallback: ensure root exists
+        let root = document.getElementById('fl-results-root');
+        if (!root) {
+          root = document.createElement('div');
+          root.id = 'fl-results-root';
+          root.setAttribute('aria-live', 'polite');
+          document.body.appendChild(root);
+        }
+      }
+    } catch (err) {
+      console.debug('[Predict] Root ensure skip:', err?.message || err);
     }
 
     await withBusy(predictBtn, async () => {

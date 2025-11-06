@@ -3,11 +3,25 @@
 (function () {
   'use strict';
 
-  const root = document.getElementById('fl-results-root');
-  if (!root) {
-    console.error('[FLResults] Container #fl-results-root not found');
-    return;
+  // Defensive mount helpers
+  export function ensureResultsRoot() {
+    let root = document.getElementById('fl-results-root');
+    if (!root) {
+      root = document.createElement('div');
+      root.id = 'fl-results-root';
+      root.setAttribute('aria-live', 'polite');
+      root.dataset.mounted = '0';
+      document.body.appendChild(root);
+    }
+    return root;
   }
+
+  export function openResultsPanel() {
+    const mount = mountResultsPanel();
+    if (mount?.show) mount.show();
+  }
+
+  const root = ensureResultsRoot();
 
   let elements = null;
   let lastPred = null;
@@ -587,7 +601,8 @@
 
   function render(pred) {
     // Guard: ensure modal root exists before rendering
-    if (!root || !document.body.contains(root)) {
+    const currentRoot = ensureResultsRoot();
+    if (!currentRoot || !document.body.contains(currentRoot)) {
       console.warn('[FLResults] Modal root not available; skipping render.');
       return;
     }

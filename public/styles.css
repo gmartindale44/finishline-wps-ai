@@ -424,3 +424,35 @@ button[disabled][aria-busy="true"] { opacity: 0.7; }
 .fl-calib-refresh:hover {
   background: rgba(255, 255, 255, 0.12);
 }
+
+/* Toast and button states */
+.fl-toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  padding: 12px 16px;
+  background: rgba(0, 0, 0, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: var(--fg);
+  font-size: 14px;
+  z-index: 10000;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.fl-toast-in {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.fl-toast-out {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+.is-busy {
+  opacity: 0.7;
+  pointer-events: none;
+}
