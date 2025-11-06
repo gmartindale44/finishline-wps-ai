@@ -197,6 +197,21 @@
     `;
   }
 
+  function getTimeAgo(date) {
+    const now = Date.now();
+    const then = date.getTime();
+    const diffMs = now - then;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    
+    if (diffMins < 1) return 'now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return `${Math.floor(diffDays / 7)}w ago`;
+  }
+
   function computeSignal(confPct, massPct) {
     const c = Number.isFinite(confPct) ? confPct : NaN;
     const m = Number.isFinite(massPct) ? massPct : NaN;
@@ -455,7 +470,44 @@
 
     const h = document.createElement('div');
     h.className = 'fl-strategy-title';
-    h.textContent = 'FinishLine AI Betting Strategy';
+    h.style.cssText = 'display:flex;justify-content:space-between;align-items:center;';
+    
+    const titleSpan = document.createElement('span');
+    titleSpan.textContent = 'FinishLine AI Betting Strategy';
+    h.appendChild(titleSpan);
+    
+    // Optional calibration status (behind env flag - check window variable set by server)
+    if (window.FINISHLINE_SHOW_CAL_STATUS) {
+      const statusSpan = document.createElement('span');
+      statusSpan.className = 'fl-cal-status';
+      statusSpan.style.cssText = 'font-size:11px;opacity:0.6;color:#b8bdd4;margin-left:12px;font-weight:normal;';
+      statusSpan.textContent = 'Loading...';
+      h.appendChild(statusSpan);
+      
+      // Fetch status once on mount (fail silently)
+      fetch('/api/calibration_status')
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (!data || !data.ok) return;
+          
+          const parts = [];
+          if (data.csv_rows != null) parts.push(`rows:${data.csv_rows}`);
+          if (data.tau != null) parts.push(`τ:${data.tau}`);
+          if (data.params_mtime) {
+            const ago = getTimeAgo(new Date(data.params_mtime));
+            parts.push(`updated:${ago}`);
+          } else {
+            parts.push('updated:—');
+          }
+          
+          statusSpan.textContent = `Calibrated ✓ ${parts.join(' ')}`;
+        })
+        .catch(() => {
+          // Fail silently - remove status on error
+          try { statusSpan.remove(); } catch {}
+        });
+    }
+    
     card.appendChild(h);
 
     // Render stop-light signal (extract metrics after card is created)

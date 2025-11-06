@@ -108,6 +108,10 @@
   <script type="module" src="/js/finishline-picker-bootstrap.js" defer></script>
   <script src="/js/picker-autobind.js" defer></script>
   <script>
+    // Set calibration status flag if env var is enabled (server-side check via Vercel)
+    // This can be set via Vercel environment variable FINISHLINE_SHOW_CAL_STATUS
+    window.FINISHLINE_SHOW_CAL_STATUS = false; // Default off - set to true in Vercel preview env if needed
+    
     // Distance tooltip helper
     window.addEventListener('DOMContentLoaded', () => {
       const distInput = document.getElementById('race-distance');
