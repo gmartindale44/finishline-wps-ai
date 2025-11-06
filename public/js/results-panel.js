@@ -459,7 +459,7 @@
     // Render stop-light signal (extract metrics after card is created)
     const strategyConfidencePct = s.metrics?.confidence != null ? Math.round((Number(s.metrics.confidence) || 0) * 100) : NaN;
     const top3MassPct = s.metrics?.top3Mass != null ? Math.round((Number(s.metrics.top3Mass) || 0) * 100) : NaN;
-    renderStoplightSignal(card, strategyConfidencePct, top3MassPct);
+    renderStoplightSignal(header, strategyConfidencePct, top3MassPct);
 
     const reco = document.createElement('div');
     reco.className = 'fl-strategy-reco';
