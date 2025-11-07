@@ -15,7 +15,8 @@
     "calibrate:all": "npm run validate:dataset && npm run calibrate && npm run calibrate:report",
     "backfill:calibrate": "node scripts/redis-backfill-to-csv.js",
     "build": "echo \"no build step\"",
-    "audit:server": "node scripts/fetch-audit.js"
+    "audit:server": "node scripts/fetch-audit.js",
+    "sanitize:placeholders": "node scripts/sanitize-placeholders.js"
   },
   "dependencies": {
     "@upstash/redis": "^1.28.2",
