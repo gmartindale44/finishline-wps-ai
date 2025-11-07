@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2025-11-07T15:53:15.554Z",
+  "generated_at": "2025-11-07T19:35:08.536Z",
   "bin_metrics": [
     {
       "bin": "50-54",
@@ -28,17 +28,17 @@
     },
     {
       "bin": "65-69",
-      "count": 34,
-      "win_rate": 0.412,
-      "top3_rate": 0.853,
+      "count": 41,
+      "win_rate": 0.341,
+      "top3_rate": 0.707,
       "avg_roi_atb2": 31.26,
       "exotic_hit_rate": 0.529
     },
     {
       "bin": "70-74",
-      "count": 19,
-      "win_rate": 0.789,
-      "top3_rate": 0.895,
+      "count": 20,
+      "win_rate": 0.75,
+      "top3_rate": 0.85,
       "avg_roi_atb2": 80.05,
       "exotic_hit_rate": 0.769
     },
