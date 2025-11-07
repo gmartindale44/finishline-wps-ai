@@ -12,7 +12,8 @@
     "calibrate:report": "node scripts/build-report.js",
     "calibrate:all": "npm run validate:dataset && npm run calibrate && npm run calibrate:report",
     "backfill:calibrate": "node scripts/redis-backfill-to-csv.js",
-    "build": "echo \"no build step\""
+    "build": "echo \"no build step\"",
+    "audit:server": "node scripts/fetch-audit.js"
   },
   "dependencies": {
     "@upstash/redis": "^1.28.2",
