@@ -423,8 +423,16 @@
     const BK_DEFAULT = 200;
     let bankroll = BK_DEFAULT;
 
-    function planLinesFor(recommended, picks, bk) {
-      // scale from the $200 template we already show:
+    function planLinesFor(recommended, picks, bk, gatesInfo) {
+      let rec = recommended;
+      if (!gatesInfo.allow_win_only && rec === 'Win Only') rec = 'Across the Board';
+      if (rec.includes('Exacta') && !gatesInfo.allow_exacta) {
+        rec = gatesInfo.allow_win_only ? 'Win Only' : 'Across the Board';
+      }
+      if (rec.includes('Trifecta') && !gatesInfo.allow_trifecta) {
+        rec = gatesInfo.allow_exacta ? 'Exacta Box (Top 3)' : (gatesInfo.allow_win_only ? 'Win Only' : 'Across the Board');
+      }
+
       const top3 = (picks || []).slice(0, 3).map(p => p?.name).filter(Boolean);
       const top = top3[0] || 'Top Pick';
       const pct = {
@@ -432,22 +440,23 @@
         'Win Only': { win: 1.00, place: 0, show: 0, exacta: 0, tri: 0 },
         'Exacta Box (Top 3)': { win: 0.60, place: 0, show: 0, exacta: 0.40, tri: 0 },
         'Trifecta Box (AI Top 3)': { win: 0.40, place: 0, show: 0, exacta: 0, tri: 0.60 },
-      }[recommended] || { win: 0.50, place: 0, show: 0, exacta: 0.50, tri: 0 };
+      }[rec] || { win: 0.50, place: 0, show: 0, exacta: 0.50, tri: 0 };
 
-      const asDollars = (x) => Math.max(2, Math.round(x / 2) * 2); // even $ and ≥ $2
-      const win = asDollars(bk * (pct.win || 0));
-      const plc = asDollars(bk * (pct.place || 0));
-      const shw = asDollars(bk * (pct.show || 0));
-      const exBox = asDollars(bk * (pct.exacta || 0));
-      const triBx = asDollars(bk * (pct.tri || 0));
+      const asDollars = (x) => Math.max(2, Math.round(x / 2) * 2);
+      const adjustedBankroll = bk * (Number.isFinite(gatesInfo.stake_reco) && gatesInfo.stake_reco > 0 ? gatesInfo.stake_reco : 1);
+      const win = asDollars(adjustedBankroll * (pct.win || 0));
+      const plc = asDollars(adjustedBankroll * (pct.place || 0));
+      const shw = asDollars(adjustedBankroll * (pct.show || 0));
+      const exBox = asDollars(adjustedBankroll * (pct.exacta || 0));
+      const triBx = asDollars(adjustedBankroll * (pct.tri || 0));
 
       const lines = [];
       if (win > 1) lines.push(`WIN ${top} — $${win}`);
       if (plc > 1) lines.push(`PLACE ${top} — $${plc}`);
       if (shw > 1) lines.push(`SHOW ${top} — $${shw}`);
-      if (exBox > 1 && top3.length === 3) lines.push(`EXACTA BOX ${top3.join(', ')} — $${exBox} total`);
-      if (triBx > 1 && top3.length === 3) lines.push(`TRIFECTA BOX ${top3.join(', ')} — $${triBx} total`);
-      return lines;
+      if (gatesInfo.allow_exacta && exBox > 1 && top3.length === 3) lines.push(`EXACTA BOX ${top3.join(', ')} — $${exBox} total`);
+      if (gatesInfo.allow_trifecta && triBx > 1 && top3.length === 3) lines.push(`TRIFECTA BOX ${top3.join(', ')} — $${triBx} total`);
+      return { lines, recommended: rec };
     }
 
     function copyBetSlip(lines) {
@@ -467,6 +476,107 @@
 
     const card = document.createElement('div');
     card.className = 'fl-strategy-card';
+
+    const metrics = s.metrics || {};
+    const fallbackConf = Number(fallbackData.confidence || metrics.confidence || 0);
+    const fallbackTop3 = Number(metrics.top3Mass ?? fallbackData.top3Mass ?? 0);
+    const fallbackGap12 = Number(metrics.gap12 ?? metrics.gap1to2 ?? fallbackData.gap12 ?? fallbackData.gap1to2 ?? 0);
+    const fallbackGap23 = Number(metrics.gap23 ?? metrics.gap2to3 ?? fallbackData.gap23 ?? fallbackData.gap2to3 ?? 0);
+
+    function toPercent(value) {
+      if (!Number.isFinite(value)) return NaN;
+      return value <= 1 ? value * 100 : value;
+    }
+
+    function parseDistanceToYards(str) {
+      if (!str) return NaN;
+      if (typeof str === 'number' && Number.isFinite(str)) return str;
+      const text = String(str).trim();
+      const yardsMatch = /([0-9]+)\s*[Yy]/.exec(text);
+      if (yardsMatch) return Number(yardsMatch[1]);
+      const furlongMatch = /([0-9]+(?:\.[0-9]+)?)\s*[Ff]/.exec(text);
+      if (furlongMatch) {
+        const furlongs = Number(furlongMatch[1]);
+        if (Number.isFinite(furlongs)) {
+          return Math.round(furlongs * 220);
+        }
+      }
+      const mileMatch = /([0-9]+(?:\.[0-9]+)?)\s*(?:M|mile|miles)/i.exec(text);
+      if (mileMatch) {
+        const miles = Number(mileMatch[1]);
+        if (Number.isFinite(miles)) {
+          return Math.round(miles * 1760);
+        }
+      }
+      return NaN;
+    }
+
+    const confPct = toPercent(fallbackConf);
+    const top3Pct = toPercent(fallbackTop3);
+    const gap12Pct = toPercent(fallbackGap12);
+    const gap23Pct = toPercent(fallbackGap23);
+
+    const distanceContext = parseDistanceToYards(
+      fallbackData.distance || metrics.distance || window.__fl_state?.distance_yards || window.__fl_state?.distance_input || ''
+    );
+    const surfaceContext = fallbackData.surface || metrics.surface || window.__fl_state?.surface || '';
+    const classContext = fallbackData.class || metrics.class || window.__fl_state?.class || '';
+
+    let gates = {
+      stake_reco: 1,
+      allow_win_only: confPct >= 80,
+      allow_exacta: true,
+      allow_trifecta: true,
+      rationale: [],
+    };
+
+    if (window.FinishLineCalibration?.shouldOfferExotics) {
+      try {
+        gates = window.FinishLineCalibration.shouldOfferExotics({
+          confidence: confPct,
+          top3Mass: top3Pct,
+          gap12: gap12Pct,
+          gap23: gap23Pct,
+          distance: distanceContext,
+          surface: surfaceContext,
+          class: classContext,
+        });
+      } catch (err) {
+        console.debug('[FLResults] Calibration gating failed, falling back:', err?.message || err);
+      }
+    }
+
+    const stakeMultiplier = window.FinishLineCalibration?.getStakeForConfidence
+      ? window.FinishLineCalibration.getStakeForConfidence(confPct)
+      : gates.stake_reco || 1;
+
+    const gatesForPlan = {
+      ...gates,
+      stake_reco: Number.isFinite(stakeMultiplier) && stakeMultiplier > 0 ? stakeMultiplier : (gates.stake_reco || 1),
+    };
+
+    if (!Array.isArray(s.rationale)) s.rationale = [];
+    if (Array.isArray(gates.rationale)) {
+      gates.rationale.forEach(note => {
+        if (note && !s.rationale.includes(note)) {
+          s.rationale.push(note);
+        }
+      });
+    }
+
+    let effectiveRecommendation = s.recommended;
+    if (effectiveRecommendation === 'Win Only' && !gates.allow_win_only) {
+      effectiveRecommendation = 'Across the Board';
+      s.rationale.push('Win-only disabled by calibration gate');
+    }
+    if (effectiveRecommendation && effectiveRecommendation.includes('Exacta') && !gates.allow_exacta) {
+      effectiveRecommendation = gates.allow_win_only ? 'Win Only' : 'Across the Board';
+      s.rationale.push('Exacta gated off; reverting to safer plan');
+    }
+    if (effectiveRecommendation && effectiveRecommendation.includes('Trifecta') && !gates.allow_trifecta) {
+      effectiveRecommendation = gates.allow_exacta ? 'Exacta Box (Top 3)' : (gates.allow_win_only ? 'Win Only' : 'Across the Board');
+      s.rationale.push('Trifecta gated off by calibration');
+    }
 
     const h = document.createElement('div');
     h.className = 'fl-strategy-title';
@@ -517,7 +627,7 @@
 
     const reco = document.createElement('div');
     reco.className = 'fl-strategy-reco';
-    reco.innerHTML = `<span class="fl-badge">Recommended</span> <strong>${s.recommended || 'Across the Board'}</strong>`;
+    reco.innerHTML = `<div class="fl-reco-label">Recommended Play</div><div class="fl-reco-value">${effectiveRecommendation}</div>`;
     card.appendChild(reco);
 
     // rationale chips
@@ -583,6 +693,13 @@
       const plan = document.createElement('div');
       plan.className = 'fl-strategy-plan';
       
+      const { lines: planLines, recommended: resolvedReco } = planLinesFor(
+        effectiveRecommendation || 'Across the Board',
+        s.picks || fallbackData.picks || [],
+        bankroll,
+        gatesForPlan
+      );
+
       plan.innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
           <h4 style="margin:0;font-size:14px;font-weight:600;color:#dfe3ff;">Suggested Plan</h4>
@@ -612,8 +729,8 @@
 
       function renderPlan() {
         if (!linesEl) return;
-        const lines = planLinesFor(rec, picks, bankroll);
-        linesEl.innerHTML = lines.map(l => `<li style="margin:4px 0;color:#b8bdd4;font-size:13px;">${l}</li>`).join('');
+        const lines = planLinesFor(rec, picks, bankroll, { ...gates, stake_reco: stakeMultiplier });
+        linesEl.innerHTML = lines.lines.map(l => `<li style="margin:4px 0;color:#b8bdd4;font-size:13px;">${l}</li>`).join('');
       }
 
       renderPlan();

@@ -6,7 +6,11 @@
     "node": "20.x"
   },
   "scripts": {
+    "append:rows": "node scripts/csv-append.js",
+    "validate:dataset": "node scripts/validate-dataset.js",
     "calibrate": "node scripts/calibrate.js",
+    "calibrate:report": "node scripts/build-report.js",
+    "calibrate:all": "npm run validate:dataset && npm run calibrate && npm run calibrate:report",
     "backfill:calibrate": "node scripts/redis-backfill-to-csv.js",
     "build": "echo \"no build step\""
   },

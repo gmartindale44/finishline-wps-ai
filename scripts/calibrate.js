@@ -1,103 +1,221 @@
-import fs from 'fs';
-import path from 'path';
-const CSV = path.join(process.cwd(), 'data', 'finishline_tests_v1.csv');
-const OUT = path.join(process.cwd(), 'data', 'model_params.json');
+import fs from 'node:fs';
+import path from 'node:path';
 
-function parseCSV(text) {
-  const lines = text.trim().split(/\r?\n/).filter(l=>l.trim() && !l.trim().startsWith('#'));
-  if (!lines.length) return [];
-  const hdr = lines[0]; const rows = lines.slice(1);
-  const H = hdr.split(',').map(h => h.trim().toLowerCase());
-  const F = (k) => H.findIndex(h => h === k || h.includes(k));
-  const idx = {
-    conf: F('confidence'),
-    picks: F('ai_picks'),
-    strat: F('strategy'),
-    result: F('result'),
-    roi: F('roi_percent')
-  };
-  // Expect your schema; if not present, keep neutral by returning []
-  if (idx.conf<0 || idx.picks<0 || idx.strat<0 || idx.result<0 || idx.roi<0) return [];
-  return rows.map(r=>{
-    const c=r.split(',').map(x=>x.trim());
-    const conf = parseFloat(c[idx.conf]||'0'); // already 0..1
-    const picksStr = (c[idx.picks]||'').replace(/"/g,'').trim();
-    const pred = picksStr ? picksStr.split('-').map(x=>x.trim().toLowerCase()) : [];
-    const result = (c[idx.result]||'').toLowerCase(); // hit/partial/miss
-    const roi = parseFloat(String(c[idx.roi]||'0').replace('+',''));
-    const v = (c[idx.strat]||'').toLowerCase();
-    const reco = (v==='atb' ? 'across the board' : v);
-    const top3_success = /hit|partial/.test(result);
-    return { conf, pred, top3_success, roi, reco };
-  });
+const CSV_PATH = path.join(process.cwd(), 'data', 'finishline_tests_v1.csv');
+const OUTPUT_PATH = path.join(process.cwd(), 'data', 'calibration_v1.json');
+
+const LEGACY_HEADERS = [
+  'Test_ID',
+  'Track',
+  'Race_No',
+  'Surface',
+  'Distance',
+  'Confidence',
+  'Top_3_Mass',
+  'AI_Picks',
+  'Strategy',
+  'Result',
+  'ROI_Percent',
+  'WinRate',
+  'Notes',
+];
+
+const CONFIDENCE_BINS = [
+  { label: '50-54', min: 50, max: 54 },
+  { label: '55-59', min: 55, max: 59 },
+  { label: '60-64', min: 60, max: 64 },
+  { label: '65-69', min: 65, max: 69 },
+  { label: '70-74', min: 70, max: 74 },
+  { label: '75-79', min: 75, max: 79 },
+  { label: '80-84', min: 80, max: 84 },
+  { label: '85+', min: 85, max: Infinity },
+];
+
+function loadCsv() {
+  if (!fs.existsSync(CSV_PATH)) {
+    throw new Error('Dataset missing – run append first.');
+  }
+  const raw = fs.readFileSync(CSV_PATH, 'utf8').replace(/\r\n/g, '\n');
+  const lines = raw.trim().split('\n');
+  const headerLine = lines.shift();
+  const header = headerLine ? headerLine.split(',').map(h => h.trim()) : [];
+
+  if (header.join(',') !== LEGACY_HEADERS.join(',')) {
+    throw new Error('Unexpected header – calibration expects legacy schema.');
+  }
+
+  const rows = lines.filter(Boolean).map(line => parseCsv(line, header.length));
+  return rows.map(row => Object.fromEntries(LEGACY_HEADERS.map((h, idx) => [h, row[idx] ?? ''])));
 }
-function bin(x){ const b=Math.max(0,Math.min(99,Math.floor(x*100))); return Math.floor(b/2)*2; }
-function isotonic(xs,ys,ws){
-  const blocks=[];
-  for (let i=0;i<xs.length;i++){
-    blocks.push({sumw:ws[i],sumy:ys[i]*ws[i],lo:i,hi:i});
-    while(blocks.length>1){
-      const a=blocks[blocks.length-2], b=blocks[blocks.length-1];
-      if (a.sumy/a.sumw <= b.sumy/b.sumw) break;
-      a.sumw+=b.sumw; a.sumy+=b.sumy; a.hi=b.hi; blocks.pop();
+
+function parseCsv(line, size) {
+  const result = [];
+  let current = '';
+  let quoted = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (quoted && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else {
+        quoted = !quoted;
+      }
+    } else if (ch === ',' && !quoted) {
+      result.push(current);
+      current = '';
+    } else {
+      current += ch;
     }
   }
-  const out=new Array(xs.length);
-  for(const bl of blocks){ const v=bl.sumy/bl.sumw; for(let i=bl.lo;i<=bl.hi;i++) out[i]=v; }
-  return out;
+  result.push(current);
+  while (result.length < size) result.push('');
+  return result;
 }
-function learnParams(rows){
-  if (!rows.length) return { reliability:[], temp_tau:1.0, policy:{} };
-  // Reliability
-  const bins=new Map();
-  rows.forEach(r=>{ const b=bin(r.conf); if(!bins.has(b)) bins.set(b,{w:0,hit:0}); const o=bins.get(b); o.w++; o.hit += (r.top3_success?1:0); });
-  const xs=Array.from(bins.keys()).sort((a,b)=>a-b).map(b=>b/100);
-  const ws=xs.map(x=>bins.get(Math.floor(x*100)).w);
-  const ys=xs.map(x=>bins.get(Math.floor(x*100)).hit / bins.get(Math.floor(x*100)).w);
-  const iso=isotonic(xs,ys,ws);
-  const reliability=xs.map((x,i)=>({ c:x, p: iso[i] }));
 
-  // Rank mass temperature (skip without winner rank → neutral 1.0)
-  const temp_tau = 1.0;
+function percentFromDecimal(value) {
+  if (!value) return NaN;
+  const num = Number(value);
+  if (!Number.isFinite(num)) return NaN;
+  return num * 100;
+}
 
-  // Strategy policy by bands
-  const bands=[{name:'60-64',lo:0.60,hi:0.649},{name:'65-69',lo:0.65,hi:0.699},{name:'70-74',lo:0.70,hi:0.749},{name:'75-79',lo:0.75,hi:0.799}];
-  const strat=['across the board','exacta box','trifecta box'];
-  const policy={};
-  bands.forEach(b=>{
-    const cand=rows.filter(r=>r.conf>=b.lo && r.conf<=b.hi);
-    const stats={};
-    strat.forEach(s=>{
-      const S=cand.filter(r=>{
-        const v=(r.reco||'').toLowerCase();
-        return v===s || (s==='across the board' && v==='atb');
-      });
-      const avg=S.length? S.reduce((a,r)=>a+(isFinite(r.roi)?r.roi:0),0)/S.length : -999;
-      stats[s]={ n:S.length, avg_roi:avg };
+function parseRoi(value) {
+  if (!value) return NaN;
+  const cleaned = String(value).replace(/[^0-9+\-\.]/g, '');
+  const num = Number(cleaned);
+  return Number.isFinite(num) ? num : NaN;
+}
+
+function isExotic(strategy) {
+  if (!strategy) return false;
+  const s = strategy.toLowerCase();
+  return s.includes('exacta') || s.includes('trifecta');
+}
+
+function buildBinStats() {
+  const stats = new Map();
+  CONFIDENCE_BINS.forEach(bin => {
+    stats.set(bin.label, {
+      label: bin.label,
+      count: 0,
+      winHits: 0,
+      top3Hits: 0,
+      roiSum: 0,
+      roiCount: 0,
+      exoticTotal: 0,
+      exoticHits: 0,
     });
-    let best='across the board',bestR=-Infinity; Object.keys(stats).forEach(s=>{ if(stats[s].avg_roi>bestR){bestR=stats[s].avg_roi; best=s;} });
-    policy[b.name]={ stats, recommended:best };
+  });
+  return stats;
+}
+
+function pickBin(confPct) {
+  for (const bin of CONFIDENCE_BINS) {
+    if (confPct >= bin.min && confPct <= bin.max) return bin.label;
+    if (bin.max === Infinity && confPct >= bin.min) return bin.label;
+  }
+  return CONFIDENCE_BINS[0].label;
+}
+
+function safeParseDistance(dist) {
+  if (!dist) return { yards: NaN, surface: '', klass: '' };
+  let yards = NaN;
+  const matchY = /([0-9]+)Y/i.exec(dist);
+  const matchF = /([0-9]+(?:\.[0-9]+)?)F/i.exec(dist);
+  if (matchY) {
+    yards = Number(matchY[1]);
+  } else if (matchF) {
+    const furlongs = Number(matchF[1]);
+    if (Number.isFinite(furlongs)) {
+      yards = Math.round(furlongs * 220);
+    }
+  }
+  return { yards };
+}
+
+function computeCalibration(rows) {
+  const binStats = buildBinStats();
+
+  rows.forEach(row => {
+    const confPct = percentFromDecimal(row.Confidence);
+    if (!Number.isFinite(confPct)) return;
+    const binLabel = pickBin(confPct);
+    const stat = binStats.get(binLabel);
+    stat.count += 1;
+
+    const winRate = (row.WinRate || '').toLowerCase();
+    if (winRate === 'win') stat.winHits += 1;
+
+    const result = (row.Result || '').toLowerCase();
+    if (result === 'hit' || result === 'partial') stat.top3Hits += 1;
+
+    const roi = parseRoi(row.ROI_Percent);
+    if (!Number.isNaN(roi)) {
+      stat.roiSum += roi;
+      stat.roiCount += 1;
+    }
+
+    if (isExotic(row.Strategy)) {
+      stat.exoticTotal += 1;
+      if (result === 'hit') stat.exoticHits += 1;
+    }
   });
 
-  return { reliability, temp_tau, policy };
-}
-function main(){
-  if (!fs.existsSync(CSV)) {
-    console.log('No CSV present at', CSV, '— keeping current params.');
-    return;
-  }
-  const txt=fs.readFileSync(CSV,'utf8');
-  // If only headers (or nothing usable), keep current params neutral
-  const nonComment = txt.split(/\r?\n/).filter(l=>l.trim() && !l.trim().startsWith('#'));
-  if (nonComment.length <= 1) {
-    console.log('CSV has no data rows — keeping current params (neutral).');
-    return;
-  }
-  const rows=parseCSV(txt).filter(r=>r.pred && r.pred.length>=3 && r.conf>0);
-  const params=learnParams(rows);
-  fs.mkdirSync(path.dirname(OUT), {recursive:true});
-  fs.writeFileSync(OUT, JSON.stringify(params,null,2));
-  console.log('Wrote', OUT, 'with', rows.length, 'rows');
+  const binMetrics = Array.from(binStats.values()).map(stat => {
+    return {
+      bin: stat.label,
+      count: stat.count,
+      win_rate: stat.count ? Number((stat.winHits / stat.count).toFixed(3)) : 0,
+      top3_rate: stat.count ? Number((stat.top3Hits / stat.count).toFixed(3)) : 0,
+      avg_roi_atb2: stat.roiCount ? Number((stat.roiSum / stat.roiCount).toFixed(2)) : null,
+      exotic_hit_rate: stat.exoticTotal ? Number((stat.exoticHits / stat.exoticTotal).toFixed(3)) : null,
+    };
+  });
+
+  return binMetrics;
 }
 
-if (process.argv[1] && process.argv[1].includes('calibrate.js')) { main(); }
+function writeCalibrationFile(binMetrics) {
+  const payload = {
+    version: 'v1',
+    generated_at: new Date().toISOString(),
+    bin_metrics: binMetrics,
+    stake_curve: {
+      '50': 1,
+      '55': 1,
+      '60': 1,
+      '65': 1,
+      '70': 2,
+      '75': 2,
+      '80': 3,
+      '85': 3,
+    },
+    exotics_rules: {
+      exacta_min_top3: 45,
+      trifecta_min_top3: 55,
+      min_conf_for_win_only: 80,
+    },
+    distance_mods: {
+      '≤250y_maiden': {
+        exotics_penalty: 0.05,
+      },
+    },
+  };
+
+  fs.writeFileSync(OUTPUT_PATH, JSON.stringify(payload, null, 2), 'utf8');
+  console.log(`[calibrate] Wrote calibration file to ${OUTPUT_PATH}`);
+}
+
+function main() {
+  try {
+    const rows = loadCsv();
+    const metrics = computeCalibration(rows);
+    writeCalibrationFile(metrics);
+  } catch (err) {
+    console.error('[calibrate] Fatal:', err?.message || err);
+    process.exit(1);
+  }
+}
+
+main();
