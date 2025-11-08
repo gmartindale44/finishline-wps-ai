@@ -93,3 +93,25 @@ Test_ID,Track,Race_No,Surface,Distance,Confidence,Top_3_Mass,AI_Picks,Strategy,R
 92,Woodbine,4,All Weather,6f,70,29,"Dissectologist (IRE),Hardware Gap,Big Baby Henry",ATB ($2),,,,Test Race (no official result)
 93,Woodbine,5,All Weather,6f,67,54,"Souper Dormy,Souper Success,Last American Exit",ATB ($2),,,,Test Race (no official result)
 94,Woodbine,6,All Weather,6f,67,54,"Verdejo,Super Sicliy,Garnet and Gold",ATB ($2),,,,Test Race (no official result)
+95,Lone Star Park,1,Dirt,330y,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
+96,Lone Star Park,2,Dirt,330y,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
+97,Lone Star Park,3,Dirt,250y,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
+98,Lone Star Park,4,Dirt,220y,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
+99,Lone Star Park,5,Dirt,440y,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
+100,Lone Star Park,6,Dirt,300y,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
+101,Lone Star Park,7,Dirt,400y,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
+102,Lone Star Park,8,Dirt,440y,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
+103,Lone Star Park,9,Dirt,250y,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
+104,Woodbine,1,All Weather,6f,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
+105,Woodbine,2,All Weather,8.5f,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
+106,Woodbine,3,All Weather,8.5f,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
+107,Woodbine,4,All Weather,6f,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
+108,Gulfstream Park,1,All Weather,70y,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
+109,Gulfstream Park,2,All Weather,8.5f,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
+110,Gulfstream Park,3,Dirt,8f,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
+111,Gulfstream Park,4,Dirt,6f,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
+112,Gulfstream Park,5,All Weather,2f,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
+113,Gulfstream Park,6,All Weather,8.5f,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
+114,Gulfstream Park,7,Dirt,2f,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
+115,Gulfstream Park,8,All Weather,5f,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
+116,Laurel Park,1,Turf,8f,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
