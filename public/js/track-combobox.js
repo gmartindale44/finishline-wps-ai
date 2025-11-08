@@ -124,6 +124,9 @@ export function mountTrackCombobox(inputEl, { onChange } = {}) {
     list.classList.add('fl-combobox-hidden');
     if (val) saveRecent(val);
     if (onChange) onChange(val);
+    if (window.FLPersistence && typeof window.FLPersistence.notifyTrackCommit === 'function') {
+      window.FLPersistence.notifyTrackCommit(val);
+    }
   }
 
   // Events

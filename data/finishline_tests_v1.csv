@@ -73,3 +73,23 @@ Test_ID,Track,Race_No,Surface,Distance,Confidence,Top_3_Mass,AI_Picks,Strategy,R
 72,Lone Star,6,Dirt,?,,,WIN: ? | PLACE: ? | SHOW: ?,ATB (light),Pending,,Placeholder; backfill from Redis,Test
 73,Remington,7,Dirt/Turf?,?,,,WIN: ? | PLACE: ? | SHOW: ?,ATB (light),Pending,,Placeholder; backfill from Redis,Test
 74,Remington,9,Dirt/Turf?,?,,,WIN: ? | PLACE: ? | SHOW: ?,ATB (light),Pending,,Placeholder; backfill from Redis,Test
+75,Evangeline Downs,5,Dirt,250y,68,48,"TF Reckless Tide,Jij Sea Yacht B,TF This Gals Rippin",ATB ($2),,,,Test Race (no official result)
+76,Evangeline Downs,6,Dirt,300y,68,43,"Tjs Dynasty,Unleash,Hy On Sweet Luck",ATB ($2),,,,Test Race (no official result)
+77,Charles Town,1,Dirt,6.5f,65,54,"Old Bay,Lona Lee,Notiptoni",ATB ($2),,,,Test Race (no official result)
+78,Charles Town,2,Dirt,6.5f,67,54,"Caribbean Clarity,Strata,Netta Rox",ATB ($2),,,,Test Race (no official result)
+79,Charles Town,3,Dirt,7f,66,54,"Dame Catherine,Chublin,Slanderous",ATB ($2),,,,Test Race (no official result)
+80,Charles Town,4,Dirt,4.5f,65,62,"Good Intentions,Renegade Rabbit,Indicator",ATB ($2),,,,Test Race (no official result)
+81,Charles Town,5,Dirt,4.5f,68,43,"Miss Bee Bop,Cajun Expectation,Ding Ding",ATB ($2),,,,Test Race (no official result)
+82,Lone Star Park,1,Dirt,330y,68,43,"La Cholula,Ldr Streakin,Fancy a Miracle",ATB ($2),,,,Test Race (no official result)
+83,Lone Star Park,2,Dirt,330y,67,54,"Dygnyty,Ju La Toxica,Inseperable Rain",ATB ($2),,,,Test Race (no official result)
+84,Lone Star Park,3,Dirt,250y,68,48,"Run Nellie Run,Strange Chic,Ajc Big Boy Is Back",ATB ($2),,,,Test Race (no official result)
+85,Lone Star Park,4,Dirt,220y,69,39,"Wicked and Fast,Coronita Wagon,Hellofaneagle",ATB ($2),,,,Test Race (no official result)
+86,Lone Star Park,5,Dirt,440y,69,36,"Real Deal Lajolla,The Legendary,Ase Jettazoom",ATB ($2),,,,Test Race (no official result)
+87,Lone Star Park,6,Dirt,300y,70,33,"Curvacious,Ember in the Sky,Mrs Pyc Angel",ATB ($2),,,,Test Race (no official result)
+88,Lone Star Park,8,Dirt,400y,70,33,"Mr Bordertown Buzz,Enjoying Life,Fancy Frank",ATB ($2),,,,Test Race (no official result)
+89,Woodbine,1,All Weather,6f,68,48,"Country Living,Always a Way,War Lord Cruzan",ATB ($2),,,,Test Race (no official result)
+90,Woodbine,2,All Weather,8.5f,69,33,"Mannix (IRE),Good Sin,Mehlek",ATB ($2),,,,Test Race (no official result)
+91,Woodbine,3,All Weather,8.5f,69,39,"King Elvis,Swan Lake,Volcanic",ATB ($2),,,,Test Race (no official result)
+92,Woodbine,4,All Weather,6f,70,29,"Dissectologist (IRE),Hardware Gap,Big Baby Henry",ATB ($2),,,,Test Race (no official result)
+93,Woodbine,5,All Weather,6f,67,54,"Souper Dormy,Souper Success,Last American Exit",ATB ($2),,,,Test Race (no official result)
+94,Woodbine,6,All Weather,6f,67,54,"Verdejo,Super Sicliy,Garnet and Gold",ATB ($2),,,,Test Race (no official result)

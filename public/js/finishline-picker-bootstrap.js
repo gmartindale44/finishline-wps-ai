@@ -33,6 +33,9 @@ import { mountTrackCombobox } from './track-combobox.js';
     if (track) window.__fl_state.track = track;
     if (surface) window.__fl_state.surface = surface;
     if (distance) window.__fl_state.distance_input = distance;
+    if (window.FLPersistence && typeof window.FLPersistence.notifyMeasurements === 'function') {
+      window.FLPersistence.notifyMeasurements();
+    }
   }
 
   // === Simple normalized fuzzy-similarity (Dice coefficient over bigrams) ===

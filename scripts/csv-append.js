@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { normalizeSurface, normalizeTrack } from '../lib/data-normalize.js';
 
 const LEGACY_HEADERS = [
   'Test_ID',
@@ -389,9 +390,9 @@ function dedupeKey(columns) {
 
 function mapIncomingRow(row) {
   const mapped = Object.fromEntries(LEGACY_HEADERS.map(h => [h, '']));
-  mapped.Track = row.track || row.Track || '';
+  mapped.Track = normalizeTrack(row.track || row.Track || '');
   mapped.Race_No = row.race_num != null ? String(row.race_num) : (row.Race_No || '');
-  mapped.Surface = row.surface || row.Surface || '';
+  mapped.Surface = normalizeSurface(row.surface || row.Surface || '');
   mapped.Distance = distanceString(row);
   mapped.Confidence = formatDecimal(row.ai_confidence_pct ?? row.confidence_pct ?? row.Confidence);
   mapped.Top_3_Mass = formatDecimal(row.top3_mass_pct ?? row.Top_3_Mass);

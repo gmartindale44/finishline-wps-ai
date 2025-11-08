@@ -212,23 +212,42 @@
     return `${Math.floor(diffDays / 7)}w ago`;
   }
 
-  function computeSignal(confPct, massPct) {
-    const c = Number.isFinite(confPct) ? confPct : NaN;
-    const m = Number.isFinite(massPct) ? massPct : NaN;
+  function computeSignal(metrics) {
+    if (window.FLStrategyLogic?.evaluateStrategySignal) {
+      return window.FLStrategyLogic.evaluateStrategySignal(metrics);
+    }
+    const c = Number.isFinite(metrics.confidence) ? metrics.confidence : NaN;
+    const m = Number.isFinite(metrics.top3Mass) ? metrics.top3Mass : NaN;
     if (!Number.isFinite(c) || !Number.isFinite(m)) {
-      return { color: 'yellow', label: 'Caution', action: 'Light ATB ($1–$3) or Win-Only if Confidence ≥ 80%' };
+      return {
+        color: 'yellow',
+        label: 'Caution',
+        action: '⚠️ Caution — Light ATB ($1–$3) or Win-Only if Confidence ≥ 80%',
+      };
     }
-    if (c >= 75 && m >= 45) {
-      return { color: 'green', label: 'Good to bet', action: 'Full ATB or Trifecta Box play' };
+    if (c >= 82 && m >= 40) {
+      return {
+        color: 'green',
+        label: 'Go',
+        action: '✅ Go — Win-Only or ATB (bankroll-scaled)',
+      };
     }
-    if ((c >= 65 && c <= 74) || (m >= 35 && m <= 44) || (c >= 80 && m < 45)) {
-      return { color: 'yellow', label: 'Caution', action: 'Light ATB ($1–$3) or Win-Only if Confidence ≥ 80%' };
+    if (c >= 68 || m >= 33) {
+      return {
+        color: 'yellow',
+        label: 'Caution',
+        action: '⚠️ Caution — Light ATB ($1–$3) or Win-Only if Confidence ≥ 80%',
+      };
     }
-    return { color: 'red', label: 'Skip', action: 'Skip (save bankroll) — chaotic field' };
+    return {
+      color: 'red',
+      label: 'Avoid',
+      action: '⛔ Avoid — Low edge',
+    };
   }
 
-  function renderStoplightSignal(container, confPct, massPct) {
-    const sig = computeSignal(confPct, massPct);
+  function renderStoplightSignal(container, metrics) {
+    const sig = computeSignal(metrics);
     const id = 'fl-signal';
     let box = container.querySelector('#' + id);
     if (!box) {
@@ -253,7 +272,7 @@
     const txt = box.querySelector('.fl-signal-text');
     dot.classList.remove('green', 'yellow', 'red');
     dot.classList.add(sig.color);
-    dot.title = `${sig.label} · Uses Strategy Confidence & Top-3 mass`;
+    dot.title = `${sig.label} · Uses confidence, Top-3 mass, and gap deltas`;
     txt.textContent = `${sig.label} — ${sig.action}`;
 
     // Color the active strategy row border to match signal
@@ -425,6 +444,9 @@
 
     function planLinesFor(recommended, picks, bk, gatesInfo) {
       let rec = recommended;
+      if (rec === 'Skip / Observe') {
+        return { lines: ['⛔ Signal red — sit out this race.'], recommended: rec };
+      }
       if (!gatesInfo.allow_win_only && rec === 'Win Only') rec = 'Across the Board';
       if (rec.includes('Exacta') && !gatesInfo.allow_exacta) {
         rec = gatesInfo.allow_win_only ? 'Win Only' : 'Across the Board';
@@ -565,6 +587,15 @@
     }
 
     let effectiveRecommendation = s.recommended;
+    if (strategySignal.color === 'green' && gates.allow_win_only) {
+      effectiveRecommendation = 'Win Only';
+    }
+    if (strategySignal.color === 'red') {
+      effectiveRecommendation = 'Skip / Observe';
+      if (!s.rationale.includes('Signal red — sit out')) {
+        s.rationale.push('Signal red — sit out');
+      }
+    }
     if (effectiveRecommendation === 'Win Only' && !gates.allow_win_only) {
       effectiveRecommendation = 'Across the Board';
       s.rationale.push('Win-only disabled by calibration gate');
@@ -623,7 +654,14 @@
     // Render stop-light signal (extract metrics after card is created)
     const strategyConfidencePct = s.metrics?.confidence != null ? Math.round((Number(s.metrics.confidence) || 0) * 100) : NaN;
     const top3MassPct = s.metrics?.top3Mass != null ? Math.round((Number(s.metrics.top3Mass) || 0) * 100) : NaN;
-    renderStoplightSignal(card, strategyConfidencePct, top3MassPct);
+    const signalMetrics = {
+      confidence: strategyConfidencePct,
+      top3Mass: top3MassPct,
+      gap1: gap12Pct,
+      gap2: gap23Pct,
+    };
+    const strategySignal = computeSignal(signalMetrics);
+    renderStoplightSignal(card, signalMetrics);
 
     const reco = document.createElement('div');
     reco.className = 'fl-strategy-reco';
@@ -681,7 +719,12 @@
           if ((row.type || '').toLowerCase() === (s.recommended || '').toLowerCase()) {
             tr.classList.add('is-recommended');
             // Apply signal color to active row border
-            const sig = computeSignal(strategyConfidencePct, top3MassPct);
+            const sig = computeSignal({
+              confidence: strategyConfidencePct,
+              top3Mass: top3MassPct,
+              gap1: gap12Pct,
+              gap2: gap23Pct,
+            });
             tr.classList.add('sig-' + sig.color);
           }
           tb.appendChild(tr);
@@ -715,6 +758,20 @@
       `;
       card.appendChild(plan);
 
+      const recoValueEl = reco.querySelector('.fl-reco-value');
+      if (recoValueEl && resolvedReco) {
+        recoValueEl.textContent = resolvedReco;
+      }
+      const noteEl = plan.querySelector('.fl-note');
+      if (noteEl) {
+        const noteByColor = {
+          green: '✅ Strong edge detected — scale stakes or lean Win-only when bankroll allows.',
+          yellow: '⚠️ Mixed edge — stay light with ATB ($1–$3) or Win-only if ≥80% confidence.',
+          red: '⛔ Signal red — sit out and preserve bankroll.',
+        };
+        noteEl.textContent = noteByColor[strategySignal.color] || noteEl.textContent;
+      }
+
       wrap.appendChild(card);
 
       // Wire bankroll slider + live plan render
@@ -725,12 +782,15 @@
       // Get picks from the prediction data (need to extract from parent context)
       // Try to get picks from lastPred or construct from strategy metrics
       const picks = fallbackData.picks || (s.metrics?.top || []).slice(0, 3).map(t => ({ name: t.name || '' })).filter(p => p.name);
-      const rec = s.recommended || 'Across the Board';
+      const rec = effectiveRecommendation || 'Across the Board';
 
       function renderPlan() {
         if (!linesEl) return;
-        const lines = planLinesFor(rec, picks, bankroll, { ...gates, stake_reco: stakeMultiplier });
+        const lines = planLinesFor(rec, picks, bankroll, gatesForPlan);
         linesEl.innerHTML = lines.lines.map(l => `<li style="margin:4px 0;color:#b8bdd4;font-size:13px;">${l}</li>`).join('');
+        if (recoValueEl && lines.recommended) {
+          recoValueEl.textContent = lines.recommended;
+        }
       }
 
       renderPlan();

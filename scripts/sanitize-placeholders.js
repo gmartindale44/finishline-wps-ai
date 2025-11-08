@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { normalizeSurface } from "../lib/data-normalize.js";
 const csvPath = path.join(process.cwd(), "data", "finishline_tests_v1.csv");
 const headerExpected = "Test_ID,Track,Race_No,Surface,Distance,Confidence,Top_3_Mass,AI_Picks,Strategy,Result,ROI_Percent,WinRate,Notes";
 
@@ -41,6 +42,13 @@ for (let i=0;i<lines.length;i++){
   }
 
   cols = cols.slice(0,13);
+
+  // Normalize surface values (e.g., remove stray punctuation, map aliases)
+  const normalizedSurface = normalizeSurface(cols[3]);
+  if (normalizedSurface !== cols[3]) {
+    cols[3] = normalizedSurface;
+    changed++;
+  }
 
   const result = (cols[9]||"").trim();
   if (!result || !["Hit","Partial","Miss"].includes(result)) {
