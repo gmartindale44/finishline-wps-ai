@@ -108,3 +108,5 @@ Test_ID,Track,Race_No,Surface,Distance,Confidence,Top_3_Mass,AI_Picks,Strategy,R
 107,Lone Star Park,7,Dirt,300y,70,0.33,"10,5,9",ATB ($2),10-5-2,,0,Curvacious strong; Tri 10-5-2
 108,Lone Star Park,9,Dirt,400y,70,0.33,"11,12,6",ATB ($2),6-5-10,,0,Dare to Fly; Tri 6-5-10
 109,Lone Star Park,10,Dirt,440y,70,0.33,"7,8,6",ATB ($2),7-2-8,,1,Xpressiv; Tri 7-2-8
+110,Lone Star Park,5,Dirt,440y,69,0.36,"10,9,11",ATB ($2),8-4-7,,0,Race 5: Winner #8 Marfa Regime; Exacta 8-4; Trifecta 8-4-7
+111,Lone Star Park,8,Dirt,400y,70,0.33,"11,8,2",ATB ($2),4-8-10,,0,Race 8: Winner #4 Bogarts Lil Jess; Exacta 4-8; Trifecta 4-8-10
