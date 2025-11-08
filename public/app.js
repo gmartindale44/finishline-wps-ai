@@ -358,7 +358,7 @@ async function handleOcrTextAndPopulate(ocrText) {
 }
 
 /* -----------------------------------------
-   Wire the "Choose Photos / PDF" button
+   Wire the "Choose Photos" button
 ------------------------------------------ */
 (function wireChoose() {
   const choose = [...document.querySelectorAll('button, [role="button"]')]
@@ -964,7 +964,7 @@ async function handleUploadAndExtract(file){
 
 // Hook up file input (keep your existing listener, but ensure it calls handleUploadAndExtract)
 (function wireUpload(){
-  const btn = qs('button, [data-upload], [data-choose-photos]'); // your real selector for "Choose Photos / PDF"
+  const btn = qs('button, [data-upload], [data-choose-photos]'); // your real selector for "Choose Photos"
   const input = document.createElement('input');
   input.type = 'file';
   input.accept = 'image/*,application/pdf';
