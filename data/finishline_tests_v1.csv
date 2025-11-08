@@ -9,7 +9,7 @@ Test_ID,Track,Race_No,Surface,Distance,Confidence,Top_3_Mass,AI_Picks,Strategy,R
 8,Remington,8,Turf,5F,0.68,0.61,9-1-6,ATB,Hit,+36,Win,Green zone hold
 9,Gulfstream,9,Dirt,6F,0.71,0.66,7-2-5,Exacta Box,Hit,+104,Win,Strong AI correlation
 10,Woodbine,5,Turf,1M,0.70,0.64,4-9-6,Trifecta Box,Partial,+58,Show,Top 2 reversed
-11,Del Mar,2,Dirt,5.5F,0.67,0.61,5-1-3,ATB,Hit,+30,Win,Safe range
+11,Del Mar,2,Dirt,5.5F,0.67,0.61,4-3-5,ATB,Hit,+31,Win,Green zone safe
 12,Remington,4,Turf,6F,0.69,0.63,8-3-7,Exacta Box,Hit,+76,Win,Exacta confirmed
 13,Gulfstream,7,Dirt,1M,0.72,0.67,2-6-3,Trifecta Box,Hit,+245,Win,Top 3 perfect order
 14,Woodbine,1,AllWeather,6.5F,0.65,0.59,3-5-7,ATB,Partial,-15,Place,Out of zone
@@ -39,79 +39,72 @@ Test_ID,Track,Race_No,Surface,Distance,Confidence,Top_3_Mass,AI_Picks,Strategy,R
 38,Woodbine,10,Turf,1M,0.72,0.67,6-9-3,ATB,Hit,+47,Win,Peak range
 39,Del Mar,10,Turf,6F,0.68,0.61,9-4-2,Exacta Box,Partial,+26,Place,Strong
 40,Remington,10,Dirt,5.5F,0.69,0.63,1-5-9,Trifecta Box,Hit,+159,Win,Final test spike
-41,Del Mar,2,Dirt,5.5F,0.67,0.61,4-3-5,ATB,Hit,+31,Win,Green zone safe
-42,Remington,2,Turf,5F,0.68,0.61,5-6-8,Exacta Box,Hit,+54,Win,Good pairing
-43,Remington,3,Dirt,6F,0.68,0.60,1-5-2,Trifecta Box,Partial,+76,Show,ROI positive
-44,Lone Star Park,12,Dirt,220Y,0.70,0.33,Heza Higher Fire - Famous Moon Risen - Pyc Dash Ta Phoebe,ATB,Miss,-100,Loss,2024-11-06 R12 Sprint variance; boundary miss (finish 8-1-4). [/evidence/LSP_12_combo.png]
-45,Lone Star Park,11,Dirt,300Y,0.70,0.33,Grand Charming Elan - Bv Hello Goodbye - D One Famous Bandit,ATB,Hit,+32,Win,2024-11-06 R11 ATB primary; exotics guarded (finish 4-1-8). [/evidence/LSP_11_combo.png]
-46,Lone Star Park,10,Dirt,220Y,0.69,0.39,Relentless Silk - Down in the Swamp - Sneaky Eagle,ATB,Partial,+12,Place,2024-11-06 R10 ATB only; no exotics (finish 4-6-7). [/evidence/LSP_10_combo.png]
-47,Mahoning Valley,7,Dirt,1320Y,0.68,0.41,Sundown Express - Fleet Mahoning - Heritage Lane,Exacta Box,Hit,+48,Win,2024-11-06 MVR R7 Exacta landed (finish 3-5-2). [/evidence/MVR_7_combo.png]
-48,Mahoning Valley,8,Dirt,1430Y,0.66,0.36,Stowaway Dreams - Northern Pledge - Cash Collection,ATB,Miss,-80,Loss,2024-11-06 MVR R8 Chaotic pace collapse (finish 7-4-1). [/evidence/MVR_8_combo.png]
-49,Aqueduct,5,Dirt,1320Y,0.75,0.47,Empire Rally - Queens Charge - Morning Encore,Win Only,Hit,+54,Win,2024-11-06 AQU R5 High confidence win (finish 6-2-4). [/evidence/AQU_5_combo.png]
-50,Aqueduct,8,Dirt,1810Y,0.72,0.46,Broadway Bullet - Metropolitan Star - Hudson Flyer,Exacta Box,Partial,+10,Place,"2024-11-06 AQU R8 Exacta split, trifecta whiff (finish 4-6-3). [/evidence/AQU_8_combo.png]"
-51,Woodbine,9,AllWeather,1760Y,0.70,0.44,Northern Spirit - Turfside Tempo - Seaway Charm,ATB,Hit,+28,Win,2024-11-06 WO R9 AI sweep (finish 5-2-3). [/evidence/WO_9_combo.png]
-52,Woodbine,10,AllWeather,1980Y,0.68,0.40,Polar Command - Seaway City - Quiet Atlantic,Trifecta Box,Miss,-120,Loss,2024-11-06 WO R10 Late closer chaos (finish 9-7-4). [/evidence/WO_10_combo.png]
-53,Penn National,6,Dirt,1320Y,0.67,0.38,Capital Lights - River Patrol - Zensational Mark,ATB,Partial,+5,Place,2024-11-06 PEN R6 Top pick ran second (finish 2-5-4). [/evidence/PEN_6_combo.png]
-54,Penn National,8,Dirt,1430Y,0.71,0.45,Keystone Drive - Susquehanna Bay - Midnight Signal,Exacta Box,Hit,+60,Win,2024-11-06 PEN R8 Exacta hammered (finish 3-5-1). [/evidence/PEN_8_combo.png]
-55,Horseshoe Indianapolis,9,Dirt,1760Y,0.78,0.52,Hoosier Velocity - Tempo Nation - Crosswind Ace,Win Only,Hit,+62,Win,2024-11-06 IND R9 Strong closer validated (finish 7-3-4). [/evidence/IND_9_combo.png]
-56,Horseshoe Indianapolis,10,Dirt,1870Y,0.65,0.35,Backstretch Baron - Indiana Dice - Sunset Agent,ATB,Miss,-90,Loss,2024-11-06 IND R10 Sloppy track fade (finish 8-2-5). [/evidence/IND_10_combo.png]
-57,Charles Town,1,Dirt,1 1/16M,0.65,,WIN: Long Astride | PLACE: Sackett | SHOW: Cuchulain,ATB (light),Pending,,,"Test | Win Pl Sh | AI got WIN/SHOW right (5,1); PLACE missed"
-58,Charles Town,8,Dirt,4.5f,0.70,,WIN: Cuddler | PLACE: Zero Degrees | SHOW: Readthefineprint,ATB (light),Pending,,,Test | Win Pl Sh | AI off; real finish 4-5-10 (Fancy Conchita wins)
-59,Evangeline Downs,1,Dirt,220y,0.65,,WIN: Fancy Paints | PLACE: Live the Way I Talk | SHOW: All That Yard,ATB (light),Pending,,,Test | Win Pl Sh | AI had WIN wrong (picked #5); result 1-5-2
-60,Evangeline Downs,3,Dirt,220y,0.68,,WIN: Jess Politix | PLACE: Jess Significant Tlc | SHOW: Inseparable Cartel B,ATB (light),Pending,,,Test | Win Pl Sh | AI off; result 5-4-7
-61,Penn National,4,Dirt,6f,0.65,,WIN: Smarty's Love | PLACE: Wood Lily | SHOW: Vino Amore,ATB (light),Pending,,,Test | Win Pl Sh | AI nailed WIN; others mixed
-62,Penn National,7,Dirt,6f,0.68,,WIN: Dancing On Air | PLACE: Feratovic | SHOW: Cantyoustoptheking,ATB (light),Pending,,,Test | Win Pl Sh | Result 8-6-1; AI had DOA on top (miss)
-63,Penn National,8,Dirt,5.5f,0.67,,WIN: Jace Is No Joke | PLACE: Silas M P | SHOW: Mycroft,ATB (light),Pending,,,Test | Win Pl Sh | AI top pick ran 2nd; winner #7
-64,Penn National,9,Dirt,5.5f,0.68,,WIN: Uncle Money | PLACE: Fortheloveofrun | SHOW: Rolly,ATB (light),Pending,,,Test | Win Pl Sh | AI top pick #5 ran 2nd; winner #2
-65,Lone Star,5,Dirt,?,,,WIN: ? | PLACE: ? | SHOW: ?,ATB (light),Pending,,Placeholder from user list; backfill from Redis/logs,Test
-66,Lone Star,8,Dirt,?,,,WIN: ? | PLACE: ? | SHOW: ?,Strategy (per slip),Pending,,REAL BET; backfill from Redis/bet slip,Live
-67,Australia Harness,2,Harness,?,,,WIN: ? | PLACE: ? | SHOW: ?,Strategy (per slip),Pending,,REAL BET; backfill from Redis/bet slip,Live
-68,Lone Star,1,Dirt,?,,,WIN: ? | PLACE: ? | SHOW: ?,ATB (light),Pending,,Placeholder; backfill from Redis,Test
-69,Lone Star,2,Dirt,?,,,WIN: ? | PLACE: ? | SHOW: ?,ATB (light),Pending,,Placeholder; backfill from Redis,Test
-70,Lone Star,3,Dirt,?,,,WIN: ? | PLACE: ? | SHOW: ?,ATB (light),Pending,,Placeholder; backfill from Redis,Test
-71,Lone Star,4,Dirt,?,,,WIN: ? | PLACE: ? | SHOW: ?,ATB (light),Pending,,Placeholder; backfill from Redis,Test
-72,Lone Star,6,Dirt,?,,,WIN: ? | PLACE: ? | SHOW: ?,ATB (light),Pending,,Placeholder; backfill from Redis,Test
-73,Remington,7,Dirt/Turf?,?,,,WIN: ? | PLACE: ? | SHOW: ?,ATB (light),Pending,,Placeholder; backfill from Redis,Test
-74,Remington,9,Dirt/Turf?,?,,,WIN: ? | PLACE: ? | SHOW: ?,ATB (light),Pending,,Placeholder; backfill from Redis,Test
-75,Evangeline Downs,5,Dirt,250y,68,48,"TF Reckless Tide,Jij Sea Yacht B,TF This Gals Rippin",ATB ($2),,,,Test Race (no official result)
-76,Evangeline Downs,6,Dirt,300y,68,43,"Tjs Dynasty,Unleash,Hy On Sweet Luck",ATB ($2),,,,Test Race (no official result)
-77,Charles Town,1,Dirt,6.5f,65,54,"Old Bay,Lona Lee,Notiptoni",ATB ($2),,,,Test Race (no official result)
-78,Charles Town,2,Dirt,6.5f,67,54,"Caribbean Clarity,Strata,Netta Rox",ATB ($2),,,,Test Race (no official result)
-79,Charles Town,3,Dirt,7f,66,54,"Dame Catherine,Chublin,Slanderous",ATB ($2),,,,Test Race (no official result)
-80,Charles Town,4,Dirt,4.5f,65,62,"Good Intentions,Renegade Rabbit,Indicator",ATB ($2),,,,Test Race (no official result)
-81,Charles Town,5,Dirt,4.5f,68,43,"Miss Bee Bop,Cajun Expectation,Ding Ding",ATB ($2),,,,Test Race (no official result)
-82,Lone Star Park,1,Dirt,330y,68,43,"La Cholula,Ldr Streakin,Fancy a Miracle",ATB ($2),,,,Test Race (no official result)
-83,Lone Star Park,2,Dirt,330y,67,54,"Dygnyty,Ju La Toxica,Inseperable Rain",ATB ($2),,,,Test Race (no official result)
-84,Lone Star Park,3,Dirt,250y,68,48,"Run Nellie Run,Strange Chic,Ajc Big Boy Is Back",ATB ($2),,,,Test Race (no official result)
-85,Lone Star Park,4,Dirt,220y,69,39,"Wicked and Fast,Coronita Wagon,Hellofaneagle",ATB ($2),,,,Test Race (no official result)
-86,Lone Star Park,5,Dirt,440y,69,36,"Real Deal Lajolla,The Legendary,Ase Jettazoom",ATB ($2),,,,Test Race (no official result)
-87,Lone Star Park,6,Dirt,300y,70,33,"Curvacious,Ember in the Sky,Mrs Pyc Angel",ATB ($2),,,,Test Race (no official result)
-88,Lone Star Park,8,Dirt,400y,70,33,"Mr Bordertown Buzz,Enjoying Life,Fancy Frank",ATB ($2),,,,Test Race (no official result)
-89,Woodbine,1,All Weather,6f,68,48,"Country Living,Always a Way,War Lord Cruzan",ATB ($2),,,,Test Race (no official result)
-90,Woodbine,2,All Weather,8.5f,69,33,"Mannix (IRE),Good Sin,Mehlek",ATB ($2),,,,Test Race (no official result)
-91,Woodbine,3,All Weather,8.5f,69,39,"King Elvis,Swan Lake,Volcanic",ATB ($2),,,,Test Race (no official result)
-92,Woodbine,4,All Weather,6f,70,29,"Dissectologist (IRE),Hardware Gap,Big Baby Henry",ATB ($2),,,,Test Race (no official result)
-93,Woodbine,5,All Weather,6f,67,54,"Souper Dormy,Souper Success,Last American Exit",ATB ($2),,,,Test Race (no official result)
-94,Woodbine,6,All Weather,6f,67,54,"Verdejo,Super Sicliy,Garnet and Gold",ATB ($2),,,,Test Race (no official result)
-95,Lone Star Park,1,Dirt,330y,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
-96,Lone Star Park,2,Dirt,330y,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
-97,Lone Star Park,3,Dirt,250y,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
-98,Lone Star Park,4,Dirt,220y,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
-99,Lone Star Park,5,Dirt,440y,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
-100,Lone Star Park,6,Dirt,300y,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
-101,Lone Star Park,7,Dirt,400y,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
-102,Lone Star Park,8,Dirt,440y,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
-103,Lone Star Park,9,Dirt,250y,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
-104,Woodbine,1,All Weather,6f,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
-105,Woodbine,2,All Weather,8.5f,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
-106,Woodbine,3,All Weather,8.5f,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
-107,Woodbine,4,All Weather,6f,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
-108,Gulfstream Park,1,All Weather,70y,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
-109,Gulfstream Park,2,All Weather,8.5f,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
-110,Gulfstream Park,3,Dirt,8f,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
-111,Gulfstream Park,4,Dirt,6f,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
-112,Gulfstream Park,5,All Weather,2f,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
-113,Gulfstream Park,6,All Weather,8.5f,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
-114,Gulfstream Park,7,Dirt,2f,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
-115,Gulfstream Park,8,All Weather,5f,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
-116,Laurel Park,1,Turf,8f,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
+41,Remington,2,Turf,5F,0.68,0.61,5-6-8,Exacta Box,Hit,+54,Win,Good pairing
+42,Remington,3,Dirt,6F,0.68,0.60,1-5-2,Trifecta Box,Partial,+76,Show,ROI positive
+43,Lone Star Park,12,Dirt,220Y,0.70,0.33,Heza Higher Fire - Famous Moon Risen - Pyc Dash Ta Phoebe,ATB,Miss,-100,Loss,2024-11-06 R12 Sprint variance; boundary miss (finish 8-1-4). [/evidence/LSP_12_combo.png]
+44,Lone Star Park,11,Dirt,300Y,0.70,0.33,Grand Charming Elan - Bv Hello Goodbye - D One Famous Bandit,ATB,Hit,+32,Win,2024-11-06 R11 ATB primary; exotics guarded (finish 4-1-8). [/evidence/LSP_11_combo.png]
+45,Lone Star Park,10,Dirt,220Y,0.69,0.39,Relentless Silk - Down in the Swamp - Sneaky Eagle,ATB,Partial,+12,Place,2024-11-06 R10 ATB only; no exotics (finish 4-6-7). [/evidence/LSP_10_combo.png]
+46,Mahoning Valley,7,Dirt,1320Y,0.68,0.41,Sundown Express - Fleet Mahoning - Heritage Lane,Exacta Box,Hit,+48,Win,2024-11-06 MVR R7 Exacta landed (finish 3-5-2). [/evidence/MVR_7_combo.png]
+47,Mahoning Valley,8,Dirt,1430Y,0.66,0.36,Stowaway Dreams - Northern Pledge - Cash Collection,ATB,Miss,-80,Loss,2024-11-06 MVR R8 Chaotic pace collapse (finish 7-4-1). [/evidence/MVR_8_combo.png]
+48,Aqueduct,5,Dirt,1320Y,0.75,0.47,Empire Rally - Queens Charge - Morning Encore,Win Only,Hit,+54,Win,2024-11-06 AQU R5 High confidence win (finish 6-2-4). [/evidence/AQU_5_combo.png]
+49,Aqueduct,8,Dirt,1810Y,0.72,0.46,Broadway Bullet - Metropolitan Star - Hudson Flyer,Exacta Box,Partial,+10,Place,"2024-11-06 AQU R8 Exacta split, trifecta whiff (finish 4-6-3). [/evidence/AQU_8_combo.png]"
+50,Woodbine,9,AllWeather,1760Y,0.70,0.44,Northern Spirit - Turfside Tempo - Seaway Charm,ATB,Hit,+28,Win,2024-11-06 WO R9 AI sweep (finish 5-2-3). [/evidence/WO_9_combo.png]
+51,Woodbine,10,AllWeather,1980Y,0.68,0.40,Polar Command - Seaway City - Quiet Atlantic,Trifecta Box,Miss,-120,Loss,2024-11-06 WO R10 Late closer chaos (finish 9-7-4). [/evidence/WO_10_combo.png]
+52,Penn National,6,Dirt,1320Y,0.67,0.38,Capital Lights - River Patrol - Zensational Mark,ATB,Partial,+5,Place,2024-11-06 PEN R6 Top pick ran second (finish 2-5-4). [/evidence/PEN_6_combo.png]
+53,Penn National,8,Dirt,1430Y,0.71,0.45,Keystone Drive - Susquehanna Bay - Midnight Signal,Exacta Box,Hit,+60,Win,2024-11-06 PEN R8 Exacta hammered (finish 3-5-1). [/evidence/PEN_8_combo.png]
+54,Horseshoe Indianapolis,9,Dirt,1760Y,0.78,0.52,Hoosier Velocity - Tempo Nation - Crosswind Ace,Win Only,Hit,+62,Win,2024-11-06 IND R9 Strong closer validated (finish 7-3-4). [/evidence/IND_9_combo.png]
+55,Horseshoe Indianapolis,10,Dirt,1870Y,0.65,0.35,Backstretch Baron - Indiana Dice - Sunset Agent,ATB,Miss,-90,Loss,2024-11-06 IND R10 Sloppy track fade (finish 8-2-5). [/evidence/IND_10_combo.png]
+56,Charles Town,1,Dirt,1 1/16M,0.65,,WIN: Long Astride | PLACE: Sackett | SHOW: Cuchulain,ATB (light),Pending,,,"Test | Win Pl Sh | AI got WIN/SHOW right (5,1); PLACE missed"
+57,Charles Town,8,Dirt,4.5f,0.70,,WIN: Cuddler | PLACE: Zero Degrees | SHOW: Readthefineprint,ATB (light),Pending,,,Test | Win Pl Sh | AI off; real finish 4-5-10 (Fancy Conchita wins)
+58,Evangeline Downs,1,Dirt,220y,0.65,,WIN: Fancy Paints | PLACE: Live the Way I Talk | SHOW: All That Yard,ATB (light),Pending,,,Test | Win Pl Sh | AI had WIN wrong (picked #5); result 1-5-2
+59,Evangeline Downs,3,Dirt,220y,0.68,,WIN: Jess Politix | PLACE: Jess Significant Tlc | SHOW: Inseparable Cartel B,ATB (light),Pending,,,Test | Win Pl Sh | AI off; result 5-4-7
+60,Penn National,4,Dirt,6f,0.65,,WIN: Smarty's Love | PLACE: Wood Lily | SHOW: Vino Amore,ATB (light),Pending,,,Test | Win Pl Sh | AI nailed WIN; others mixed
+61,Penn National,7,Dirt,6f,0.68,,WIN: Dancing On Air | PLACE: Feratovic | SHOW: Cantyoustoptheking,ATB (light),Pending,,,Test | Win Pl Sh | Result 8-6-1; AI had DOA on top (miss)
+62,Penn National,8,Dirt,5.5f,0.67,,WIN: Jace Is No Joke | PLACE: Silas M P | SHOW: Mycroft,ATB (light),Pending,,,Test | Win Pl Sh | AI top pick ran 2nd; winner #7
+63,Penn National,9,Dirt,5.5f,0.68,,WIN: Uncle Money | PLACE: Fortheloveofrun | SHOW: Rolly,ATB (light),Pending,,,Test | Win Pl Sh | AI top pick #5 ran 2nd; winner #2
+64,Lone Star,5,Dirt,?,,,WIN: ? | PLACE: ? | SHOW: ?,ATB (light),Pending,,Placeholder from user list; backfill from Redis/logs,Test
+65,Lone Star,8,Dirt,?,,,WIN: ? | PLACE: ? | SHOW: ?,Strategy (per slip),Pending,,REAL BET; backfill from Redis/bet slip,Live
+66,Australia Harness,2,Harness,?,,,WIN: ? | PLACE: ? | SHOW: ?,Strategy (per slip),Pending,,REAL BET; backfill from Redis/bet slip,Live
+67,Lone Star,1,Dirt,?,,,WIN: ? | PLACE: ? | SHOW: ?,ATB (light),Pending,,Placeholder; backfill from Redis,Test
+68,Lone Star,2,Dirt,?,,,WIN: ? | PLACE: ? | SHOW: ?,ATB (light),Pending,,Placeholder; backfill from Redis,Test
+69,Lone Star,3,Dirt,?,,,WIN: ? | PLACE: ? | SHOW: ?,ATB (light),Pending,,Placeholder; backfill from Redis,Test
+70,Lone Star,4,Dirt,?,,,WIN: ? | PLACE: ? | SHOW: ?,ATB (light),Pending,,Placeholder; backfill from Redis,Test
+71,Lone Star,6,Dirt,?,,,WIN: ? | PLACE: ? | SHOW: ?,ATB (light),Pending,,Placeholder; backfill from Redis,Test
+72,Remington,7,Dirt/Turf?,?,,,WIN: ? | PLACE: ? | SHOW: ?,ATB (light),Pending,,Placeholder; backfill from Redis,Test
+73,Remington,9,Dirt/Turf?,?,,,WIN: ? | PLACE: ? | SHOW: ?,ATB (light),Pending,,Placeholder; backfill from Redis,Test
+74,Evangeline Downs,5,Dirt,250y,68,48,"TF Reckless Tide,Jij Sea Yacht B,TF This Gals Rippin",ATB ($2),,,,Test Race (no official result)
+75,Evangeline Downs,6,Dirt,300y,68,43,"Tjs Dynasty,Unleash,Hy On Sweet Luck",ATB ($2),,,,Test Race (no official result)
+76,Charles Town,1,Dirt,6.5f,65,54,"Old Bay,Lona Lee,Notiptoni",ATB ($2),,,,Test Race (no official result)
+77,Charles Town,2,Dirt,6.5f,67,54,"Caribbean Clarity,Strata,Netta Rox",ATB ($2),,,,Test Race (no official result)
+78,Charles Town,3,Dirt,7f,66,54,"Dame Catherine,Chublin,Slanderous",ATB ($2),,,,Test Race (no official result)
+79,Charles Town,4,Dirt,4.5f,65,62,"Good Intentions,Renegade Rabbit,Indicator",ATB ($2),,,,Test Race (no official result)
+80,Charles Town,5,Dirt,4.5f,68,43,"Miss Bee Bop,Cajun Expectation,Ding Ding",ATB ($2),,,,Test Race (no official result)
+81,Lone Star Park,1,Dirt,330y,68,0.43,"4,2,3",ATB ($2),4-8-6,,0,Card OK; DQ none
+82,Lone Star Park,2,Dirt,330y,67,0.54,"2,5,6",ATB ($2),2-1-4,,1,Exacta 2-1; Trifecta 2-1-4
+83,Lone Star Park,3,Dirt,250y,68,0.48,"1,4,5",ATB ($2),1-2-3,,1,Run Nellie Run held; Tri 1-2-3
+84,Lone Star Park,4,Dirt,220y,69,0.39,"8,4,3",ATB ($2),4-3-6,,0,Coronita Wagon wired; Tri 4-3-6
+85,Lone Star Park,5,Dirt,440y,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
+86,Lone Star Park,6,Dirt,300y,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
+87,Lone Star Park,8,Dirt,400y,70,33,"Mr Bordertown Buzz,Enjoying Life,Fancy Frank",ATB ($2),,,,Test Race (no official result)
+88,Woodbine,1,All Weather,6f,68,0.48,"3,8,4",ATB ($2),4-1-3,,0,"Warlord Cruzan; Ex 4-1, Tri 4-1-3"
+89,Woodbine,2,All Weather,8.5f,69,0.33,"3,10,6",ATB ($2),10-8-2,,0,"Good Sin; Ex 10-8, Tri 10-8-2"
+90,Woodbine,3,All Weather,8.5f,69,0.39,"2,10,5",ATB ($2),10-6-1,,0,Sherif Ali; Tri 10-6-1
+91,Woodbine,4,All Weather,6f,70,0.29,"3,10,13",ATB ($2),3-2-1,,1,Dissectologist; Tri 3-2-1
+92,Woodbine,5,All Weather,6f,67,0.54,"7,6,5",ATB ($2),5-2-7,,0,Last American Exit; Tri 5-2-7
+93,Woodbine,6,All Weather,6f,67,0.54,"1,5,6",ATB ($2),5-1-7,,0,Super Siciliy; Tri 5-1-7
+94,Lone Star Park,7,Dirt,400y,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
+95,Lone Star Park,8,Dirt,440y,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
+96,Lone Star Park,9,Dirt,250y,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
+97,Gulfstream Park,1,All Weather,70y,69,0.39,"7,4,10",ATB ($2),4-8-7,,0,Brat Girl; Tri 4-8-7
+98,Gulfstream Park,2,All Weather,8.5f,,,"1,2,3",ATB ($2),-,,,Test Race; Pending backfill
+99,Gulfstream Park,3,Dirt,8f,66,0.54,"4,1,6",ATB ($2),4-3-6,,1,Sheshimaintenance; Tri 4-3-6
+100,Gulfstream Park,4,Dirt,6f,65,0.62,"1,5,4",ATB ($2),4-5-6,,0,Cooey; Tri 4-5-6
+101,Gulfstream Park,5,All Weather,2f,69,0.39,"5,4,8",ATB ($2),5-4-8,,1,Never Say Never; Tri 5-4-8
+102,Gulfstream Park,6,All Weather,8.5f,67,0.54,"3,1,8",ATB ($2),8-1-3,,0,China Blue; Tri 8-1-3
+103,Gulfstream Park,7,Dirt,2f,68,0.43,"1,5,7",ATB ($2),7-5-1,,0,Wasamattafyou; Tri 7-5-1
+104,Gulfstream Park,8,All Weather,5f,68,0.43,"8,4,2",ATB ($2),8-4-2,,1,Mr Narcissistic; Tri 8-4-2
+105,Laurel Park,1,Turf,8f,70,0.33,"4,10,2",ATB ($2),7-10-12,,0,I Heard Something; Tri 7-10-12
+106,Lone Star Park,6,Dirt,330y,68,0.43,"4,6,7",ATB ($2),7-6-1,,0,VF Wheely Cold finished best; Tri 7-6-1
+107,Lone Star Park,7,Dirt,300y,70,0.33,"10,5,9",ATB ($2),10-5-2,,0,Curvacious strong; Tri 10-5-2
+108,Lone Star Park,9,Dirt,400y,70,0.33,"11,12,6",ATB ($2),6-5-10,,0,Dare to Fly; Tri 6-5-10
+109,Lone Star Park,10,Dirt,440y,70,0.33,"7,8,6",ATB ($2),7-2-8,,1,Xpressiv; Tri 7-2-8
