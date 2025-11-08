@@ -869,7 +869,22 @@ import { mountTrackCombobox } from './track-combobox.js';
     });
 
     // Reset file label
-    const fileLabel = document.getElementById('file-selected-label');
+      const fileLabel = document.getElementById('file-selected-label');
+      const chooseBtn = document.querySelector('[data-fl-file-btn]');
+      if (chooseBtn) {
+        const normalized = 'Choose Photos';
+        if (chooseBtn.textContent && /photos\s*\/\s*pdf/i.test(chooseBtn.textContent)) {
+          chooseBtn.textContent = normalized;
+        }
+        const aria = chooseBtn.getAttribute('aria-label');
+        if (aria && /pdf/i.test(aria)) {
+          chooseBtn.setAttribute('aria-label', normalized);
+        }
+        const title = chooseBtn.getAttribute('title');
+        if (title && /pdf/i.test(title)) {
+          chooseBtn.setAttribute('title', normalized);
+        }
+      }
     if (fileLabel) fileLabel.textContent = 'No file selected';
 
     // Reset form inputs
