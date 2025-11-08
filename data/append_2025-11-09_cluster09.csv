@@ -1,0 +1,6 @@
+﻿Test_ID,Track,Race_No,Surface,Distance,Confidence,Top_3_Mass,AI_Picks,Strategy,Result,ROI_Percent,WinRate,Notes
+,Lone Star Park,12,Dirt,300y,70,0.33,"6,10,8","ATB ($2)","5-6-10",12.0,0.67,"Live calibration validation #1"
+,BergsÃ¥ker,5,All Weather,1.10m,68,0.43,"4,2,6","ATB ($2)","5-4-2",0.0,0.67,"Live calibration validation #2 â€” no bets placed"
+,Aqueduct,3,Dirt,-,60,0.85,"1,8,3","Skip (chaotic) / ATB ($2) if action","1-?-?",126.7,1.00,"Live bet probe on Skip; WPS $3 â†’ $6.80 payout"
+,Gulfstream Park,7,Dirt,-,68,0.43,"5,9,2","ATB ($2)","9-5-2",27.0,1.00,"Top-3 hit (order off); tickets total $6.35 on $5"
+,Aqueduct,9,Dirt,-,68,0.43,"3,6,8","ATB ($2)","6-3-8",71.0,1.00,"Live calibration validation #5 (Top-3 perfect; order off)"
