@@ -1179,6 +1179,28 @@
     },
   };
 
+  if (typeof window !== 'undefined') {
+    window.addEventListener('message', (event) => {
+      const payload = event?.data;
+      if (!payload || payload.type !== 'predict:error') return;
+      const error = payload.error || {};
+      const code = error.code || error.context?.code;
+      const message = error.message || '';
+      let displayMessage = '';
+
+      if (code === 'CALIBRATION_NOT_FOUND') {
+        displayMessage = 'Calibration not found on server. Try a hard refresh or contact support.';
+      } else if (message) {
+        displayMessage = message;
+      } else {
+        displayMessage = 'Prediction failed, but UI is still usable. Try Analyze again or add race details.';
+      }
+
+      console.error('[ResultsPanel] predict error', error);
+      ResultsPanelAPI.renderError(displayMessage);
+    });
+  }
+
   window.ResultsPanel = ResultsPanelAPI;
 
   window.FLResults = {

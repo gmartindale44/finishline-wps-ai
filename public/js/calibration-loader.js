@@ -1,31 +1,27 @@
 (function () {
-  const defaultCalibration = {
-    version: 'defaults',
+  const DEFAULT_CALIBRATION = {
+    version: 'fallback',
     stake_curve: {
       '50': 1,
-      '55': 1,
       '60': 1,
-      '65': 1,
-      '70': 2,
-      '75': 2,
+      '70': 1,
       '80': 2,
-      '85': 2,
+      '90': 2,
     },
     exotics_rules: {
-      exacta_min_top3: 999,
-      trifecta_min_top3: 999,
+      exacta_min_top3: 55,
+      trifecta_min_top3: 65,
       min_conf_for_win_only: 80,
     },
-    distance_mods: {
-      '≤250y_maiden': {
-        exotics_penalty: 0.05,
-      },
-    },
+    distance_mods: {},
   };
+
+  const CALIBRATION_URLS = ['/public/data/calibration_v1.json', '/data/calibration_v1.json'];
 
   const state = {
     calibration: null,
     loaded: false,
+    source: null,
   };
 
   function normalizePercent(value) {
@@ -43,7 +39,7 @@
   }
 
   function getCalibration() {
-    return state.calibration || defaultCalibration;
+    return state.calibration || DEFAULT_CALIBRATION;
   }
 
   function getStakeForConfidence(confidence) {
@@ -104,13 +100,13 @@
     let allowTrifecta = false;
 
     if (Number.isFinite(adjustedTop3)) {
-      const exactaGate = rules.exacta_min_top3 ?? 45;
+      const exactaGate = rules.exacta_min_top3 ?? 55;
       if (adjustedTop3 >= exactaGate) {
         allowExacta = true;
         rationale.push(`Top-3 mass ${adjustedTop3.toFixed(0)}% ≥ ${exactaGate}%`);
       }
 
-      const trifectaGate = rules.trifecta_min_top3 ?? 55;
+      const trifectaGate = rules.trifecta_min_top3 ?? 65;
       if (adjustedTop3 >= trifectaGate && Number.isFinite(gap12) && Number.isFinite(gap23)) {
         const gapsStrong = gap12 >= 40 && gap23 >= 35;
         if (gapsStrong) {
@@ -138,19 +134,31 @@
     };
   }
 
+  async function loadCalibrationFromSources(urls = CALIBRATION_URLS) {
+    for (const url of urls) {
+      try {
+        const res = await fetch(url, { cache: 'no-store' });
+        if (!res.ok) throw new Error(`http ${res.status}`);
+        const calibration = await res.json();
+        return { calibration, source: url };
+      } catch (err) {
+        console.warn('[calibration] fetch failed', url, err);
+      }
+    }
+    return { calibration: DEFAULT_CALIBRATION, source: 'default' };
+  }
+
   async function loadCalibrationOnce() {
     try {
-      const res = await fetch('/data/calibration_v1.json', { cache: 'no-store' });
-      if (!res.ok) {
-        console.info('[FinishLineCalibration] calibration_v1.json not found – using defaults');
-        state.loaded = true;
-        return;
-      }
-      state.calibration = await res.json();
-      state.loaded = true;
-      console.info('[FinishLineCalibration] calibration loaded');
+      const { calibration, source } = await loadCalibrationFromSources();
+      state.calibration = calibration || DEFAULT_CALIBRATION;
+      state.source = source;
+      console.info('[FinishLineCalibration] calibration loaded from', source);
     } catch (err) {
       console.info('[FinishLineCalibration] failed to load calibration – defaults in use', err?.message || err);
+      state.calibration = DEFAULT_CALIBRATION;
+      state.source = 'default';
+    } finally {
       state.loaded = true;
     }
   }
@@ -164,5 +172,15 @@
     getCalibration,
     getStakeForConfidence,
     shouldOfferExotics,
+    getSource() {
+      return state.source;
+    },
+    async loadCalibration() {
+      const result = await loadCalibrationFromSources();
+      state.calibration = result.calibration || DEFAULT_CALIBRATION;
+      state.source = result.source;
+      state.loaded = true;
+      return result;
+    },
   };
 })();
