@@ -107,6 +107,7 @@
   <script defer src="/js/distance-normalizer.js"></script>
   <script src="/js/calibration-loader.js" defer></script>
   <script type="module" src="/js/strategy-logic.js" defer></script>
+  <script type="module" src="/js/predict-safe-flows.js" defer></script>
   <script src="/js/results-panel.js" defer></script>
   <script type="module" src="/js/persistence.js" defer></script>
   <script type="module" src="/js/finishline-picker-bootstrap.js" defer></script>
@@ -115,6 +116,10 @@
     // Set calibration status flag if env var is enabled (server-side check via Vercel)
     // This can be set via Vercel environment variable FINISHLINE_SHOW_CAL_STATUS
     window.FINISHLINE_SHOW_CAL_STATUS = false; // Default off - set to true in Vercel preview env if needed
+    window.FL_FLAGS = window.FL_FLAGS || {};
+    if (typeof window.FL_FLAGS.useAnalyzeEndpoint === 'undefined') {
+      window.FL_FLAGS.useAnalyzeEndpoint = false;
+    }
     
     // Distance tooltip helper
     window.addEventListener('DOMContentLoaded', () => {

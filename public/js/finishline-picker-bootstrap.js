@@ -1,4 +1,5 @@
 import { mountTrackCombobox } from './track-combobox.js';
+import { SafeFlows } from './predict-safe-flows.js';
 
 (function () {
   const state = (window.__fl_state = window.__fl_state || {
@@ -11,6 +12,11 @@ import { mountTrackCombobox } from './track-combobox.js';
     track: null,
     features: {},
   });
+
+  window.FL_FLAGS = window.FL_FLAGS || {};
+  if (typeof window.FL_FLAGS.useAnalyzeEndpoint === 'undefined') {
+    window.FL_FLAGS.useAnalyzeEndpoint = false;
+  }
 
   // Name normalization helpers
   function normName(s) {
@@ -456,41 +462,40 @@ import { mountTrackCombobox } from './track-combobox.js';
   async function onPredict() {
     const predictBtn = qPredict();
 
-    // Get horses with priority order
     const horses = getHorsesForPrediction();
-
     if (!horses || horses.length < 3) {
       showToast('Not enough horses to predict. Analyze first or add rows. (Need at least 3 with name + odds)');
       return;
     }
 
+    const panel = window.ResultsPanel;
+
+    showToast('Generating predictions...');
+    panel?.open({ working: true, renderSkeleton: true });
+    console.log('[predict] open');
+
     await withBusy(predictBtn, async () => {
+      let calibration = null;
       try {
-        showToast('Generating predictions...');
-        
-        // Collect meta from form
         const rawDistance = (document.getElementById('race-distance')?.value || '').trim();
         const normDistance = window.FL_parseDistance ? window.FL_parseDistance(rawDistance) : null;
-        
+
         const meta = {
           track: (document.getElementById('race-track')?.value || '').trim(),
           surface: (document.getElementById('race-surface')?.value || '').trim(),
           distance: normDistance ? normDistance.pretty : rawDistance,
           date: (document.getElementById('race-date')?.value || '').trim(),
         };
-        
-        // Add normalized distance fields if parsed
+
         if (normDistance) {
           meta.distance_furlongs = normDistance.distance_furlongs;
           meta.distance_meters = normDistance.distance_meters;
         }
 
-        // Get features or build from horses
         let features = window.__fl_state.features || {};
         if (Object.keys(features).length === 0) {
-          // Fallback: build from current horses
           features = {};
-          horses.forEach(h => {
+          horses.forEach((h) => {
             const key = horseKey(h.name);
             const decOdds = h.odds_norm || h.odds_raw || h.odds;
             let implied = null;
@@ -514,12 +519,10 @@ import { mountTrackCombobox } from './track-combobox.js';
           });
         }
 
-        // Sync inputs to state before predict
         syncInputsToState();
 
-        // Build payload for Model v2
         const payload = {
-          horses: horses.map(h => ({
+          horses: horses.map((h) => ({
             name: h.name,
             odds: h.odds_norm || h.odds_raw || h.odds,
             post: h.post || null,
@@ -529,167 +532,137 @@ import { mountTrackCombobox } from './track-combobox.js';
           distance_input: window.__fl_state.distance_input || meta.distance || '',
           speedFigs: window.__fl_state.speedFigs || {},
         };
-        
-        // Add normalized distance fields if available
-        if (meta.distance_furlongs != null) {
-          payload.distance_furlongs = meta.distance_furlongs;
-        }
-        if (meta.distance_meters != null) {
-          payload.distance_meters = meta.distance_meters;
-        }
+
+        if (meta.distance_furlongs != null) payload.distance_furlongs = meta.distance_furlongs;
+        if (meta.distance_meters != null) payload.distance_meters = meta.distance_meters;
 
         __fl_diag('predict payload', payload);
 
-        let r;
-        let data = null;
-        try {
-          r = await fetch('/api/predict_wps', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-          });
-
-          // Robust JSON parsing
-          try {
-            const text = await r.text();
-            data = text ? JSON.parse(text) : null;
-          } catch (parseErr) {
-            console.error('[Predict] JSON parse error:', parseErr);
-            if (window.FLResults?.show) {
-              window.FLResults.show({ error: true, message: 'Prediction response parse error. Please try again.' });
-            } else {
-              showToast('Prediction response parse error – check console.');
-            }
-            return;
-          }
-        } catch (fetchErr) {
-          console.error('[Predict] Fetch error:', fetchErr);
-          if (window.FLResults?.show) {
-            window.FLResults.show({ error: true, message: 'Prediction failed (connection error). Please check your internet connection.' });
-          } else {
-            showToast('Prediction failed (connection error).');
-          }
-          return;
-        }
-
-        if (!r.ok || data?.error) {
-          console.warn('[Predict] Error response:', data);
-          const errorMsg = data?.error || data?.detail || data?.message || data?.reason || `HTTP ${r.status}` || 'Prediction failed';
-          if (window.FLResults?.show) {
-            window.FLResults.show({ error: true, message: errorMsg });
-          } else {
-            showToast(`Prediction failed: ${errorMsg}`);
-          }
-          return;
-        }
-
-        // Model v2 response format: { picks: [{slot, name, odds, reasons}], confidence, meta }
-        const picks = data?.picks || [];
-        const winPick = picks.find(p => p.slot === 'Win') || picks[0];
-        const placePick = picks.find(p => p.slot === 'Place') || picks[1];
-        const showPick = picks.find(p => p.slot === 'Show') || picks[2];
-
-        const winName = winPick?.name || null;
-        const placeName = placePick?.name || null;
-        const showName = showPick?.name || null;
-
-        // Validate response
-        if (!winName || !placeName || !showName) {
-          console.error('[Predict] Invalid response:', data);
-          showToast('Predict returned invalid results. Check that at least 3 horses have valid names and odds.');
-          return;
-        }
-
-        // Confidence is 0-1 range, convert to 0-100
-        const confPct = typeof data.confidence === 'number' && data.confidence >= 0 
-          ? Math.round(data.confidence * 100) 
-          : 7;
-
-        // Store prediction in localStorage
-        try {
-          localStorage.setItem('prediction', JSON.stringify(data));
-        } catch (e) {
-          console.warn('[Predict] Could not save to localStorage:', e);
-        }
-        
-        // Build reasons object from picks (only show non-empty reasons)
-        const reasons = {};
-        picks.forEach(p => {
-          if (p.reasons && p.reasons.length > 0) {
-            reasons[p.name] = p.reasons;
-          }
-        });
-
-        // Build horses array for display
-        const horsesForDisplay = horses.map(h => ({
+        const horsesForDisplay = horses.map((h) => ({
           name: h.name,
           odds: h.odds_norm || h.odds_raw || h.odds,
           speedFig: window.__fl_state.speedFigs?.[h.name] || h.speedFig || null,
         }));
 
-        // Show persistent results panel with reasons and tickets (null-safe)
-        try {
-          if (window.FLResults?.show) {
-            window.FLResults.show({
-              win: winName,
-              place: placeName,
-              show: showName,
-              confidence: confPct / 100, // Convert to 0-1 range for results-panel
-              horses: horsesForDisplay,
-              reasons: reasons,
-              tickets: data.tickets || null,
-              strategy: data.strategy || null,
-              picks: data.picks || picks || null,
-            });
+        const fallbackParsed = {
+          horses,
+          horsesForDisplay,
+          meta,
+          features,
+          payload,
+        };
 
-            console.log('[Predict] Results displayed in panel', { win: winName, place: placeName, show: showName, confidence: confPct, tickets: data.tickets, strategy: data.strategy ? 'present' : 'missing' });
-          } else {
-            // Fallback to toast if panel not available
-            showToast(`Predictions ready. Win: ${winName}, Place: ${placeName}, Show: ${showName}`);
-          }
-        } catch (modalErr) {
-          console.error('[Predict] Modal render error:', modalErr);
-          showToast('Prediction display error – check console.');
+        const useApi = !!window.FL_FLAGS.useAnalyzeEndpoint;
+        let parsed = null;
+        try {
+          parsed = await SafeFlows.analyze({ useApi, fallback: fallbackParsed });
+        } catch (err) {
+          console.warn('[predict] analyze failed, preserving fallback:', err);
+          parsed = fallbackParsed;
         }
+        parsed = parsed || fallbackParsed;
+        console.log('[predict] parsed');
+
+        let response = null;
+        try {
+          response = await SafeFlows.predict(parsed);
+        } catch (err) {
+          console.warn('[predict] predict_wps failed, falling back to heuristics:', err);
+          response = await SafeFlows.predictClientOnly(parsed);
+        }
+        console.log('[predict] predicted');
+
+        if (!response) {
+          throw new Error('No prediction data returned');
+        }
+
+        const picks = response.picks || [];
+        const winPick = picks.find((p) => p.slot === 'Win') || picks[0] || {};
+        const placePick = picks.find((p) => p.slot === 'Place') || picks[1] || {};
+        const showPick = picks.find((p) => p.slot === 'Show') || picks[2] || {};
+
+        const winName = winPick?.name || winPick?.horse || '';
+        const placeName = placePick?.name || placePick?.horse || '';
+        const showName = showPick?.name || showPick?.horse || '';
+
+        if (!winName || !placeName || !showName) {
+          throw new Error('Prediction response missing Win/Place/Show picks');
+        }
+
+        const confRaw = typeof response.confidence === 'number' ? response.confidence : 0.66;
+        const confPct = Math.round((confRaw <= 1 ? confRaw : confRaw / 100) * 100);
+
+        try {
+          localStorage.setItem('prediction', JSON.stringify(response));
+        } catch (err) {
+          console.warn('[predict] localStorage save failed:', err);
+        }
+
+        const reasons = response.reasons || {};
+        const top3Mass = response.top3_mass ?? response.top3Mass ?? null;
+
+        calibration = await SafeFlows.loadCalibration().catch((err) => {
+          console.warn('[predict] calibration load failed, using defaults:', err);
+          return { version: 'fallback', policy: {}, bin_metrics: [] };
+        });
+        console.log('[predict] calibrated');
+
+        const finalPred = {
+          win: winName,
+          place: placeName,
+          show: showName,
+          confidence: confPct / 100,
+          horses: horsesForDisplay,
+          reasons,
+          tickets: response.tickets || null,
+          strategy: response.strategy || null,
+          picks: response.picks || null,
+          top3_mass: top3Mass,
+        };
+
+        if (panel?.render) {
+          panel.render({ parsed, pred: finalPred, calibration });
+          panel.setWorking(false);
+        } else if (window.FLResults?.show) {
+          window.FLResults.show(finalPred);
+        } else {
+          showToast(`Predictions ready. Win: ${winName}, Place: ${placeName}, Show: ${showName}`);
+        }
+        console.log('[predict] rendered');
         pulse(predictBtn);
-        
-        // Auto-log prediction to Redis (fire-and-forget)
+
         (async () => {
           try {
             const race = {
-              track: (document.getElementById('race-track')?.value || '').trim(),
-              date: (document.getElementById('race-date')?.value || '').trim(),
+              track: meta.track || '',
+              date: meta.date || '',
               postTime: (document.getElementById('race-time')?.value || document.getElementById('post-time')?.value || '').trim(),
               raceNo: (document.getElementById('race-no')?.value || '').trim() || '',
-              surface: (document.getElementById('race-surface')?.value || '').trim(),
-              distance: (document.getElementById('race-distance')?.value || '').trim()
+              surface: meta.surface || '',
+              distance: (document.getElementById('race-distance')?.value || '').trim(),
             };
-            
-            const picks = {
-              win: winPick?.name || winName || '',
-              place: placePick?.name || placeName || '',
-              show: showPick?.name || showName || ''
+
+            const picksPayload = {
+              win: winName,
+              place: placeName,
+              show: showName,
             };
-            
-            const top3_mass = data.top3_mass || data.top3Mass || null;
-            const strategy = data.strategy?.recommended || '';
-            
-            const logResp = await fetch("/api/log_prediction", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
+
+            const logResp = await fetch('/api/log_prediction', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 track: race.track,
                 date: race.date,
                 postTime: race.postTime,
                 raceNo: race.raceNo,
-                picks,
-                confidence: confPct / 100, // Convert back to 0-1 for storage
-                top3_mass: top3_mass ? (typeof top3_mass === 'number' ? top3_mass / 100 : parseFloat(top3_mass) / 100) : null,
-                strategy
-              })
+                picks: picksPayload,
+                confidence: confPct / 100,
+                top3_mass: typeof top3Mass === 'number' ? (top3Mass <= 1 ? top3Mass : top3Mass / 100) : null,
+                strategy: response.strategy?.recommended || '',
+              }),
             });
-            
-            // Store race key for potential archiving later
+
             if (logResp.ok) {
               try {
                 const logData = await logResp.json();
@@ -698,31 +671,38 @@ import { mountTrackCombobox } from './track-combobox.js';
                   window.__fl_state.lastPendingKey = `fl:pred:${logData.race_id}`;
                 }
               } catch (_) {
-                // Ignore JSON parse errors
+                // ignore parse errors
               }
             }
           } catch (_) {
-            // Ignore all errors - fire-and-forget
+            // ignore logging errors
           }
         })();
-        
-        // Tiny "Logged" toast if flags are enabled (non-breaking)
+
         if (window.FL_FLAGS) {
           try {
             const toastEl = document.createElement('div');
             toastEl.textContent = 'Logged ✅';
-            toastEl.style.cssText = 'position:fixed;bottom:80px;right:20px;padding:6px 12px;background:rgba(0,255,120,0.2);color:#cfffdf;border-radius:6px;font-size:12px;z-index:10001;border:1px solid rgba(0,255,120,0.4);';
+            toastEl.style.cssText =
+              'position:fixed;bottom:80px;right:20px;padding:6px 12px;background:rgba(0,255,120,0.2);color:#cfffdf;border-radius:6px;font-size:12px;z-index:10001;border:1px solid rgba(0,255,120,0.4);';
             document.body.appendChild(toastEl);
             setTimeout(() => {
-              try { toastEl.remove(); } catch (_) {}
+              try {
+                toastEl.remove();
+              } catch (_) {
+                /* no-op */
+              }
             }, 1500);
           } catch (_) {
-            // Ignore if toast creation fails
+            // ignore toast errors
           }
         }
-      } catch (e) {
-        console.error('[Predict] Unexpected error:', e);
-        showToast(`Prediction failed: ${e?.message || 'Unknown error'}`);
+      } catch (err) {
+        console.error('[predict] unhandled error', err);
+        panel?.renderError('Prediction failed, but UI is still usable. Try Analyze again or add race details.');
+        showToast(`Prediction failed: ${err?.message || 'Unknown error'}`);
+      } finally {
+        panel?.setWorking(false);
       }
     });
   }

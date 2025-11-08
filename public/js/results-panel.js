@@ -110,6 +110,7 @@
       closeBtn: wrap.querySelector('[data-close]'),
       copyBtn: wrap.querySelector('[data-copy]'),
       pinBtn: wrap.querySelector('[data-pin]'),
+      title: wrap.querySelector('.fl-results__title'),
       badgeWin: wrap.querySelector('#fl-badge-win'),
       badgePlace: wrap.querySelector('#fl-badge-place'),
       badgeShow: wrap.querySelector('#fl-badge-show'),
@@ -216,13 +217,15 @@
     if (window.FLStrategyLogic?.evaluateStrategySignal) {
       return window.FLStrategyLogic.evaluateStrategySignal(metrics);
     }
-    const c = Number.isFinite(metrics.confidence) ? metrics.confidence : NaN;
-    const m = Number.isFinite(metrics.top3Mass) ? metrics.top3Mass : NaN;
+    const c = Number(metrics?.confidence ?? NaN);
+    const mRaw = Number(metrics?.top3Mass ?? metrics?.top3_mass ?? NaN);
+    const m = Number.isFinite(mRaw) && mRaw <= 1 ? mRaw * 100 : mRaw;
     if (!Number.isFinite(c) || !Number.isFinite(m)) {
       return {
         color: 'yellow',
         label: 'Caution',
         action: '⚠️ Caution — Light ATB ($1–$3) or Win-Only if Confidence ≥ 80%',
+        message: '⚠️ Caution — Light ATB ($1–$3) or Win-Only if Confidence ≥ 80%',
       };
     }
     if (c >= 82 && m >= 40) {
@@ -230,6 +233,7 @@
         color: 'green',
         label: 'Go',
         action: '✅ Go — Win-Only or ATB (bankroll-scaled)',
+        message: '✅ Go — Win-Only or ATB (bankroll-scaled)',
       };
     }
     if (c >= 68 || m >= 33) {
@@ -237,13 +241,85 @@
         color: 'yellow',
         label: 'Caution',
         action: '⚠️ Caution — Light ATB ($1–$3) or Win-Only if Confidence ≥ 80%',
+        message: '⚠️ Caution — Light ATB ($1–$3) or Win-Only if Confidence ≥ 80%',
       };
     }
     return {
       color: 'red',
       label: 'Avoid',
       action: '⛔ Avoid — Low edge',
+      message: '⛔ Avoid — Low edge',
     };
+  }
+
+  function openModal() {
+    ensure();
+    const isPinned = localStorage.getItem('fl_results_pinned') === '1';
+    elements.root.classList.add(clsOpen);
+    if (isPinned) {
+      elements.root.classList.add(clsPinned);
+    } else {
+      elements.root.classList.remove(clsPinned);
+    }
+
+    elements.dialog.setAttribute('aria-hidden', 'false');
+    try {
+      elements.closeBtn?.focus({ preventScroll: true });
+    } catch (_) {
+      // ignore focus errors
+    }
+    switchTab('predictions');
+  }
+
+  function setWorking(isWorking) {
+    if (!elements) ensure();
+    if (!elements) return;
+    if (isWorking) {
+      elements.root.classList.add('fl-results--working');
+    } else {
+      elements.root.classList.remove('fl-results--working');
+    }
+    if (elements.title) {
+      elements.title.textContent = isWorking ? 'Predictions · Working…' : 'Predictions';
+    }
+  }
+
+  function renderSkeletonView() {
+    openModal();
+    setWorking(true);
+    fillBadge(elements.badgeWin, '🥇 Win', 'Loading…', '', 'fl-badge--gold');
+    fillBadge(elements.badgePlace, '🥈 Place', 'Loading…', '', 'fl-badge--silver');
+    fillBadge(elements.badgeShow, '🥉 Show', 'Loading…', '', 'fl-badge--bronze');
+    if (elements.confPct) elements.confPct.textContent = '--';
+    if (elements.confBar) {
+      elements.confBar.style.width = '15%';
+      elements.confBar.style.background = '#4b5563';
+    }
+    if (elements.reasonsSection) elements.reasonsSection.style.display = 'none';
+    if (elements.exoticsContent) {
+      elements.exoticsContent.innerHTML = `<div style="opacity:0.7;font-size:13px;">Loading ticket ideas…</div>`;
+    }
+    if (elements.strategyWrap) {
+      elements.strategyWrap.innerHTML = `<div style="opacity:0.7;font-size:13px;">Loading strategy…</div>`;
+    }
+  }
+
+  function renderErrorView(message) {
+    openModal();
+    setWorking(false);
+    const msg = message || 'Prediction failed.';
+    fillBadge(elements.badgeWin, '🥇 Win', '—', '', 'fl-badge--gold');
+    fillBadge(elements.badgePlace, '🥈 Place', '—', '', 'fl-badge--silver');
+    fillBadge(elements.badgeShow, '🥉 Show', '—', '', 'fl-badge--bronze');
+    if (elements.confPct) elements.confPct.textContent = '--';
+    if (elements.confBar) {
+      elements.confBar.style.width = '0%';
+      elements.confBar.style.background = '#4b5563';
+    }
+    if (elements.reasonsSection) elements.reasonsSection.style.display = 'none';
+    const errHtml = `<div style="padding:12px;border:1px solid rgba(255,99,99,0.4);background:rgba(255,99,99,0.08);color:#ff9999;border-radius:8px;">${msg}</div>`;
+    if (elements.exoticsContent) elements.exoticsContent.innerHTML = errHtml;
+    if (elements.strategyWrap) elements.strategyWrap.innerHTML = errHtml;
   }
 
   function renderStoplightSignal(container, metrics) {
@@ -272,8 +348,9 @@
     const txt = box.querySelector('.fl-signal-text');
     dot.classList.remove('green', 'yellow', 'red');
     dot.classList.add(sig.color);
+    const message = sig.message || sig.action || `${sig.label}`;
     dot.title = `${sig.label} · Uses confidence, Top-3 mass, and gap deltas`;
-    txt.textContent = `${sig.label} — ${sig.action}`;
+    txt.textContent = `${sig.label} — ${message}`;
 
     // Color the active strategy row border to match signal
     const activeRow = container.querySelector('.strategy-table .row.active, .strategy-table tr.is-recommended, .strategy-row.active');
@@ -808,7 +885,10 @@
       });
     }
 
-  function render(pred) {
+  function renderContent(pred = {}) {
+    openModal();
+    setWorking(false);
+    lastPred = pred;
     // Guard: ensure modal root exists before rendering
     if (!root || !document.body.contains(root)) {
       console.warn('[FLResults] Modal root not available; skipping render.');
@@ -903,25 +983,13 @@
       // Ignore logging errors
     }
 
-    // Open and apply pinned state
-    elements.root.classList.add(clsOpen);
-    if (isPinned) {
-      elements.root.classList.add(clsPinned);
-    } else {
-      elements.root.classList.remove(clsPinned);
-    }
-
-    elements.dialog.setAttribute('aria-hidden', 'false');
-    elements.closeBtn.focus({ preventScroll: true });
-
-    // Reset to predictions tab
-    switchTab('predictions');
   }
 
   function hide() {
     if (!elements) return;
     elements.root.classList.remove(clsOpen, clsPinned);
     elements.dialog.setAttribute('aria-hidden', 'true');
+    setWorking(false);
   }
 
   function copy() {
@@ -1077,6 +1145,42 @@
   }
 
   // Public API (null-safe)
+  const ResultsPanelAPI = {
+    open(opts = {}) {
+      if (opts.renderSkeleton) {
+        renderSkeletonView();
+        return;
+      }
+      if (opts.working) {
+        setWorking(true);
+      }
+      openModal();
+    },
+    render({ pred, calibration } = {}) {
+      try {
+        const safePred = pred || {};
+        renderContent(safePred);
+      } catch (err) {
+        console.error('[ResultsPanel] render error:', err);
+        renderErrorView('Could not render results.');
+      }
+    },
+    renderSkeleton() {
+      renderSkeletonView();
+    },
+    renderError(message) {
+      renderErrorView(message);
+    },
+    setWorking(isWorking) {
+      setWorking(isWorking);
+    },
+    hide() {
+      hide();
+    },
+  };
+
+  window.ResultsPanel = ResultsPanelAPI;
+
   window.FLResults = {
     show(pred) {
       try {
@@ -1084,15 +1188,15 @@
           console.warn('[FLResults] Invalid prediction data');
           return;
         }
-        lastPred = pred;
-        render(pred);
+        ResultsPanelAPI.open();
+        ResultsPanelAPI.render({ pred });
       } catch (err) {
         console.error('[FLResults] show() error:', err);
       }
     },
     hide() {
       try {
-        hide();
+        ResultsPanelAPI.hide();
       } catch (err) {
         console.error('[FLResults] hide() error:', err);
       }

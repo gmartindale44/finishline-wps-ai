@@ -10,42 +10,47 @@ export const STRATEGY_THRESHOLDS = {
   },
 };
 
-export function evaluateStrategySignal({ confidence, top3Mass, gap1, gap2 }) {
+export function evaluateStrategySignal({ confidence, top3Mass, gap1, gap2 } = {}) {
+  const thresholds = STRATEGY_THRESHOLDS || {};
+  const green = thresholds.GREEN || { confidence: 82, top3Mass: 40, gap: 1.8 };
+  const yellow = thresholds.YELLOW || { minConfidence: 68, minTop3Mass: 33 };
+
   const conf = normalizePct(confidence);
   const mass = normalizePct(top3Mass);
   const g1 = normalizePct(gap1);
   const g2 = normalizePct(gap2);
-  const maxGap = Math.max(isFinite(g1) ? g1 : 0, isFinite(g2) ? g2 : 0);
+  const maxGap = Math.max(Number.isFinite(g1) ? g1 : 0, Number.isFinite(g2) ? g2 : 0);
 
-  if (!isFinite(conf) || !isFinite(mass)) {
+  if (!Number.isFinite(conf) || !Number.isFinite(mass)) {
     return cautionSignal();
   }
 
-  const meetsGreen =
-    conf >= STRATEGY_THRESHOLDS.GREEN.confidence &&
-    mass >= STRATEGY_THRESHOLDS.GREEN.top3Mass &&
-    maxGap >= STRATEGY_THRESHOLDS.GREEN.gap;
-
-  if (meetsGreen) {
+  if (
+    conf >= green.confidence &&
+    mass >= green.top3Mass &&
+    maxGap >= green.gap
+  ) {
     return {
       color: 'green',
       label: 'Go',
       action: '✅ Go — Win-Only or ATB (bankroll-scaled)',
+      message: '✅ Go — Win-Only or ATB (bankroll-scaled)',
     };
   }
 
-  const meetsYellow =
-    conf >= STRATEGY_THRESHOLDS.YELLOW.minConfidence ||
-    mass >= STRATEGY_THRESHOLDS.YELLOW.minTop3Mass;
-
-  if (meetsYellow) {
-    return cautionSignal();
+  if (
+    conf >= yellow.minConfidence ||
+    mass >= yellow.minTop3Mass
+  ) {
+    const caution = cautionSignal();
+    return caution;
   }
 
   return {
     color: 'red',
     label: 'Avoid',
     action: '⛔ Avoid — Low edge',
+    message: '⛔ Avoid — Low edge',
   };
 }
 
@@ -54,6 +59,7 @@ function cautionSignal() {
     color: 'yellow',
     label: 'Caution',
     action: '⚠️ Caution — Light ATB ($1–$3) or Win-Only if Confidence ≥ 80%',
+    message: '⚠️ Caution — Light ATB ($1–$3) or Win-Only if Confidence ≥ 80%',
   };
 }
 
