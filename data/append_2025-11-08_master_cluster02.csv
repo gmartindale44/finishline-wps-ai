@@ -1,0 +1,4 @@
+Test_ID,Track,Race_No,Surface,Distance,Confidence,Top_3_Mass,AI_Picks,Strategy,Result,ROI_Percent,WinRate,Notes
+T023,Lone Star Park,5,Dirt,440y,69,0.36,"10,9,11","ATB ($2)","8-4-7",,0,"Winner #8 Marfa Regime; Ex 8-4; Tri 8-4-7"
+T024,Lone Star Park,8,Dirt,400y,70,0.33,"11,8,2","ATB ($2)","4-8-10",,0,"Winner #4 Bogarts Lil Jess; Ex 4-8; Tri 4-8-10"
+
