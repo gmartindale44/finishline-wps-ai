@@ -1,40 +1,54 @@
-name: nightly-calibration (preview)
+name: nightly-calibration
 
 on:
+  # 08:00 UTC daily (2:00 AM CST / 3:00 AM CDT)
   schedule:
-    - cron: '15 3 * * *'
+    - cron: "0 8 * * *"
   workflow_dispatch: {}
 
 permissions:
   contents: write
   pull-requests: write
 
+# Prevent overlapping runs
 concurrency:
-  group: nightly-calibration-preview
+  group: nightly-calibration
   cancel-in-progress: false
 
 jobs:
   recalibrate:
+    name: Calibrate & open PR (uses Preview env secrets)
     runs-on: ubuntu-latest
+    environment: Preview
     env:
+      # Redis / persistence (from Environment “Preview” → Secrets)
       UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
       UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+      FINISHLINE_PERSISTENCE_ENABLED: ${{ secrets.FINISHLINE_PERSISTENCE_ENABLED }}
+      # Optional tuning var (Environment variable)
       CAL_THRESHOLD_MIN_NEW: ${{ vars.CAL_THRESHOLD_MIN_NEW }}
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          persist-credentials: true
           fetch-depth: 0
+          persist-credentials: true
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: "20"
+          cache: "npm"
 
       - name: Install dependencies
         run: npm ci
+
+      # Safe: no-ops if the script isn’t present or the flag is not true
+      - name: Seed persistence (tracks/measurements)
+        if: env.FINISHLINE_PERSISTENCE_ENABLED == 'true'
+        run: |
+          npm run backfill:persistence || echo "No backfill script — skipping"
 
       - name: Validate dataset
         run: npm run validate:dataset
@@ -45,23 +59,23 @@ jobs:
           npm run calibrate:all
           echo "=== Nightly Calibration End ($(date -u)) ==="
 
-      - name: Ensure public artifacts exist
+      # Make sure artifacts are served by Vercel
+      - name: Mirror artifacts to public/data
         run: |
           mkdir -p public/data
           if [ -f data/calibration_v1.json ]; then cp -f data/calibration_v1.json public/data/calibration_v1.json; fi
           if [ -f data/finishline_tests_v1.csv ]; then cp -f data/finishline_tests_v1.csv public/data/finishline_tests_v1.csv; fi
           if [ -f data/calibration_report_v1.md ]; then cp -f data/calibration_report_v1.md public/data/calibration_report_v1.md; fi
 
-      - name: Create PR with changes (if any)
+      # Open a short-lived PR only if files changed
+      - name: Create PR with updated calibration
         id: cpr
         uses: peter-evans/create-pull-request@v6
         with:
-          commit-message: "chore(calibration): nightly artifacts (preview)"
-          title: "Nightly calibration (preview): ${{ github.run_id }}"
-          branch: "auto/calibration-preview-${{ github.run_id }}"
+          branch: "auto/calibration-${{ github.run_id }}"
           base: ${{ github.ref_name }}
-          author: "github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
-          signoff: false
+          title: "chore(ci): nightly calibration (${{ github.run_id }})"
+          commit-message: "chore(ci): nightly calibration artifacts"
           delete-branch: true
           add-paths: |
             data/calibration_v1.json
@@ -79,4 +93,3 @@ jobs:
       - name: No changes to commit
         if: steps.cpr.outputs.pull-request-number == ''
         run: echo "No artifact changes detected. Skipping PR."
-
