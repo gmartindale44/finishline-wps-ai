@@ -9,6 +9,8 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  actions: write
+  id-token: write
 
 # Prevent overlapping nightly runs
 concurrency:
@@ -31,7 +33,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          # IMPORTANT: no cache line so we don't require a lockfile
+          # IMPORTANT: no cache so we don't require a lockfile
 
       - name: Install deps
         run: npm install --no-audit --no-fund
