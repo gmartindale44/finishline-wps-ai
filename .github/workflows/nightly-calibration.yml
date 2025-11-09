@@ -8,6 +8,8 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  actions: write
+  id-token: write
 
 concurrency:
   group: nightly-calibration-preview
@@ -70,6 +72,14 @@ jobs:
             public/data/calibration_v1.json
             public/data/finishline_tests_v1.csv
             public/data/calibration_report_v1.md
+
+      - name: Enable auto-merge (squash)
+        if: steps.cpr.outputs.pull-request-number != ''
+        uses: peter-evans/enable-pull-request-automerge@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          pull-request-number: ${{ steps.cpr.outputs.pull-request-number }}
+          merge-method: squash
 
       - name: PR summary
         if: steps.cpr.outputs.pull-request-number != ''
