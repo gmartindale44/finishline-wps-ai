@@ -1,0 +1,48 @@
+name: nightly-calibration (preview)
+
+on:
+  schedule:
+    - cron: '15 3 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nightly-calibration
+  cancel-in-progress: true
+
+jobs:
+  calibrate:
+    if: github.ref_name == 'feat/nightly-calibration'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Export env (Upstash + flags)
+        run: |
+          echo "UPSTASH_REDIS_REST_URL=${{ secrets.UPSTASH_REDIS_REST_URL }}" >> $GITHUB_ENV
+          echo "UPSTASH_REDIS_REST_TOKEN=${{ secrets.UPSTASH_REDIS_REST_TOKEN }}" >> $GITHUB_ENV
+          echo "FINISHLINE_PERSISTENCE_ENABLED=true" >> $GITHUB_ENV
+          echo "CAL_THRESHOLD_MIN_NEW=${{ vars.CAL_THRESHOLD_MIN_NEW || 10 }}" >> $GITHUB_ENV
+
+      - name: Nightly calibration (map/merge→validate→calibrate→atomic publish)
+        run: node scripts/nightly-calibration.js
+
+      - name: Commit & push if changed
+        run: |
+          git config user.name "nova-bot"
+          git config user.email "bot@novaspark"
+          git add data/*.csv data/calibration_v1.json data/calibration_report_v1.md public/data/*
+          git commit -m "chore(calibration): nightly refresh (preview)" || echo "No changes to commit"
+          git push || echo "No changes to push"
+
