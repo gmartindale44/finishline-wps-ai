@@ -1,27 +1,26 @@
 {
   "name": "finishline-wps-ai",
   "version": "1.0.0",
+  "private": true,
   "type": "module",
   "engines": {
     "node": "20.x"
   },
   "scripts": {
-    "append:rows": "node scripts/csv-append.js",
+    "append:raw": "node scripts/csv-append.js",
     "append:today": "node scripts/map-append-current.js && node scripts/merge-append-current.js",
-    "append:redis": "node scripts/append-from-redis.js",
-    "data:validate": "node scripts/data-validate.js",
+    "append:ready": "node scripts/append-from-races.js",
     "validate:dataset": "node scripts/validate-dataset.js",
     "calibrate": "node scripts/calibrate.js",
-    "calibrate:report": "node scripts/build-report.js",
-    "calibrate:all": "npm run data:validate && node scripts/calibrate.js && node scripts/build-report.js",
-    "backfill:calibrate": "node scripts/redis-backfill-to-csv.js",
-    "build": "echo \"no build step\"",
-    "audit:server": "node scripts/fetch-audit.js",
-    "sanitize:placeholders": "node scripts/sanitize-placeholders.js"
+    "build:report": "node scripts/build-report.js",
+    "calibrate:all": "npm run validate:dataset && npm run calibrate && npm run build:report",
+    "backfill:persistence": "node scripts/backfill-persistence.js",
+    "sanitize:placeholders": "node scripts/sanitize-placeholders.js",
+    "build": "echo \"no build step\""
   },
   "dependencies": {
     "@upstash/redis": "^1.28.2",
-    "formidable": "^3.5.1",
+    "formidable": "^3.5.3",
     "openai": "^4.0.0"
   }
 }
