@@ -7,9 +7,9 @@
     "node": "20.x"
   },
   "scripts": {
-    "append-raw": "node scripts/csv-append.js",
-    "append-todays": "node scripts/merge-append-current.js && node scripts/merge-append-current.js",
-    "append-ready": "node scripts/append-from-races.js",
+    "append:raw": "node scripts/csv-append.js",
+    "append:today": "node scripts/map-append-current.js && node scripts/merge-append-current.js",
+    "append:ready": "node scripts/append-from-races.js",
 
     "validate:dataset": "node scripts/validate-dataset.js",
     "calibrate": "node scripts/calibrate.js",
@@ -17,12 +17,12 @@
     "calibrate:all": "npm run validate:dataset && npm run calibrate && npm run build:report",
 
     "backfill:persistence": "node scripts/backfill-persistence.js",
-    "build": "echo \"no build step\"",
-    "sanitize-placeholders": "node scripts/sanitize-placeholders.js"
+    "sanitize:placeholders": "node scripts/sanitize-placeholders.js",
+    "build": "echo \"no build step\""
   },
   "dependencies": {
-    "openai": "^4.0.0",
+    "@upstash/redis": "^1.28.2",
     "formidable": "^3.5.3",
-    "@upstash/redis": "^1.28.2"
+    "openai": "^4.0.0"
   }
 }

@@ -31,12 +31,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
+          # IMPORTANT: no cache line so we don't require a lockfile
 
       - name: Install deps
         run: npm install --no-audit --no-fund
 
-      # Optional seed of persistence (safe to leave on; no-ops if script missing)
+      # Optional seed (safe to leave on; will no-op if script missing)
       - name: Seed persistence (tracks/measurements)
         env:
           FINISHLINE_PERSISTENCE_ENABLED: ${{ vars.FINISHLINE_PERSISTENCE_ENABLED || 'true' }}
