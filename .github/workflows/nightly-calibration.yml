@@ -1,0 +1,62 @@
+name: nightly-calibration
+
+on:
+  schedule:
+    # 08:00 UTC every day (2:00 AM CST / 3:00 AM CDT)
+    - cron: "0 8 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write          # needed to push branch/PR with new calibration
+  pull-requests: write
+
+jobs:
+  calibrate:
+    name: Calibrate & open PR (preview env secrets)
+    runs-on: ubuntu-latest
+    environment: Preview   # uses your "Preview" Environment Secrets you just added
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install deps
+        run: npm ci
+
+      # (Optional) backfill/redis—safe to leave; will no-op if not present
+      - name: Seed persistence (tracks/measurements)
+        if: env.FINISHLINE_PERSISTENCE_ENABLED == 'true'
+        run: |
+          npm run backfill:persistence || echo "backfill script not present—skipping"
+
+      - name: Validate dataset
+        run: npm run validate:dataset
+
+      - name: Calibrate all
+        run: npm run calibrate:all
+
+      # Copy artifacts into public/data so previews/production can serve them
+      - name: Mirror artifacts to public/data
+        run: |
+          mkdir -p public/data
+          cp -f data/finishline_tests_v1.csv public/data/ || true
+          cp -f data/calibration_v1.json public/data/ || true
+          cp -f data/calibration_report_v1.md public/data/ || true
+
+      # Commit changes on a short-lived branch and open a PR
+      - name: Create PR with updated calibration
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: ci/calibration-${{ github.run_id }}
+          title: "chore(ci): nightly calibration (${{ github.run_id }})"
+          commit-message: "chore(ci): nightly calibration"
+          body: |
+            Automated nightly calibration run.
+            - Validated dataset
+            - Regenerated `data/calibration_v1.json`
+            - Mirrored to `public/data/`
+          labels: calibration, automated
