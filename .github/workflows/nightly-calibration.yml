@@ -7,42 +7,76 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 concurrency:
-  group: nightly-calibration
-  cancel-in-progress: true
+  group: nightly-calibration-preview
+  cancel-in-progress: false
 
 jobs:
-  calibrate:
-    if: github.ref_name == 'feat/nightly-calibration'
+  recalibrate:
     runs-on: ubuntu-latest
+    env:
+      UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+      UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+      CAL_THRESHOLD_MIN_NEW: ${{ vars.CAL_THRESHOLD_MIN_NEW }}
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          fetch-depth: 0
 
-      - name: Setup Node
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: '20'
+          cache: 'npm'
 
-      - name: Install deps
+      - name: Install dependencies
         run: npm ci
 
-      - name: Export env (Upstash + flags)
-        run: |
-          echo "UPSTASH_REDIS_REST_URL=${{ secrets.UPSTASH_REDIS_REST_URL }}" >> $GITHUB_ENV
-          echo "UPSTASH_REDIS_REST_TOKEN=${{ secrets.UPSTASH_REDIS_REST_TOKEN }}" >> $GITHUB_ENV
-          echo "FINISHLINE_PERSISTENCE_ENABLED=true" >> $GITHUB_ENV
-          echo "CAL_THRESHOLD_MIN_NEW=${{ vars.CAL_THRESHOLD_MIN_NEW || 10 }}" >> $GITHUB_ENV
+      - name: Validate dataset
+        run: npm run validate:dataset
 
-      - name: Nightly calibration (map/merge→validate→calibrate→atomic publish)
-        run: node scripts/nightly-calibration.js
-
-      - name: Commit & push if changed
+      - name: Run calibration pipeline
         run: |
-          git config user.name "nova-bot"
-          git config user.email "bot@novaspark"
-          git add data/*.csv data/calibration_v1.json data/calibration_report_v1.md public/data/*
-          git commit -m "chore(calibration): nightly refresh (preview)" || echo "No changes to commit"
-          git push || echo "No changes to push"
+          echo "=== Nightly Calibration Start ($(date -u)) ==="
+          npm run calibrate:all
+          echo "=== Nightly Calibration End ($(date -u)) ==="
+
+      - name: Ensure public artifacts exist
+        run: |
+          mkdir -p public/data
+          if [ -f data/calibration_v1.json ]; then cp -f data/calibration_v1.json public/data/calibration_v1.json; fi
+          if [ -f data/finishline_tests_v1.csv ]; then cp -f data/finishline_tests_v1.csv public/data/finishline_tests_v1.csv; fi
+          if [ -f data/calibration_report_v1.md ]; then cp -f data/calibration_report_v1.md public/data/calibration_report_v1.md; fi
+
+      - name: Create PR with changes (if any)
+        id: cpr
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "chore(calibration): nightly artifacts (preview)"
+          title: "Nightly calibration (preview): ${{ github.run_id }}"
+          branch: "auto/calibration-preview-${{ github.run_id }}"
+          base: ${{ github.ref_name }}
+          author: "github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
+          signoff: false
+          delete-branch: true
+          add-paths: |
+            data/calibration_v1.json
+            data/finishline_tests_v1.csv
+            data/calibration_report_v1.md
+            public/data/calibration_v1.json
+            public/data/finishline_tests_v1.csv
+            public/data/calibration_report_v1.md
+
+      - name: PR summary
+        if: steps.cpr.outputs.pull-request-number != ''
+        run: |
+          echo "Opened PR #${{ steps.cpr.outputs.pull-request-number }}: ${{ steps.cpr.outputs.pull-request-url }}"
+
+      - name: No changes to commit
+        if: steps.cpr.outputs.pull-request-number == ''
+        run: echo "No artifact changes detected. Skipping PR."
 
