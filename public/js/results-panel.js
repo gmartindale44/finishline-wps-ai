@@ -3,6 +3,116 @@
 (function () {
   'use strict';
 
+  const persistenceHelper = (() => {
+    let readyPromise = null;
+
+    function ensureReady() {
+      if (!readyPromise) {
+        readyPromise = fetch('/api/health', { cache: 'no-store' })
+          .then((response) => (response.ok ? response.json() : null))
+          .then((json) => Boolean(json?.persistence?.enabled && json?.persistence?.hasRedis))
+          .catch(() => false);
+      }
+      return readyPromise;
+    }
+
+    function sendPayload(payload) {
+      if (!payload) return;
+      const json = JSON.stringify(payload);
+
+      try {
+        if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+          const blob = new Blob([json], { type: 'application/json' });
+          navigator.sendBeacon('/api/persistence', blob);
+          return;
+        }
+      } catch (_) {
+        // ignore sendBeacon failures and fall back to fetch
+      }
+
+      try {
+        fetch('/api/persistence', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: json,
+          keepalive: true,
+        }).catch(() => {});
+      } catch (_) {
+        // ignore fetch errors
+      }
+    }
+
+    async function persist(payload) {
+      if (!payload) return;
+      const enabled = await ensureReady();
+      if (!enabled) return;
+      sendPayload(payload);
+    }
+
+    return {
+      persist,
+    };
+  })();
+
+  function coalesce(...values) {
+    for (const value of values) {
+      if (value != null && value !== '') {
+        return value;
+      }
+    }
+    return null;
+  }
+
+  function buildPersistencePayload(pred) {
+    if (!pred || typeof pred !== 'object') return null;
+
+    const meta = pred.meta || {};
+    const picks = Array.isArray(pred.picks) ? pred.picks : [];
+
+    const tracks = [
+      meta.track,
+      meta.Track,
+      (typeof window !== 'undefined' && window.__fl_state?.track) || null,
+    ];
+
+    const surfaces = [
+      meta.surface,
+      meta.Surface,
+      (typeof window !== 'undefined' && window.__fl_state?.surface) || null,
+    ];
+
+    const distances = [
+      meta.distance,
+      meta.distance_input,
+      meta.distancePretty,
+      (typeof window !== 'undefined' && window.__fl_state?.distance_input) || null,
+    ];
+
+    const raceIds = [meta.race, meta.race_no, meta.raceNo];
+
+    const payload = {
+      track: coalesce(...tracks),
+      race: coalesce(...raceIds),
+      surface: coalesce(...surfaces),
+      distance: coalesce(...distances),
+      confidence: typeof pred.confidence === 'number' ? pred.confidence : null,
+      top3_mass: typeof pred.top3_mass === 'number' ? pred.top3_mass : null,
+      picks: picks
+        .map((entry) => {
+          if (!entry) return null;
+          if (typeof entry === 'string') return entry;
+          return entry.name || entry.slot || null;
+        })
+        .filter(Boolean),
+      strategy: pred.strategy?.recommended || null,
+      meta: {
+        source: 'preview',
+      },
+    };
+
+    return payload;
+  }
+
   // Defensive mount helper
   function ensureResultsRoot() {
     let root = document.getElementById('fl-results-root');
@@ -856,6 +966,15 @@
 
     // Reset to predictions tab
     switchTab('predictions');
+
+    try {
+      const payload = buildPersistencePayload(pred);
+      if (payload) {
+        persistenceHelper.persist(payload);
+      }
+    } catch (err) {
+      console.debug('[FLResults] persistence skipped', err?.message || err);
+    }
   }
 
   function hide() {
