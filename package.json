@@ -10,12 +10,10 @@
     "append:raw": "node scripts/csv-append.js",
     "append:today": "node scripts/map-append-current.js && node scripts/merge-append-current.js",
     "append:ready": "node scripts/append-from-races.js",
-
     "validate:dataset": "node scripts/validate-dataset.js",
     "calibrate": "node scripts/calibrate.js",
     "build:report": "node scripts/build-report.js",
     "calibrate:all": "npm run validate:dataset && npm run calibrate && npm run build:report",
-
     "backfill:persistence": "node scripts/backfill-persistence.js",
     "sanitize:placeholders": "node scripts/sanitize-placeholders.js",
     "build": "echo \"no build step\""

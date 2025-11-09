@@ -38,7 +38,7 @@ jobs:
       - name: Install deps
         run: npm install --no-audit --no-fund
 
-      # Optional seed (safe to leave on; will no-op if script missing)
+      # Optional seed (no-op if script missing)
       - name: Seed persistence (tracks/measurements)
         env:
           FINISHLINE_PERSISTENCE_ENABLED: ${{ vars.FINISHLINE_PERSISTENCE_ENABLED || 'true' }}
@@ -65,6 +65,7 @@ jobs:
           [ -f data/calibration_report_v1.md ] && cp -f data/calibration_report_v1.md public/data/
 
       - name: Create PR with updated calibration
+        id: cpr
         uses: peter-evans/create-pull-request@v6
         with:
           branch: ci/calibration-${{ github.run_id }}
@@ -78,3 +79,11 @@ jobs:
             public/data/calibration_v1.json
             public/data/finishline_tests_v1.csv
             public/data/calibration_report_v1.md
+
+      - name: Enable auto-merge (squash)
+        if: steps.cpr.outputs.pull-request-number != ''
+        uses: peter-evans/enable-pull-request-automerge@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          pull-request-number: ${{ steps.cpr.outputs.pull-request-number }}
+          merge-method: squash
