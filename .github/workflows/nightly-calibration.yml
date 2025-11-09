@@ -33,7 +33,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          # IMPORTANT: no cache line so we don't require a lockfile
+          # IMPORTANT: no cache so we don't require a lockfile
 
       - name: Install deps
         run: npm install --no-audit --no-fund
@@ -78,4 +78,3 @@ jobs:
             public/data/calibration_v1.json
             public/data/finishline_tests_v1.csv
             public/data/calibration_report_v1.md
-

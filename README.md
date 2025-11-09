@@ -1,3 +1,6 @@
+[![Nightly Calibration](https://github.com/gmartindale44/finishline-wps-ai/actions/workflows/nightly-calibration.yml/badge.svg)](https://github.com/gmartindale44/finishline-wps-ai/actions/workflows/nightly-calibration.yml)
+[![Vercel Deploy](https://img.shields.io/badge/deploy-vercel-green?logo=vercel)](https://finishline-wps-ai.vercel.app)
+
 # FinishLine WPS AI
 
 **Advanced horse race prediction system for Win/Place/Show betting**
