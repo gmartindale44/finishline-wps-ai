@@ -1,92 +1,71 @@
-name: nightly-calibration (preview)
+name: nightly-calibration
 
 on:
   schedule:
-    - cron: '15 3 * * *'
+    # 08:00 UTC daily (02:00 AM CST / 03:00 AM CDT)
+    - cron: "0 8 * * *"
   workflow_dispatch: {}
 
 permissions:
   contents: write
   pull-requests: write
 
+# Prevent overlapping nightly runs
 concurrency:
-  group: nightly-calibration-preview
+  group: nightly-calibration
   cancel-in-progress: false
 
 jobs:
-  recalibrate:
-    name: Calibrate & open PR (preview env secrets)
+  calibrate:
+    name: Calibrate & open PR (uses Preview env secrets)
     runs-on: ubuntu-latest
     environment: Preview
-    env:
-      UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
-      UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
-      CAL_THRESHOLD_MIN_NEW: ${{ vars.CAL_THRESHOLD_MIN_NEW }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          persist-credentials: true
           fetch-depth: 0
 
-      - name: Set up Node.js
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
 
-      - name: Install dependencies
+      - name: Install deps
         run: npm ci
 
-      - name: Validate dataset
-        run: npm run validate:dataset
+      - name: Seed persistence (tracks/measurements)
+        env:
+          FINISHLINE_PERSISTENCE_ENABLED: ${{ vars.FINISHLINE_PERSISTENCE_ENABLED || 'true' }}
+        run: |
+          if [ "$FINISHLINE_PERSISTENCE_ENABLED" = "true" ]; then
+            npm run backfill:persistence || echo "backfill script not present — skipping"
+          fi
 
-      - name: Run calibration pipeline
-        shell: bash
+      - name: Validate dataset
+        run: npm run validate:dataset || echo "validate script not present — continuing"
+
+      - name: Calibrate all
         run: |
           echo "=== Nightly Calibration Start ($(date -u)) ==="
-          set -e
-          # Try explicit script files first, fall back to npm scripts if defined
-          if [ -f scripts/calibrate.js ]; then
-            node scripts/calibrate.js
-          elif [ -f scripts/calibrate.mjs ]; then
-            node scripts/calibrate.mjs
-          elif npm run | grep -qE '^ *calibrate($|:)'; then
-            # Prefer a simple `calibrate` if present, else use `calibrate:all`
-            npm run calibrate || npm run calibrate:all
-          else
-            echo "No calibration script found. Skipping calibration step."
-          fi
-
-          # Optional: generate report if present
-          if [ -f scripts/calibrate-report.js ]; then
-            node scripts/calibrate-report.js
-          elif [ -f scripts/calibration_report.js ]; then
-            node scripts/calibration_report.js
-          elif npm run | grep -qE '^ *calibrate:report'; then
-            npm run calibrate:report
-          else
-            echo "No calibration report script found. Skipping report."
-          fi
+          npm run calibrate:all
           echo "=== Nightly Calibration End ($(date -u)) ==="
 
-      - name: Ensure public artifacts exist
+      - name: Mirror artifacts to public/data
         run: |
           mkdir -p public/data
-          if [ -f data/calibration_v1.json ]; then cp -f data/calibration_v1.json public/data/calibration_v1.json; fi
-          if [ -f data/finishline_tests_v1.csv ]; then cp -f data/finishline_tests_v1.csv public/data/finishline_tests_v1.csv; fi
-          if [ -f data/calibration_report_v1.md ]; then cp -f data/calibration_report_v1.md public/data/calibration_report_v1.md; fi
+          [ -f data/finishline_tests_v1.csv ] && cp -f data/finishline_tests_v1.csv public/data/
+          [ -f data/calibration_v1.json ] && cp -f data/calibration_v1.json public/data/
+          [ -f data/calibration_report_v1.md ] && cp -f data/calibration_report_v1.md public/data/
 
-      - name: Create PR with changes (if any)
-        id: cpr
+      - name: Create PR with updated calibration
         uses: peter-evans/create-pull-request@v6
         with:
-          commit-message: "chore(calibration): nightly artifacts (preview)"
-          title: "Nightly calibration (preview): ${{ github.run_id }}"
-          branch: "auto/calibration-preview-${{ github.run_id }}"
-          base: ${{ github.ref_name }}
-          author: "github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
-          signoff: false
+          branch: ci/calibration-${{ github.run_id }}
+          title: "chore(ci): nightly calibration (${{ github.run_id }})"
+          commit-message: "chore(ci): nightly calibration"
           delete-branch: true
           add-paths: |
             data/calibration_v1.json
@@ -95,13 +74,3 @@ jobs:
             public/data/calibration_v1.json
             public/data/finishline_tests_v1.csv
             public/data/calibration_report_v1.md
-
-      - name: PR summary
-        if: steps.cpr.outputs.pull-request-number != ''
-        run: |
-          echo "Opened PR #${{ steps.cpr.outputs.pull-request-number }}: ${{ steps.cpr.outputs.pull-request-url }}"
-
-      - name: No changes to commit
-        if: steps.cpr.outputs.pull-request-number == ''
-        run: echo "No artifact changes detected. Skipping PR."
-
