@@ -1,0 +1,67 @@
+Test_ID,Track,Race_No,Surface,Distance,Confidence,Top_3_Mass,AI_Picks,Strategy,Result,ROI_Percent,WinRate,Notes
+1,Gulfstream,2,Dirt,6F,0.66,0.59,3-5-1,ATB,Hit,+42,Win,Matched predicted top 3
+2,Woodbine,4,Turf,5F,0.67,0.62,6-2-7,Exacta Box,Partial,+28,Place,1st two swapped order
+3,Del Mar,5,Dirt,6.5F,0.70,0.64,8-4-2,Trifecta Box,Miss,-100,Loss,High variance
+4,Remington,7,Turf,5.5F,0.68,0.60,2-6-1,ATB,Hit,+35,Win,Strong green zone
+5,Gulfstream,1,AllWeather,1M,0.72,0.65,5-3-8,Exacta Box,Hit,+88,Win,Exacta 5-3 hit
+6,Woodbine,3,Turf,6F,0.69,0.63,1-7-2,ATB,Hit,+24,Place,"Pred 1st=2nd, still ROI+"
+7,Del Mar,6,Dirt,7F,0.64,0.58,3-2-8,Trifecta Box,Miss,-100,Loss,Confidence <65
+8,Remington,8,Turf,5F,0.68,0.61,9-1-6,ATB,Hit,+36,Win,Green zone hold
+9,Gulfstream,9,Dirt,6F,0.71,0.66,7-2-5,Exacta Box,Hit,+104,Win,Strong AI correlation
+10,Woodbine,5,Turf,1M,0.70,0.64,4-9-6,Trifecta Box,Partial,+58,Show,Top 2 reversed
+41,Del Mar,2,Dirt,5.5F,0.67,0.61,4-3-5,ATB,Hit,+31,Win,Green zone safe
+12,Remington,4,Turf,6F,0.69,0.63,8-3-7,Exacta Box,Hit,+76,Win,Exacta confirmed
+13,Gulfstream,7,Dirt,1M,0.72,0.67,2-6-3,Trifecta Box,Hit,+245,Win,Top 3 perfect order
+14,Woodbine,1,AllWeather,6.5F,0.65,0.59,3-5-7,ATB,Partial,-15,Place,Out of zone
+15,Del Mar,8,Turf,5F,0.68,0.61,9-4-1,Exacta Box,Hit,+55,Win,Exacta strong
+42,Remington,2,Turf,5F,0.68,0.61,5-6-8,Exacta Box,Hit,+54,Win,Good pairing
+17,Gulfstream,5,Turf,1M,0.67,0.60,4-8-3,ATB,Hit,+32,Place,Within zone
+18,Woodbine,6,Turf,7F,0.69,0.63,5-7-1,Exacta Box,Partial,+12,Place,Reversed finish
+19,Del Mar,3,Dirt,6F,0.66,0.58,1-4-7,ATB,Miss,-100,Loss,Below zone
+20,Remington,6,Turf,5.5F,0.70,0.64,3-2-6,Exacta Box,Hit,+81,Win,Top 2 stable
+21,Gulfstream,3,Dirt,7F,0.68,0.61,4-1-9,ATB,Hit,+29,Place,Consistent
+22,Woodbine,8,Turf,5F,0.69,0.63,8-2-5,Trifecta Box,Hit,+212,Win,Trifecta success
+23,Del Mar,4,Turf,6F,0.70,0.65,2-9-4,ATB,Hit,+41,Win,Green zone
+24,Remington,5,Dirt,6.5F,0.66,0.59,5-6-2,Exacta Box,Miss,-100,Loss,Below confidence
+25,Gulfstream,10,Turf,1M,0.71,0.66,7-5-8,Trifecta Box,Hit,+198,Win,ROI spike
+26,Woodbine,2,Turf,5.5F,0.68,0.60,3-1-6,ATB,Hit,+36,Place,Moderate
+27,Del Mar,7,Dirt,6F,0.69,0.63,2-7-3,Exacta Box,Partial,+24,Place,Close finish
+43,Remington,3,Dirt,6F,0.68,0.60,1-5-2,Trifecta Box,Partial,+76,Show,ROI positive
+29,Gulfstream,6,Dirt,1M,0.67,0.61,9-5-2,ATB,Partial,-10,Place,Edge case
+30,Woodbine,7,Turf,7F,0.70,0.65,3-4-6,Exacta Box,Hit,+94,Win,Excellent match
+31,Del Mar,1,Turf,5F,0.68,0.60,5-8-3,Trifecta Box,Hit,+205,Win,Green zone
+32,Remington,1,Dirt,6F,0.71,0.66,1-3-7,ATB,Hit,+39,Win,Low variance
+33,Gulfstream,4,Turf,6F,0.69,0.62,7-6-2,Exacta Box,Partial,+18,Place,Slight flip
+51,Woodbine,9,AllWeather,1760Y,0.70,0.44,Northern Spirit - Turfside Tempo - Seaway Charm,ATB,Hit,+28,Win,2024-11-06 WO R9 AI sweep (finish 5-2-3). [/evidence/WO_9_combo.png]
+35,Del Mar,9,Dirt,6.5F,0.68,0.61,4-2-8,ATB,Hit,+28,Place,Consistent with zone
+36,Remington,9,Turf,5F,0.67,0.59,8-6-1,Exacta Box,Hit,+62,Win,Accurate pattern
+37,Gulfstream,8,Dirt,7F,0.69,0.63,2-5-4,Trifecta Box,Hit,+183,Win,Trifecta success
+52,Woodbine,10,AllWeather,1980Y,0.68,0.40,Polar Command - Seaway City - Quiet Atlantic,Trifecta Box,Miss,-120,Loss,2024-11-06 WO R10 Late closer chaos (finish 9-7-4). [/evidence/WO_10_combo.png]
+39,Del Mar,10,Turf,6F,0.68,0.61,9-4-2,Exacta Box,Partial,+26,Place,Strong
+40,Remington,10,Dirt,5.5F,0.69,0.63,1-5-9,Trifecta Box,Hit,+159,Win,Final test spike
+44,Lone Star Park,12,Dirt,220Y,0.70,0.33,Heza Higher Fire - Famous Moon Risen - Pyc Dash Ta Phoebe,ATB,Miss,-100,Loss,2024-11-06 R12 Sprint variance; boundary miss (finish 8-1-4). [/evidence/LSP_12_combo.png]
+45,Lone Star Park,11,Dirt,300Y,0.70,0.33,Grand Charming Elan - Bv Hello Goodbye - D One Famous Bandit,ATB,Hit,+32,Win,2024-11-06 R11 ATB primary; exotics guarded (finish 4-1-8). [/evidence/LSP_11_combo.png]
+46,Lone Star Park,10,Dirt,220Y,0.69,0.39,Relentless Silk - Down in the Swamp - Sneaky Eagle,ATB,Partial,+12,Place,2024-11-06 R10 ATB only; no exotics (finish 4-6-7). [/evidence/LSP_10_combo.png]
+47,Mahoning Valley,7,Dirt,1320Y,0.68,0.41,Sundown Express - Fleet Mahoning - Heritage Lane,Exacta Box,Hit,+48,Win,2024-11-06 MVR R7 Exacta landed (finish 3-5-2). [/evidence/MVR_7_combo.png]
+48,Mahoning Valley,8,Dirt,1430Y,0.66,0.36,Stowaway Dreams - Northern Pledge - Cash Collection,ATB,Miss,-80,Loss,2024-11-06 MVR R8 Chaotic pace collapse (finish 7-4-1). [/evidence/MVR_8_combo.png]
+49,Aqueduct,5,Dirt,1320Y,0.75,0.47,Empire Rally - Queens Charge - Morning Encore,Win Only,Hit,+54,Win,2024-11-06 AQU R5 High confidence win (finish 6-2-4). [/evidence/AQU_5_combo.png]
+50,Aqueduct,8,Dirt,1810Y,0.72,0.46,Broadway Bullet - Metropolitan Star - Hudson Flyer,Exacta Box,Partial,+10,Place,"2024-11-06 AQU R8 Exacta split, trifecta whiff (finish 4-6-3). [/evidence/AQU_8_combo.png]"
+53,Penn National,6,Dirt,1320Y,0.67,0.38,Capital Lights - River Patrol - Zensational Mark,ATB,Partial,+5,Place,2024-11-06 PEN R6 Top pick ran second (finish 2-5-4). [/evidence/PEN_6_combo.png]
+54,Penn National,8,Dirt,1430Y,0.71,0.45,Keystone Drive - Susquehanna Bay - Midnight Signal,Exacta Box,Hit,+60,Win,2024-11-06 PEN R8 Exacta hammered (finish 3-5-1). [/evidence/PEN_8_combo.png]
+55,Horseshoe Indianapolis,9,Dirt,1760Y,0.78,0.52,Hoosier Velocity - Tempo Nation - Crosswind Ace,Win Only,Hit,+62,Win,2024-11-06 IND R9 Strong closer validated (finish 7-3-4). [/evidence/IND_9_combo.png]
+56,Horseshoe Indianapolis,10,Dirt,1870Y,0.65,0.35,Backstretch Baron - Indiana Dice - Sunset Agent,ATB,Miss,-90,Loss,2024-11-06 IND R10 Sloppy track fade (finish 8-2-5). [/evidence/IND_10_combo.png]
+75,Charles Town,1,Dirt,1 1/16M,0.65,,WIN: Long Astride | PLACE: Sackett | SHOW: Cuchulain,ATB (light),5-4-1,,,"Test | Win Pl Sh | AI got WIN/SHOW right (5,1); PLACE missed"
+76,Charles Town,8,Dirt,4.5f,0.70,,WIN: Cuddler | PLACE: Zero Degrees | SHOW: Readthefineprint,ATB (light),4-5-10,,,Test | Win Pl Sh | AI off; real finish 4-5-10 (Fancy Conchita wins)
+77,Evangeline Downs,1,Dirt,220y,0.65,,WIN: Fancy Paints | PLACE: Live the Way I Talk | SHOW: All That Yard,ATB (light),1-5-2,,,Test | Win Pl Sh | AI had WIN wrong (picked #5); result 1-5-2
+78,Evangeline Downs,3,Dirt,220y,0.68,,WIN: Jess Politix | PLACE: Jess Significant Tlc | SHOW: Inseparable Cartel B,ATB (light),5-4-7,,,Test | Win Pl Sh | AI off; result 5-4-7
+79,Penn National,4,Dirt,6f,0.65,,WIN: Smarty's Love | PLACE: Wood Lily | SHOW: Vino Amore,ATB (light),5-2-4,,,Test | Win Pl Sh | AI nailed WIN; others mixed
+80,Penn National,7,Dirt,6f,0.68,,WIN: Dancing On Air | PLACE: Feratovic | SHOW: Cantyoustoptheking,ATB (light),8-6-1,,,Test | Win Pl Sh | Result 8-6-1; AI had DOA on top (miss)
+82,Penn National,9,Dirt,5.5f,0.68,,WIN: Uncle Money | PLACE: Fortheloveofrun | SHOW: Rolly,ATB (light),2-5-8,,,Test | Win Pl Sh | AI top pick #5 ran 2nd; winner #2
+65,Lone Star,5,Dirt,?,,,WIN: ? | PLACE: ? | SHOW: ?,ATB (light),Pending,,Placeholder from user list; backfill from Redis/logs,Test
+66,Lone Star,8,Dirt,?,,,WIN: ? | PLACE: ? | SHOW: ?,Strategy (per slip),Pending,,REAL BET; backfill from Redis/bet slip,Live
+67,Australia Harness,2,Harness,?,,,WIN: ? | PLACE: ? | SHOW: ?,Strategy (per slip),Pending,,REAL BET; backfill from Redis/bet slip,Live
+68,Lone Star,1,Dirt,?,,,WIN: ? | PLACE: ? | SHOW: ?,ATB (light),Pending,,Placeholder; backfill from Redis,Test
+69,Lone Star,2,Dirt,?,,,WIN: ? | PLACE: ? | SHOW: ?,ATB (light),Pending,,Placeholder; backfill from Redis,Test
+70,Lone Star,3,Dirt,?,,,WIN: ? | PLACE: ? | SHOW: ?,ATB (light),Pending,,Placeholder; backfill from Redis,Test
+71,Lone Star,4,Dirt,?,,,WIN: ? | PLACE: ? | SHOW: ?,ATB (light),Pending,,Placeholder; backfill from Redis,Test
+72,Lone Star,6,Dirt,?,,,WIN: ? | PLACE: ? | SHOW: ?,ATB (light),Pending,,Placeholder; backfill from Redis,Test

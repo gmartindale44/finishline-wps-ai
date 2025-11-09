@@ -1,0 +1,356 @@
+/* FinishLine Results Panel Styles */
+
+.fl-results {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 10020;
+}
+
+.fl-results--open {
+  display: flex;
+}
+
+.fl-results__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(2px);
+}
+
+.fl-results__dialog {
+  position: relative;
+  width: min(720px, 92vw);
+  background: #0f1120;
+  color: #e7e9f5;
+  border: 1px solid #2a2f4a;
+  border-radius: 16px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  padding: 20px 22px;
+}
+
+.fl-results__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.fl-results__title {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+.fl-results__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.fl-button {
+  appearance: none;
+  border: 1px solid #39406a;
+  background: #1a1f3a;
+  color: #dfe3ff;
+  padding: 8px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+  transition: background 0.2s;
+}
+
+.fl-button:hover {
+  background: #23294d;
+}
+
+.fl-button:focus {
+  outline: 2px solid #5c86ff;
+  outline-offset: 2px;
+}
+
+.fl-button--ghost {
+  background: transparent;
+}
+
+.fl-button--ghost:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.fl-results__badges {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin: 14px 0;
+}
+
+@media (min-width: 560px) {
+  .fl-results__badges {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+}
+
+.fl-badge {
+  border: 1px solid #2c3258;
+  border-radius: 14px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: #121531;
+}
+
+.fl-badge__rank {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.fl-badge__name {
+  font-size: 18px;
+  font-weight: 800;
+  color: #e7e9f5;
+}
+
+.fl-badge__meta {
+  opacity: 0.85;
+  font-size: 13px;
+  color: #b8bdd4;
+}
+
+.fl-badge--gold {
+  outline: 2px solid #7c5cff40;
+}
+
+.fl-badge--silver {
+  outline: 2px solid #5c86ff40;
+}
+
+.fl-badge--bronze {
+  outline: 2px solid #ff996640;
+}
+
+.fl-results__confidence {
+  margin-top: 16px;
+}
+
+.fl-results__confidence-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.fl-results__confidence-label strong {
+  font-size: 16px;
+  color: #e7e9f5;
+}
+
+.fl-progress {
+  height: 10px;
+  border-radius: 999px;
+  background: #21264a;
+  overflow: hidden;
+  margin-top: 6px;
+}
+
+.fl-progress__bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #8b5cf6, #22d3ee);
+  transition: width 0.4s ease;
+}
+
+/* Pinned mode */
+.fl-results--pinned {
+  inset: auto;
+  left: auto;
+  right: 16px;
+  bottom: 16px;
+  top: auto;
+}
+
+.fl-results--pinned .fl-results__backdrop {
+  display: none;
+}
+
+.fl-results--pinned .fl-results__dialog {
+  width: min(420px, 92vw);
+}
+
+/* ─────────────────────────────────────────────────
+   Exotic ticket line styling
+   ───────────────────────────────────────────────── */
+.fl-ticket-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  margin: 6px 0;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.04);
+  font-size: 14px;
+}
+
+.fl-ticket-conf {
+  opacity: 0.9;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─────────────────────────────────────────────────
+   Strategy card styling
+   ───────────────────────────────────────────────── */
+.fl-strategy-card {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+.fl-strategy-title {
+  font-weight: 600;
+  margin-bottom: 6px;
+  font-size: 16px;
+  color: #dfe3ff;
+}
+
+.fl-strategy-reco {
+  margin-bottom: 8px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 14px;
+  color: #dfe3ff;
+}
+
+.fl-strategy-reco .fl-badge {
+  display: inline-block;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(110,78,238,0.2);
+  border: 1px solid rgba(110,78,238,0.35);
+  color: #dfe3ff;
+}
+
+.fl-strategy-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.fl-strategy-chips .fl-chip {
+  display: inline-block;
+  padding: 4px 10px;
+  background: rgba(92,134,255,0.15);
+  border: 1px solid rgba(92,134,255,0.3);
+  border-radius: 12px;
+  font-size: 12px;
+  color: #b8bdd4;
+}
+
+.fl-strategy-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0,1fr));
+  gap: 6px 14px;
+  font-size: 13px;
+  opacity: 0.9;
+  margin-bottom: 8px;
+  color: #b8bdd4;
+}
+
+.fl-strategy-metrics strong {
+  color: #dfe3ff;
+}
+
+.fl-strategy-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-top: 8px;
+}
+
+.fl-strategy-table th,
+.fl-strategy-table td {
+  text-align: left;
+  padding: 6px 8px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  color: #b8bdd4;
+}
+
+.fl-strategy-table thead th {
+  border-top: none;
+  opacity: 0.9;
+  font-weight: 600;
+  color: #dfe3ff;
+}
+
+.fl-strategy-table tbody tr:hover {
+  background: rgba(255,255,255,0.02);
+}
+
+.fl-strategy-table tr.is-recommended {
+  background: rgba(110,78,238,0.12);
+}
+
+.fl-strategy-plan {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+.fl-strategy-plan h4 {
+  margin: 10px 0 6px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #dfe3ff;
+}
+
+.fl-strategy-plan ul {
+  margin: 0 0 6px 16px;
+  padding: 0;
+  list-style-type: disc;
+}
+
+.fl-strategy-plan li {
+  margin: 4px 0;
+  color: #b8bdd4;
+  font-size: 13px;
+}
+
+.fl-note {
+  opacity: 0.8;
+  font-size: 12px;
+  color: #b8bdd4;
+  margin-top: 8px;
+  font-style: italic;
+}
+
+.fl-list {
+  list-style-type: disc;
+  padding-left: 20px;
+  margin: 8px 0;
+}
+
+.fl-list li {
+  margin: 4px 0;
+  color: #b8bdd4;
+  font-size: 13px;
+}
+
+/* Range input styling */
+input[type="range"] {
+  accent-color: #8b5cf6;
+  cursor: pointer;
+}
+
+input[type="range"]:hover {
+  accent-color: #9d6dff;
+}
+

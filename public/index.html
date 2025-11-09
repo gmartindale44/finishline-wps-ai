@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FinishLine WPS AI</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <link rel="stylesheet" href="/finishline-picker-guard.css" />
+  <link rel="stylesheet" href="/css/finishline.css" />
+  <link rel="stylesheet" href="/css/combobox.css" />
+</head>
+<body>
+  <header class="hero">
+    <div class="logo-row">
+      <span class="logo-horse">🐎</span>
+      <h1>FinishLine WPS AI</h1>
+    </div>
+    <p class="subtitle">Win / Place / Show Predictor</p>
+  </header>
+
+  <!-- Main Panel (single canonical form) -->
+  <section class="panel panel-main" id="mainPanel">
+    <div class="panel-header">
+      <h2>Race Information</h2>
+      <span class="badge" id="statusBadge" data-ocr-badge>Idle</span>
+    </div>
+
+    <div class="grid grid-2">
+      <label class="field">
+        <span>Race Date</span>
+        <input id="race-date" type="text" placeholder="mm/dd/yyyy" />
+      </label>
+      <label class="field">
+        <span>Track</span>
+        <input id="race-track" type="text" placeholder="e.g., Churchill Downs" />
+      </label>
+      <label class="field">
+        <span>Surface</span>
+        <select id="race-surface">
+          <option value="Dirt" selected>Dirt</option>
+          <option value="Turf">Turf</option>
+          <option value="Synthetic">Synthetic</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Distance</span>
+        <input id="race-distance" type="text" placeholder="e.g., 1 1/4 miles" />
+      </label>
+    </div>
+
+    <!-- Horse Data Section -->
+    <section id="horse-section" class="panel mt-4">
+      <div class="section-header">
+        <h3 class="section-title">Horse Data</h3>
+        <button id="add-row-btn" class="btn btn-secondary btn-sm">+ Add Horse</button>
+      </div>
+
+      <!-- Table / rows container -->
+      <div id="horse-rows" class="rows"></div>
+
+      <div class="controls">
+        <!-- File picker UI -->
+        <div id="fl-picker-wrap" class="flex items-center gap-2">
+          <button type="button" data-fl-file-btn class="btn">Choose Photos</button>
+          <span id="file-selected-label" class="text-sm opacity-80">No file selected</span>
+          <!-- Hidden file input -->
+          <input id="fl-file" type="file" hidden accept="image/*,application/pdf" multiple>
+        </div>
+        
+        <!-- Action buttons (keep your styling; just ensure these data hooks exist) -->
+        <button type="button" data-fl-analyze id="analyze-btn" class="btn btn-secondary disabled" disabled>Analyze with AI</button>
+        <button type="button" data-fl-predict id="predict-btn" class="btn btn-primary disabled" disabled>Predict W/P/S</button>
+        <button type="button" id="fl-new-race" class="btn btn-secondary">New Race</button>
+        
+        <div class="chips">
+          <span data-chip="choose" class="chip chip--idle">Idle</span>
+          <span data-chip="analyze" class="chip chip--idle">Idle</span>
+          <span data-chip="predict" class="chip chip--idle">Idle</span>
+        </div>
+      </div>
+
+    </section>
+
+  <footer class="foot">
+    <p>© NovaSpark Collective LLC · FinishLine WPS AI</p>
+    <p class="muted">Disclaimer: This tool is for informational/entertainment purposes only and does not constitute betting advice.</p>
+    <div id="fl-debug" style="opacity:.6;font-size:12px;margin-top:.5rem;"></div>
+  </footer>
+  <!-- Progress toast container -->
+  <div id="fl-toast" style="position:fixed;bottom:20px;right:20px;max-width:400px;padding:12px;background:#2a2f3a;color:#fff;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:10000;display:none;"></div>
+  <!-- Results panel container -->
+  <div id="fl-results-root" aria-live="polite"></div>
+  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.4.168/build/pdf.min.js" defer></script>
+  <script>
+    window.addEventListener('DOMContentLoaded', () => {
+      if (window.pdfjsLib) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.4.168/build/pdf.worker.min.js';
+      }
+    });
+  </script>
+  <script src="/js/table.js" defer></script>
+  <script type="module" src="/js/features.js" defer></script>
+  <script type="module" src="/js/predictor.js" defer></script>
+  <script type="module" src="/js/ocr-extract.js" defer></script>
+  <script type="module" src="/js/utils-distance.js" defer></script>
+  <script defer src="/js/distance-normalizer.js"></script>
+  <script src="/js/calibration-loader.js" defer></script>
+  <script src="/js/results-panel.js" defer></script>
+  <script type="module" src="/js/finishline-picker-bootstrap.js" defer></script>
+  <script src="/js/picker-autobind.js" defer></script>
+  <script>
+    // Set calibration status flag if env var is enabled (server-side check via Vercel)
+    // This can be set via Vercel environment variable FINISHLINE_SHOW_CAL_STATUS
+    window.FINISHLINE_SHOW_CAL_STATUS = false; // Default off - set to true in Vercel preview env if needed
+    
+    // Distance tooltip helper
+    window.addEventListener('DOMContentLoaded', () => {
+      const distInput = document.getElementById('race-distance');
+      const distLabel = distInput?.closest('label');
+      if (distInput && distLabel) {
+        let tooltip = null;
+        distInput.addEventListener('input', async () => {
+          const value = distInput.value.trim();
+          if (!value) {
+            if (tooltip) { tooltip.remove(); tooltip = null; }
+            return;
+          }
+          const { parseDistanceToMiles } = await import('/js/utils-distance.js');
+          const miles = parseDistanceToMiles(value);
+          if (miles != null && !isNaN(miles) && miles > 0) {
+            if (!tooltip) {
+              tooltip = document.createElement('span');
+              tooltip.style.cssText = 'font-size:11px;opacity:0.7;margin-left:6px;color:#b8bdd4;';
+              distLabel.appendChild(tooltip);
+            }
+            tooltip.textContent = `≈ ${miles.toFixed(2)} mi`;
+          } else if (tooltip) {
+            tooltip.remove();
+            tooltip = null;
+          }
+        });
+      }
+    });
+  </script>
+</body>
+</html>

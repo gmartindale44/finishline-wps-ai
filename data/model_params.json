@@ -1,0 +1,95 @@
+{
+  "reliability": [
+    {
+      "c": 0.64,
+      "p": 0.5
+    },
+    {
+      "c": 0.66,
+      "p": 0.7777777777777778
+    },
+    {
+      "c": 0.68,
+      "p": 0.9655172413793104
+    },
+    {
+      "c": 0.7,
+      "p": 0.9655172413793104
+    },
+    {
+      "c": 0.72,
+      "p": 1
+    }
+  ],
+  "temp_tau": 1,
+  "policy": {
+    "60-64": {
+      "stats": {
+        "across the board": {
+          "n": 0,
+          "avg_roi": -999
+        },
+        "exacta box": {
+          "n": 0,
+          "avg_roi": -999
+        },
+        "trifecta box": {
+          "n": 0,
+          "avg_roi": -999
+        }
+      },
+      "recommended": "across the board"
+    },
+    "65-69": {
+      "stats": {
+        "across the board": {
+          "n": 0,
+          "avg_roi": -999
+        },
+        "exacta box": {
+          "n": 0,
+          "avg_roi": -999
+        },
+        "trifecta box": {
+          "n": 0,
+          "avg_roi": -999
+        }
+      },
+      "recommended": "across the board"
+    },
+    "70-74": {
+      "stats": {
+        "across the board": {
+          "n": 0,
+          "avg_roi": -999
+        },
+        "exacta box": {
+          "n": 0,
+          "avg_roi": -999
+        },
+        "trifecta box": {
+          "n": 0,
+          "avg_roi": -999
+        }
+      },
+      "recommended": "across the board"
+    },
+    "75-79": {
+      "stats": {
+        "across the board": {
+          "n": 0,
+          "avg_roi": -999
+        },
+        "exacta box": {
+          "n": 0,
+          "avg_roi": -999
+        },
+        "trifecta box": {
+          "n": 0,
+          "avg_roi": -999
+        }
+      },
+      "recommended": "across the board"
+    }
+  }
+}

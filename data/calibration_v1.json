@@ -1,0 +1,90 @@
+{
+  "version": "v1",
+  "generated_at": "2025-11-08T21:14:22.786Z",
+  "bin_metrics": [
+    {
+      "bin": "50-54",
+      "count": 0,
+      "win_rate": 0,
+      "top3_rate": 0,
+      "avg_roi_atb2": null,
+      "exotic_hit_rate": null
+    },
+    {
+      "bin": "55-59",
+      "count": 0,
+      "win_rate": 0,
+      "top3_rate": 0,
+      "avg_roi_atb2": null,
+      "exotic_hit_rate": null
+    },
+    {
+      "bin": "60-64",
+      "count": 1,
+      "win_rate": 0,
+      "top3_rate": 0,
+      "avg_roi_atb2": -100,
+      "exotic_hit_rate": 0
+    },
+    {
+      "bin": "65-69",
+      "count": 39,
+      "win_rate": 0.333,
+      "top3_rate": 0.718,
+      "avg_roi_atb2": 31.3,
+      "exotic_hit_rate": 0.529
+    },
+    {
+      "bin": "70-74",
+      "count": 16,
+      "win_rate": 0.688,
+      "top3_rate": 0.813,
+      "avg_roi_atb2": 58.53,
+      "exotic_hit_rate": 0.7
+    },
+    {
+      "bin": "75-79",
+      "count": 2,
+      "win_rate": 1,
+      "top3_rate": 1,
+      "avg_roi_atb2": 58,
+      "exotic_hit_rate": null
+    },
+    {
+      "bin": "80-84",
+      "count": 0,
+      "win_rate": 0,
+      "top3_rate": 0,
+      "avg_roi_atb2": null,
+      "exotic_hit_rate": null
+    },
+    {
+      "bin": "85+",
+      "count": 0,
+      "win_rate": 0,
+      "top3_rate": 0,
+      "avg_roi_atb2": null,
+      "exotic_hit_rate": null
+    }
+  ],
+  "stake_curve": {
+    "50": 1,
+    "55": 1,
+    "60": 1,
+    "65": 1,
+    "70": 2,
+    "75": 2,
+    "80": 3,
+    "85": 3
+  },
+  "exotics_rules": {
+    "exacta_min_top3": 45,
+    "trifecta_min_top3": 55,
+    "min_conf_for_win_only": 80
+  },
+  "distance_mods": {
+    "≤250y_maiden": {
+      "exotics_penalty": 0.05
+    }
+  }
+}

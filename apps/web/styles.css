@@ -1,4 +1,4 @@
-/* NovaSpark Branding - Dark Theme with Purple-Blue Gradients */
+/* NovaSpark Collective LLC Branding - Dark Theme with Purple-Blue Gradients */
 
 :root {
   --bg-dark: #0a0014;
@@ -417,4 +417,202 @@ footer strong {
   .input-section, .results-section, .photo-section {
     padding: 1rem;
   }
+}
+
+/* Photo uploader */
+.photo-box { background: rgba(255,255,255,0.04); border: 1px solid rgba(139,92,246,0.35); border-radius: 14px; padding: 14px; margin-bottom: 16px; }
+.photo-header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom: 10px; }
+.photo-count { opacity: 0.8; margin-left: 8px; font-size: 0.9rem; }
+.hidden-input { display:none; }
+.drop-zone { border: 1px dashed rgba(139,92,246,0.6); border-radius: 12px; padding: 18px; text-align: center; background: rgba(139,92,246,0.08); transition: 0.15s ease; }
+.drop-zone.dragging { background: rgba(139,92,246,0.18); border-color: rgba(56,189,248,0.7); }
+.drop-zone .hint { opacity: 0.7; font-size: 0.9rem; }
+.thumbs { display:grid; grid-template-columns: repeat(auto-fill,minmax(120px,1fr)); gap: 10px; margin-top: 12px; }
+.thumb { position: relative; background: rgba(255,255,255,0.05); border: 1px solid rgba(139,92,246,0.3); border-radius: 12px; overflow: hidden; }
+.thumb img { width: 100%; height: 90px; object-fit: cover; display:block; }
+.thumb .pdf-badge { height: 90px; display:flex; align-items:center; justify-content:center; font-weight:600; letter-spacing:0.5px; }
+.thumb .thumb-meta { display:flex; justify-content:space-between; align-items:center; padding: 8px; gap: 8px; }
+.thumb .name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size: 0.85rem; opacity: 0.9; }
+.thumb .remove { background: transparent; border: 1px solid rgba(255,255,255,0.25); color: #fff; border-radius: 8px; padding: 2px 6px; cursor: pointer; }
+.thumb .remove:hover { background: rgba(255,255,255,0.08); }
+
+/* OCR Review Panel */
+.ocr-review.hidden { display:none; }
+.ocr-review { margin-top: 12px; padding: 12px; border:1px solid rgba(139,92,246,.35); border-radius: 12px; background: rgba(255,255,255,.04); }
+.ocr-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+.ocr-items { display:grid; gap:8px; }
+.ocr-row { display:grid; grid-template-columns: 24px 1fr 120px; gap:8px; align-items:center; }
+.ocr-row input[type="text"] { width:100%; }
+.btn.sm { padding:6px 10px; font-size:.9rem; }
+.btn.ghost { background: transparent; border:1px solid rgba(139,92,246,.45); }
+
+/* Horse row field sizing tweaks */
+[data-horse-row] .jj, [data-horse-row] .tt {
+  width: 100%;
+}
+@media (min-width: 900px) {
+  [data-horse-row] .form-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1.5fr 1.5fr 1fr 1fr; /* Name, Odds, Jockey, Trainer, Bankroll, Kelly */
+    gap: 10px;
+  }
+}
+
+/* File picker reliability (iOS/Android/desktop) */
+.file-trigger {
+  position: relative;
+  overflow: hidden;
+}
+.file-trigger input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;           /* fully transparent but clickable */
+  cursor: pointer;
+}
+
+.hidden-input { display: none; }  /* keep for any older refs, unused now */
+
+/* Canonical horse-list layout */
+.horse-list { display: grid; gap: 10px; margin-bottom: 12px; }
+.horse-row { display: grid; gap: 10px; }
+@media (min-width: 900px) {
+  .horse-row {
+    grid-template-columns: 2fr 1fr 1.5fr 1.5fr 1fr 1fr; /* Name, Odds, Jockey, Trainer, Bankroll, Kelly */
+    align-items: center;
+  }
+}
+.row-actions { margin-top: 8px; }
+
+/* ===== OCR-FILLED ROW VISIBILITY IMPROVEMENTS ===== */
+
+/* Bigger, clearer horse-row inputs */
+#horse-card input[placeholder="Horse Name"],
+#horse-card input[placeholder^="ML Odds"],
+#horse-card input[type="number"] {
+  font-size: 1rem;            /* bump visibility */
+  padding: 0.7rem 0.8rem;     /* more breathing room */
+  background: #0f0a14;        /* slightly lighter than bg */
+  border: 1px solid #3a285c;
+  color: var(--text-light);
+}
+
+/* Emphasize horse name */
+#horse-card input[placeholder="Horse Name"] {
+  font-weight: 600;
+}
+
+/* Zebra rows & spacing (covers common row container classnames) */
+#horse-card .row,
+#horse-card .horse-row,
+#horse-card .grid-row,
+#horse-card .stack-row {
+  margin-bottom: 8px;
+}
+#horse-card .row:nth-child(odd),
+#horse-card .horse-row:nth-child(odd),
+#horse-card .grid-row:nth-child(odd),
+#horse-card .stack-row:nth-child(odd) {
+  background: rgba(56, 189, 248, 0.05); /* faint blue */
+  border-radius: 10px;
+  padding: 6px;
+}
+
+/* Flash highlight when populated */
+@keyframes filledFlash {
+  0%   { box-shadow: 0 0 0 0 rgba(56,189,248,0.8); }
+  100% { box-shadow: 0 0 0 14px rgba(56,189,248,0); }
+}
+.filled-flash { animation: filledFlash 900ms ease-out 1; border-radius: 10px; }
+
+/* Mobile tweak */
+@media (max-width: 640px) {
+  #horse-card input[placeholder="Horse Name"],
+  #horse-card input[placeholder^="ML Odds"],
+  #horse-card input[type="number"] {
+    font-size: 1.05rem;
+  }
+}
+
+/* ===== STATUS PILL COMPONENT ===== */
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .2px;
+  box-shadow: 0 2px 12px rgba(0,0,0,.25);
+  border: 1px solid transparent;
+}
+.status-idle     { background: #2d1b4e; color: #c7b6ff; border-color:#3a285c; }
+.status-running  { background: #0b3a6e; color: #cde7ff; border-color:#1b5ea7; }
+.status-ready    { background: #064e3b; color: #d1fae5; border-color:#10b981; }
+.status-error    { background: #5b1a1a; color: #ffd3d3; border-color:#ef4444; }
+
+/* tiny spinner dots for running */
+.status-pill .dots::after {
+  content: '⋯';
+  animation: dots 1.2s infinite steps(4,end);
+}
+@keyframes dots {
+  0% { content: ' '; }
+  25% { content: '·'; }
+  50% { content: '··'; }
+  75% { content: '···'; }
+  100% { content: ' '; }
+}
+
+/* ===== PROGRESS FILL FOR ANALYZE/PREDICT/EXTRACT BUTTONS ===== */
+
+#btn-extract,
+#btnAnalyze,
+#btnPredict,
+#btn-analyze,
+#btn-predict {
+  position: relative;
+  overflow: hidden;
+  background-image:
+    linear-gradient(135deg, var(--accent-purple), var(--accent-blue)),
+    linear-gradient(to right, rgba(56,189,248,.30), rgba(56,189,248,.30));
+  background-origin: border-box, border-box;
+  background-clip: padding-box, padding-box;
+  background-repeat: no-repeat, no-repeat;
+  background-size: 100% 100%, var(--pct, 0%) 100%;
+  background-position: 0 0, 0 0;
+  transition: background-size .12s linear, filter .2s ease;
+}
+
+button.is-working { 
+  filter: saturate(1.1) brightness(1.02); 
+}
+
+button.is-done { 
+  background-image:
+    linear-gradient(135deg, #16a34a, #22c55e), 
+    linear-gradient(to right, #16a34a33, #22c55e33);
+}
+
+button .pct { 
+  opacity: .9; 
+  font-variant-numeric: tabular-nums; 
+}
+
+button .countdown {
+  opacity: .95;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: rgba(56, 189, 248, 0.9);
+}
+
+button .check { 
+  margin-left: .35rem; 
+  font-weight: 800; 
+  color: #fff;
+}
+
+.badge.ok { 
+  color: #22c55e; 
 }

@@ -1,0 +1,19 @@
+Date,Track,Race_No,Distance,Surface,Class,AI_Win,AI_Place,AI_Show,AI_Confidence,Top_3_Mass,Strategy,Result_Order,ROI_Percent,WinRate,Notes,Live,Suggested_Stakes
+2025-11-07,Charles Town,1,1 1/16M,Dirt,",000 Clm",Long Astride,Sackett,Cuchulain,0.65,,ATB (light),5-4-1,,,"AI got WIN/SHOW right (5,1); PLACE missed",Test,Win Pl Sh
+2025-11-07,Charles Town,8,4.5f,Dirt,MSW,Cuddler,Zero Degrees,Readthefineprint,0.70,,ATB (light),4-5-10,,,AI off; real finish 4-5-10 (Fancy Conchita wins),Test,Win Pl Sh
+2025-11-07,Evangeline Downs,1,220y,Dirt,",000 Clm",Fancy Paints,Live the Way I Talk,All That Yard,0.65,,ATB (light),1-5-2,,,AI had WIN wrong (picked #5); result 1-5-2,Test,Win Pl Sh
+2025-11-07,Evangeline Downs,3,220y,Dirt,",000 Md Clm",Jess Politix,Jess Significant Tlc,Inseparable Cartel B,0.68,,ATB (light),5-4-7,,,AI off; result 5-4-7,Test,Win Pl Sh
+2025-11-07,Penn National,4,6f,Dirt,",000 Md Clm",Smarty's Love,Wood Lily,Vino Amore,0.65,,ATB (light),5-2-4,,,AI nailed WIN; others mixed,Test,Win Pl Sh
+2025-11-07,Penn National,7,6f,Dirt,",000 Md Clm",Dancing On Air,Feratovic,Cantyoustoptheking,0.68,,ATB (light),8-6-1,,,Result 8-6-1; AI had DOA on top (miss),Test,Win Pl Sh
+2025-11-07,Penn National,8,5.5f,Dirt,",000 Clm",Jace Is No Joke,Silas M P,Mycroft,0.67,,ATB (light),7-6-4,,,AI top pick ran 2nd; winner #7,Test,Win Pl Sh
+2025-11-07,Penn National,9,5.5f,Dirt,",000 Clm",Uncle Money,Fortheloveofrun,Rolly,0.68,,ATB (light),2-5-8,,,AI top pick #5 ran 2nd; winner #2,Test,Win Pl Sh
+2025-11-06,Lone Star,5,?,Dirt,?,?,?,?,,,ATB (light),,,Placeholder from user list; backfill from Redis/logs,Test,
+2025-11-06,Lone Star,8,?,Dirt,?,?,?,?,,,Strategy (per slip),,,REAL BET; backfill from Redis/bet slip,Live,
+2025-11-06,Australia Harness,2,?,Harness,?,?,?,?,,,Strategy (per slip),,,REAL BET; backfill from Redis/bet slip,Live,
+2025-11-07,Lone Star,1,?,Dirt,?,?,?,?,,,ATB (light),,,Placeholder; backfill from Redis,Test,
+2025-11-07,Lone Star,2,?,Dirt,?,?,?,?,,,ATB (light),,,Placeholder; backfill from Redis,Test,
+2025-11-07,Lone Star,3,?,Dirt,?,?,?,?,,,ATB (light),,,Placeholder; backfill from Redis,Test,
+2025-11-07,Lone Star,4,?,Dirt,?,?,?,?,,,ATB (light),,,Placeholder; backfill from Redis,Test,
+2025-11-07,Lone Star,6,?,Dirt,?,?,?,?,,,ATB (light),,,Placeholder; backfill from Redis,Test,
+2025-11-07,Remington,7,?,Dirt/Turf?,?,?,?,?,,,ATB (light),,,Placeholder; backfill from Redis,Test,
+2025-11-07,Remington,9,?,Dirt/Turf?,?,?,?,?,,,ATB (light),,,Placeholder; backfill from Redis,Test,

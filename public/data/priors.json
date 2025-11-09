@@ -1,0 +1,25 @@
+{
+  "jockey": {
+    "javier castellano": 0.17,
+    "ricardo santana": 0.16,
+    "john c kimmel": 0.11,
+    "irad ortiz jr": 0.18,
+    "jose ortiz": 0.16,
+    "florent geroux": 0.14,
+    "joel rosario": 0.15
+  },
+  "trainer": {
+    "chad brown": 0.24,
+    "bill mott": 0.18,
+    "john c kimmel": 0.12,
+    "bob baffert": 0.22,
+    "todd pletcher": 0.20,
+    "steve asmussen": 0.16,
+    "brad cox": 0.19
+  },
+  "default": {
+    "jockey": 0.12,
+    "trainer": 0.12
+  }
+}
+

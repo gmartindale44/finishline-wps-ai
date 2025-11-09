@@ -1,0 +1,458 @@
+:root{
+  --bg:#0b0b12;
+  --fg:#e9e7ff;
+  --muted:#a39ad8;
+  --card:#141126;
+  --border:rgba(255,255,255,.07);
+  --accent:#7c37ff;
+  --accent-2:#1de4ff;
+  --ok:#1fcf7a;
+  --bad:#ff5a7a;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--fg);font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif}
+.hero{padding:28px 20px 8px;max-width:1080px;margin:0 auto;text-align:center}
+.logo-row{display:flex;align-items:center;gap:10px;justify-content:center}
+.logo-horse{font-size:28px;text-shadow:0 0 24px rgba(124,55,255,.55), 0 0 10px rgba(29,228,255,.35)}
+h1{font-weight:800;letter-spacing:.3px;color:var(--fg);text-shadow:0 0 24px rgba(124,55,255,.55), 0 0 10px rgba(29,228,255,.35)}
+.subtitle{color:var(--muted);margin:4px 0 0}
+.panel{max-width:1080px;margin:16px auto;padding:20px;background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.35), 0 0 0 1px rgba(124,55,255,.08) inset}
+.panel-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.badge{padding:4px 10px;border-radius:999px;background:rgba(124,55,255,.18);color:#d6c6ff;font-weight:600}
+.badge-ok{background:rgba(31,207,122,.15);color:var(--ok)}
+.badge-bad{background:rgba(255,90,122,.15);color:var(--bad)}
+.badge-working{background:rgba(124,55,255,.18);color:#d6c6ff}
+.grid{display:grid;gap:12px}
+.grid-2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.field span{display:block;color:var(--muted);font-size:12px;margin-bottom:6px}
+input,select,button{font:inherit}
+input,select{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:#0f0d1e;color:var(--fg)}
+.horse-form-inline{display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:10px;align-items:center}
+
+/* Horse Section Styles */
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: .75rem;
+}
+
+.section-title {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--fg);
+  margin: 0;
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: .875rem;
+}
+
+.horse-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: .5rem;
+  margin-bottom: .5rem;
+}
+
+.input {
+  background: #1e1e2f;
+  border: 1px solid var(--border);
+  color: var(--fg);
+  padding: 8px;
+  border-radius: 6px;
+  font: inherit;
+}
+
+.chip {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: .85rem;
+  font-weight: 500;
+  margin-right: .25rem;
+}
+
+.chip--idle { background: #333; color: #bbb; }
+.chip--ready { background: #0055ff; color: #fff; }
+.chip--done { background: #16a34a; color: #fff; }
+.chip--error { background: #b91c1c; color: #fff; }
+.chip--working { background: #eab308; color: #000; }
+
+.chips {
+  display: inline-flex;
+  gap: .25rem;
+  margin-left: .5rem;
+}
+
+.controls { 
+  margin-top: 1rem; 
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .5rem;
+}
+
+.rows { 
+  margin-top: .5rem; 
+}
+.button{padding:10px 14px;border:0;border-radius:12px;color:#fff;background:linear-gradient(180deg,var(--accent),#5b19f5);cursor:pointer;font-weight:600;transition:.2s transform ease, .2s box-shadow ease;box-shadow:0 8px 18px rgba(124,55,255,.25)}
+.button:hover{transform:translateY(-1px);box-shadow:0 12px 26px rgba(124,55,255,.35)}
+.button.secondary{background:linear-gradient(180deg,#2a2a47,#24223f)}
+.button.success{background:linear-gradient(180deg,#22c37d,#12a766)}
+.button:disabled{opacity:.6;cursor:not-allowed}
+.horse-list{list-style:none;margin:14px 0 0;padding:0;border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.horse-list li{display:grid;grid-template-columns:24px 2fr 1fr 1fr 1fr auto;gap:8px;align-items:center;padding:10px 12px;border-top:1px solid var(--border)}
+.horse-list li:first-child{border-top:0}
+.pill{padding:4px 8px;border-radius:999px;background:rgba(255,255,255,.06);font-size:12px;color:var(--muted)}
+.actions{display:flex;gap:10px;flex-wrap:wrap}
+.mt-4{margin-top:16px}
+.foot{max-width:1080px;margin:32px auto 48px;padding:0 20px;color:var(--muted)}
+.muted{color:var(--muted)}
+.remove-btn{background:#231b3e;color:#ffb4c2;border:1px solid rgba(255,90,122,.3)}
+/* ─────────────────────────────────────────────────
+   FinishLine toast (non-blocking notifications)
+   ───────────────────────────────────────────────── */
+.fl-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%) translateY(16px);
+  background: rgba(110, 78, 238, 0.95); /* fits dark theme (purple-ish) */
+  color: #fff;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 14px;
+  line-height: 1.4;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.35);
+  opacity: 0;
+  z-index: 9999;
+  transition: opacity 180ms ease, transform 180ms ease;
+  pointer-events: none;
+  max-width: 90%;
+  text-align: center;
+}
+.fl-toast-in {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+.fl-toast-out {
+  opacity: 0;
+  transform: translateX(-50%) translateY(16px);
+}
+
+/* Ensure status badges and overlays don't block clicks */
+.badge,
+.status-badge,
+.app-status,
+.header-status {
+  pointer-events: none;
+}
+
+/* Ensure the choose button is always clickable */
+#chooseBtn,
+[data-photo-input] {
+  position: relative;
+  z-index: 10;
+  pointer-events: auto;
+}
+
+/* Prevent any backdrop from blocking the button */
+.panel-header {
+  pointer-events: none;
+}
+
+.panel-header .badge {
+  pointer-events: none;
+}
+
+/* FinishLine picker guard — prevents common overlays from swallowing clicks */
+.overlay, .backdrop, .mask, .modal-overlay, .loading, [data-blocking-overlay="true"] {
+  pointer-events: none !important;
+}
+
+/* Hardened photo picker styles */
+.photo-picker-container {
+  position: relative;
+  display: inline-block;
+}
+
+.photo-picker-label {
+  position: relative;
+  z-index: 1000 !important;
+  pointer-events: auto !important;
+  cursor: pointer;
+}
+
+.photo-picker-label:disabled,
+.photo-picker-label[aria-disabled="true"] {
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+/* Ensure the picker is always clickable */
+#file-input {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+button[disabled][aria-busy="true"] { opacity: 0.7; }
+
+/* Buttons with inline spinners */
+.btn .spinner { margin-left: 8px; }
+
+/* Neon aura + pulse for running states */
+.btn-aura {
+  position: relative;
+  transition: filter 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 0 0px rgba(128, 90, 213, 0.0);
+}
+
+.btn-aura.running {
+  box-shadow: 0 0 22px rgba(168, 85, 247, 0.45), 0 0 44px rgba(59, 130, 246, 0.25);
+  animation: auraPulse 1.25s ease-in-out infinite;
+}
+
+@keyframes auraPulse {
+  0%   { filter: drop-shadow(0 0 0 rgba(168,85,247,0.0)); }
+  50%  { filter: drop-shadow(0 0 8px rgba(168,85,247,0.45)); }
+  100% { filter: drop-shadow(0 0 0 rgba(168,85,247,0.0)); }
+}
+
+/* Status chip color helpers */
+.chip-ok    { background: rgba(34,197,94,.15);  color:#22c55e; }
+.chip-warn  { background: rgba(234,179,8,.15); color:#eab308; }
+.chip-busy  { background: rgba(99,102,241,.15);color:#6366f1; }
+.chip-err   { background: rgba(248,113,113,.15);color:#f87171; }
+
+/* Hardened picker overlay guard */
+.overlay, .backdrop, .mask, .modal-overlay, .loading, [data-blocking-overlay="true"] { pointer-events: none !important; }
+#choose-btn { position: relative; z-index: 1000; pointer-events: auto !important; }
+.panel.actions { pointer-events: auto !important; }
+
+/* Chip styles with indicator dots */
+.chip {
+  display:inline-flex; align-items:center; gap:.45rem;
+  margin-left:.5rem; padding:.18rem .55rem;
+  border-radius:999px; font-size:.78rem; line-height:1;
+  border:1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.06);
+  color:#cfd3ff; user-select:none;
+  box-shadow: 0 0 0 rgba(139,92,246,0);
+  transition: all .25s ease;
+}
+
+.chip::before {
+  content:""; width:.5rem; height:.5rem; border-radius:50%;
+  background:#888; box-shadow:0 0 0 .15rem transparent inset;
+}
+
+.chip-idle      { color:#cbd5e1; }
+.chip-idle::before { background:#64748b; }
+.chip-busy      { color:#e9d5ff; background:rgba(168,85,247,.12); }
+.chip-busy::before { background:#a855f7; box-shadow:0 0 10px 2px rgba(168,85,247,.45); }
+.chip-ready     { color:#bbf7d0; background:rgba(34,197,94,.14); }
+.chip-ready::before { background:#22c55e; box-shadow:0 0 10px 2px rgba(34,197,94,.35); }
+
+/* Subtle aura around the related button when busy/ready */
+.btn.aura-busy  { box-shadow:0 0 0 0 rgba(168,85,247,.45); animation:auraPulse 1.8s ease-in-out infinite; }
+.btn.aura-ready { box-shadow:0 0 20px 2px rgba(34,197,94,.35); }
+
+@keyframes auraPulse {
+  0% { box-shadow:0 0 0 0 rgba(168,85,247,.45); }
+  60% { box-shadow:0 0 22px 4px rgba(168,85,247,.50); }
+  100% { box-shadow:0 0 0 0 rgba(168,85,247,.45); }
+}
+
+/* New chip styles with double-dash pattern */
+.chip{display:inline-block;padding:.2rem .5rem;border-radius:9999px;font-size:.75rem;line-height:1;border:1px solid transparent;margin-left:.4rem;vertical-align:middle}
+
+.chip--idle{background:#2b2b31;color:#b8b8c6;border-color:#3a3a41}
+.chip--working{background:#1e3a5f;color:#dce9ff;border-color:#2f5c9c}
+.chip--ready{background:#143f2a;color:#bff0cf;border-color:#206a45}
+.chip--done{background:#2a2a2a;color:#dcdcdc;border-color:#3a3a3a}
+.chip--error{background:#1a0b0b;color:#fecaca;border-color:#f87171}
+
+.aura{box-shadow:0 0 0 6px rgba(124,58,237,.15),0 0 24px rgba(124,58,237,.35)}
+
+/* ---- Neon glow (safe, applies only when .is-complete is present) ---- */
+@keyframes neonPulse {
+  0% { box-shadow: 0 0 4px rgba(0,255,120,.0), 0 0 0 rgba(0,255,120,0); }
+  50% { box-shadow: 0 0 12px rgba(0,255,120,.7), 0 0 24px rgba(0,255,120,.35); }
+  100% { box-shadow: 0 0 4px rgba(0,255,120,.0), 0 0 0 rgba(0,255,120,0); }
+}
+.btn, button, [role="button"] {
+  transition: box-shadow .25s ease, filter .25s ease;
+}
+.is-complete {
+  outline: none !important;
+  animation: neonPulse 1.4s ease-in-out 2;
+  filter: drop-shadow(0 0 6px rgba(0,255,120,.35));
+}
+
+/* ---- "Working" badge (small pill) ---- */
+.working-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #1f2937;
+  border: 1px solid rgba(0,255,120,.4);
+  color: #cfffdf;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  margin-left: 8px;
+}
+.working-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: rgb(0,255,120);
+  animation: dotBlink 1s infinite;
+}
+@keyframes dotBlink {
+  0%,100% { opacity: .35; }
+  50% { opacity: 1; }
+}
+
+/* Admin tools: hidden by default, shown only when FL_FLAGS.showAdminTools === true */
+[data-admin-tools] {
+  display: none !important;
+}
+
+[data-admin-tools][style*="display:block"],
+[data-admin-tools][style*="display: flex"] {
+  display: block !important;
+}
+
+/* --- FinishLine: Strategy stop-light signal --- */
+.fl-signal { margin: 8px 0 10px; }
+.fl-signal-row { display: flex; align-items: center; gap: 10px; }
+.fl-signal-dot {
+  width: 14px; height: 14px; border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.1) inset;
+}
+.fl-signal-dot.green { background: #22c55e; box-shadow: 0 0 8px #22c55e, 0 0 0 2px rgba(255,255,255,0.08) inset; }
+.fl-signal-dot.yellow { background: #f59e0b; box-shadow: 0 0 8px #f59e0b, 0 0 0 2px rgba(255,255,255,0.08) inset; }
+.fl-signal-dot.red { background: #ef4444; box-shadow: 0 0 8px #ef4444, 0 0 0 2px rgba(255,255,255,0.08) inset; }
+.fl-signal-text { font-size: 0.95rem; opacity: 0.95; }
+
+/* Optional: tint the active strategy row to match signal */
+.sig-green { border-left: 3px solid #22c55e !important; }
+.sig-yellow { border-left: 3px solid #f59e0b !important; }
+.sig-red { border-left: 3px solid #ef4444 !important; }
+
+/* Confidence bar styling */
+.fl-progress {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.fl-progress__bar {
+  height: 6px;
+  border-radius: 3px;
+  transition: width 0.8s ease, background 0.5s ease;
+  background: #00e6a8; /* default green */
+}
+
+/* New Race button styling */
+#fl-new-race {
+  opacity: 0.95;
+  transition: transform 0.08s ease;
+}
+
+#fl-new-race:active {
+  transform: translateY(1px);
+}
+
+/* Calibration Tracker */
+.fl-calib {
+  margin-left: 12px;
+}
+
+.fl-calib-card {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.25);
+}
+
+.fl-calib-title {
+  font-weight: 700;
+  opacity: 0.9;
+}
+
+.fl-calib-rows {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 6px 14px;
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.fl-calib-rows span {
+  opacity: 0.7;
+  margin-right: 4px;
+}
+
+.fl-calib-refresh {
+  align-self: flex-end;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+  color: var(--fg);
+}
+
+.fl-calib-refresh:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* Toast and button states */
+.fl-toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  padding: 12px 16px;
+  background: rgba(0, 0, 0, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: var(--fg);
+  font-size: 14px;
+  z-index: 10000;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.fl-toast-in {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.fl-toast-out {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+.is-busy {
+  opacity: 0.7;
+  pointer-events: none;
+}

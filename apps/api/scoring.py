@@ -1,183 +1,164 @@
 """
-Scoring & Ranking System for Horse Race Predictions
-Calculates Kelly fraction, expected value, and probability for Win/Place/Show
+Enhanced handicapping scoring module for FinishLine WPS AI.
+Combines multiple factors: odds baseline, trainer/jockey combo, track/surface bias,
+post-position bias, pace projection, and Kelly criterion.
 """
+from __future__ import annotations
+import math
+import re
+from typing import Dict, Any, List, Optional
 
-from typing import List, Dict, Any
-from .odds import ml_to_fraction, ml_to_prob
+FRACT_RE = re.compile(r'^\s*(\d+)\s*[/\-:\s]\s*(\d+)\s*$')  # 7/2, 7-2, 7:2, '7 2'
 
-def calculate_kelly_fraction(probability: float, odds_decimal: float, bankroll: float = 1000, max_kelly: float = 0.25) -> float:
-    """
-    Calculate Kelly Criterion fraction for optimal bet sizing.
-    
-    Args:
-        probability: True probability of winning
-        odds_decimal: Decimal odds (e.g., 2.5 for 5-2)
-        bankroll: Total bankroll
-        max_kelly: Maximum Kelly fraction to use
-    
-    Returns:
-        Kelly fraction as decimal (e.g., 0.05 for 5%)
-    """
-    try:
-        # Kelly formula: f = (bp - q) / b
-        # where b = odds - 1, p = probability, q = 1 - p
-        b = odds_decimal - 1
-        p = probability
-        q = 1 - p
-        
-        kelly = (b * p - q) / b
-        
-        # Ensure Kelly is positive and within reasonable bounds
-        kelly = max(0, min(kelly, max_kelly))
-        
-        return round(kelly, 4)
-    
-    except (ValueError, ZeroDivisionError):
+def parse_fractional(frac: str | None) -> Optional[float]:
+    """Parse fractional odds like '7/2' into decimal ratio."""
+    if not frac:
+        return None
+    m = FRACT_RE.match(str(frac))
+    if not m:
+        return None
+    num, den = int(m.group(1)), int(m.group(2))
+    if den == 0:
+        return None
+    return num / den
+
+def implied_prob_from_fractional(frac: str | None) -> Optional[float]:
+    """Convert fractional odds to implied probability."""
+    r = parse_fractional(frac)
+    if r is None:
+        return None
+    # fractional r = profit/1 → decimal = r+1 => p = 1/decimal
+    return 1.0 / (r + 1.0)
+
+def z(x: float, m: float, s: float) -> float:
+    """Safe z-score calculation."""
+    if s <= 1e-9:
         return 0.0
+    return (x - m) / s
 
-def calculate_expected_value(probability: float, odds_decimal: float) -> float:
-    """
-    Calculate expected value of a bet.
-    
-    Args:
-        probability: True probability of winning
-        odds_decimal: Decimal odds
-    
-    Returns:
-        Expected value as decimal
-    """
-    try:
-        # EV = (probability * payout) - (1 - probability) * bet
-        # For $1 bet: EV = (p * odds) - (1 - p) * 1
-        payout = odds_decimal
-        bet = 1.0
-        
-        ev = (probability * payout) - ((1 - probability) * bet)
-        return round(ev, 4)
-    
-    except (ValueError, ZeroDivisionError):
-        return 0.0
+def pct_clip(x: float, lo: float = 0.0, hi: float = 1.0) -> float:
+    """Clip value to percentage range."""
+    return max(lo, min(hi, x))
 
-def score_horse(horse: Dict[str, Any]) -> Dict[str, Any]:
+def score_horses(
+    horses: List[Dict[str, Any]],
+    ctx: Dict[str, Any],
+    research: Optional[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
     """
-    Calculate comprehensive score for a single horse.
-    
-    Args:
-        horse: Dictionary with name, odds, bankroll, kelly_fraction
-    
-    Returns:
-        Dictionary with all calculated metrics
+    Score horses using multiple handicapping factors.
+    Returns list with model_prob and kelly stake, using only horses provided.
     """
-    try:
-        name = horse.get("name", "Unknown")
-        odds_str = horse.get("odds", "1-1")
-        bankroll = horse.get("bankroll", 1000)
-        max_kelly = horse.get("kelly_fraction", 0.25)
-        
-        # Convert odds to decimal and probability
-        odds_decimal = ml_to_fraction(odds_str)
-        implied_prob = ml_to_prob(odds_str)
-        
-        # Calculate Kelly fraction and expected value
-        kelly = calculate_kelly_fraction(implied_prob, odds_decimal, bankroll, max_kelly)
-        ev = calculate_expected_value(implied_prob, odds_decimal)
-        
-        # Calculate composite score (weighted combination)
-        # Higher EV and Kelly fraction = better score
-        composite_score = (ev * 0.4) + (kelly * 0.6)
-        
-        return {
-            "name": name,
-            "odds": odds_str,
-            "odds_decimal": odds_decimal,
-            "probability": implied_prob,
-            "kelly_fraction": kelly,
-            "expected_value": ev,
-            "composite_score": round(composite_score, 4),
-            "bankroll": bankroll
-        }
+    if not horses:
+        return []
     
-    except Exception as e:
-        # Return default values if calculation fails
-        return {
-            "name": horse.get("name", "Unknown"),
-            "odds": horse.get("odds", "1-1"),
-            "odds_decimal": 1.0,
-            "probability": 0.5,
-            "kelly_fraction": 0.0,
-            "expected_value": 0.0,
-            "composite_score": 0.0,
-            "bankroll": horse.get("bankroll", 1000)
-        }
+    # Baselines from odds
+    base_probs = []
+    for h in horses:
+        p = implied_prob_from_fractional(h.get('odds')) or 0.12  # fallback 12%
+        base_probs.append(p)
 
-def calculate_predictions(horses: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
-    """
-    Calculate Win/Place/Show predictions for all horses.
+    # Normalize baseline so sum ~ 1.0
+    s = sum(base_probs) or 1.0
+    base_probs = [p / s for p in base_probs]
+
+    # Research-derived modifiers
+    # Expected research features if provider=websearch (but handle missing gracefully)
+    jtw = []  # jockey/trainer win%
+    pace = []  # early/press/closer [E,P,C] → numeric bias
+    post = []  # post position if any
+    track = (ctx.get('track') or '').lower()
+    surface = (ctx.get('surface') or '').lower()
+    distance = (ctx.get('distance') or '').lower()
+
+    for i, h in enumerate(horses):
+        research_horses = (research or {}).get('horses', {})
+        info = research_horses.get(h.get('name', ''), {})
+        
+        jt = float(info.get('jt_win_pct') or info.get('trainer_jockey_win_pct') or 12.0)  # default 12%
+        jtw.append(jt)
+
+        ps = (info.get('style') or info.get('pace') or '').upper()
+        if ps.startswith('E'):
+            pace.append(+0.02)
+        elif ps.startswith('P'):
+            pace.append(+0.01)
+        elif ps.startswith('C'):
+            pace.append(0.0)
+        else:
+            pace.append(0.0)
+
+        pp = int(info.get('post') or 0)
+        post.append(pp)
+
+    # Compute aggregate weights
+    jt_mean = (sum(jtw) / len(jtw)) if jtw else 12.0
+    jt_std = (sum((x - jt_mean) ** 2 for x in jtw) / len(jtw)) ** 0.5 if jtw else 5.0
+
+    # Track/Surface bias table (very light-touch)
+    bias = 0.0
+    if 'dirt' in surface:
+        bias += 0.01
+    if 'turf' in surface:
+        bias += 0.0
     
-    Args:
-        horses: List of horse dictionaries
+    sprint = any(x in distance for x in ['5f', '5 1/2', '6f'])
+
+    # Build final raw score
+    raw = []
+    for i, h in enumerate(horses):
+        p0 = base_probs[i]
+        jt_boost = 1.0 + 0.05 * z(jtw[i], jt_mean, max(jt_std, 1.0))
+        pace_boost = 1.0 + pace[i]  # +2% early, +1% press
+        
+        # Post penalty: sprints penalize far outside, routes penalize extremes
+        pp = post[i]
+        post_boost = 1.0
+        if pp > 0:
+            if sprint:
+                if pp >= 10:
+                    post_boost -= 0.03
+                elif pp >= 8:
+                    post_boost -= 0.02
+            else:
+                if pp == 1 or pp >= 12:
+                    post_boost -= 0.02
+
+        track_boost = 1.0 + bias
+        r = p0 * jt_boost * pace_boost * post_boost * track_boost
+        raw.append(max(1e-6, r))
+
+    # Normalize to probabilities
+    s = sum(raw) or 1.0
+    probs = [r / s for r in raw]
+
+    # Kelly vs implied odds
+    out = []
+    for i, h in enumerate(horses):
+        p = probs[i]
+        frac = parse_fractional(h.get('odds'))
+        if frac is None:
+            kelly = 0.0
+        else:
+            # Kelly: f* = (bp - q)/b ; where b = frac, p=model prob, q=1-p
+            b = frac
+            k = (b * p - (1.0 - p)) / max(b, 1e-6)
+            kelly = pct_clip(k, 0.0, 0.5)
+        
+        out.append({
+            **h,
+            'model_prob': round(p, 4),
+            'kelly': round(kelly, 4)
+        })
     
-    Returns:
-        Dictionary with win, place, show predictions
-    """
-    try:
-        if not horses:
-            # Return default predictions if no horses provided
-            return {
-                "win": {"name": "No Data", "odds": "1-1", "prob": 0.5, "kelly": 0.0},
-                "place": {"name": "No Data", "odds": "1-1", "prob": 0.5, "kelly": 0.0},
-                "show": {"name": "No Data", "odds": "1-1", "prob": 0.5, "kelly": 0.0}
-            }
-        
-        # Score all horses
-        scored_horses = [score_horse(horse) for horse in horses]
-        
-        # Sort by composite score (highest first)
-        scored_horses.sort(key=lambda x: x["composite_score"], reverse=True)
-        
-        # Select top 3 for Win/Place/Show
-        win_horse = scored_horses[0] if len(scored_horses) > 0 else None
-        place_horse = scored_horses[1] if len(scored_horses) > 1 else scored_horses[0]
-        show_horse = scored_horses[2] if len(scored_horses) > 2 else scored_horses[0]
-        
-        # Format predictions
-        predictions = {
-            "win": {
-                "name": win_horse["name"],
-                "odds": win_horse["odds"],
-                "prob": win_horse["probability"],
-                "kelly": win_horse["kelly_fraction"],
-                "ev": win_horse["expected_value"],
-                "score": win_horse["composite_score"],
-                "rationale": f"Highest composite score ({win_horse['composite_score']:.3f}) with {win_horse['probability']:.1%} win probability"
-            },
-            "place": {
-                "name": place_horse["name"],
-                "odds": place_horse["odds"],
-                "prob": place_horse["probability"],
-                "kelly": place_horse["kelly_fraction"],
-                "ev": place_horse["expected_value"],
-                "score": place_horse["composite_score"],
-                "rationale": f"Strong place candidate with {place_horse['probability']:.1%} probability and {place_horse['kelly_fraction']:.1%} Kelly fraction"
-            },
-            "show": {
-                "name": show_horse["name"],
-                "odds": show_horse["odds"],
-                "prob": show_horse["probability"],
-                "kelly": show_horse["kelly_fraction"],
-                "ev": show_horse["expected_value"],
-                "score": show_horse["composite_score"],
-                "rationale": f"Solid show bet with {show_horse['probability']:.1%} probability and {show_horse['expected_value']:.3f} expected value"
-            }
-        }
-        
-        return predictions
-    
-    except Exception as e:
-        # Return fallback predictions if calculation fails
+    return out
+
+def wps_from_probs(scored: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Extract W/P/S predictions from scored horses."""
+    ranked = sorted(scored, key=lambda x: x.get('model_prob', 0), reverse=True)
         return {
-            "win": {"name": "Thunderstride", "odds": "5-2", "prob": 0.29, "kelly": 0.05, "ev": 0.15, "score": 0.12, "rationale": "Fallback prediction"},
-            "place": {"name": "Silver Blaze", "odds": "3-1", "prob": 0.25, "kelly": 0.04, "ev": 0.12, "score": 0.10, "rationale": "Fallback prediction"},
-            "show": {"name": "Midnight Arrow", "odds": "6-1", "prob": 0.14, "kelly": 0.03, "ev": 0.08, "score": 0.08, "rationale": "Fallback prediction"}
+        'win': ranked[0] if len(ranked) > 0 else None,
+        'place': ranked[1] if len(ranked) > 1 else None,
+        'show': ranked[2] if len(ranked) > 2 else None,
+        'ranked': ranked
         }
