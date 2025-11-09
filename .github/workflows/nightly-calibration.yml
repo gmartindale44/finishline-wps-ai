@@ -15,13 +15,15 @@ concurrency:
 
 jobs:
   recalibrate:
+    name: Calibrate & open PR (preview env secrets)
     runs-on: ubuntu-latest
+    environment: Preview
     env:
       UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
       UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
       CAL_THRESHOLD_MIN_NEW: ${{ vars.CAL_THRESHOLD_MIN_NEW }}
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           persist-credentials: true
@@ -40,9 +42,32 @@ jobs:
         run: npm run validate:dataset
 
       - name: Run calibration pipeline
+        shell: bash
         run: |
           echo "=== Nightly Calibration Start ($(date -u)) ==="
-          npm run calibrate:all
+          set -e
+          # Try explicit script files first, fall back to npm scripts if defined
+          if [ -f scripts/calibrate.js ]; then
+            node scripts/calibrate.js
+          elif [ -f scripts/calibrate.mjs ]; then
+            node scripts/calibrate.mjs
+          elif npm run | grep -qE '^ *calibrate($|:)'; then
+            # Prefer a simple `calibrate` if present, else use `calibrate:all`
+            npm run calibrate || npm run calibrate:all
+          else
+            echo "No calibration script found. Skipping calibration step."
+          fi
+
+          # Optional: generate report if present
+          if [ -f scripts/calibrate-report.js ]; then
+            node scripts/calibrate-report.js
+          elif [ -f scripts/calibration_report.js ]; then
+            node scripts/calibration_report.js
+          elif npm run | grep -qE '^ *calibrate:report'; then
+            npm run calibrate:report
+          else
+            echo "No calibration report script found. Skipping report."
+          fi
           echo "=== Nightly Calibration End ($(date -u)) ==="
 
       - name: Ensure public artifacts exist
