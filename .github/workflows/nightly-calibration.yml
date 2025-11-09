@@ -34,7 +34,7 @@ jobs:
           cache: 'npm'
 
       - name: Install deps
-        run: npm ci
+  run: npm install --no-audit --no-fund
 
       # Optional: seeds track/measurement redis keys if script exists
       - name: Seed persistence (tracks/measurements)
