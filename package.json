@@ -7,14 +7,21 @@
     "node": "20.x"
   },
   "scripts": {
+    "dev": "next dev",
     "append:raw": "node scripts/csv-append.js",
+    "append:rows": "node scripts/csv-append.js",
     "append:today": "node scripts/map-append-current.js && node scripts/merge-append-current.js",
     "append:ready": "node scripts/append-from-races.js",
+    "append:redis": "node scripts/append-from-redis.js",
     "validate:dataset": "node scripts/validate-dataset.js",
+    "data:validate": "npm run validate:dataset",
     "calibrate": "node scripts/calibrate.js",
+    "calibrate:report": "node scripts/build-report.js",
     "build:report": "node scripts/build-report.js",
-    "calibrate:all": "npm run validate:dataset && npm run calibrate && npm run build:report",
+    "calibrate:all": "npm run validate:dataset && npm run calibrate && npm run calibrate:report",
     "backfill:persistence": "node scripts/backfill-persistence.js",
+    "backfill:calibrate": "node scripts/redis-backfill-to-csv.js",
+    "audit:server": "node scripts/fetch-audit.js",
     "sanitize:placeholders": "node scripts/sanitize-placeholders.js",
     "build": "echo \"no build step\""
   },

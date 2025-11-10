@@ -9,81 +9,40 @@ on:
 permissions:
   contents: write
   pull-requests: write
-  actions: write
-  id-token: write
 
-# Prevent overlapping nightly runs
 concurrency:
   group: nightly-calibration
   cancel-in-progress: false
 
 jobs:
-  calibrate:
-    name: Calibrate & open PR (uses Preview env secrets)
+  recalibrate:
     runs-on: ubuntu-latest
-    environment: Preview
-
+    env:
+      UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+      UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+      CAL_THRESHOLD_MIN_NEW: ${{ vars.CAL_THRESHOLD_MIN_NEW }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Setup Node
+      - name: Use Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          # IMPORTANT: no cache so we don't require a lockfile
+          node-version: "20"
 
-      - name: Install deps
-        run: npm install --no-audit --no-fund
+      - name: Install
+        run: npm ci
 
-      # Optional seed (no-op if script missing)
-      - name: Seed persistence (tracks/measurements)
-        env:
-          FINISHLINE_PERSISTENCE_ENABLED: ${{ vars.FINISHLINE_PERSISTENCE_ENABLED || 'true' }}
+      - name: Append from Redis (idempotent)
+        run: npm run append:redis || true
+
+      - name: Validate + Calibrate + Report
+        run: npm run calibrate:all
+
+      - name: Commit calibration artifacts
         run: |
-          if [ "$FINISHLINE_PERSISTENCE_ENABLED" = "true" ]; then
-            npm run backfill:persistence || echo "backfill script not present — skipping"
-          fi
-
-      - name: Validate dataset
-        run: npm run validate:dataset || echo "validate script not present — continuing"
-
-      - name: Calibrate all
-        run: |
-          echo "=== Nightly Calibration Start ($(date -u)) ==="
-          npm run calibrate:all
-          echo "=== Nightly Calibration End ($(date -u)) ==="
-
-      # Serve artifacts from /public/data as well
-      - name: Mirror artifacts to public/data
-        run: |
-          mkdir -p public/data
-          [ -f data/finishline_tests_v1.csv ] && cp -f data/finishline_tests_v1.csv public/data/
-          [ -f data/calibration_v1.json ] && cp -f data/calibration_v1.json public/data/
-          [ -f data/calibration_report_v1.md ] && cp -f data/calibration_report_v1.md public/data/
-
-      - name: Create PR with updated calibration
-        id: cpr
-        uses: peter-evans/create-pull-request@v6
-        with:
-          branch: ci/calibration-${{ github.run_id }}
-          title: "chore(ci): nightly calibration (${{ github.run_id }})"
-          commit-message: "chore(ci): nightly calibration"
-          delete-branch: true
-          add-paths: |
-            data/calibration_v1.json
-            data/finishline_tests_v1.csv
-            data/calibration_report_v1.md
-            public/data/calibration_v1.json
-            public/data/finishline_tests_v1.csv
-            public/data/calibration_report_v1.md
-
-      - name: Enable auto-merge (squash)
-        if: steps.cpr.outputs.pull-request-number != ''
-        uses: peter-evans/enable-pull-request-automerge@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          pull-request-number: ${{ steps.cpr.outputs.pull-request-number }}
-          merge-method: squash
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/finishline_tests_v1.csv data/calibration_v1.json data/calibration_report_v1.md || true
+          git commit -m "ci: nightly calibration artifacts" || true
+          git push || true
