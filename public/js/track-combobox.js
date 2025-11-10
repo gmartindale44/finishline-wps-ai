@@ -1,7 +1,8 @@
-// public/js/track-combobox.js - Type-ahead combobox for track selection
+// public/js/track-combobox.js — Type-ahead combobox for track selection
 
 const MIN_CHARS = 1;
 const DEBOUNCE_MS = 120;
+// Mirror server-side cache TTL (keep these in sync with /api/tracks handler)
 const API_CACHE_TTL = 30 * 1000;
 
 const normText = (s) =>
@@ -33,7 +34,7 @@ export function mountTrackCombobox(inputEl, { onChange } = {}) {
   let activeIndex = -1;
   let currentItems = [];
   let inflightToken = 0;
-  let sourceLogged = false;
+  let sourceLogged = false; // only log data source once per mount
 
   const apiCache = new Map();
 
@@ -66,26 +67,33 @@ export function mountTrackCombobox(inputEl, { onChange } = {}) {
 
     const now = Date.now();
     const hit = apiCache.get(normalized);
-    if (hit && hit.expires > now) {
-      return hit.data;
-    }
+    if (hit && hit.expires > now) return hit.data;
 
     try {
       const res = await fetch(`/api/tracks?q=${encodeURIComponent(query)}`, {
         headers: { Accept: 'application/json' },
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      // Accept either new shape { tracks: [...], source: 'redis|fallback' }
+      // or legacy shape [...]. Normalize to an array of strings.
       const payload = await res.json();
-      const data = Array.isArray(payload?.tracks) ? payload.tracks : [];
-      if (!sourceLogged && payload?.source) {
+      const data = Array.isArray(payload?.tracks)
+        ? payload.tracks
+        : Array.isArray(payload)
+        ? payload
+        : [];
+
+      if (!sourceLogged && (payload?.source || res.headers.get('x-fl-source'))) {
         console.info(
           '[track-combobox] source:',
-          payload.source,
+          payload?.source || res.headers.get('x-fl-source'),
           'count:',
-          payload.tracks?.length ?? data.length
+          data.length
         );
         sourceLogged = true;
       }
+
       apiCache.set(normalized, { data, expires: now + API_CACHE_TTL });
       return data;
     } catch (err) {
@@ -105,6 +113,7 @@ export function mountTrackCombobox(inputEl, { onChange } = {}) {
       header.className = 'fl-combobox-section';
       header.textContent = 'Recent';
       fragment.appendChild(header);
+
       recent.forEach((name) => {
         const item = document.createElement('div');
         item.className = 'fl-combobox-item';
@@ -175,11 +184,8 @@ export function mountTrackCombobox(inputEl, { onChange } = {}) {
   inputEl.addEventListener('input', debouncedLookup);
   inputEl.addEventListener('focus', () => {
     const currentVal = inputEl.value || '';
-    if (normText(currentVal).length >= MIN_CHARS) {
-      performLookup();
-    } else {
-      renderList({ showRecent: true });
-    }
+    if (normText(currentVal).length >= MIN_CHARS) performLookup();
+    else renderList({ showRecent: true });
   });
 
   inputEl.addEventListener('blur', () => {
@@ -209,11 +215,8 @@ export function mountTrackCombobox(inputEl, { onChange } = {}) {
       items[activeIndex].scrollIntoView({ block: 'nearest' });
     } else if (event.key === 'Enter') {
       event.preventDefault();
-      if (activeIndex >= 0) {
-        commit(items[activeIndex].dataset.value);
-      } else {
-        commit(inputEl.value);
-      }
+      if (activeIndex >= 0) commit(items[activeIndex].dataset.value);
+      else commit(inputEl.value);
     } else if (event.key === 'Escape') {
       list.classList.add('fl-combobox-hidden');
     }
@@ -221,4 +224,3 @@ export function mountTrackCombobox(inputEl, { onChange } = {}) {
 
   renderList({ showRecent: true });
 }
-
