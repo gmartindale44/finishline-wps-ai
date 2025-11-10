@@ -9,6 +9,10 @@
  * Project is "type": "module" → keep ESM.
  */
 
+import { access, readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 const {
   UPSTASH_REDIS_REST_URL,
   UPSTASH_REDIS_REST_TOKEN,
@@ -26,11 +30,12 @@ if (String(FINISHLINE_PERSISTENCE_ENABLED).toLowerCase() !== 'true') {
   );
 }
 
-const NS_TRACK = 'fl:persist:track'; // e.g. fl:persist:track:gulfstream_park
-const NS_MEAS = 'fl:persist:measurement'; // e.g. fl:persist:measurement:6f
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const TRACKS_KEY = 'finishline:tracks:v1';
+const NS_TRACK = 'fl:persist:track';
+const NS_MEAS = 'fl:persist:measurement';
 
-// --- Canonical seeds (expand freely) ----------------------------------------
-const TRACKS = [
+const FALLBACK_TRACKS = [
   'Aqueduct Racetrack',
   'Arlington International Racecourse',
   'Aintree Racecourse',
@@ -43,7 +48,7 @@ const TRACKS = [
   'Belterra Park',
   'Batavia Downs',
   'Buffalo Raceway',
-  'Baden-Baden',
+  'Baden-Baden (Iffezheim)',
   'Bangalore Turf Club',
   'Bendigo Racecourse',
   'Beverley Racecourse',
@@ -186,10 +191,11 @@ const MEASUREMENTS = [
   '1.14m',
 ];
 
-// --- Minimal helpers --------------------------------------------------------
 const slug = (value) =>
   value
     .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
     .replace(/[^a-z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '');
 
@@ -204,8 +210,8 @@ const upstash = async (cmd, ...args) => {
   return res.json();
 };
 
-// Prefer pipeline to reduce round-trips
 const pipeline = async (commands) => {
+  if (!commands.length) return;
   const res = await fetch(`${UPSTASH_REDIS_REST_URL}/pipeline`, {
     method: 'POST',
     headers: {
@@ -218,40 +224,68 @@ const pipeline = async (commands) => {
   return res.json();
 };
 
-const main = async () => {
-  console.log('[backfill] Seeding Tracks and Measurements to Upstash…');
+async function loadTracksFromFile() {
+  const candidate = path.join(__dirname, '../data/tracks.json');
+  try {
+    await access(candidate);
+    const raw = await readFile(candidate, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      const names = parsed
+        .map((entry) => {
+          if (typeof entry === 'string') return entry;
+          if (entry && typeof entry === 'object') {
+            return entry.name || entry.track || '';
+          }
+          return '';
+        })
+        .filter(Boolean);
+      if (names.length) return names;
+    }
+  } catch {
+    // ignore and fall back
+  }
+  return FALLBACK_TRACKS;
+}
 
-  // Build SET commands (idempotent — SET overwrites with same value)
+const main = async () => {
+  console.log('[backfill] Seeding Tracks (JSON + namespace) and Measurements to Upstash…');
+
+  const loaded = await loadTracksFromFile();
+  const dedupedTracks = [...new Set(loaded.map((t) => (t || '').trim()))].filter(Boolean);
+
+  await upstash('SET', TRACKS_KEY, JSON.stringify(dedupedTracks));
+
   const commands = [];
 
-  for (const track of TRACKS) {
+  for (const track of dedupedTracks) {
     const key = `${NS_TRACK}:${slug(track)}`;
-    commands.push(['SET', key, track]); // value = canonical track name
+    commands.push(['SET', key, track]);
   }
 
   for (const measurement of MEASUREMENTS) {
     const key = `${NS_MEAS}:${slug(measurement)}`;
-    commands.push(['SET', key, measurement]); // value = canonical measurement label
+    commands.push(['SET', key, measurement]);
   }
 
-  // Execute in chunks to stay friendly
   const chunkSize = 100;
   for (let i = 0; i < commands.length; i += chunkSize) {
     const slice = commands.slice(i, i + chunkSize);
     await pipeline(slice);
   }
 
-  // Quick counts (approx) using KEYS; fine for small namespaces
-  const tracksList = await upstash('KEYS', `${NS_TRACK}:*`);
-  const measurementsList = await upstash('KEYS', `${NS_MEAS}:*`);
+  const [tracksList, measurementsList] = await Promise.all([
+    upstash('KEYS', `${NS_TRACK}:*`).catch(() => ({ result: null })),
+    upstash('KEYS', `${NS_MEAS}:*`).catch(() => ({ result: null })),
+  ]);
 
   console.log(
-    `[backfill] Tracks upserted: ${TRACKS.length} (keys now: ${
+    `[backfill] Tracks stored: ${dedupedTracks.length} (namespace keys: ${
       Array.isArray(tracksList.result) ? tracksList.result.length : 'n/a'
     })`
   );
   console.log(
-    `[backfill] Measurements upserted: ${MEASUREMENTS.length} (keys now: ${
+    `[backfill] Measurements stored: ${MEASUREMENTS.length} (namespace keys: ${
       Array.isArray(measurementsList.result)
         ? measurementsList.result.length
         : 'n/a'
