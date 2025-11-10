@@ -6,6 +6,7 @@
     "node": "20.x"
   },
   "scripts": {
+    "dev": "next dev",
     "append:rows": "node scripts/csv-append.js",
     "append:today": "node scripts/map-append-current.js && node scripts/merge-append-current.js",
     "append:redis": "node scripts/append-from-redis.js",
