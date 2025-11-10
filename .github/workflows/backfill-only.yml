@@ -1,0 +1,53 @@
+name: backfill-only
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Log only (don’t write to Redis)"
+        required: false
+        default: "false"
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: backfill-only
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    name: Seed Redis (tracks/persistence)
+    runs-on: ubuntu-latest
+    environment: Preview
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install deps
+        run: npm install --no-audit --no-fund
+
+      - name: Backfill Redis
+        env:
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+          FINISHLINE_PERSISTENCE_ENABLED: "true"
+        run: |
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            echo "Dry run: would execute `npm run backfill:persistence`"
+            exit 0
+          fi
+          npm run backfill:persistence
+
+      - name: Done
+        run: echo "Backfill complete ✅"
+
