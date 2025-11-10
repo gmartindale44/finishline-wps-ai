@@ -1,8 +1,9 @@
-name: nightly-calibration (preview)
+name: nightly-calibration
 
 on:
   schedule:
-    - cron: '15 3 * * *'
+    # 08:00 UTC daily (02:00 AM CST / 03:00 AM CDT)
+    - cron: "0 8 * * *"
   workflow_dispatch: {}
 
 permissions:
@@ -10,7 +11,7 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: nightly-calibration-preview
+  group: nightly-calibration
   cancel-in-progress: false
 
 jobs:
@@ -21,62 +22,27 @@ jobs:
       UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
       CAL_THRESHOLD_MIN_NEW: ${{ vars.CAL_THRESHOLD_MIN_NEW }}
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          persist-credentials: true
-          fetch-depth: 0
 
-      - name: Set up Node.js
+      - name: Use Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: "20"
 
-      - name: Install dependencies
+      - name: Install
         run: npm ci
 
-      - name: Validate dataset
-        run: npm run validate:dataset
+      - name: Append from Redis (idempotent)
+        run: npm run append:redis || true
 
-      - name: Run calibration pipeline
+      - name: Validate + Calibrate + Report
+        run: npm run calibrate:all
+
+      - name: Commit calibration artifacts
         run: |
-          echo "=== Nightly Calibration Start ($(date -u)) ==="
-          npm run calibrate:all
-          echo "=== Nightly Calibration End ($(date -u)) ==="
-
-      - name: Ensure public artifacts exist
-        run: |
-          mkdir -p public/data
-          if [ -f data/calibration_v1.json ]; then cp -f data/calibration_v1.json public/data/calibration_v1.json; fi
-          if [ -f data/finishline_tests_v1.csv ]; then cp -f data/finishline_tests_v1.csv public/data/finishline_tests_v1.csv; fi
-          if [ -f data/calibration_report_v1.md ]; then cp -f data/calibration_report_v1.md public/data/calibration_report_v1.md; fi
-
-      - name: Create PR with changes (if any)
-        id: cpr
-        uses: peter-evans/create-pull-request@v6
-        with:
-          commit-message: "chore(calibration): nightly artifacts (preview)"
-          title: "Nightly calibration (preview): ${{ github.run_id }}"
-          branch: "auto/calibration-preview-${{ github.run_id }}"
-          base: ${{ github.ref_name }}
-          author: "github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
-          signoff: false
-          delete-branch: true
-          add-paths: |
-            data/calibration_v1.json
-            data/finishline_tests_v1.csv
-            data/calibration_report_v1.md
-            public/data/calibration_v1.json
-            public/data/finishline_tests_v1.csv
-            public/data/calibration_report_v1.md
-
-      - name: PR summary
-        if: steps.cpr.outputs.pull-request-number != ''
-        run: |
-          echo "Opened PR #${{ steps.cpr.outputs.pull-request-number }}: ${{ steps.cpr.outputs.pull-request-url }}"
-
-      - name: No changes to commit
-        if: steps.cpr.outputs.pull-request-number == ''
-        run: echo "No artifact changes detected. Skipping PR."
-
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/finishline_tests_v1.csv data/calibration_v1.json data/calibration_report_v1.md || true
+          git commit -m "ci: nightly calibration artifacts" || true
+          git push || true
