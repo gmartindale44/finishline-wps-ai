@@ -6,8 +6,9 @@ export default function Document() {
       <Head></Head>
       <body>
         <Main />
-        <script defer src="/js/verify-injector.js"></script>
         <NextScript />
+        <script defer src="/js/verify-injector.js"></script>
+        <script defer src="/js/verify-tab.js"></script>
       </body>
     </Html>
   );

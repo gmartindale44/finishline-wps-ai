@@ -168,12 +168,28 @@ export default async function handler(req, res) {
     ].join(",");
     await csvAppend(csvRow);
 
+    const hits = results.slice(0, 5).map((item) => ({
+      title: item?.title || "",
+      url: item?.link || item?.url || "",
+      snippet: item?.snippet || item?.content || "",
+    }));
+    const summary = {
+      resolvedAt: ts,
+      track,
+      raceNo: raceNumber,
+      date,
+    };
+    const cacheKey = eventKey;
+
     return res.status(200).json({
       ok: true,
       saved: { ns, eventKey },
+      cacheKey,
       query,
       count: results.length,
       top,
+      hits,
+      summary,
     });
   } catch (err) {
     console.error("[/api/verify_race]", err);
