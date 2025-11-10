@@ -5,405 +5,199 @@
  * - Calls /api/verify_race and renders results (top 5) with cache awareness.
  * - Guards against duplicate mounts and survives modal re-renders.
  */
-(function verifyTabBootstrap() {
-  const MAX_WAIT_MS = 10_000;
-  const POLL_INTERVAL_MS = 250;
-  const FLAG_ATTR = 'data-fl-verify-tab-mounted';
-  const TAB_SELECTOR = '.fl-tabs, .tabs, [data-fl-tabs]';
-  const PANEL_ID = 'fl-verify-panel';
-  const TAB_ID = 'fl-verify-tab';
+(() => {
+  const BOOT_ATTR = "data-fl-verify-boot";
+  if (document.documentElement.hasAttribute(BOOT_ATTR)) return;
+  document.documentElement.setAttribute(BOOT_ATTR, "1");
 
-  let stopPolling = false;
-  const observedBars = new WeakSet();
+  // Small helpers
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+  const text = (el) => (el?.textContent || "").trim();
 
-  function $(sel, root = document) {
-    return root.querySelector(sel);
+  function findTabsRoot() {
+    // Tabs container in Predictions modal header (existing three tabs)
+    // Adjust selectors only if your structure changes.
+    return $(".fl-predictions-tabs") ||
+           $(".predictions header nav") ||
+           $(".predictions nav") ||
+           $$(".predictions").find(el => $$(".tab", el).length >= 3) ||
+           null;
   }
 
-  function $all(sel, root = document) {
-    return Array.from(root.querySelectorAll(sel));
+  function findPanelsRoot() {
+    // The container that holds the content panels for the tabs
+    return $(".fl-predictions-panels") ||
+           $(".predictions .panels") ||
+           $(".predictions") ||
+           null;
   }
 
-  function todayYMD() {
-    const d = new Date();
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-  }
+  function currentContext() {
+    // Pull context from visible UI. Prompt fallback happens in action.
+    const ctx = {};
+    ctx.track =
+      $("[data-track]")?.getAttribute("data-track") ||
+      text($(".fl-track-name")) ||
+      text($("header .track-name")) ||
+      "";
 
-  function inferContext() {
-    const ctx = {
-      track: '',
-      date: todayYMD(),
-      raceNo: '',
-      distance: '',
-      surface: '',
-      strategy: '',
-      aiPicks: ''
-    };
+    const raceStr =
+      text($(".fl-race-no")) ||
+      text($("[data-race]")) ||
+      text($("[data-race-number]")) ||
+      "";
+    const m =
+      raceStr.match(/\bRace\s*#?\s*(\d+)\b/i) ||
+      raceStr.match(/\bR(\d+)\b/i) ||
+      raceStr.match(/\b(\d+)\b/);
+    ctx.raceNo = m ? m[1] : "";
 
-    try {
-      ctx.track = (
-        $('[data-track]')?.getAttribute('data-track') ||
-        $('.fl-track-name')?.textContent ||
-        $('input[name="track"], #track, [data-fl-track]')?.value ||
-        ''
-      ).trim();
-
-      const raceLabel = (
-        $('.fl-race-no')?.textContent ||
-        $('[data-race]')?.getAttribute('data-race') ||
-        $('[data-race-number]')?.getAttribute('data-race-number') ||
-        $('input[name="race"], #race, [data-fl-race]')?.value ||
-        ''
-      ).toString();
-      const raceMatch = raceLabel.match(/\b(?:race|r)\s*#?\s*(\d+)\b/i) || raceLabel.match(/\b(\d{1,2})\b/);
-      if (raceMatch) ctx.raceNo = raceMatch[1];
-
-      const dateValue = (
-        $('[data-race-date]')?.getAttribute('data-race-date') ||
-        $('input[type="date"], input[name="date"], #date, [data-fl-date]')?.value ||
-        ''
-      ).trim();
-      if (dateValue) ctx.date = dateValue;
-
-      ctx.distance = (
-        $('.fl-distance')?.textContent ||
-        $('[data-fl-distance]')?.getAttribute('data-fl-distance') ||
-        ''
-      ).trim();
-
-      ctx.surface = (
-        $('.fl-surface')?.textContent ||
-        $('[data-fl-surface]')?.getAttribute('data-fl-surface') ||
-        ''
-      ).trim();
-
-      ctx.strategy = (
-        $('.fl-strategy-active')?.textContent ||
-        $('.fl-strategy-name')?.textContent ||
-        $('[data-fl-strategy]')?.getAttribute('data-fl-strategy') ||
-        ''
-      ).trim();
-
-      const picks = $all('.fl-pick, [data-fl-pick]').map((el) => el.textContent.trim()).filter(Boolean);
-      if (picks.length) ctx.aiPicks = picks.join(' | ');
-    } catch (err) {
-      console.info('[verify-tab] context inference failed softly', err);
+    // Format YYYY-MM-DD. If not present, default to today
+    ctx.date = $("[data-race-date]")?.getAttribute("data-race-date") || "";
+    if (!ctx.date) {
+      const d = new Date();
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      const dd = String(d.getDate()).padStart(2, "0");
+      ctx.date = `${d.getFullYear()}-${mm}-${dd}`;
     }
 
+    ctx.distance = text($(".fl-distance")) || "";
+    ctx.surface = text($(".fl-surface")) || "";
+    ctx.strategy =
+      text($(".fl-strategy-active")) ||
+      text($(".fl-strategy-name")) ||
+      "";
+
+    const picks = $$(".fl-pick, [data-fl-pick]")
+      .map((el) => text(el))
+      .filter(Boolean);
+    ctx.ai_picks = picks.join(" | ");
     return ctx;
   }
 
-  function createPanel() {
-    const panel = document.createElement('section');
-    panel.id = PANEL_ID;
-    panel.className = 'fl-panel hidden';
-    panel.setAttribute('aria-hidden', 'true');
+  async function postJSON(url, body) {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(body),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+    return json;
+  }
 
+  function ensureVerifyTab() {
+    const tabsRoot = findTabsRoot();
+    const panelsRoot = findPanelsRoot();
+    if (!tabsRoot || !panelsRoot) return false;
+
+    // If the tab already exists, don’t duplicate
+    if ($('[data-tab-id="verify"]', tabsRoot)) return true;
+
+    // Create the tab
+    const tab = document.createElement("button");
+    tab.className = "tab";
+    tab.type = "button";
+    tab.textContent = "Verify";
+    tab.setAttribute("data-tab-id", "verify");
+    tab.style.marginLeft = "6px";
+
+    // Create the panel (hidden by default)
+    const panel = document.createElement("div");
+    panel.className = "panel fl-verify-panel";
+    panel.setAttribute("data-panel-id", "verify");
+    panel.style.display = "none";
     panel.innerHTML = `
-      <div class="fl-verify-form">
-        <div class="fl-verify-grid">
-          <label>Track
-            <input id="flv-track" name="track" placeholder="e.g., Penn National" autocomplete="off" />
-          </label>
-          <label>Date
-            <input id="flv-date" name="date" type="date" />
-          </label>
-          <label>Race #
-            <input id="flv-race" name="raceNo" type="number" min="1" step="1" inputmode="numeric" />
-          </label>
+      <div class="fl-card" style="margin-top:12px">
+        <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+          <div>
+            <label>Track</label>
+            <input id="flv-track" class="fl-input" style="min-width:220px" />
+          </div>
+          <div>
+            <label>Race #</label>
+            <input id="flv-race" class="fl-input" style="width:90px" />
+          </div>
+          <div>
+            <label>Date (YYYY-MM-DD)</label>
+            <input id="flv-date" class="fl-input" style="width:150px" />
+          </div>
+          <button id="flv-run" class="fl-btn">Verify result</button>
         </div>
-        <div class="fl-verify-grid">
-          <label>Distance
-            <input id="flv-distance" name="distance" placeholder="optional" />
-          </label>
-          <label>Surface
-            <input id="flv-surface" name="surface" placeholder="optional" />
-          </label>
-          <label>Strategy
-            <input id="flv-strategy" name="strategy" placeholder="optional" />
-          </label>
-        </div>
-        <label>AI Picks
-          <textarea id="flv-picks" name="ai_picks" rows="2" placeholder="AI picks (WIN | PLACE | SHOW)"></textarea>
-        </label>
-        <div class="fl-verify-actions">
-          <button type="button" id="flv-run" class="fl-btn fl-btn-primary">Run Verify</button>
-          <div id="flv-status" class="fl-verify-status" aria-live="polite"></div>
-        </div>
-      </div>
-      <div id="flv-results" class="fl-verify-results">
-        <div class="fl-verify-placeholder">Results will appear here.</div>
+        <div id="flv-status" style="margin-top:12px;font-size:0.95rem;opacity:0.9"></div>
+        <div id="flv-output" class="fl-code" style="margin-top:8px;white-space:pre-wrap"></div>
       </div>
     `;
 
-    // Inline minimal styling scoped to panel
-    if (!document.getElementById('fl-verify-styles')) {
-      const style = document.createElement('style');
-      style.id = 'fl-verify-styles';
-      style.textContent = `
-        #${PANEL_ID} { padding: 16px; border-radius: 10px; background: rgba(12,12,20,0.85); border: 1px solid rgba(255,255,255,0.06); color: inherit; }
-        #${PANEL_ID}.hidden { display: none; }
-        #${PANEL_ID} .fl-verify-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin-bottom: 12px; }
-        #${PANEL_ID} label { display: flex; flex-direction: column; font-size: 0.9rem; gap: 6px; }
-        #${PANEL_ID} input, #${PANEL_ID} textarea { padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.12); background: rgba(8,8,14,0.9); color: inherit; }
-        #${PANEL_ID} textarea { resize: vertical; min-height: 70px; }
-        #${PANEL_ID} .fl-verify-actions { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
-        #${PANEL_ID} #flv-run { padding: 8px 16px; border-radius: 999px; cursor: pointer; }
-        #${PANEL_ID} #flv-run[disabled] { opacity: 0.6; cursor: wait; }
-        #${PANEL_ID} .fl-verify-status { min-height: 1.2rem; font-size: 0.9rem; opacity: 0.85; }
-        #${PANEL_ID} .fl-verify-status.error { color: #ff9898; }
-        #${PANEL_ID} .fl-verify-status.ok { color: #8de0b5; }
-        #${PANEL_ID} .fl-verify-status.cached { color: #74b9ff; }
-        #${PANEL_ID} .fl-verify-results { margin-top: 18px; display: grid; gap: 12px; }
-        #${PANEL_ID} .fl-verify-summary { display:flex; flex-wrap:wrap; gap:12px; font-size:0.9rem; }
-        #${PANEL_ID} .fl-verify-chip { padding:4px 8px; border-radius:999px; background:rgba(255,255,255,0.08); }
-        #${PANEL_ID} .fl-verify-list { list-style:none; padding:0; margin:0; display:grid; gap:10px; }
-        #${PANEL_ID} .fl-verify-item { padding:10px; border-radius:8px; border:1px solid rgba(255,255,255,0.08); background:rgba(12,12,22,0.6); }
-        #${PANEL_ID} .fl-verify-item h4 { margin:0 0 4px 0; font-size:1rem; }
-        #${PANEL_ID} .fl-verify-item a { color:#7ecbff; word-break:break-all; }
-        #${PANEL_ID} .fl-verify-placeholder { opacity:0.6; font-size:0.9rem; }
-        #${PANEL_ID} .fl-verify-error { padding:12px; border-radius:8px; background:rgba(255,80,80,0.15); border:1px solid rgba(255,120,120,0.3); }
-      `;
-      document.head.appendChild(style);
+    tabsRoot.appendChild(tab);
+    panelsRoot.appendChild(panel);
+
+    // Tab switching (simple, non-invasive)
+    const allTabs = $$('[data-tab-id]', tabsRoot);
+    const allPanels = $$('[data-panel-id]', panelsRoot);
+    function show(id) {
+      allTabs.forEach((t) =>
+        t.toggleAttribute('data-active', t.getAttribute('data-tab-id') === id)
+      );
+      allPanels.forEach((p) => {
+        p.style.display = p.getAttribute('data-panel-id') === id ? '' : 'none';
+      });
     }
+    tab.addEventListener('click', () => show('verify'));
 
-    return panel;
-  }
+    // Seed inputs from current UI context
+    const ctx = currentContext();
+    panel.querySelector('#flv-track').value = ctx.track || '';
+    panel.querySelector('#flv-race').value = ctx.raceNo || '';
+    panel.querySelector('#flv-date').value = ctx.date || '';
 
-  function showPanel(panel, tabButton) {
-    panel.classList.remove('hidden');
-    panel.setAttribute('aria-hidden', 'false');
+    // Wire the action button
+    const btn = panel.querySelector('#flv-run');
+    const status = panel.querySelector('#flv-status');
+    const out = panel.querySelector('#flv-output');
 
-    $all('.fl-panel').forEach((p) => {
-      if (p !== panel) {
-        p.classList.add('hidden');
-        p.setAttribute('aria-hidden', 'true');
-      }
-    });
-
-    const tabs = $all(`${TAB_SELECTOR} .fl-tab, ${TAB_SELECTOR} button, ${TAB_SELECTOR} [role="tab"]`);
-    tabs.forEach((btn) => btn.classList && btn.classList.remove('active'));
-    if (tabButton?.classList) tabButton.classList.add('active');
-  }
-
-  function hidePanel(panel, tabButton) {
-    panel.classList.add('hidden');
-    panel.setAttribute('aria-hidden', 'true');
-    tabButton?.classList?.remove('active');
-  }
-
-  function renderResults(container, payload) {
-    if (!container) return;
-    const isCached = Boolean(payload?.cached);
-    const hits = Array.isArray(payload?.items) ? payload.items : [];
-    const top = payload?.topHit || hits[0] || null;
-    const summaryHtml = `
-      <div class="fl-verify-summary">
-        <span class="fl-verify-chip">${payload?.query || 'No query'}</span>
-        <span class="fl-verify-chip">${hits.length} hit${hits.length === 1 ? '' : 's'}</span>
-        ${isCached ? '<span class="fl-verify-chip">from cache</span>' : ''}
-      </div>
-    `;
-
-    const topHtml = top
-      ? `<div class="fl-verify-item">
-          <h4>Top result</h4>
-          <div><strong>${top.title || '(no title)'}</strong></div>
-          ${top.link ? `<div><a href="${top.link}" target="_blank" rel="noopener">${top.link}</a></div>` : ''}
-          ${top.snippet ? `<p>${top.snippet}</p>` : ''}
-        </div>`
-      : '';
-
-    const listHtml = hits.length
-      ? `<ol class="fl-verify-list">
-          ${hits
-            .map(
-              (hit) => `
-                <li class="fl-verify-item">
-                  <h4>${hit.title || '(no title)'}</h4>
-                  ${hit.link ? `<div><a href="${hit.link}" target="_blank" rel="noopener">${hit.link}</a></div>` : ''}
-                  ${hit.snippet ? `<p>${hit.snippet}</p>` : ''}
-                </li>
-              `
-            )
-            .join('')}
-        </ol>`
-      : '<div class="fl-verify-placeholder">No matches were returned.</div>';
-
-    container.innerHTML = summaryHtml + topHtml + listHtml;
-  }
-
-  function renderError(container, message) {
-    if (!container) return;
-    container.innerHTML = `<div class="fl-verify-error">${message}</div>`;
-  }
-
-  function attachRunHandler(panel) {
-    const runBtn = panel.querySelector('#flv-run');
-    const statusEl = panel.querySelector('#flv-status');
-    const resultsEl = panel.querySelector('#flv-results');
-
-    const setStatus = (message, state = '') => {
-      if (!statusEl) return;
-      statusEl.textContent = message || '';
-      statusEl.className = `fl-verify-status ${state}`.trim();
-    };
-
-    runBtn?.addEventListener('click', async () => {
-      const payload = {
-        track: panel.querySelector('#flv-track')?.value?.trim() || '',
-        date: panel.querySelector('#flv-date')?.value?.trim() || todayYMD(),
-        raceNo: Number(panel.querySelector('#flv-race')?.value || 0) || '',
-        distance: panel.querySelector('#flv-distance')?.value?.trim() || '',
-        surface: panel.querySelector('#flv-surface')?.value?.trim() || '',
-        strategy: panel.querySelector('#flv-strategy')?.value?.trim() || '',
-        ai_picks: panel.querySelector('#flv-picks')?.value?.trim() || ''
-      };
-
-      if (!payload.track || !payload.date || !payload.raceNo) {
-        setStatus('Track, Date, and Race # are required.', 'error');
-        return;
-      }
-
+    btn.onclick = async () => {
       try {
-        runBtn.disabled = true;
-        setStatus('Verifying…');
-        renderResults(resultsEl, { query: payload.track, items: [] });
+        btn.disabled = true;
+        status.textContent = 'Running…';
+        out.textContent = '';
 
-        const res = await fetch('/api/verify_race', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
+        const payload = {
+          track: panel.querySelector('#flv-track').value.trim(),
+          raceNo: panel.querySelector('#flv-race').value.trim(),
+          date: panel.querySelector('#flv-date').value.trim(),
+          distance: ctx.distance || '',
+          surface: ctx.surface || '',
+          strategy: ctx.strategy || '',
+          ai_picks: ctx.ai_picks || '',
+        };
+        if (!payload.track || !payload.raceNo || !payload.date)
+          throw new Error('Track, race #, and date are required.');
 
-        const json = await res.json().catch(() => ({}));
-
-        if (!res.ok) {
-          const detail = json?.error || res.statusText || 'Verify failed.';
-          if (/GOOGLE_.* missing/i.test(detail) || /Missing GOOGLE/i.test(detail)) {
-            renderError(resultsEl, 'Missing Google Custom Search credentials. Set GOOGLE_API_KEY and GOOGLE_CSE_ID in Vercel (Preview & Production).');
-          } else {
-            renderError(resultsEl, detail);
-          }
-          setStatus('Verification failed.', 'error');
-          return;
-        }
-
-        renderResults(resultsEl, json);
-        setStatus(json.cached ? 'Verified (cached)' : 'Verified successfully.', json.cached ? 'cached' : 'ok');
-      } catch (err) {
-        console.error('[verify-tab] error', err);
-        renderError(resultsEl, err?.message || 'Unexpected error running verification.');
-        setStatus('Verification error.', 'error');
+        const res = await postJSON('/api/verify_race', payload);
+        status.textContent = `OK — ${res.count ?? (res.items?.length ?? 0)} results`;
+        const top = res.top || res.topHit || {};
+        out.textContent =
+          [
+            `Query: ${res.query || "(built from inputs)"}`,
+            top.title ? `Top: ${top.title}` : "",
+            top.link ? `Link: ${top.link}` : "",
+          ]
+            .filter(Boolean)
+            .join("\n") || JSON.stringify(res, null, 2);
+      } catch (e) {
+        status.textContent = `Failed — ${e.message || e}`;
       } finally {
-        runBtn.disabled = false;
+        btn.disabled = false;
       }
-    });
-  }
-
-  function mountInTabs(tabsBar) {
-    if (!tabsBar || observedBars.has(tabsBar)) return;
-    observedBars.add(tabsBar);
-
-    const tabButton = document.createElement('button');
-    tabButton.id = TAB_ID;
-    tabButton.type = 'button';
-    tabButton.className = 'fl-tab';
-    tabButton.textContent = 'Verify';
-    tabButton.setAttribute('aria-controls', PANEL_ID);
-
-    // Insert after Strategy tab if it exists
-    const siblings = $all('button, .fl-tab, [role="tab"], a', tabsBar);
-    const strategy = siblings.find((el) => /strategy/i.test(el.textContent || ''));
-    if (strategy?.parentNode) {
-      strategy.parentNode.insertBefore(tabButton, strategy.nextSibling);
-    } else {
-      tabsBar.appendChild(tabButton);
-    }
-
-    const panelHost = $('#fl-panel-host') || $('.fl-panels') || document.querySelector('.fl-modal, [data-fl-panels]') || document.body;
-    let panel = document.getElementById(PANEL_ID);
-    if (!panel) {
-      panel = createPanel();
-      panelHost.appendChild(panel);
-    }
-
-    // Prefill inputs
-    const ctx = inferContext();
-    const setValue = (selector, value) => {
-      const el = panel.querySelector(selector);
-      if (el && value) el.value = value;
     };
-    setValue('#flv-track', ctx.track);
-    setValue('#flv-date', ctx.date);
-    setValue('#flv-race', ctx.raceNo);
-    setValue('#flv-distance', ctx.distance);
-    setValue('#flv-surface', ctx.surface);
-    setValue('#flv-strategy', ctx.strategy);
-    setValue('#flv-picks', ctx.aiPicks);
 
-    attachRunHandler(panel);
-
-    tabButton.addEventListener('click', () => {
-      showPanel(panel, tabButton);
-    });
-
-    tabsBar.addEventListener('click', (event) => {
-      const target = event.target instanceof Element ? event.target.closest('button, .fl-tab, [role="tab"], a') : null;
-      if (!target) return;
-      if (target === tabButton) return;
-      hidePanel(panel, tabButton);
-    });
-
-    console.info('[verify-tab] mounted');
+    return true;
   }
 
-  function attemptMount() {
-    if (document.documentElement.hasAttribute(FLAG_ATTR)) return;
-
-    const bars = $all(TAB_SELECTOR).filter(Boolean);
-    if (bars.length) {
-      document.documentElement.setAttribute(FLAG_ATTR, 'true');
-      bars.forEach(mountInTabs);
-      stopPolling = true;
-      return;
-    }
-  }
-
-  function observeForTabs() {
-    const observer = new MutationObserver(() => {
-      const bars = $all(TAB_SELECTOR).filter((bar) => !observedBars.has(bar));
-      if (bars.length) {
-        document.documentElement.setAttribute(FLAG_ATTR, 'true');
-        bars.forEach(mountInTabs);
-      }
-    });
-
-    observer.observe(document.body, { childList: true, subtree: true });
-
-    setTimeout(() => observer.disconnect(), MAX_WAIT_MS);
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-      attemptMount();
-      observeForTabs();
-    });
-  } else {
-    attemptMount();
-    observeForTabs();
-  }
-
-  const pollStart = Date.now();
-  const poll = setInterval(() => {
-    if (stopPolling || Date.now() - pollStart > MAX_WAIT_MS) {
-      clearInterval(poll);
-      if (!stopPolling) console.info('[verify-tab] tabs not detected within timeout');
-      return;
-    }
-    attemptMount();
-  }, POLL_INTERVAL_MS);
+  // Keep trying until the modal mounts
+  const iv = setInterval(() => {
+    if (ensureVerifyTab()) clearInterval(iv);
+  }, 300);
 })();
