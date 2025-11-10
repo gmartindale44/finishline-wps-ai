@@ -1,16 +1,15 @@
-import { Html, Head, Main, NextScript } from "next/document";
+import { Html, Head, Main, NextScript } from 'next/document';
 
 export default function Document() {
   return (
     <Html>
-      <Head>
-        <script defer src="/js/verify-injector.js"></script>
-      </Head>
+      <Head />
       <body>
         <Main />
         <NextScript />
+        {/* Verify Tab assets (no legacy injector) */}
+        <script defer src="/js/verify-tab.js"></script>
       </body>
     </Html>
   );
 }
-
