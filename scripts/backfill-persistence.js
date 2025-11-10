@@ -14,10 +14,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const {
-  UPSTASH_REDIS_REST_URL,
-  UPSTASH_REDIS_REST_TOKEN,
+  UPSTASH_REDIS_REST_URL: RAW_UPSTASH_URL,
+  UPSTASH_REDIS_REST_TOKEN: RAW_UPSTASH_TOKEN,
   FINISHLINE_PERSISTENCE_ENABLED,
 } = process.env;
+
+const UPSTASH_REDIS_REST_URL = (RAW_UPSTASH_URL || '').replace(/^"+|"+$/g, '');
+const UPSTASH_REDIS_REST_TOKEN = (RAW_UPSTASH_TOKEN || '').replace(/^"+|"+$/g, '');
 
 if (!UPSTASH_REDIS_REST_URL || !UPSTASH_REDIS_REST_TOKEN) {
   console.error('[backfill] Missing Upstash envs. Aborting.');
@@ -31,7 +34,7 @@ if (String(FINISHLINE_PERSISTENCE_ENABLED).toLowerCase() !== 'true') {
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const TRACKS_KEY = 'finishline:tracks:v1';
+const TRACK_KEYS = ['finishline:tracks', 'finishline:tracks:v1'];
 const NS_TRACK = 'fl:persist:track';
 const NS_MEAS = 'fl:persist:measurement';
 
@@ -163,6 +166,59 @@ const FALLBACK_TRACKS = [
   'Zia Park',
   'Borrowdale Park',
   'Zagreb Racecourse',
+  'Tokyo City Keiba (Ohi)',
+  'Hanshin Racecourse',
+  'Kyoto Racecourse',
+  'Sapporo Racecourse',
+  'Hakodate Racecourse',
+  'Niigata Racecourse',
+  'Fukushima Racecourse',
+  'Nakuru Racecourse',
+  'Fairview Racecourse',
+  'Kenilworth Park',
+  'Port Elizabeth Racecourse',
+  'Turf Club Mauritius',
+  'Happy Turf Club',
+  'Bahrain Turf Club',
+  'King Abdulaziz Racetrack',
+  'Doomben Turf Club',
+  'Sunshine Coast Turf Club',
+  'Gawler Racecourse',
+  'Morphettville Racecourse',
+  'Ballarat Turf Club',
+  'Cranbourne Turf Club',
+  'Sale Turf Club',
+  'Geelong Racecourse',
+  'Hamilton Racecourse',
+  'Warrnambool Racecourse',
+  'Narromine Turf Club',
+  'Tamworth Racecourse',
+  'Wagga Racecourse',
+  'Grafton Racecourse',
+  'Toowoomba Racecourse',
+  'Rockhampton Racecourse',
+  'Townsville Turf Club',
+  'Darwin Turf Club',
+  'Broome Turf Club',
+  'Ascot Park (NZ)',
+  'Riccarton Park',
+  'Trentham Racecourse',
+  'Ellerslie Racecourse',
+  'Awapuni Racecourse',
+  'Oamaru Racecourse',
+  'Wingatui Racecourse',
+  'Phumelela Turffontein',
+  'Greyville Polytrack',
+  'Markopoulo Park',
+  'Milan San Siro Racecourse',
+  'Capannelle Racecourse',
+  'Pisa San Rossore',
+  'Seoul Racecourse',
+  'Busan-Gyeongnam Racecourse',
+  'Daegu Racecourse',
+  'Taipa Racecourse',
+  'Kranji Turf (Legacy)',
+  'Singapore Turf Club (Legacy)',
 ];
 
 const MEASUREMENTS = [
@@ -254,7 +310,9 @@ const main = async () => {
   const loaded = await loadTracksFromFile();
   const dedupedTracks = [...new Set(loaded.map((t) => (t || '').trim()))].filter(Boolean);
 
-  await upstash('SET', TRACKS_KEY, JSON.stringify(dedupedTracks));
+  for (const key of TRACK_KEYS) {
+    await upstash('SET', key, JSON.stringify(dedupedTracks));
+  }
 
   const commands = [];
 
@@ -278,6 +336,10 @@ const main = async () => {
     upstash('KEYS', `${NS_TRACK}:*`).catch(() => ({ result: null })),
     upstash('KEYS', `${NS_MEAS}:*`).catch(() => ({ result: null })),
   ]);
+
+  console.log(
+    `[backfill] JSON keys updated: ${TRACK_KEYS.join(', ')}`
+  );
 
   console.log(
     `[backfill] Tracks stored: ${dedupedTracks.length} (namespace keys: ${

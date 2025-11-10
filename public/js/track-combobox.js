@@ -2,7 +2,7 @@
 
 const MIN_CHARS = 1;
 const DEBOUNCE_MS = 120;
-const API_CACHE_TTL = 30 * 1000; // mirror server-side query cache
+const API_CACHE_TTL = 30 * 1000;
 
 const normText = (s) =>
   (s ?? '')
@@ -33,6 +33,7 @@ export function mountTrackCombobox(inputEl, { onChange } = {}) {
   let activeIndex = -1;
   let currentItems = [];
   let inflightToken = 0;
+  let sourceLogged = false;
 
   const apiCache = new Map();
 
@@ -74,8 +75,17 @@ export function mountTrackCombobox(inputEl, { onChange } = {}) {
         headers: { Accept: 'application/json' },
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      const data = Array.isArray(json) ? json : [];
+      const payload = await res.json();
+      const data = Array.isArray(payload?.tracks) ? payload.tracks : [];
+      if (!sourceLogged && payload?.source) {
+        console.info(
+          '[track-combobox] source:',
+          payload.source,
+          'count:',
+          payload.tracks?.length ?? data.length
+        );
+        sourceLogged = true;
+      }
       apiCache.set(normalized, { data, expires: now + API_CACHE_TTL });
       return data;
     } catch (err) {
@@ -119,6 +129,11 @@ export function mountTrackCombobox(inputEl, { onChange } = {}) {
         fragment.appendChild(item);
       });
       currentItems.push(...matches);
+    } else if (query) {
+      const emptyMsg = document.createElement('div');
+      emptyMsg.className = 'fl-combobox-empty';
+      emptyMsg.textContent = 'No tracks found';
+      fragment.appendChild(emptyMsg);
     }
 
     list.appendChild(fragment);
@@ -149,7 +164,6 @@ export function mountTrackCombobox(inputEl, { onChange } = {}) {
 
     if (!matches.length) {
       renderList({ query: trimmed, matches: [] });
-      list.classList.add('fl-combobox-hidden');
       return;
     }
 
