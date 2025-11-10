@@ -922,6 +922,9 @@ import { mountTrackCombobox } from './track-combobox.js';
   function initTrackCombobox() {
     const trackInput = document.getElementById('race-track') || document.querySelector('input[name="track"], #track, [data-fl-field="track"]');
     if (trackInput && !trackInput.closest('.fl-combobox')) {
+      if (!trackInput.placeholder || trackInput.placeholder !== 'Type to search tracks…') {
+        trackInput.placeholder = 'Type to search tracks…';
+      }
       mountTrackCombobox(trackInput, {
         onChange: (val) => {
           // Normalize into global state if used
