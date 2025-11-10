@@ -1,23 +1,24 @@
 /**
  * scripts/backfill-persistence.js
  * Seeds canonical tracks and distance measurements into Upstash Redis via REST.
- * Idempotent: safe to run multiple times. Requires:
+ * Idempotent: safe to run multiple times.
+ *
+ * Requires environment variables:
  *   UPSTASH_REDIS_REST_URL
  *   UPSTASH_REDIS_REST_TOKEN
- *   FINISHLINE_PERSISTENCE_ENABLED=true
+ *   FINISHLINE_PERSISTENCE_ENABLED=true   (recommended; script still proceeds if not)
  *
- * Project is "type": "module" → keep ESM.
+ * Project uses "type": "module" → keep ESM.
  */
 
 import { access, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const {
-  UPSTASH_REDIS_REST_URL,
-  UPSTASH_REDIS_REST_TOKEN,
-  FINISHLINE_PERSISTENCE_ENABLED,
-} = process.env;
+// Read from the *actual* env vars, then sanitize stray quotes.
+const UPSTASH_REDIS_REST_URL = (process.env.UPSTASH_REDIS_REST_URL || '').replace(/^"+|"+$/g, '');
+const UPSTASH_REDIS_REST_TOKEN = (process.env.UPSTASH_REDIS_REST_TOKEN || '').replace(/^"+|"+$/g, '');
+const { FINISHLINE_PERSISTENCE_ENABLED } = process.env;
 
 if (!UPSTASH_REDIS_REST_URL || !UPSTASH_REDIS_REST_TOKEN) {
   console.error('[backfill] Missing Upstash envs. Aborting.');
@@ -26,15 +27,20 @@ if (!UPSTASH_REDIS_REST_URL || !UPSTASH_REDIS_REST_TOKEN) {
 
 if (String(FINISHLINE_PERSISTENCE_ENABLED).toLowerCase() !== 'true') {
   console.warn(
-    '[backfill] FINISHLINE_PERSISTENCE_ENABLED is not "true" – proceeding anyway (dry-ish run).'
+    '[backfill] FINISHLINE_PERSISTENCE_ENABLED is not "true" – proceeding anyway.'
   );
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const TRACKS_KEY = 'finishline:tracks:v1';
+
+// Canonical JSON list key (current) + legacy key (for compatibility)
+const TRACKS_KEY_CANON = 'finishline:tracks:v1';
+const TRACKS_KEY_LEGACY = 'finishline:tracks';
+
 const NS_TRACK = 'fl:persist:track';
 const NS_MEAS = 'fl:persist:measurement';
 
+// Fallback list is broad to support global users. Data/tracks.json overrides it when present.
 const FALLBACK_TRACKS = [
   'Aqueduct Racetrack',
   'Arlington International Racecourse',
@@ -163,6 +169,18 @@ const FALLBACK_TRACKS = [
   'Zia Park',
   'Borrowdale Park',
   'Zagreb Racecourse',
+
+  // Added APAC/EMEA expansion (selection)
+  'Tokyo City Keiba (Ohi)',
+  'Hanshin Racecourse',
+  'Kyoto Racecourse',
+  'Sapporo Racecourse',
+  'Hakodate Racecourse',
+  'Niigata Racecourse',
+  'Fukushima Racecourse',
+  'Fairview Racecourse',
+  'Kranji Turf (Legacy)',
+  'Singapore Turf Club (Legacy)',
 ];
 
 const MEASUREMENTS = [
@@ -185,7 +203,7 @@ const MEASUREMENTS = [
   '1 1/4m',
   '1 1/2m',
 
-  // Harness style (kilometer style readouts commonly shown)
+  // Harness style (kilometer-ish readouts)
   '1.10m',
   '1.12m',
   '1.14m',
@@ -200,9 +218,7 @@ const slug = (value) =>
     .replace(/^_+|_+$/g, '');
 
 const upstash = async (cmd, ...args) => {
-  const url = `${UPSTASH_REDIS_REST_URL}/${cmd}/${args
-    .map(encodeURIComponent)
-    .join('/')}`;
+  const url = `${UPSTASH_REDIS_REST_URL}/${cmd}/${args.map(encodeURIComponent).join('/')}`;
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${UPSTASH_REDIS_REST_TOKEN}` },
   });
@@ -234,9 +250,7 @@ async function loadTracksFromFile() {
       const names = parsed
         .map((entry) => {
           if (typeof entry === 'string') return entry;
-          if (entry && typeof entry === 'object') {
-            return entry.name || entry.track || '';
-          }
+          if (entry && typeof entry === 'object') return entry.name || entry.track || '';
           return '';
         })
         .filter(Boolean);
@@ -254,20 +268,22 @@ const main = async () => {
   const loaded = await loadTracksFromFile();
   const dedupedTracks = [...new Set(loaded.map((t) => (t || '').trim()))].filter(Boolean);
 
-  await upstash('SET', TRACKS_KEY, JSON.stringify(dedupedTracks));
+  // Write canonical + legacy JSON keys (keeps API + clients compatible)
+  await upstash('SET', TRACKS_KEY_CANON, JSON.stringify(dedupedTracks));
+  await upstash('SET', TRACKS_KEY_LEGACY, JSON.stringify(dedupedTracks));
 
+  // Create namespaced lookup keys (fast exact-match / prefix scans if needed)
   const commands = [];
-
   for (const track of dedupedTracks) {
     const key = `${NS_TRACK}:${slug(track)}`;
     commands.push(['SET', key, track]);
   }
-
   for (const measurement of MEASUREMENTS) {
     const key = `${NS_MEAS}:${slug(measurement)}`;
     commands.push(['SET', key, measurement]);
   }
 
+  // Chunked pipeline to avoid payload limits
   const chunkSize = 100;
   for (let i = 0; i < commands.length; i += chunkSize) {
     const slice = commands.slice(i, i + chunkSize);
@@ -279,6 +295,7 @@ const main = async () => {
     upstash('KEYS', `${NS_MEAS}:*`).catch(() => ({ result: null })),
   ]);
 
+  console.log(`[backfill] JSON keys updated: ${TRACKS_KEY_CANON}, ${TRACKS_KEY_LEGACY}`);
   console.log(
     `[backfill] Tracks stored: ${dedupedTracks.length} (namespace keys: ${
       Array.isArray(tracksList.result) ? tracksList.result.length : 'n/a'
@@ -286,9 +303,7 @@ const main = async () => {
   );
   console.log(
     `[backfill] Measurements stored: ${MEASUREMENTS.length} (namespace keys: ${
-      Array.isArray(measurementsList.result)
-        ? measurementsList.result.length
-        : 'n/a'
+      Array.isArray(measurementsList.result) ? measurementsList.result.length : 'n/a'
     })`
   );
   console.log('[backfill] Done.');
@@ -298,4 +313,3 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
-
