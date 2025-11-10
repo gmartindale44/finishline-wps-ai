@@ -1,8 +1,8 @@
 // public/js/track-combobox.js — Type-ahead combobox for track selection
 
+// Mirror server-side cache TTL (keep these in sync with /api/tracks handler)
 const MIN_CHARS = 1;
 const DEBOUNCE_MS = 120;
-// Mirror server-side cache TTL (keep these in sync with /api/tracks handler)
 const API_CACHE_TTL = 30 * 1000;
 
 const normText = (s) =>
@@ -75,8 +75,7 @@ export function mountTrackCombobox(inputEl, { onChange } = {}) {
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-      // Accept either new shape { tracks: [...], source: 'redis|fallback' }
-      // or legacy shape [...]. Normalize to an array of strings.
+      // Accept either new shape { tracks: [...], source } or legacy [...]
       const payload = await res.json();
       const data = Array.isArray(payload?.tracks)
         ? payload.tracks

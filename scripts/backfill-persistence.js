@@ -3,19 +3,18 @@
  * Seeds canonical tracks and distance measurements into Upstash Redis via REST.
  * Idempotent: safe to run multiple times.
  *
- * Requires environment variables:
+ * Requires:
  *   UPSTASH_REDIS_REST_URL
  *   UPSTASH_REDIS_REST_TOKEN
- *   FINISHLINE_PERSISTENCE_ENABLED=true   (recommended; script still proceeds if not)
+ *   FINISHLINE_PERSISTENCE_ENABLED=true   (recommended; script proceeds if not)
  *
- * Project uses "type": "module" → keep ESM.
+ * Project uses "type": "module".
  */
 
 import { access, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// Read from the *actual* env vars, then sanitize stray quotes.
 const UPSTASH_REDIS_REST_URL = (process.env.UPSTASH_REDIS_REST_URL || '').replace(/^"+|"+$/g, '');
 const UPSTASH_REDIS_REST_TOKEN = (process.env.UPSTASH_REDIS_REST_TOKEN || '').replace(/^"+|"+$/g, '');
 const { FINISHLINE_PERSISTENCE_ENABLED } = process.env;
@@ -26,9 +25,7 @@ if (!UPSTASH_REDIS_REST_URL || !UPSTASH_REDIS_REST_TOKEN) {
 }
 
 if (String(FINISHLINE_PERSISTENCE_ENABLED).toLowerCase() !== 'true') {
-  console.warn(
-    '[backfill] FINISHLINE_PERSISTENCE_ENABLED is not "true" – proceeding anyway.'
-  );
+  console.warn('[backfill] FINISHLINE_PERSISTENCE_ENABLED is not "true" – proceeding anyway.');
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -40,7 +37,7 @@ const TRACKS_KEY_LEGACY = 'finishline:tracks';
 const NS_TRACK = 'fl:persist:track';
 const NS_MEAS = 'fl:persist:measurement';
 
-// Fallback list is broad to support global users. Data/tracks.json overrides it when present.
+// Fallback list (data/tracks.json, if present, overrides)
 const FALLBACK_TRACKS = [
   'Aqueduct Racetrack',
   'Arlington International Racecourse',
@@ -170,7 +167,7 @@ const FALLBACK_TRACKS = [
   'Borrowdale Park',
   'Zagreb Racecourse',
 
-  // Added APAC/EMEA expansion (selection)
+  // JP + ZA + AU/NZ/etc selections (compat with previous merges)
   'Tokyo City Keiba (Ohi)',
   'Hanshin Racecourse',
   'Kyoto Racecourse',
