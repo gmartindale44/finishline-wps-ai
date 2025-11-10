@@ -3,4 +3,3 @@
  * This file remains only to avoid 404s from older previews. It does nothing.
  */
 console.info('[verify-injector] Deprecated. Using Verify tab instead.');
-
