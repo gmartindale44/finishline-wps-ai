@@ -1,202 +1,94 @@
-import crypto from "node:crypto";
-import fs from "node:fs/promises";
-import path from "node:path";
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
 
-const CSE_BRIDGE = "/api/cse_resolver";
-const TTL_SECONDS = 60 * 60 * 24;
+const UPSTASH_URL = (process.env.UPSTASH_REDIS_REST_URL || '').replace(/^"+|"+$/g, '');
+const UPSTASH_TOKEN = (process.env.UPSTASH_REDIS_REST_TOKEN || '').replace(/^"+|"+$/g, '');
+const GOOGLE_KEY = (process.env.GOOGLE_API_KEY || '').replace(/^"+|"+$/g, '');
+const GOOGLE_CX  = (process.env.GOOGLE_CSE_ID  || '').replace(/^"+|"+$/g, '');
 
-const UPSTASH_URL = (process.env.UPSTASH_REDIS_REST_URL || "").replace(
-  /^"+|"+$/g,
-  ""
-);
-const UPSTASH_TOKEN = (process.env.UPSTASH_REDIS_REST_TOKEN || "").replace(
-  /^"+|"+$/g,
-  ""
-);
+const CACHE_TTL_S = 60 * 60 * 24; // 24h
+const CSV_FILE = path.join(process.cwd(), 'data', 'reconciliations_v1.csv');
 
-const CSV = path.join(process.cwd(), "data", "reconciliations_v1.csv");
+async function upstash(command, ...args) {
+  if (!UPSTASH_URL || !UPSTASH_TOKEN) return null;
+  const url = `${UPSTASH_URL}/${command}/${args.map(encodeURIComponent).join('/')}`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${UPSTASH_TOKEN}` } });
+  if (!res.ok) throw new Error(`Upstash ${command} failed: ${res.status}`);
+  return res.json();
+}
 
-const slug = (s = "") =>
-  s
-    .toString()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
-
-async function ensureCsvHeader() {
+async function cacheGet(key) {
   try {
-    await fs.access(CSV);
-  } catch {
-    const header =
-      "Timestamp,Track,Date,Race_No,Distance,Surface,Strategy,AI_Picks,Query,Result_Count,Top_Title,Top_Link\n";
-    await fs.writeFile(CSV, header, "utf8");
+    const r = await upstash('GET', key);
+    return r?.result ? JSON.parse(r.result) : null;
+  } catch { return null; }
+}
+async function cacheSet(key, value, ttl = CACHE_TTL_S) {
+  try { await upstash('SET', key, JSON.stringify(value)); await upstash('EXPIRE', key, ttl); } catch {}
+}
+
+async function cse(query) {
+  if (!GOOGLE_KEY || !GOOGLE_CX) throw new Error('Missing GOOGLE_API_KEY or GOOGLE_CSE_ID');
+  const u = new URL('https://www.googleapis.com/customsearch/v1');
+  u.searchParams.set('key', GOOGLE_KEY);
+  u.searchParams.set('cx', GOOGLE_CX);
+  u.searchParams.set('q', query);
+  const r = await fetch(u.toString());
+  if (!r.ok) {
+    const text = await r.text();
+    throw new Error(`Google CSE ${r.status}: ${text}`);
   }
+  return r.json();
 }
 
-async function csvAppend(row) {
-  await ensureCsvHeader();
-  await fs.appendFile(CSV, row + "\n", "utf8");
-}
-
-async function redisPipeline(cmds) {
-  if (!UPSTASH_URL || !UPSTASH_TOKEN) return false;
-  const res = await fetch(`${UPSTASH_URL}/pipeline`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${UPSTASH_TOKEN}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(cmds),
-  });
-  return res.ok;
+async function appendCSV(row) {
+  const header = 'timestamp,track,date,raceNo,query,hit_title,hit_link,hit_snippet\n';
+  try {
+    await fs.access(CSV_FILE).catch(async () => fs.mkdir(path.dirname(CSV_FILE), { recursive: true }).then(() => fs.writeFile(CSV_FILE, header)));
+    await fs.appendFile(CSV_FILE, row, 'utf8');
+  } catch {}
 }
 
 export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    res.setHeader('Allow','POST');
+    return res.status(405).json({ error: 'Method Not Allowed' });
+  }
   try {
-    if (req.method !== "POST")
-      return res.status(405).json({ error: "POST only" });
-    let payload = {};
-    if (typeof req.json === "function") {
-      try {
-        payload = await req.json();
-      } catch {
-        payload = {};
-      }
-    }
-    if (!Object.keys(payload).length && req.body) {
-      if (typeof req.body === "string") {
-        try {
-          payload = JSON.parse(req.body);
-        } catch (err) {
-          return res.status(400).json({ error: "Invalid JSON" });
-        }
-      } else {
-        payload = req.body;
-      }
-    }
+    const { track, date, raceNo } = req.body || {};
+    if (!track || !date || !raceNo) throw new Error('track, date, raceNo are required');
 
-    const {
-      track,
-      date, // YYYY-MM-DD
-      raceNo,
-      race_no, // number or string
-      distance = "",
-      surface = "",
-      strategy = "",
-      ai_picks = "", // e.g. "WIN:Dancing On Air|PLACE:Feratovic|SHOW:Cantyoustoptheking"
-    } = payload;
+    const query = `${track} race ${raceNo} results ${date}`;
+    const cacheKey = `fl:cse:reconcile:${track}:${date}:${raceNo}`;
 
-    const raceNumber = raceNo || race_no;
+    const cached = await cacheGet(cacheKey);
+    if (cached) return res.status(200).json({ cached: true, ...cached });
 
-    if (!track || !date || !raceNumber) {
-      return res
-        .status(400)
-        .json({ error: "Missing required fields: track, date, raceNo" });
-    }
-
-    const qParts = [
-      track,
-      `Race ${raceNumber}`,
-      date,
-      distance && `${distance}`,
-      surface && `${surface}`,
-      "results Win Place Show order",
-    ].filter(Boolean);
-    const query = qParts.join(" ").trim();
-
-    const proto = req.headers["x-forwarded-proto"] || "https";
-    const host = req.headers.host;
-    const url = `${proto}://${host}${CSE_BRIDGE}?q=${encodeURIComponent(
-      query
-    )}`;
-    const r = await fetch(url, { cache: "no-store" });
-    const payload = await r.json();
-    if (!r.ok) {
-      return res
-        .status(r.status)
-        .json({ error: "CSE failed", details: payload?.error || payload });
-    }
-
-    const results = Array.isArray(payload?.results) ? payload.results : [];
-    const top = results[0] || {};
-    const ts = new Date().toISOString();
-
-    const ns = `fl:cse:reconcile:${slug(track)}:${date}:R${raceNumber}`;
-    const eventKey = `${ns}:${Date.now()}:${crypto
-      .randomBytes(4)
-      .toString("hex")}`;
-    const cmds = [
-      [
-        "SET",
-        eventKey,
-        JSON.stringify({
-          ts,
-          track,
-          date,
-          raceNo: raceNumber,
-          distance,
-          surface,
-          strategy,
-          ai_picks,
-          query,
-          count: results.length,
-          results: results.slice(0, 10),
-        }),
-      ],
-      ["EXPIRE", eventKey, String(TTL_SECONDS)],
-      ["LPUSH", `${ns}:log`, eventKey],
-      ["LTRIM", `${ns}:log`, "0", "99"],
-      ["EXPIRE", `${ns}:log`, String(TTL_SECONDS)],
-    ];
-    await redisPipeline(cmds);
-
-    const csvRow = [
-      ts,
-      `"${track.replace(/"/g, '""')}"`,
-      date,
-      raceNumber,
-      `"${distance.replace(/"/g, '""')}"`,
-      `"${surface.replace(/"/g, '""')}"`,
-      `"${strategy.replace(/"/g, '""')}"`,
-      `"${ai_picks.replace(/"/g, '""')}"`,
-      `"${query.replace(/"/g, '""')}"`,
-      results.length,
-      `"${(top.title || "").replace(/"/g, '""')}"`,
-      `"${(top.link || "").replace(/"/g, '""')}"`,
-    ].join(",");
-    await csvAppend(csvRow);
-
-    const hits = results.slice(0, 5).map((item) => ({
-      title: item?.title || "",
-      url: item?.link || item?.url || "",
-      snippet: item?.snippet || item?.content || "",
-    }));
-    const summary = {
-      resolvedAt: ts,
-      track,
-      raceNo: raceNumber,
-      date,
+    const json = await cse(query);
+    const top = json?.items?.[0] || null;
+    const payload = {
+      track, date, raceNo, query,
+      topHit: top ? { title: top.title, link: top.link, snippet: top.snippet } : null,
+      items: (json?.items || []).slice(0, 5).map(i => ({ title: i.title, link: i.link, snippet: i.snippet }))
     };
-    const cacheKey = eventKey;
 
-    return res.status(200).json({
-      ok: true,
-      saved: { ns, eventKey },
-      cacheKey,
-      query,
-      count: results.length,
-      top,
-      hits,
-      summary,
-    });
+    await cacheSet(cacheKey, payload, CACHE_TTL_S);
+
+    const row = [
+      new Date().toISOString(),
+      `"${(track||'').replace(/"/g,'""')}"`,
+      date,
+      raceNo,
+      `"${query.replace(/"/g,'""')}"`,
+      `"${(top?.title||'').replace(/"/g,'""')}"`,
+      `"${(top?.link||'').replace(/"/g,'""')}"`,
+      `"${(top?.snippet||'').replace(/"/g,'""')}"`
+    ].join(',') + '\n';
+    await appendCSV(row);
+
+    return res.status(200).json(payload);
   } catch (err) {
-    console.error("[/api/verify_race]", err);
-    return res.status(500).json({
-      error: "verify_race failed",
-      details: err?.message || String(err),
-    });
+    return res.status(500).json({ error: String(err.message || err) });
   }
 }
 
