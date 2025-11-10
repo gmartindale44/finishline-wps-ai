@@ -4,9 +4,9 @@
   window.__FL_VERIFY_LOADER_ACTIVE__ = true;
 
   if (window.__flVerifyDebug === undefined) window.__flVerifyDebug = false;
-  const log = (...a) => { try { if (window.__flVerifyDebug) console.log("[FL:verify]", ...a); } catch {} };
+  const log = (...a) => { try { if (window.__flVerifyDebug) console.log("[FL:loader]", ...a); } catch {} };
 
-  try { console.info("%c FinishLine Verify Loader r8 ", "background:#6b46c1;color:#fff;padding:2px 6px;border-radius:4px"); } catch {}
+  try { console.info("%c FinishLine Verify Loader r9 ", "background:#6b46c1;color:#fff;padding:2px 6px;border-radius:4px"); } catch {}
 
   const withPrefix = (p) => {
     try {
@@ -15,37 +15,37 @@
     } catch { return p; }
   };
 
-  // Tiny heartbeat
+  // Heartbeat
   try {
     const tag = document.createElement("div");
     tag.textContent = "VT";
     tag.style.cssText = "position:fixed;right:8px;bottom:8px;z-index:2147483647;font:600 11px/1.2 system-ui;padding:4px 6px;border-radius:6px;color:#fff;background:#6b46c1;opacity:.9;pointer-events:none";
-    const mount = () => { document.body && document.body.appendChild(tag); setTimeout(()=> tag.remove(), 2000); };
+    const mount = () => { document.body && document.body.appendChild(tag); setTimeout(()=> tag.remove(), 1600); };
     (document.readyState === "loading") ? document.addEventListener("DOMContentLoaded", mount, { once:true }) : mount();
   } catch {}
 
-  // Load verify-tab.js (cache-busted)
-  const ensureVerifyTab = () => {
-    const already = Array.from(document.scripts || []).some(s => (s.src||"").includes("/js/verify-tab.js"));
-    if (!already) {
-      const s = document.createElement("script");
-      s.defer = true;
-      s.src = withPrefix("/js/verify-tab.js?v=" + encodeURIComponent("v2025-11-10-8"));
-      s.onload = () => log("verify-tab.js loaded");
-      s.onerror = () => console.error("[FL:verify] verify-tab.js failed to load", s.src);
-      document.head.appendChild(s);
-    } else {
-      log("verify-tab.js already present");
-    }
+  const inject = (src) => new Promise((res, rej) => {
+    const s = document.createElement("script");
+    s.defer = true;
+    s.src = withPrefix(src);
+    s.onload = () => { log("loaded", src); res(); };
+    s.onerror = () => { console.error("[FL:loader] failed", src); rej(); };
+    document.head.appendChild(s);
+  });
+
+  const run = () => {
+    const want = [
+      "/js/verify-tab.js?v=v2025-11-10-9",
+      "/js/track-guard.js?v=v2025-11-10-9"
+    ];
+    let p = Promise.resolve();
+    for (const src of want) p = p.then(() => inject(src).catch(()=>{}));
   };
 
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", ensureVerifyTab, { once:true });
+    document.addEventListener("DOMContentLoaded", run, { once:true });
   } else {
-    ensureVerifyTab();
+    run();
   }
-
-  // IMPORTANT: disable FAB fallback by default (r8). Re-enable only if window.__flVerifyFab = true.
-  window.__flVerifyFab = !!window.__flVerifyFab; // off unless set true manually
 })();
 
