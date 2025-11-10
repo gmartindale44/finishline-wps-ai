@@ -50,3 +50,8 @@
   color: #9aa0a6;
 }
 
+.fl-verify-btn:focus {
+  outline: 2px solid rgba(110,168,254,.6);
+  outline-offset: 2px;
+}
+
