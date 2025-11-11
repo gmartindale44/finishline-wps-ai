@@ -47,6 +47,16 @@
   }
   function getTopTrack(){return qs("input[placeholder*='track' i]")||qs("input[id*='track' i]")||qs("input[name*='track' i]");}
   function getTopRace(){return qs("input[placeholder*='race' i]")||qs("input[id*='race' i]")||qs("input[name*='race' i]");}
+  function currentTrack(){
+    const input = getTopTrack();
+    if(input && typeof input.value==="string" && input.value.trim()) return input.value.trim();
+    return "";
+  }
+  function currentRaceNo(){
+    const input = getTopRace();
+    if(input && typeof input.value==="string" && input.value.trim()) return input.value.trim();
+    return "";
+  }
 
   function scoreGZ(sig){
     const c=sig&&sig.confidence||0;
@@ -76,7 +86,7 @@
       <div id="gz-today-list" style="margin-top:8px"></div>
       <div id="gz-today-summary" style="margin-top:8px;opacity:.9"></div>
     `;
-    const anchor = qs("#flv-raw", host)?.parentElement || qs(".flv-card", host) || host;
+    const anchor = qs("#flv-raw-details", host)?.parentElement || qs(".flv-card", host) || host;
     anchor.parentElement?.insertBefore(wrap, anchor.nextSibling);
     return wrap;
   }
@@ -177,14 +187,14 @@
           <small style="opacity:.75">Track is required; Race # helps context.</small>
         </div>
 
-        <details open>
+        <details id="flv-sum" open>
           <summary style="cursor:pointer;opacity:.9">Summary</summary>
-          <div id="flv-summary" style="margin-top:8px"><em>No summary returned.</em></div>
+          <pre id="flv-sum-body" style="white-space:pre-wrap;margin-top:8px;max-height:220px;overflow:auto;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.04);font:12px/1.5 ui-monospace, Menlo, Consolas">No summary returned.</pre>
         </details>
 
-        <details style="margin-top:8px">
+        <details id="flv-raw-details" style="margin-top:8px">
           <summary style="cursor:pointer;opacity:.9">Raw</summary>
-          <pre id="flv-raw" style="max-height:320px;overflow:auto;margin:8px 0 0;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.04);font:12px/1.5 ui-monospace, Menlo, Consolas">—</pre>
+          <pre id="flv-raw-body" style="max-height:320px;overflow:auto;margin:8px 0 0;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.04);font:12px/1.5 ui-monospace, Menlo, Consolas">—</pre>
         </details>
       </div>
     `;
@@ -197,8 +207,9 @@
 
     const runBtn = qs("#flv-run",host);
     const statusEl=qs("#flv-status",host);
-    const rawEl=qs("#flv-raw",host);
-    const summaryEl=qs("#flv-summary",host);
+    const rawEl=qs("#flv-raw-body",host);
+    const sumDetails=qs("#flv-sum",host);
+    const summaryEl=qs("#flv-sum-body",host);
     const warnTrack=qs("#flv-track-warn",host);
     const warnRace=qs("#flv-race-warn",host);
     const trackInput=qs("#flv-track",host);
@@ -223,7 +234,7 @@
           statusEl.style.color = "#cbd5f5";
         }
         if(rawEl) rawEl.textContent = "";
-        if(summaryEl) summaryEl.innerHTML = "<em>Working…</em>";
+        if(summaryEl) summaryEl.textContent = "Working…";
         if(warnRace) warnRace.style.display = "none";
         host.__flvLast = { top: null, query: '' };
 
@@ -250,13 +261,14 @@
 
           host.__flvLast = { top: (data && data.top) || null, query: (data && data.query) || '' };
 
+          if(sumDetails) sumDetails.open = true;
           if(summaryEl){
-            const parts=[];
-            if(data.query) parts.push(`<div><b>Query:</b> ${data.query}</div>`);
-            if(data.top&&data.top.title) parts.push(`<div><b>Top Result:</b> ${data.top.title}</div>`);
-            if(data.summary) parts.push(`<div>${data.summary}</div>`);
+            const lines=[];
+            if(data.query) lines.push(`Query: ${data.query}`);
+            const summaryText = data.summary || (data.top && data.top.title ? `Top Result: ${data.top.title}${data.top.link?`\n${data.top.link}`:""}` : "");
+            if(summaryText) lines.push(summaryText);
             if(data.outcome && (data.outcome.win||data.outcome.place||data.outcome.show)){
-              parts.push(`<div><b>Outcome:</b> ${[data.outcome.win,data.outcome.place,data.outcome.show].filter(Boolean).join(' / ')}</div>`);
+              lines.push(`Outcome: ${[data.outcome.win,data.outcome.place,data.outcome.show].filter(Boolean).join(' / ')}`);
             }
             if(data.hits){
               const hitText=[
@@ -264,9 +276,9 @@
                 data.hits.placeHit?"Place":null,
                 data.hits.showHit?"Show":null
               ].filter(Boolean).join(', ');
-              parts.push(`<div><b>Hits:</b> ${hitText || 'None'}</div>`);
+              if(hitText) lines.push(`Hits: ${hitText}`);
             }
-            summaryEl.innerHTML = parts.join("") || "<em>No summary returned.</em>";
+            summaryEl.textContent = lines.filter(Boolean).join("\n") || "No summary returned.";
           }
         }catch(error){
           if(statusEl){
@@ -322,16 +334,42 @@
     host.__flvLast = { top: null, query: '' };
 
     const statusEl=qs("#flv-status",host);
-    const summaryEl=qs("#flv-summary",host);
-    const rawEl=qs("#flv-raw",host);
+    const sumDetails=qs("#flv-sum",host);
+    const summaryEl=qs("#flv-sum-body",host);
+    const rawEl=qs("#flv-raw-body",host);
     const warnTrack=qs("#flv-track-warn",host);
     const warnRace=qs("#flv-race-warn",host);
 
     if(statusEl){ statusEl.textContent="Idle"; statusEl.style.color="#cbd5f5"; }
-    if(summaryEl) summaryEl.innerHTML="<em>No summary returned.</em>";
+    if(sumDetails) sumDetails.open = true;
+    if(summaryEl) summaryEl.textContent="No summary returned.";
     if(rawEl) rawEl.textContent="—";
     if(warnTrack) warnTrack.style.display=trackVal?"none":"";
     if(warnRace) warnRace.style.display="none";
+
+    (function pushImmediateSnapshot(){
+      try{
+        const picks = readUIPredictions();
+        const track = trackVal || currentTrack();
+        if(!track) return;
+        const raceNow = (raceInput && raceInput.value && raceInput.value.trim()) || currentRaceNo() || "";
+        const t = new Date();
+        const y = t.getFullYear();
+        const m = String(t.getMonth()+1).padStart(2,"0");
+        const d = String(t.getDate()).padStart(2,"0");
+        const dayKey = `${y}-${m}-${d}`;
+        const key = `fl:snap:${dayKey}:${track}:${raceNow||"nr"}`;
+        const payload = {
+          ts: Date.now(),
+          date: dayKey,
+          track,
+          raceNo: raceNow,
+          signals: { confidence: null, top3Mass: null, gap12: 0, gap23: 0 },
+          picks
+        };
+        sessionStorage.setItem(key, JSON.stringify(payload));
+      }catch{}
+    })();
 
     if(typeof host.__flvUpdateGZ === "function") host.__flvUpdateGZ();
   }
