@@ -13,6 +13,34 @@
     return `${y}-${m}-${dd}`;
   }
 
+  function readUIPredictions(){
+    try{
+      const scope=document.querySelector('[data-panel="predictions"], .predictions-panel')||document;
+      const picks={ win:"", place:"", show:"" };
+      const cards=Array.from(scope.querySelectorAll('.prediction-card, [data-pick]')).filter(Boolean);
+      if(cards.length>=3){
+        const names=cards.slice(0,3).map(card=>{
+          const el=card.querySelector('[data-name], .title, .name, b, strong');
+          return (el&&el.textContent||"").trim();
+        });
+        picks.win = names[0]||"";
+        picks.place = names[1]||"";
+        picks.show = names[2]||"";
+        return picks;
+      }
+      const getPick=(selector)=>{
+        const el=scope.querySelector(selector);
+        return el ? (el.textContent||"").trim() : "";
+      };
+      picks.win = getPick("[data-pick='win'], .pick-win b, .emoji-win~b");
+      picks.place = getPick("[data-pick='place'], .pick-place b, .emoji-place~b");
+      picks.show = getPick("[data-pick='show'], .pick-show b, .emoji-show~b");
+      return picks;
+    }catch{
+      return { win:"", place:"", show:"" };
+    }
+  }
+
   function readCtx(){
     try{const s=sessionStorage.getItem("fl:verify:ctx"); if(s) return JSON.parse(s);}catch{}
     return {};
@@ -36,7 +64,7 @@
 
         <div id="flv-status" style="font:600 12px/1.2 system-ui;opacity:.8;margin-bottom:10px">Idle</div>
 
-        <div style="display:grid;gap:10px;margin-bottom:12px;grid-template-columns:1fr 160px 170px;">
+        <div style="display:grid;gap:10px;margin-bottom:12px;grid-template-columns:1fr 140px 150px;">
           <div>
             <label style="display:block;margin:0 0 6px 0;opacity:.9">Track <span style="color:#ffcc00">*</span></label>
             <input id="flv-track" type="text" placeholder="Track"
@@ -99,10 +127,11 @@
       host.__flvLast = { top: null, query: '' };
 
       try{
+        const predicted=readUIPredictions();
         const resp=await fetch("/api/verify_race",{
           method:"POST",
           headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({track,date,raceNo:raceNo||undefined})
+          body:JSON.stringify({track,date,raceNo:raceNo||undefined,predicted})
         });
         const data=await resp.json().catch(()=>({}));
         status.textContent=resp.ok?"OK":`Error ${resp.status}`;
@@ -110,11 +139,22 @@
         if(!resp.ok && data && typeof data.error==="string" && /raceno/i.test(data.error)){
           wRace.style.display="";
         }
-        host.__flvLast = { top: (data && data.top) || null, query: data && data.query || '' };
+        host.__flvLast = { top: (data && data.top) || null, query: (data && data.query) || '' };
         const parts=[];
         if(data.query) parts.push(`<div><b>Query:</b> ${data.query}</div>`);
         if(data.top&&data.top.title) parts.push(`<div><b>Top Result:</b> ${data.top.title}</div>`);
         if(data.summary) parts.push(`<div>${data.summary}</div>`);
+        if(data.outcome && (data.outcome.win||data.outcome.place||data.outcome.show)){
+          parts.push(`<div><b>Outcome:</b> ${[data.outcome.win,data.outcome.place,data.outcome.show].filter(Boolean).join(' / ')}</div>`);
+        }
+        if(data.hits){
+          const hitText=[
+            data.hits.winHit?"Win":null,
+            data.hits.placeHit?"Place":null,
+            data.hits.showHit?"Show":null
+          ].filter(Boolean).join(', ');
+          parts.push(`<div><b>Hits:</b> ${hitText || 'None'}</div>`);
+        }
         let summaryHtml=parts.join("")||"<em>No summary returned.</em>";
         const detailText=String(data?.details||data?.error||"");
         if(!resp.ok && resp.status===500 && /read-only file system/i.test(detailText)){

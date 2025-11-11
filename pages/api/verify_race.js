@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { Redis } from '@upstash/redis';
+import { fetchAndParseResults } from '../../lib/results';
 
 const GOOGLE_KEY = (process.env.GOOGLE_API_KEY || '').replace(/^"+|"+$/g, '');
 const GOOGLE_CX  = (process.env.GOOGLE_CSE_ID  || '').replace(/^"+|"+$/g, '');
@@ -100,6 +101,7 @@ export default async function handler(req, res) {
       surface  = '',
       strategy = '',
       ai_picks = '',
+      predicted = {},
     } = body || {};
 
     const raceNumber = raceNo ?? race_no;
@@ -140,6 +142,24 @@ export default async function handler(req, res) {
 
     const topPreferred = pickBest(results);
     const top = topPreferred || results[0] || null;
+
+    const outcome = top?.link ? await fetchAndParseResults(top.link) : { win: '', place: '', show: '' };
+    const normalizeName = (value = '') => value.toLowerCase().replace(/\s+/g, ' ').trim();
+    const predictedSafe = {
+      win: (predicted && predicted.win) ? String(predicted.win) : '',
+      place: (predicted && predicted.place) ? String(predicted.place) : '',
+      show: (predicted && predicted.show) ? String(predicted.show) : '',
+    };
+    const hits = {
+      winHit: predictedSafe.win && outcome.win && normalizeName(predictedSafe.win) === normalizeName(outcome.win),
+      placeHit: predictedSafe.place && outcome.place && normalizeName(predictedSafe.place) === normalizeName(outcome.place),
+      showHit: predictedSafe.show && outcome.show && normalizeName(predictedSafe.show) === normalizeName(outcome.show),
+      top3Hit: [predictedSafe.win, predictedSafe.place, predictedSafe.show]
+        .filter(Boolean)
+        .map(normalizeName)
+        .some((name) => [outcome.win, outcome.place, outcome.show].map(normalizeName).includes(name)),
+    };
+
     const tsIso  = new Date().toISOString();
     const redis = getRedis();
 
@@ -161,6 +181,9 @@ export default async function handler(req, res) {
           query: queryUsed,
           count: results.length,
           results: results.slice(0, 10),
+          predicted: predictedSafe,
+          outcome,
+          hits,
         }));
         await redis.expire(eventKey, TTL_SECONDS);
         await redis.lpush(`${ns}:log`, eventKey);
@@ -171,8 +194,6 @@ export default async function handler(req, res) {
       }
     }
 
-    const topResult = top ? { title: top.title, link: top.link, snippet: top.snippet ?? null } : null;
-
     if (redis) {
       try {
         const row = {
@@ -181,13 +202,20 @@ export default async function handler(req, res) {
           track,
           raceNo: raceNumber ?? null,
           query: queryUsed || null,
-          top: topResult,
-          ok: true,
+          top: top ? { title: top.title, link: top.link } : null,
+          outcome,
+          predicted: predictedSafe,
+          hits,
         };
         await redis.rpush(RECON_LIST, JSON.stringify(row));
         const dayKey = `${RECON_DAY_PREFIX}${date}`;
         await redis.rpush(dayKey, JSON.stringify(row));
         await redis.expire(dayKey, 60 * 60 * 24 * 90);
+        await redis.hincrby('cal:v1', 'total', 1);
+        if (hits.winHit) await redis.hincrby('cal:v1', 'correctWin', 1);
+        if (hits.placeHit) await redis.hincrby('cal:v1', 'correctPlace', 1);
+        if (hits.showHit) await redis.hincrby('cal:v1', 'correctShow', 1);
+        if (hits.top3Hit) await redis.hincrby('cal:v1', 'top3Hit', 1);
       } catch (error) {
         console.error('Redis logging failed', error);
       }
@@ -198,7 +226,7 @@ export default async function handler(req, res) {
         const fs = await import('node:fs');
         const path = await import('node:path');
         const csvPath = path.resolve(process.cwd(), 'data/reconciliations_v1.csv');
-        const header = 'ts,date,track,raceNo,query,topTitle,topUrl\n';
+        const header = 'ts,date,track,raceNo,query,topTitle,topUrl,winHit,placeHit,showHit,top3Hit\n';
         const exists = fs.existsSync(csvPath);
         const line = [
           Date.now(),
@@ -206,8 +234,12 @@ export default async function handler(req, res) {
           JSON.stringify(track),
           raceNumber ?? '',
           JSON.stringify(queryUsed || ''),
-          JSON.stringify(topResult?.title || ''),
-          JSON.stringify(topResult?.link || ''),
+          JSON.stringify(top?.title || ''),
+          JSON.stringify(top?.link || ''),
+          hits.winHit ? 1 : 0,
+          hits.placeHit ? 1 : 0,
+          hits.showHit ? 1 : 0,
+          hits.top3Hit ? 1 : 0,
         ].join(',') + '\n';
         if (!exists) fs.writeFileSync(csvPath, header);
         fs.appendFileSync(csvPath, line);
@@ -222,6 +254,9 @@ export default async function handler(req, res) {
       count: results.length,
       top,
       results: results.slice(0, 5),
+      outcome,
+      predicted: predictedSafe,
+      hits,
     });
   } catch (err) {
     return res.status(500).json({ error: 'verify_race failed', details: err?.message || String(err) });
