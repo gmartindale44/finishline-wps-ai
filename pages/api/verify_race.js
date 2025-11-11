@@ -95,8 +95,8 @@ export default async function handler(req, res) {
 
     const {
       track,
-      date,                       // YYYY-MM-DD
-      raceNo, race_no,            // either is fine
+      date: inputDate,
+      raceNo, race_no,
       distance = '',
       surface  = '',
       strategy = '',
@@ -105,8 +105,17 @@ export default async function handler(req, res) {
     } = body || {};
 
     const raceNumber = raceNo ?? race_no;
-    if (!track || !date) {
-      return res.status(400).json({ error: 'Missing required fields: track, date' });
+    if (!track) {
+      return res.status(400).json({ error: 'Missing required field: track' });
+    }
+
+    let date = inputDate;
+    if (!date) {
+      const now = new Date();
+      const y = now.getFullYear();
+      const m = String(now.getMonth() + 1).padStart(2, '0');
+      const d = String(now.getDate()).padStart(2, '0');
+      date = `${y}-${m}-${d}`;
     }
 
     const dWords = date.replace(/-/g, ' ');

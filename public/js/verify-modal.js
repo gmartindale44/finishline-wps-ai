@@ -48,6 +48,97 @@
   function getTopTrack(){return qs("input[placeholder*='track' i]")||qs("input[id*='track' i]")||qs("input[name*='track' i]");}
   function getTopRace(){return qs("input[placeholder*='race' i]")||qs("input[id*='race' i]")||qs("input[name*='race' i]");}
 
+  function scoreGZ(sig){
+    const c=sig&&sig.confidence||0;
+    const m=sig&&sig.top3Mass||0;
+    const g12=sig&&sig.gap12||0;
+    const g23=sig&&sig.gap23||0;
+    const score=Math.min(100, 0.45*c + 0.35*m + 8*g12 + 5*g23);
+    let suggested="ATB";
+    if(c>=78 && g12>=2) suggested="WinOnly";
+    else if(m>=55 && (g12+g23)>=3.5) suggested="TrifectaBox";
+    else if(m>=52) suggested="ExactaBox";
+    const tier = score>=72 ? "Green" : score>=58 ? "Yellow" : "Red";
+    return { score:Math.round(score), tier, suggested };
+  }
+
+  function ensureGreenZoneSection(host){
+    let wrap = qs("#flv-gz-today", host);
+    if(wrap) return wrap;
+    wrap = document.createElement("div");
+    wrap.id = "flv-gz-today";
+    wrap.style.cssText = "margin-top:12px;border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:12px;background:rgba(255,255,255,.03)";
+    wrap.innerHTML = `
+      <div style="font:600 14px system-ui;display:flex;gap:8px;align-items:center">
+        <span>🟢 Green-Zone (Today)</span>
+        <small style="opacity:.75">Based on your predictions saved today</small>
+      </div>
+      <div id="gz-today-list" style="margin-top:8px"></div>
+      <div id="gz-today-summary" style="margin-top:8px;opacity:.9"></div>
+    `;
+    const anchor = qs("#flv-raw", host)?.parentElement || qs(".flv-card", host) || host;
+    anchor.parentElement?.insertBefore(wrap, anchor.nextSibling);
+    return wrap;
+  }
+
+  function updateGreenZoneToday(host){
+    const wrap = ensureGreenZoneSection(host);
+    const list = wrap.querySelector("#gz-today-list");
+    const summary = wrap.querySelector("#gz-today-summary");
+    if(!list || !summary) return;
+
+    const dayKey = todayISO();
+    const rows=[];
+    try{
+      for(let i=0;i<sessionStorage.length;i++){
+        const key = sessionStorage.key(i)||"";
+        if(!key.startsWith(`fl:snap:${dayKey}:`)) continue;
+        try{
+          const raw = sessionStorage.getItem(key);
+          if(!raw) continue;
+          const parsed = JSON.parse(raw);
+          if(parsed && parsed.signals) rows.push(parsed);
+        }catch{}
+      }
+    }catch{}
+
+    if(!rows.length){
+      list.textContent = "No predictions captured today yet.";
+      summary.textContent = "";
+      return;
+    }
+
+    const scored = rows.map(row=>({
+      ...row,
+      gz: scoreGZ(row.signals||{})
+    })).sort((a,b)=>b.gz.score - a.gz.score);
+
+    const map = { WinOnly:"Win-Only", ATB:"Across The Board", ExactaBox:"Exacta Box", TrifectaBox:"Trifecta Box" };
+    const tbl = document.createElement("table");
+    tbl.style.cssText="width:100%;border-collapse:collapse;font:12px system-ui";
+    tbl.innerHTML = `<thead><tr>
+        <th style="text-align:left;padding:6px 4px;opacity:.8">Track</th>
+        <th style="text-align:left;padding:6px 4px;opacity:.8">Race</th>
+        <th style="text-align:left;padding:6px 4px;opacity:.8">Score</th>
+        <th style="text-align:left;padding:6px 4px;opacity:.8">Tier</th>
+        <th style="text-align:left;padding:6px 4px;opacity:.8">Suggested</th>
+      </tr></thead>
+      <tbody>${scored.map(r=>`<tr>
+        <td style="padding:4px;border-top:1px solid rgba(255,255,255,.08)">${r.track||"—"}</td>
+        <td style="padding:4px;border-top:1px solid rgba(255,255,255,.08)">${r.raceNo||"—"}</td>
+        <td style="padding:4px;border-top:1px solid rgba(255,255,255,.08)">${r.gz.score}</td>
+        <td style="padding:4px;border-top:1px solid rgba(255,255,255,.08)">${r.gz.tier}</td>
+        <td style="padding:4px;border-top:1px solid rgba(255,255,255,.08)">${map[r.gz.suggested]||"ATB"}</td>
+      </tr>`).join("")}</tbody>`;
+
+    list.innerHTML="";
+    list.appendChild(tbl);
+
+    const counts = { WinOnly:0, ATB:0, ExactaBox:0, TrifectaBox:0 };
+    scored.forEach(r=>{ counts[r.gz.suggested] = (counts[r.gz.suggested]||0)+1; });
+    summary.innerHTML = `<b>Suggested Bets (Today):</b> Win-Only ${counts.WinOnly||0} • ATB ${counts.ATB||0} • Exacta Box ${counts.ExactaBox||0} • Trifecta Box ${counts.TrifectaBox||0}`;
+  }
+
   function buildModal(){
     let host=qs("#fl-verify-modal-host");
     if(host) return host;
@@ -62,9 +153,9 @@
           <button id="flv-close" style="border:none;background:transparent;color:inherit;font:600 16px;opacity:.8">✕</button>
         </div>
 
-        <div id="flv-status" style="font:600 12px/1.2 system-ui;opacity:.8;margin-bottom:10px">Idle</div>
+        <div id="flv-status" style="font:600 12px/1.2 system-ui;opacity:.85;margin-bottom:10px">Idle</div>
 
-        <div style="display:grid;gap:10px;margin-bottom:12px;grid-template-columns:1fr 140px 150px;">
+        <div style="display:grid;gap:10px;margin-bottom:12px;grid-template-columns:1fr 150px;">
           <div>
             <label style="display:block;margin:0 0 6px 0;opacity:.9">Track <span style="color:#ffcc00">*</span></label>
             <input id="flv-track" type="text" placeholder="Track"
@@ -77,19 +168,13 @@
                    style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:transparent;color:inherit"/>
             <small id="flv-race-warn" style="display:none;color:#ffcc00">Server asked for a Race # — please add one.</small>
           </div>
-          <div>
-            <label style="display:block;margin:0 0 6px 0;opacity:.9">Date <span style="color:#ffcc00">*</span></label>
-            <input id="flv-date" type="date"
-                   style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:transparent;color:inherit"/>
-            <small id="flv-date-warn" style="display:none;color:#ffcc00">Date is required.</small>
-          </div>
         </div>
 
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
           <button id="flv-run" style="padding:10px 14px;border-radius:10px;border:none;background:#6b46c1;color:#fff;font-weight:700">Verify Now</button>
           <button id="flv-open-top" style="padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:transparent;color:inherit">Open Top Result</button>
           <button id="flv-open-google" style="padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:transparent;color:inherit">Open Google (debug)</button>
-          <small style="opacity:.75">Track and Date are required; Race # helps context.</small>
+          <small style="opacity:.75">Track is required; Race # helps context.</small>
         </div>
 
         <details open>
@@ -107,68 +192,98 @@
 
     host.__flvLast = { top: null, query: '' };
 
-    qs("#flv-close",host).addEventListener("click",()=> host.style.display="none");
+    const closeBtn = qs("#flv-close",host);
+    if(closeBtn) closeBtn.addEventListener("click",()=> host.style.display="none");
 
-    qs("#flv-run",host).addEventListener("click", async ()=>{
-      const track=qs("#flv-track",host).value.trim();
-      const raceNo=qs("#flv-race",host).value.trim();
-      const date=qs("#flv-date",host).value;
-      const status=qs("#flv-status",host), raw=qs("#flv-raw",host), sum=qs("#flv-summary",host);
-      const wTrack=qs("#flv-track-warn",host), wRace=qs("#flv-race-warn",host), wDate=qs("#flv-date-warn",host);
+    const runBtn = qs("#flv-run",host);
+    const statusEl=qs("#flv-status",host);
+    const rawEl=qs("#flv-raw",host);
+    const summaryEl=qs("#flv-summary",host);
+    const warnTrack=qs("#flv-track-warn",host);
+    const warnRace=qs("#flv-race-warn",host);
+    const trackInput=qs("#flv-track",host);
+    const raceInput=qs("#flv-race",host);
 
-      wTrack.style.display=track?"none":"";
-      wDate.style.display=date?"none":"";
-      wRace.style.display="none";
-      if(!track||!date) return;
+    ensureGreenZoneSection(host);
 
-      status.textContent="Running…";
-      raw.textContent="";
-      sum.innerHTML="<em>Working…</em>";
-      host.__flvLast = { top: null, query: '' };
+    if(runBtn){
+      const defaultLabel = runBtn.textContent || "Verify Now";
+      runBtn.addEventListener("click", async ()=>{
+        const track = (trackInput && trackInput.value || "").trim();
+        const raceNo = (raceInput && raceInput.value || "").trim();
 
-      try{
-        const predicted=readUIPredictions();
-        const resp=await fetch("/api/verify_race",{
-          method:"POST",
-          headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({track,date,raceNo:raceNo||undefined,predicted})
-        });
-        const data=await resp.json().catch(()=>({}));
-        status.textContent=resp.ok?"OK":`Error ${resp.status}`;
-        raw.textContent=JSON.stringify(data,null,2);
-        if(!resp.ok && data && typeof data.error==="string" && /raceno/i.test(data.error)){
-          wRace.style.display="";
+        if(warnTrack) warnTrack.style.display = track ? "none" : "";
+        if(!track){
+          try{ trackInput && trackInput.focus(); }catch{}
+          return;
         }
-        host.__flvLast = { top: (data && data.top) || null, query: (data && data.query) || '' };
-        const parts=[];
-        if(data.query) parts.push(`<div><b>Query:</b> ${data.query}</div>`);
-        if(data.top&&data.top.title) parts.push(`<div><b>Top Result:</b> ${data.top.title}</div>`);
-        if(data.summary) parts.push(`<div>${data.summary}</div>`);
-        if(data.outcome && (data.outcome.win||data.outcome.place||data.outcome.show)){
-          parts.push(`<div><b>Outcome:</b> ${[data.outcome.win,data.outcome.place,data.outcome.show].filter(Boolean).join(' / ')}</div>`);
-        }
-        if(data.hits){
-          const hitText=[
-            data.hits.winHit?"Win":null,
-            data.hits.placeHit?"Place":null,
-            data.hits.showHit?"Show":null
-          ].filter(Boolean).join(', ');
-          parts.push(`<div><b>Hits:</b> ${hitText || 'None'}</div>`);
-        }
-        let summaryHtml=parts.join("")||"<em>No summary returned.</em>";
-        const detailText=String(data?.details||data?.error||"");
-        if(!resp.ok && resp.status===500 && /read-only file system/i.test(detailText)){
-          summaryHtml="<em>Server cannot write CSV on Vercel (read-only). Logging has been switched to Redis; please re-run.</em>";
-        }
-        sum.innerHTML=summaryHtml;
-      }catch(e){
-        status.textContent="Error";
-        raw.textContent=String(e&&e.message||e);
-        console.error(e);
-      }
-    });
 
-    qs("#flv-open-top", host).addEventListener("click", ()=>{
+        if(statusEl){
+          statusEl.textContent = "Running…";
+          statusEl.style.color = "#cbd5f5";
+        }
+        if(rawEl) rawEl.textContent = "";
+        if(summaryEl) summaryEl.innerHTML = "<em>Working…</em>";
+        if(warnRace) warnRace.style.display = "none";
+        host.__flvLast = { top: null, query: '' };
+
+        runBtn.disabled = true;
+        runBtn.textContent = "Running…";
+
+        try{
+          const predicted = readUIPredictions();
+          const resp = await fetch("/api/verify_race",{
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({ track, raceNo: raceNo || undefined, predicted })
+          });
+          const data = await resp.json().catch(()=>({}));
+
+          if(statusEl){
+            statusEl.textContent = resp.ok ? "OK" : `Error ${resp.status}`;
+            statusEl.style.color = resp.ok ? "#cbd5f5" : "#f87171";
+          }
+          if(rawEl) rawEl.textContent = JSON.stringify(data,null,2);
+          if(!resp.ok && warnRace && data && typeof data.error === "string" && /raceno/i.test(data.error)){
+            warnRace.style.display = "";
+          }
+
+          host.__flvLast = { top: (data && data.top) || null, query: (data && data.query) || '' };
+
+          if(summaryEl){
+            const parts=[];
+            if(data.query) parts.push(`<div><b>Query:</b> ${data.query}</div>`);
+            if(data.top&&data.top.title) parts.push(`<div><b>Top Result:</b> ${data.top.title}</div>`);
+            if(data.summary) parts.push(`<div>${data.summary}</div>`);
+            if(data.outcome && (data.outcome.win||data.outcome.place||data.outcome.show)){
+              parts.push(`<div><b>Outcome:</b> ${[data.outcome.win,data.outcome.place,data.outcome.show].filter(Boolean).join(' / ')}</div>`);
+            }
+            if(data.hits){
+              const hitText=[
+                data.hits.winHit?"Win":null,
+                data.hits.placeHit?"Place":null,
+                data.hits.showHit?"Show":null
+              ].filter(Boolean).join(', ');
+              parts.push(`<div><b>Hits:</b> ${hitText || 'None'}</div>`);
+            }
+            summaryEl.innerHTML = parts.join("") || "<em>No summary returned.</em>";
+          }
+        }catch(error){
+          if(statusEl){
+            statusEl.textContent = "Error";
+            statusEl.style.color = "#f87171";
+          }
+          if(rawEl) rawEl.textContent = String(error && error.message || error || "Unknown error");
+          console.error(error);
+        }finally{
+          runBtn.disabled = false;
+          runBtn.textContent = defaultLabel;
+          updateGreenZoneToday(host);
+        }
+      });
+    }
+
+    qs("#flv-open-top", host)?.addEventListener("click", ()=>{
       try{
         const last = host.__flvLast || {};
         const url = last.top && last.top.link;
@@ -176,7 +291,7 @@
       }catch{}
     });
 
-    qs("#flv-open-google", host).addEventListener("click", ()=>{
+    qs("#flv-open-google", host)?.addEventListener("click", ()=>{
       try{
         const last = host.__flvLast || {};
         const q = last.query || "";
@@ -184,6 +299,8 @@
         window.open(u, "_blank", "noopener");
       }catch{}
     });
+
+    host.__flvUpdateGZ = () => updateGreenZoneToday(host);
 
     return host;
   }
@@ -195,20 +312,28 @@
 
     const trackVal=(ctx&&ctx.track)||(topTrack&&topTrack.value)||saved.track||"";
     const raceVal=(ctx&&ctx.raceNo)||(topRace&&topRace.value)||saved.raceNo||"";
-    const dateVal=todayISO();
 
-    qs("#flv-track",host).value=trackVal;
-    qs("#flv-race",host).value=raceVal||"";
-    qs("#flv-date",host).value=dateVal;
+    const trackInput=qs("#flv-track",host);
+    const raceInput=qs("#flv-race",host);
+
+    if(trackInput) trackInput.value=trackVal;
+    if(raceInput) raceInput.value=raceVal||"";
 
     host.__flvLast = { top: null, query: '' };
 
-    qs("#flv-status",host).textContent="Idle";
-    qs("#flv-summary",host).innerHTML="<em>No summary returned.</em>";
-    qs("#flv-raw",host).textContent="—";
-    qs("#flv-track-warn",host).style.display=trackVal?"none":"";
-    qs("#flv-date-warn",host).style.display=dateVal?"none":"";
-    qs("#flv-race-warn",host).style.display="none";
+    const statusEl=qs("#flv-status",host);
+    const summaryEl=qs("#flv-summary",host);
+    const rawEl=qs("#flv-raw",host);
+    const warnTrack=qs("#flv-track-warn",host);
+    const warnRace=qs("#flv-race-warn",host);
+
+    if(statusEl){ statusEl.textContent="Idle"; statusEl.style.color="#cbd5f5"; }
+    if(summaryEl) summaryEl.innerHTML="<em>No summary returned.</em>";
+    if(rawEl) rawEl.textContent="—";
+    if(warnTrack) warnTrack.style.display=trackVal?"none":"";
+    if(warnRace) warnRace.style.display="none";
+
+    if(typeof host.__flvUpdateGZ === "function") host.__flvUpdateGZ();
   }
 
   function open(ctx){
