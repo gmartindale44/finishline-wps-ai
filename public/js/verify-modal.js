@@ -11,7 +11,7 @@
     const m=String(d.getMonth()+1).padStart(2,"0");
     const dd=String(d.getDate()).padStart(2,"0");
     return `${y}-${m}-${dd}`;
-  }
+  };
 
   function readUIPredictions(){
     try{
@@ -72,7 +72,7 @@
       <div id="gz-today-list" style="margin-top:8px"></div>
       <div id="gz-today-summary" style="margin-top:8px;opacity:.9"></div>
     `;
-    const anchor = qs("#flv-raw-details", host)?.parentElement || qs(".flv-card", host) || host;
+    const anchor = qs("#flv-raw-details", host) || qs(".flv-card", host) || host;
     anchor.parentElement?.insertBefore(wrap, anchor.nextSibling);
     return wrap;
   }
