@@ -1,15 +1,26 @@
 import crypto from 'node:crypto';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
+import { Redis } from '@upstash/redis';
 
 const GOOGLE_KEY = (process.env.GOOGLE_API_KEY || '').replace(/^"+|"+$/g, '');
 const GOOGLE_CX  = (process.env.GOOGLE_CSE_ID  || '').replace(/^"+|"+$/g, '');
 
-const UPSTASH_URL   = (process.env.UPSTASH_REDIS_REST_URL   || '').replace(/^"+|"+$/g, '');
-const UPSTASH_TOKEN = (process.env.UPSTASH_REDIS_REST_TOKEN || '').replace(/^"+|"+$/g, '');
-
 const TTL_SECONDS = 60 * 60 * 24; // 24h
-const CSV_FILE = path.join(process.cwd(), 'data', 'reconciliations_v1.csv');
+const isVercel = !!process.env.VERCEL;
+const RECON_LIST = 'reconciliations:v1';
+const RECON_DAY_PREFIX = 'reconciliations:v1:';
+
+let redisClient = null;
+function getRedis() {
+  if (!redisClient) {
+    try {
+      redisClient = Redis.fromEnv();
+    } catch (error) {
+      console.error('[verify_race] Failed to init Redis client', error);
+      redisClient = null;
+    }
+  }
+  return redisClient;
+}
 
 const slug = (s = '') =>
   s.toString()
@@ -18,53 +29,6 @@ const slug = (s = '') =>
     .replace(/\p{Diacritic}/gu, '')
     .replace(/[^a-z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '');
-
-async function ensureCsvHeader() {
-  try { await fs.access(CSV_FILE); }
-  catch {
-    const header = [
-      'timestamp','track','date','race_no',
-      'distance','surface','strategy','ai_picks',
-      'query','result_count','top_title','top_link','top_snippet'
-    ].join(',') + '\n';
-    await fs.mkdir(path.dirname(CSV_FILE), { recursive: true });
-    await fs.writeFile(CSV_FILE, header, 'utf8');
-  }
-}
-
-async function appendCsvRow(obj) {
-  await ensureCsvHeader();
-  const esc = (v='') => `"${String(v).replace(/"/g,'""')}"`;
-  const row = [
-    obj.ts,
-    esc(obj.track),
-    obj.date,
-    obj.raceNo,
-    esc(obj.distance || ''),
-    esc(obj.surface || ''),
-    esc(obj.strategy || ''),
-    esc(obj.ai_picks || ''),
-    esc(obj.query),
-    obj.count ?? 0,
-    esc(obj.top?.title || ''),
-    esc(obj.top?.link  || ''),
-    esc(obj.top?.snippet || ''),
-  ].join(',') + '\n';
-  await fs.appendFile(CSV_FILE, row, 'utf8');
-}
-
-async function redisPipeline(cmds) {
-  if (!UPSTASH_URL || !UPSTASH_TOKEN) return false;
-  const res = await fetch(`${UPSTASH_URL}/pipeline`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${UPSTASH_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(cmds),
-  });
-  return res.ok;
-}
 
 async function cseDirect(query) {
   const u = new URL('https://www.googleapis.com/customsearch/v1');
@@ -112,14 +76,14 @@ export default async function handler(req, res) {
     } = body || {};
 
     const raceNumber = raceNo ?? race_no;
-    if (!track || !date || !raceNumber) {
-      return res.status(400).json({ error: 'Missing required fields: track, date, raceNo' });
+    if (!track || !date) {
+      return res.status(400).json({ error: 'Missing required fields: track, date' });
     }
 
     // Query builder
     const qParts = [
       track,
-      `Race ${raceNumber}`,
+      raceNumber ? `Race ${raceNumber}` : null,
       date,
       distance && `${distance}`,
       surface && `${surface}`,
@@ -133,33 +97,86 @@ export default async function handler(req, res) {
       : await cseViaBridge(req, query);
 
     const top = results[0] || null;
-    const ts  = new Date().toISOString();
+    const tsIso  = new Date().toISOString();
+    const redis = getRedis();
 
     // Redis event log (namespaced) – best-effort
-    const ns = `fl:cse:reconcile:${slug(track)}:${date}:R${raceNumber}`;
-    const eventKey = `${ns}:${Date.now()}:${crypto.randomBytes(4).toString('hex')}`;
-    await redisPipeline([
-      ['SET',    eventKey, JSON.stringify({
-        ts, track, date, raceNo: raceNumber, distance, surface, strategy, ai_picks, query,
-        count: results.length, results: results.slice(0,10),
-      })],
-      ['EXPIRE', eventKey, String(TTL_SECONDS)],
-      ['LPUSH',  `${ns}:log`, eventKey],
-      ['LTRIM',  `${ns}:log`, '0', '99'],
-      ['EXPIRE', `${ns}:log`, String(TTL_SECONDS)],
-    ]);
+    if (redis) {
+      const raceLabel = raceNumber ? `R${raceNumber}` : 'R?';
+      const ns = `fl:cse:reconcile:${slug(track)}:${date}:${raceLabel}`;
+      const eventKey = `${ns}:${Date.now()}:${crypto.randomBytes(4).toString('hex')}`;
+      try {
+        await redis.set(eventKey, JSON.stringify({
+          ts: tsIso,
+          track,
+          date,
+          raceNo: raceNumber ?? null,
+          distance,
+          surface,
+          strategy,
+          ai_picks,
+          query,
+          count: results.length,
+          results: results.slice(0, 10),
+        }));
+        await redis.expire(eventKey, TTL_SECONDS);
+        await redis.lpush(`${ns}:log`, eventKey);
+        await redis.ltrim(`${ns}:log`, 0, 99);
+        await redis.expire(`${ns}:log`, TTL_SECONDS);
+      } catch (error) {
+        console.error('[verify_race] Redis event log failed', error);
+      }
+    }
 
-    // CSV audit – tolerant
-    await appendCsvRow({
-      ts, track, date, raceNo: raceNumber,
-      distance, surface, strategy, ai_picks,
-      query, count: results.length, top,
-    });
+    const resolvedQuery = query;
+    const topResult = top ? { title: top.title, link: top.link, snippet: top.snippet ?? null } : null;
+
+    if (redis) {
+      try {
+        const row = {
+          ts: Date.now(),
+          date,
+          track,
+          raceNo: raceNumber ?? null,
+          query: resolvedQuery || null,
+          top: topResult,
+          ok: true,
+        };
+        await redis.rpush(RECON_LIST, JSON.stringify(row));
+        const dayKey = `${RECON_DAY_PREFIX}${date}`;
+        await redis.rpush(dayKey, JSON.stringify(row));
+        await redis.expire(dayKey, 60 * 60 * 24 * 90);
+      } catch (error) {
+        console.error('Redis logging failed', error);
+      }
+    }
+
+    if (!isVercel) {
+      try {
+        const fs = await import('node:fs');
+        const path = await import('node:path');
+        const csvPath = path.resolve(process.cwd(), 'data/reconciliations_v1.csv');
+        const header = 'ts,date,track,raceNo,query,topTitle,topUrl\n';
+        const exists = fs.existsSync(csvPath);
+        const line = [
+          Date.now(),
+          date,
+          JSON.stringify(track),
+          raceNumber ?? '',
+          JSON.stringify(resolvedQuery || ''),
+          JSON.stringify(topResult?.title || ''),
+          JSON.stringify(topResult?.link || ''),
+        ].join(',') + '\n';
+        if (!exists) fs.writeFileSync(csvPath, header);
+        fs.appendFileSync(csvPath, line);
+      } catch (error) {
+        console.warn('Local CSV append failed (dev only):', error?.message || error);
+      }
+    }
 
     return res.status(200).json({
       ok: true,
-      saved: { ns, eventKey },
-      query,
+      query: resolvedQuery,
       count: results.length,
       top,
       results: results.slice(0, 5),
