@@ -5,8 +5,7 @@
 
   if (window.__flVerifyDebug === undefined) window.__flVerifyDebug = false;
   const log = (...a) => { try { if (window.__flVerifyDebug) console.log("[FL:loader]", ...a); } catch {} };
-
-  try { console.info("%c FinishLine Verify Loader r9 ", "background:#6b46c1;color:#fff;padding:2px 6px;border-radius:4px"); } catch {}
+  try { console.info("%c FinishLine Verify Loader r10 ", "background:#6b46c1;color:#fff;padding:2px 6px;border-radius:4px"); } catch {}
 
   const withPrefix = (p) => {
     try {
@@ -15,31 +14,28 @@
     } catch { return p; }
   };
 
-  // Heartbeat
+  // tiny heartbeat
   try {
     const tag = document.createElement("div");
     tag.textContent = "VT";
-    tag.style.cssText = "position:fixed;right:8px;bottom:8px;z-index:2147483647;font:600 11px/1.2 system-ui;padding:4px 6px;border-radius:6px;color:#fff;background:#6b46c1;opacity:.9;pointer-events:none";
-    const mount = () => { document.body && document.body.appendChild(tag); setTimeout(()=> tag.remove(), 1600); };
+    tag.style.cssText = "position:fixed;right:8px;bottom:8px;z-index:2147483647;font:600 11px/1.2 system-ui;padding:2px 6px;border-radius:6px;color:#fff;background:#6b46c1;opacity:.9;pointer-events:none";
+    const mount = () => { document.body && document.body.appendChild(tag); setTimeout(()=> tag.remove(), 1500); };
     (document.readyState === "loading") ? document.addEventListener("DOMContentLoaded", mount, { once:true }) : mount();
   } catch {}
 
   const inject = (src) => new Promise((res, rej) => {
+    if ([...document.scripts].some(s => (s.src||"").includes(src.split("?")[0]))) return res();
     const s = document.createElement("script");
     s.defer = true;
     s.src = withPrefix(src);
-    s.onload = () => { log("loaded", src); res(); };
-    s.onerror = () => { console.error("[FL:loader] failed", src); rej(); };
+    s.onload = res;
+    s.onerror = rej;
     document.head.appendChild(s);
   });
 
-  const run = () => {
-    const want = [
-      "/js/verify-tab.js?v=v2025-11-10-9",
-      "/js/track-guard.js?v=v2025-11-10-9"
-    ];
-    let p = Promise.resolve();
-    for (const src of want) p = p.then(() => inject(src).catch(()=>{}));
+  const run = async () => {
+    try { await inject("/js/track-guard.js?v=v2025-11-10-10"); } catch {}
+    try { await inject("/js/verify-tab.js?v=v2025-11-10-10"); } catch {}
   };
 
   if (document.readyState === "loading") {
