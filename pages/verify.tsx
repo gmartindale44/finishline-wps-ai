@@ -3,24 +3,24 @@ import Script from "next/script";
 import { useEffect, useMemo, useState } from "react";
 
 function readCtx() {
-  if (typeof window === "undefined") return {} as { track?: string; raceNo?: string };
-  const url = new URL(window.location.href);
-  const track = url.searchParams.get("track") || "";
-  const raceNo = url.searchParams.get("raceNo") || "";
+  if (typeof window === "undefined") return { track: "", raceNo: "" };
+  const u = new URL(window.location.href);
+  const track = u.searchParams.get("track") || "";
+  const raceNo = u.searchParams.get("raceNo") || "";
   if (track) return { track, raceNo };
   try {
-    const fromSession = sessionStorage.getItem("fl:verify:ctx");
-    if (fromSession) return JSON.parse(fromSession);
+    const s = sessionStorage.getItem("fl:verify:ctx");
+    if (s) return JSON.parse(s);
   } catch {}
-  return {};
+  return { track: "", raceNo: "" };
 }
 
 export default function VerifyPage() {
   const [track, setTrack] = useState("");
   const [raceNo, setRaceNo] = useState("");
-  const [status, setStatus] = useState<string>("");
+  const [status, setStatus] = useState("");
   const [raw, setRaw] = useState<any>(null);
-  const [summary, setSummary] = useState<string>("");
+  const [summary, setSummary] = useState("");
 
   useEffect(() => {
     const ctx = readCtx();
@@ -51,10 +51,9 @@ export default function VerifyPage() {
       setStatus(resp.ok ? "OK" : `Error ${resp.status}`);
       setRaw(data);
       const parts: string[] = [];
-      if (data?.query) parts.push(`<div><b>Query:</b> ${data.query}</div>`);
-      if (data?.count !== undefined) parts.push(`<div><b>Matches:</b> ${data.count}</div>`);
-      if (data?.top?.title) parts.push(`<div><b>Top Result:</b> ${data.top.title}</div>`);
-      if (data?.summary) parts.push(`<div>${data.summary}</div>`);
+      if ((data as any)?.query) parts.push(`<div><b>Query:</b> ${(data as any).query}</div>`);
+      if ((data as any)?.top?.title) parts.push(`<div><b>Top Result:</b> ${(data as any).top.title}</div>`);
+      if ((data as any)?.summary) parts.push(`<div>${(data as any).summary}</div>`);
       setSummary(parts.join("") || "<em>No summary returned.</em>");
     } catch (e: any) {
       setStatus("Error");
