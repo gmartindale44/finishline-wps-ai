@@ -6,7 +6,7 @@
   if (window.__flVerifyDebug === undefined) window.__flVerifyDebug = false;
 
   try {
-    console.info("%c FinishLine Verify Loader — modal r13 ", "background:#6b46c1;color:#fff;padding:2px 6px;border-radius:4px");
+    console.info("%c FinishLine Verify Loader — modal r15 ", "background:#6b46c1;color:#fff;padding:2px 6px;border-radius:4px");
   } catch {}
 
   const withPrefix = (p) => {
@@ -33,9 +33,9 @@
   });
 
   const run = async () => {
-    try { await inject("/js/track-guard.js?v=v2025-11-10-13"); } catch {}
-    try { await inject("/js/verify-button.js?v=v2025-11-10-13"); } catch {}
-    try { await inject("/js/verify-modal.js?v=v2025-11-10-13"); } catch {}
+    try { await inject("/js/track-guard.js?v=v2025-11-10-15"); } catch {}
+    try { await inject("/js/verify-button.js?v=v2025-11-10-15"); } catch {}
+    try { await inject("/js/verify-modal.js?v=v2025-11-10-15"); } catch {}
   };
 
   if (document.readyState === "loading") {

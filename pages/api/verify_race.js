@@ -53,6 +53,33 @@ async function cseViaBridge(req, query) {
   return arr.map(i => ({ title: i.title, link: i.link, snippet: i.snippet }));
 }
 
+const preferHosts = [
+  'equibase.com',
+  'entries.horseracingnation.com',
+  'horseracingnation.com',
+];
+
+function pickBest(items) {
+  if (!Array.isArray(items) || !items.length) return null;
+  const scored = items.map((item) => {
+    try {
+      const url = new URL(item.link || '');
+      const host = url.hostname || '';
+      const idx = preferHosts.findIndex((h) => host.includes(h));
+      return { item, score: idx === -1 ? 10 : idx };
+    } catch {
+      return { item, score: 10 };
+    }
+  }).sort((a, b) => a.score - b.score);
+  return scored.length ? scored[0].item : null;
+}
+
+async function runSearch(req, query) {
+  return (GOOGLE_KEY && GOOGLE_CX)
+    ? await cseDirect(query)
+    : await cseViaBridge(req, query);
+}
+
 export default async function handler(req, res) {
   try {
     if (req.method !== 'POST') {
@@ -80,23 +107,39 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Missing required fields: track, date' });
     }
 
-    // Query builder
-    const qParts = [
-      track,
-      raceNumber ? `Race ${raceNumber}` : null,
-      date,
-      distance && `${distance}`,
-      surface && `${surface}`,
-      'results Win Place Show order'
-    ].filter(Boolean);
-    const query = qParts.join(' ').trim();
+    const dWords = date.replace(/-/g, ' ');
+    const racePart = raceNumber ? ` Race ${raceNumber}` : '';
+    const baseQuery = `${track}${racePart} ${date} results Win Place Show order`;
+    const altQuery  = `${track}${racePart} ${dWords} result chart official`;
+    const siteBias  = '(site:equibase.com OR site:horseracingnation.com OR site:entries.horseracingnation.com)';
 
-    // Prefer direct Google if keys are present; otherwise hit the internal bridge
-    const results = (GOOGLE_KEY && GOOGLE_CX)
-      ? await cseDirect(query)
-      : await cseViaBridge(req, query);
+    const queries = [
+      `${baseQuery} ${siteBias}`.trim(),
+      `${altQuery} ${siteBias}`.trim(),
+      baseQuery,
+      altQuery,
+    ];
 
-    const top = results[0] || null;
+    let results = [];
+    let queryUsed = queries[0];
+    let lastError = null;
+    for (const q of queries) {
+      try {
+        const items = await runSearch(req, q);
+        queryUsed = q;
+        results = items;
+        if (items.length) break;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    if (!results.length && lastError) {
+      throw lastError;
+    }
+
+    const topPreferred = pickBest(results);
+    const top = topPreferred || results[0] || null;
     const tsIso  = new Date().toISOString();
     const redis = getRedis();
 
@@ -115,7 +158,7 @@ export default async function handler(req, res) {
           surface,
           strategy,
           ai_picks,
-          query,
+          query: queryUsed,
           count: results.length,
           results: results.slice(0, 10),
         }));
@@ -128,7 +171,6 @@ export default async function handler(req, res) {
       }
     }
 
-    const resolvedQuery = query;
     const topResult = top ? { title: top.title, link: top.link, snippet: top.snippet ?? null } : null;
 
     if (redis) {
@@ -138,7 +180,7 @@ export default async function handler(req, res) {
           date,
           track,
           raceNo: raceNumber ?? null,
-          query: resolvedQuery || null,
+          query: queryUsed || null,
           top: topResult,
           ok: true,
         };
@@ -163,7 +205,7 @@ export default async function handler(req, res) {
           date,
           JSON.stringify(track),
           raceNumber ?? '',
-          JSON.stringify(resolvedQuery || ''),
+          JSON.stringify(queryUsed || ''),
           JSON.stringify(topResult?.title || ''),
           JSON.stringify(topResult?.link || ''),
         ].join(',') + '\n';
@@ -176,7 +218,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
-      query: resolvedQuery,
+      query: queryUsed,
       count: results.length,
       top,
       results: results.slice(0, 5),
