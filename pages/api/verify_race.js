@@ -111,14 +111,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Missing required field: track' });
     }
 
-    let date = inputDate;
-    if (!date) {
-      const now = new Date();
-      const y = now.getFullYear();
-      const m = String(now.getMonth() + 1).padStart(2, '0');
-      const d = String(now.getDate()).padStart(2, '0');
-      date = `${y}-${m}-${d}`;
-    }
+    const date = (inputDate && String(inputDate).trim()) || new Date().toISOString().slice(0, 10);
 
     const dWords = date.replace(/-/g, ' ');
     const racePart = raceNumber ? ` Race ${raceNumber}` : '';

@@ -1,91 +1,69 @@
-/* public/js/verify-modal.js — r19 */
+;(function(){
+  if(typeof window==="undefined"||typeof document==="undefined") return;
+  if(window.__FL_VERIFY_MODAL__) return; window.__FL_VERIFY_MODAL__=true;
+  if(window.__flVerifyDebug===undefined) window.__flVerifyDebug=false;
 
-;(() => {
+  const qs=(s,r=document)=>r.querySelector(s);
 
-  "use strict";
-
-  if (typeof window === "undefined" || typeof document === "undefined") return;
-  if (window.__FL_VERIFY_MODAL__) return; window.__FL_VERIFY_MODAL__ = true;
-  if (window.__flVerifyDebug === undefined) window.__flVerifyDebug = false;
-
-  const qs = (s, r = document) => r.querySelector(s);
-
-  const todayISO = () => {
-    const d = new Date();
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
+  function todayISO(){
+    const d=new Date();
+    const y=d.getFullYear();
+    const m=String(d.getMonth()+1).padStart(2,"0");
+    const dd=String(d.getDate()).padStart(2,"0");
     return `${y}-${m}-${dd}`;
-  };
+  }
 
-  function readUIPredictions() {
-    try {
-      const scope = document.querySelector('[data-panel="predictions"], .predictions-panel') || document;
-      const picks = { win: "", place: "", show: "" };
-
-      const cards = Array.from(scope.querySelectorAll(".prediction-card, [data-pick]")).filter(Boolean);
-      if (cards.length >= 3) {
-        const names = cards.slice(0, 3).map((card) => {
-          const el = card.querySelector("[data-name], .title, .name, b, strong");
-          return ((el && el.textContent) || "").trim();
+  function readUIPredictions(){
+    try{
+      const scope=document.querySelector('[data-panel="predictions"], .predictions-panel')||document;
+      const picks={ win:"", place:"", show:"" };
+      const cards=Array.from(scope.querySelectorAll('.prediction-card, [data-pick]')).filter(Boolean);
+      if(cards.length>=3){
+        const names=cards.slice(0,3).map(card=>{
+          const el=card.querySelector('[data-name], .title, .name, b, strong');
+          return (el&&el.textContent||"").trim();
         });
-        picks.win   = names[0] || "";
-        picks.place = names[1] || "";
-        picks.show  = names[2] || "";
+        picks.win = names[0]||""; picks.place = names[1]||""; picks.show = names[2]||"";
         return picks;
       }
-
-      const getPick = (selector) => {
-        const el = scope.querySelector(selector);
-        return el ? (el.textContent || "").trim() : "";
-      };
-      picks.win   = getPick("[data-pick='win'], .pick-win b, .emoji-win~b");
-      picks.place = getPick("[data-pick='place'], .pick-place b, .emoji-place~b");
-      picks.show  = getPick("[data-pick='show'], .pick-show b, .emoji-show~b");
+      const txt = sel => (scope.querySelector(sel)?.textContent||"").trim();
+      picks.win = txt("[data-pick='win'], .pick-win b, .emoji-win~b");
+      picks.place = txt("[data-pick='place'], .pick-place b, .emoji-place~b");
+      picks.show = txt("[data-pick='show'], .pick-show b, .emoji-show~b");
       return picks;
-    } catch {
-      return { win: "", place: "", show: "" };
-    }
+    }catch{ return { win:"", place:"", show:"" }; }
   }
 
-  function readCtx() {
-    try { const s = sessionStorage.getItem("fl:verify:ctx"); if (s) return JSON.parse(s); } catch {}
+  function readCtx(){
+    try{const s=sessionStorage.getItem("fl:verify:ctx"); if(s) return JSON.parse(s);}catch{}
     return {};
   }
+  const getTopTrack = ()=> qs("input[placeholder*='track' i], input[id*='track' i], input[name*='track' i]");
+  const getTopRace  = ()=> qs("input[placeholder*='race' i],  input[id*='race' i],  input[name*='race' i]");
+  const currentTrack  = ()=> (getTopTrack()?.value||"").trim();
+  const currentRaceNo = ()=> (getTopRace()?.value||"").trim();
 
-  const getTopTrack = () => qs("input[placeholder*='track' i]") || qs("input[id*='track' i]") || qs("input[name*='track' i]");
-  const getTopRace  = () => qs("input[placeholder*='race'  i]") || qs("input[id*='race'  i]") || qs("input[name*='race'  i]");
-
-  const currentTrack = () => {
-    const input = getTopTrack();
-    return (input && typeof input.value === "string" && input.value.trim()) ? input.value.trim() : "";
-  };
-  const currentRaceNo = () => {
-    const input = getTopRace();
-    return (input && typeof input.value === "string" && input.value.trim()) ? input.value.trim() : "";
-  };
-
-  function scoreGZ(sig) {
-    const c = (sig && sig.confidence) || 0;
-    const m = (sig && sig.top3Mass)  || 0;
-    const g12 = (sig && sig.gap12)   || 0;
-    const g23 = (sig && sig.gap23)   || 0;
-    const score = Math.min(100, 0.45 * c + 0.35 * m + 8 * g12 + 5 * g23);
-    let suggested = "ATB";
-    if (c >= 78 && g12 >= 2) suggested = "WinOnly";
-    else if (m >= 55 && (g12 + g23) >= 3.5) suggested = "TrifectaBox";
-    else if (m >= 52) suggested = "ExactaBox";
-    const tier = score >= 72 ? "Green" : score >= 58 ? "Yellow" : "Red";
-    return { score: Math.round(score), tier, suggested };
+  // --- Green-Zone helpers (unchanged logic, solid card styles) ---
+  function scoreGZ(sig){
+    const c=+((sig&&sig.confidence)||0);
+    const m=+((sig&&sig.top3Mass)||0);
+    const g12=+((sig&&sig.gap12)||0);
+    const g23=+((sig&&sig.gap23)||0);
+    const score=Math.min(100, 0.45*c + 0.35*m + 8*g12 + 5*g23);
+    let suggested="ATB";
+    if(c>=78 && g12>=2) suggested="WinOnly";
+    else if(m>=55 && (g12+g23)>=3.5) suggested="TrifectaBox";
+    else if(m>=52) suggested="ExactaBox";
+    const tier = score>=72 ? "Green" : score>=58 ? "Yellow" : "Red";
+    return { score:Math.round(score), tier, suggested };
   }
-
-  function ensureGreenZoneSection(host) {
+  function todayKey(){ return todayISO(); }
+  function ensureGreenZoneSection(host){
     let wrap = qs("#flv-gz-today", host);
-    if (wrap) return wrap;
+    if(wrap) return wrap;
     wrap = document.createElement("div");
     wrap.id = "flv-gz-today";
-    wrap.style.cssText =
-      "margin-top:12px;border:1px solid rgba(255,255,255,.14);border-radius:12px;padding:12px;background:rgba(35,37,44,.98);box-shadow:0 6px 18px rgba(0,0,0,.35)";
+    wrap.style.cssText = "margin-top:12px;border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:12px;background:rgba(32,33,39,.96)";
     wrap.innerHTML = `
       <div style="font:600 14px system-ui;display:flex;gap:8px;align-items:center">
         <span>🟢 Green-Zone (Today)</span>
@@ -94,45 +72,44 @@
       <div id="gz-today-list" style="margin-top:8px"></div>
       <div id="gz-today-summary" style="margin-top:8px;opacity:.9"></div>
     `;
-    const anchor = qs("#flv-raw-details", host) || qs(".flv-card", host) || host;
+    const anchor = qs("#flv-raw-details", host)?.parentElement || qs(".flv-card", host) || host;
     anchor.parentElement?.insertBefore(wrap, anchor.nextSibling);
     return wrap;
   }
-
-  function updateGreenZoneToday(host) {
+  function updateGreenZoneToday(host){
     const wrap = ensureGreenZoneSection(host);
     const list = wrap.querySelector("#gz-today-list");
     const summary = wrap.querySelector("#gz-today-summary");
-    if (!list || !summary) return;
+    if(!list || !summary) return;
 
-    const dayKey = todayISO();
-    const rows = [];
-    try {
-      for (let i = 0; i < sessionStorage.length; i++) {
-        const key = sessionStorage.key(i) || "";
-        if (!key.startsWith(`fl:snap:${dayKey}:`)) continue;
-        try {
+    const dayKey = todayKey();
+    const rows=[];
+    try{
+      for(let i=0;i<sessionStorage.length;i++){
+        const key = sessionStorage.key(i)||"";
+        if(!key.startsWith(`fl:snap:${dayKey}:`)) continue;
+        try{
           const raw = sessionStorage.getItem(key);
-          if (!raw) continue;
+          if(!raw) continue;
           const parsed = JSON.parse(raw);
-          if (parsed && parsed.signals) rows.push(parsed);
-        } catch {}
+          if(parsed && parsed.signals) rows.push(parsed);
+        }catch{}
       }
-    } catch {}
+    }catch{}
 
-    if (!rows.length) {
+    if(!rows.length){
       list.textContent = "No predictions captured today yet.";
       summary.textContent = "";
       return;
     }
 
-    const scored = rows
-      .map((row) => ({ ...row, gz: scoreGZ(row.signals || {}) }))
-      .sort((a, b) => b.gz.score - a.gz.score);
+    const scored = rows.map(row=>({
+      ...row, gz: scoreGZ(row.signals||{})
+    })).sort((a,b)=>b.gz.score - a.gz.score);
 
-    const map = { WinOnly: "Win-Only", ATB: "Across The Board", ExactaBox: "Exacta Box", TrifectaBox: "Trifecta Box" };
+    const map = { WinOnly:"Win-Only", ATB:"Across The Board", ExactaBox:"Exacta Box", TrifectaBox:"Trifecta Box" };
     const tbl = document.createElement("table");
-    tbl.style.cssText = "width:100%;border-collapse:collapse;font:12px system-ui";
+    tbl.style.cssText="width:100%;border-collapse:collapse;font:12px system-ui";
     tbl.innerHTML = `<thead><tr>
         <th style="text-align:left;padding:6px 4px;opacity:.8">Track</th>
         <th style="text-align:left;padding:6px 4px;opacity:.8">Race</th>
@@ -140,33 +117,28 @@
         <th style="text-align:left;padding:6px 4px;opacity:.8">Tier</th>
         <th style="text-align:left;padding:6px 4px;opacity:.8">Suggested</th>
       </tr></thead>
-      <tbody>${scored.map(r => `
-        <tr>
-          <td style="padding:4px;border-top:1px solid rgba(255,255,255,.10)">${r.track || "—"}</td>
-          <td style="padding:4px;border-top:1px solid rgba(255,255,255,.10)">${r.raceNo || "—"}</td>
-          <td style="padding:4px;border-top:1px solid rgba(255,255,255,.10)">${r.gz.score}</td>
-          <td style="padding:4px;border-top:1px solid rgba(255,255,255,.10)">${r.gz.tier}</td>
-          <td style="padding:4px;border-top:1px solid rgba(255,255,255,.10)">${map[r.gz.suggested] || "ATB"}</td>
-        </tr>`).join("")}
-      </tbody>`;
+      <tbody>${scored.map(r=>`<tr>
+        <td style="padding:4px;border-top:1px solid rgba(255,255,255,.08)">${r.track||"—"}</td>
+        <td style="padding:4px;border-top:1px solid rgba(255,255,255,.08)">${r.raceNo||"—"}</td>
+        <td style="padding:4px;border-top:1px solid rgba(255,255,255,.08)">${r.gz.score}</td>
+        <td style="padding:4px;border-top:1px solid rgba(255,255,255,.08)">${r.gz.tier}</td>
+        <td style="padding:4px;border-top:1px solid rgba(255,255,255,.08)">${map[r.gz.suggested]||"ATB"}</td>
+      </tr>`).join("")}</tbody>`;
+    list.innerHTML=""; list.appendChild(tbl);
 
-    list.innerHTML = "";
-    list.appendChild(tbl);
-
-    const counts = { WinOnly: 0, ATB: 0, ExactaBox: 0, TrifectaBox: 0 };
-    scored.forEach(r => { counts[r.gz.suggested] = (counts[r.gz.suggested] || 0) + 1; });
-    summary.innerHTML = `<b>Suggested Bets (Today):</b> Win-Only ${counts.WinOnly || 0} • ATB ${counts.ATB || 0} • Exacta Box ${counts.ExactaBox || 0} • Trifecta Box ${counts.TrifectaBox || 0}`;
+    const counts = { WinOnly:0, ATB:0, ExactaBox:0, TrifectaBox:0 };
+    scored.forEach(r=>{ counts[r.gz.suggested] = (counts[r.gz.suggested]||0)+1; });
+    summary.innerHTML = `<b>Suggested Bets (Today):</b> Win-Only ${counts.WinOnly||0} • ATB ${counts.ATB||0} • Exacta Box ${counts.ExactaBox||0} • Trifecta Box ${counts.TrifectaBox||0}`;
   }
 
-  function buildModal() {
-    let host = qs("#fl-verify-modal-host");
-    if (host) return host;
+  function buildModal(){
+    let host=qs("#fl-verify-modal-host"); if(host) return host;
 
-    host = document.createElement("div");
-    host.id = "fl-verify-modal-host";
-    host.style.cssText = "position:fixed;inset:0;z-index:2147483646;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.5)";
-    host.innerHTML = `
-      <div role="dialog" aria-modal="true" class="flv-card" style="width:min(880px,96vw);max-height:90vh;overflow:auto;border-radius:16px;border:1px solid rgba(255,255,255,.12);background:rgba(23,23,28,.98);backdrop-filter:blur(6px);padding:18px;">
+    host=document.createElement("div");
+    host.id="fl-verify-modal-host";
+    host.style.cssText="position:fixed;inset:0;z-index:2147483646;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.5)";
+    host.innerHTML=`
+      <div role="dialog" aria-modal="true" class="flv-card" style="width:min(880px,96vw);max-height:90vh;overflow:auto;border-radius:16px;border:1px solid rgba(255,255,255,.12);background:rgba(23,23,28,.92);backdrop-filter:blur(6px);padding:18px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
           <h3 style="margin:0;font:600 20px/1.2 system-ui">Verify Race</h3>
           <button id="flv-close" style="border:none;background:transparent;color:inherit;font:600 16px;opacity:.8">✕</button>
@@ -174,7 +146,7 @@
 
         <div id="flv-status" style="font:600 12px/1.2 system-ui;opacity:.85;margin-bottom:10px">Idle</div>
 
-        <div style="display:grid;gap:10px;margin-bottom:12px;grid-template-columns:1fr 120px 160px;">
+        <div style="display:grid;gap:10px;margin-bottom:12px;grid-template-columns:1fr 120px 140px;">
           <div>
             <label style="display:block;margin:0 0 6px 0;opacity:.9">Track <span style="color:#ffcc00">*</span></label>
             <input id="flv-track" type="text" placeholder="Track"
@@ -214,173 +186,156 @@
     `;
     document.body.appendChild(host);
 
-    host.__flvLast = { top: null, query: "" };
+    host.__flvLast = { top: null, query: '' };
 
-    qs("#flv-close", host)?.addEventListener("click", () => (host.style.display = "none"));
+    const closeBtn = qs("#flv-close",host);
+    closeBtn?.addEventListener("click",()=> host.style.display="none");
 
-    const runBtn     = qs("#flv-run", host);
-    const statusEl   = qs("#flv-status", host);
-    const rawEl      = qs("#flv-raw-body", host);
-    const sumDetails = qs("#flv-sum", host);
-    const summaryEl  = qs("#flv-sum-body", host);
-    const warnTrack  = qs("#flv-track-warn", host);
-    const warnRace   = qs("#flv-race-warn", host);
-    const trackInput = qs("#flv-track", host);
-    const raceInput  = qs("#flv-race", host);
-    const dateInput  = qs("#flv-date", host);
+    const runBtn = qs("#flv-run",host);
+    const statusEl=qs("#flv-status",host);
+    const rawEl=qs("#flv-raw-body",host);
+    const sumDetails=qs("#flv-sum",host);
+    const summaryEl=qs("#flv-sum-body",host);
+    const warnTrack=qs("#flv-track-warn",host);
+    const warnRace=qs("#flv-race-warn",host);
+    const trackInput=qs("#flv-track",host);
+    const raceInput=qs("#flv-race",host);
+    const dateInput=qs("#flv-date",host);
 
-    if (dateInput) dateInput.value = todayISO();
+    // Default date -> today
+    if(dateInput && !dateInput.value) dateInput.value = todayISO();
 
     ensureGreenZoneSection(host);
 
-    if (runBtn) {
+    // Run click
+    if(runBtn){
       const defaultLabel = runBtn.textContent || "Verify Now";
-      runBtn.addEventListener("click", async () => {
-        const track = ((trackInput && trackInput.value) || "").trim();
-        const raceNo = ((raceInput && raceInput.value) || "").trim();
-        const date = ((dateInput && dateInput.value) || "").trim() || todayISO();
+      runBtn.addEventListener("click", async ()=>{
+        const track = (trackInput?.value||"").trim();
+        const raceNo = (raceInput?.value||"").trim();
+        const date = (dateInput?.value||"").trim() || todayISO();
 
-        if (warnTrack) warnTrack.style.display = track ? "none" : "";
-        if (!track) { try { trackInput && trackInput.focus(); } catch {} return; }
+        warnTrack && (warnTrack.style.display = track ? "none" : "");
+        if(!track){ try{ trackInput?.focus(); }catch{} return; }
 
-        if (statusEl) { statusEl.textContent = "Running…"; statusEl.style.color = "#cbd5f5"; }
-        if (rawEl) rawEl.textContent = "";
-        if (summaryEl) summaryEl.textContent = "Working…";
-        if (warnRace) warnRace.style.display = "none";
-        host.__flvLast = { top: null, query: "" };
+        if(statusEl){ statusEl.textContent = "Running…"; statusEl.style.color = "#cbd5f5"; }
+        rawEl && (rawEl.textContent = "");
+        summaryEl && (summaryEl.textContent = "Working…");
+        warnRace && (warnRace.style.display = "none");
+        host.__flvLast = { top: null, query: '' };
+        runBtn.disabled = true; runBtn.textContent = "Running…";
 
-        runBtn.disabled = true;
-        runBtn.textContent = "Running…";
-
-        try {
+        try{
           const predicted = readUIPredictions();
-          const resp = await fetch("/api/verify_race", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ track, date, raceNo: raceNo || undefined, predicted })
+          const resp = await fetch("/api/verify_race",{
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({ track, date, raceNo: raceNo || undefined, predicted })
           });
-          const data = await resp.json().catch(() => ({}));
+          const data = await resp.json().catch(()=>({}));
 
-          if (statusEl) {
-            statusEl.textContent = resp.ok ? "OK" : `Error ${resp.status}`;
-            statusEl.style.color  = resp.ok ? "#cbd5f5" : "#f87171";
-          }
-          if (rawEl) rawEl.textContent = JSON.stringify(data, null, 2);
-          if (!resp.ok && warnRace && data && typeof data.error === "string" && /raceno/i.test(data.error)) {
-            warnRace.style.display = "";
-          }
+          statusEl && (statusEl.textContent = resp.ok ? "OK" : `Error ${resp.status}`,
+                        statusEl.style.color = resp.ok ? "#cbd5f5" : "#f87171");
+          rawEl && (rawEl.textContent = JSON.stringify(data,null,2));
+          if(!resp.ok && warnRace && typeof data?.error==="string" && /raceno/i.test(data.error)){ warnRace.style.display = ""; }
 
-          host.__flvLast = { top: (data && data.top) || null, query: (data && data.query) || "" };
+          host.__flvLast = { top: data?.top||null, query: data?.query||"" };
 
-          if (sumDetails) sumDetails.open = true;
-          if (summaryEl) {
-            const lines = [];
-            if (data.query) lines.push(`Query: ${data.query}`);
-            const summaryText =
-              data.summary ||
-              (data.top && data.top.title ? `Top Result: ${data.top.title}${data.top.link ? `\n${data.top.link}` : ""}` : "") ||
-              (data.error ? `Server message: ${data.error}` : "");
-            if (summaryText) lines.push(summaryText);
-            if (data.outcome && (data.outcome.win || data.outcome.place || data.outcome.show)) {
-              lines.push(`Outcome: ${[data.outcome.win, data.outcome.place, data.outcome.show].filter(Boolean).join(" / ")}`);
+          sumDetails && (sumDetails.open = true);
+          if(summaryEl){
+            const lines=[];
+            if(data?.query) lines.push(`Query: ${data.query}`);
+            const topLine = data?.summary
+              || (data?.top?.title ? `Top Result: ${data.top.title}${data.top.link?`\n${data.top.link}`:""}` : "");
+            if(topLine) lines.push(topLine);
+            if(data?.outcome && (data.outcome.win||data.outcome.place||data.outcome.show)){
+              lines.push(`Outcome: ${[data.outcome.win,data.outcome.place,data.outcome.show].filter(Boolean).join(' / ')}`);
             }
-            if (data.hits) {
-              const hitText = [
-                data.hits.winHit ? "Win" : null,
-                data.hits.placeHit ? "Place" : null,
-                data.hits.showHit ? "Show" : null
-              ].filter(Boolean).join(", ");
-              if (hitText) lines.push(`Hits: ${hitText}`);
+            if(data?.hits){
+              const hitText=[ data.hits.winHit?"Win":null, data.hits.placeHit?"Place":null, data.hits.showHit?"Show":null ].filter(Boolean).join(", ");
+              if(hitText) lines.push(`Hits: ${hitText}`);
             }
-            summaryEl.textContent = lines.filter(Boolean).join("\n") || "No summary returned.";
+            if(!lines.length && data?.error) lines.push(`Error: ${data.error}`);
+            summaryEl.textContent = lines.join("\n") || "No summary returned.";
           }
-        } catch (error) {
-          if (statusEl) { statusEl.textContent = "Error"; statusEl.style.color = "#f87171"; }
-          if (rawEl) rawEl.textContent = String((error && error.message) || error || "Unknown error");
-          if (summaryEl) summaryEl.textContent = "Request failed. See Raw for details.";
+        }catch(error){
+          statusEl && (statusEl.textContent = "Error", statusEl.style.color = "#f87171");
+          rawEl && (rawEl.textContent = String(error?.message || error || "Unknown error"));
           console.error(error);
-        } finally {
-          runBtn.disabled = false;
-          runBtn.textContent = defaultLabel;
+        }finally{
+          runBtn.disabled = false; runBtn.textContent = defaultLabel;
           updateGreenZoneToday(host);
         }
       });
     }
 
-    qs("#flv-open-top", host)?.addEventListener("click", () => {
-      try { const last = host.__flvLast || {}; const url = last.top && last.top.link; if (url) window.open(url, "_blank", "noopener"); } catch {}
+    // Top/result buttons
+    qs("#flv-open-top", host)?.addEventListener("click", ()=>{
+      try{ const u = host.__flvLast?.top?.link; if(u) window.open(u,"_blank","noopener"); }catch{}
     });
-    qs("#flv-open-google", host)?.addEventListener("click", () => {
-      try { const last = host.__flvLast || {}; const q = last.query || ""; const u = "https://www.google.com/search?q=" + encodeURIComponent(q); window.open(u, "_blank", "noopener"); } catch {}
+    qs("#flv-open-google", host)?.addEventListener("click", ()=>{
+      try{ const q = host.__flvLast?.query || ""; window.open("https://www.google.com/search?q="+encodeURIComponent(q),"_blank","noopener"); }catch{}
     });
 
     host.__flvUpdateGZ = () => updateGreenZoneToday(host);
     return host;
   }
 
-  function prefill(host, ctx) {
-    const topTrack = getTopTrack();
-    const topRace  = getTopRace();
-    const saved    = readCtx();
+  function prefill(host,ctx){
+    const saved=readCtx();
+    const trackVal=(ctx?.track)||(currentTrack())||(saved.track)||"";
+    const raceVal =(ctx?.raceNo)||(currentRaceNo())||(saved.raceNo)||"";
+    const trackInput=qs("#flv-track",host);
+    const raceInput =qs("#flv-race",host);
+    const dateInput =qs("#flv-date",host);
 
-    const trackVal = (ctx && ctx.track)  || (topTrack && topTrack.value) || saved.track  || "";
-    const raceVal  = (ctx && ctx.raceNo) || (topRace  && topRace.value)  || saved.raceNo || "";
-    const dateVal  = todayISO();
+    if(trackInput) trackInput.value=trackVal;
+    if(raceInput)  raceInput.value=raceVal||"";
+    if(dateInput && !dateInput.value) dateInput.value = todayISO();
 
-    const trackInput = qs("#flv-track", host);
-    const raceInput  = qs("#flv-race",  host);
-    const dateInput  = qs("#flv-date",  host);
+    host.__flvLast = { top: null, query: '' };
 
-    if (trackInput) trackInput.value = trackVal;
-    if (raceInput)  raceInput.value  = raceVal || "";
-    if (dateInput)  dateInput.value  = dateVal;
+    const statusEl=qs("#flv-status",host);
+    const sumDetails=qs("#flv-sum",host);
+    const summaryEl=qs("#flv-sum-body",host);
+    const rawEl=qs("#flv-raw-body",host);
+    const warnTrack=qs("#flv-track-warn",host);
+    const warnRace=qs("#flv-race-warn",host);
 
-    host.__flvLast = { top: null, query: "" };
+    statusEl && (statusEl.textContent="Idle", statusEl.style.color="#cbd5f5");
+    sumDetails && (sumDetails.open = true);
+    summaryEl && (summaryEl.textContent="No summary returned.");
+    rawEl && (rawEl.textContent="—");
+    warnTrack && (warnTrack.style.display=trackVal?"none":"");
+    warnRace && (warnRace.style.display="none");
 
-    const statusEl   = qs("#flv-status",   host);
-    const sumDetails = qs("#flv-sum",      host);
-    const summaryEl  = qs("#flv-sum-body", host);
-    const rawEl      = qs("#flv-raw-body", host);
-    const warnTrack  = qs("#flv-track-warn", host);
-    const warnRace   = qs("#flv-race-warn",  host);
-
-    if (statusEl)   { statusEl.textContent = "Idle"; statusEl.style.color = "#cbd5f5"; }
-    if (sumDetails) sumDetails.open = true;
-    if (summaryEl)  summaryEl.textContent = "No summary returned.";
-    if (rawEl)      rawEl.textContent = "—";
-    if (warnTrack)  warnTrack.style.display = trackVal ? "none" : "";
-    if (warnRace)   warnRace.style.display  = "none";
-
-    (function pushImmediateSnapshot() {
-      try {
+    // Push an immediate snapshot so today's Green-Zone has at least one row.
+    (function pushImmediateSnapshot(){
+      try{
         const picks = readUIPredictions();
-        const track = trackVal || currentTrack();
-        if (!track) return;
-        const raceNow = (raceInput && raceInput.value && raceInput.value.trim()) || currentRaceNo() || "";
+        const t = trackVal || currentTrack(); if(!t) return;
+        const r = (raceInput?.value||"").trim() || currentRaceNo() || "";
         const dayKey = todayISO();
-        const key = `fl:snap:${dayKey}:${track}:${raceNow || "nr"}`;
+        const key = `fl:snap:${dayKey}:${t}:${r||"nr"}`;
         const payload = {
-          ts: Date.now(),
-          date: dayKey,
-          track,
-          raceNo: raceNow,
+          ts: Date.now(), date: dayKey, track: t, raceNo: r,
           signals: { confidence: null, top3Mass: null, gap12: 0, gap23: 0 },
           picks
         };
         sessionStorage.setItem(key, JSON.stringify(payload));
-      } catch {}
+      }catch{}
     })();
 
-    if (typeof host.__flvUpdateGZ === "function") host.__flvUpdateGZ();
+    typeof host.__flvUpdateGZ === "function" && host.__flvUpdateGZ();
   }
 
-  function open(ctx) {
-    const host = buildModal();
-    prefill(host, ctx);
-    host.style.display = "flex";
-    try { qs("#flv-track", host).focus(); } catch {}
+  function open(ctx){
+    const host=buildModal();
+    prefill(host,ctx);
+    host.style.display="flex";
+    try{qs("#flv-track",host).focus();}catch{}
   }
 
-  window.__FL_OPEN_VERIFY_MODAL__ = open;
+  window.__FL_OPEN_VERIFY_MODAL__=open;
 })();
 
