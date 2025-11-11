@@ -60,13 +60,16 @@
       const raceEl=getRaceNoInput();
       const track=(trackEl&&trackEl.value||"").trim();
       const raceNo=(raceEl&&raceEl.value||"").trim();
-      if(!track){ ensureWarn(trackEl); try{trackEl&&trackEl.focus();}catch{}; return; }
-      try{ sessionStorage.setItem("fl:verify:ctx", JSON.stringify({ track, raceNo: raceNo||undefined, ts: Date.now() })); }catch{}
-      const q=new URLSearchParams();
-      q.set("track", track);
-      if(raceNo) q.set("raceNo", raceNo);
-      const ap = (window.__NEXT_DATA__ && window.__NEXT_DATA__.assetPrefix) || "";
-      window.location.href = `${ap || ""}/verify?${q.toString()}`;
+      if(!track){
+        const wrap=(trackEl&&(trackEl.closest("label, .field, .form-group, .input, .row")||trackEl.parentElement))||document.body;
+        let w=qs("#fl-track-warn",wrap);
+        if(!w){w=document.createElement("div");w.id="fl-track-warn";w.style.cssText="margin-top:6px;color:#ffcc00;font:600 12px/1.2 system-ui";wrap.appendChild(w);} 
+        w.textContent="Please enter/select a Track before verifying.";
+        try{trackEl&&trackEl.focus();}catch{}
+        return;
+      }
+      try{sessionStorage.setItem("fl:verify:ctx",JSON.stringify({track,raceNo:raceNo||undefined,ts:Date.now()}));}catch{}
+      if(window.__FL_OPEN_VERIFY_MODAL__) window.__FL_OPEN_VERIFY_MODAL__({ track, raceNo });
     });
     toolbar.appendChild(pill);
     log("verify pill mounted");
