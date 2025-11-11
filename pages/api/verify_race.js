@@ -46,7 +46,9 @@ async function cseDirect(query) {
 async function cseViaBridge(req, query) {
   const proto = req.headers['x-forwarded-proto'] || 'https';
   const host  = req.headers.host;
-  const url   = `${proto}://${host}/api/cse_resolver?q=${encodeURIComponent(query)}`;
+  const basePath = (process.env.NEXT_PUBLIC_BASE_PATH || process.env.NEXT_BASE_PATH || '').replace(/\/+$/, '');
+  const pathPrefix = basePath ? (basePath.startsWith('/') ? basePath : `/${basePath}`) : '';
+  const url   = `${proto}://${host}${pathPrefix}/api/cse_resolver?q=${encodeURIComponent(query)}`;
   const r = await fetch(url, { cache: 'no-store' });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j?.error || `CSE bridge ${r.status}`);
@@ -169,6 +171,26 @@ export default async function handler(req, res) {
         .some((name) => [outcome.win, outcome.place, outcome.show].map(normalizeName).includes(name)),
     };
 
+    const summary = (() => {
+      const lines = [];
+      lines.push(`Query: ${queryUsed || baseQuery}`);
+      if (top) {
+        if (top.title) lines.push(`Top Result: ${top.title}`);
+        if (top.link) lines.push(`Link: ${top.link}`);
+      } else {
+        lines.push('No top result returned.');
+      }
+      const outcomeParts = [outcome.win, outcome.place, outcome.show].filter(Boolean);
+      if (outcomeParts.length) lines.push(`Outcome: ${outcomeParts.join(' / ')}`);
+      const hitList = [
+        hits.winHit ? 'Win' : null,
+        hits.placeHit ? 'Place' : null,
+        hits.showHit ? 'Show' : null,
+      ].filter(Boolean);
+      if (hitList.length) lines.push(`Hits: ${hitList.join(', ')}`);
+      return lines.filter(Boolean).join('\n');
+    })();
+
     const tsIso  = new Date().toISOString();
     const redis = getRedis();
 
@@ -193,6 +215,7 @@ export default async function handler(req, res) {
           predicted: predictedSafe,
           outcome,
           hits,
+          summary,
         }));
         await redis.expire(eventKey, TTL_SECONDS);
         await redis.lpush(`${ns}:log`, eventKey);
@@ -215,6 +238,7 @@ export default async function handler(req, res) {
           outcome,
           predicted: predictedSafe,
           hits,
+          summary,
         };
         await redis.rpush(RECON_LIST, JSON.stringify(row));
         const dayKey = `${RECON_DAY_PREFIX}${date}`;
@@ -266,6 +290,7 @@ export default async function handler(req, res) {
       outcome,
       predicted: predictedSafe,
       hits,
+      summary,
     });
   } catch (err) {
     return res.status(500).json({ error: 'verify_race failed', details: err?.message || String(err) });
