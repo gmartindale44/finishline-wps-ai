@@ -106,7 +106,12 @@
         if(data.query) parts.push(`<div><b>Query:</b> ${data.query}</div>`);
         if(data.top&&data.top.title) parts.push(`<div><b>Top Result:</b> ${data.top.title}</div>`);
         if(data.summary) parts.push(`<div>${data.summary}</div>`);
-        sum.innerHTML=parts.join("")||"<em>No summary returned.</em>";
+        let summaryHtml=parts.join("")||"<em>No summary returned.</em>";
+        const detailText=String(data?.details||data?.error||"");
+        if(!resp.ok && resp.status===500 && /read-only file system/i.test(detailText)){
+          summaryHtml="<em>Server cannot write CSV on Vercel (read-only). Logging has been switched to Redis; please re-run.</em>";
+        }
+        sum.innerHTML=summaryHtml;
       }catch(e){
         status.textContent="Error";
         raw.textContent=String(e&&e.message||e);
