@@ -65,7 +65,8 @@
       const q=new URLSearchParams();
       q.set("track", track);
       if(raceNo) q.set("raceNo", raceNo);
-      window.location.href = "/verify?" + q.toString();
+      const ap = (window.__NEXT_DATA__ && window.__NEXT_DATA__.assetPrefix) || "";
+      window.location.href = `${ap || ""}/verify?${q.toString()}`;
     });
     toolbar.appendChild(pill);
     log("verify pill mounted");
