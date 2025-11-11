@@ -1,19 +1,22 @@
-/* public/js/verify-modal.js — r18 */
+/* public/js/verify-modal.js — r19 */
+
 ;(() => {
+
   "use strict";
+
   if (typeof window === "undefined" || typeof document === "undefined") return;
   if (window.__FL_VERIFY_MODAL__) return; window.__FL_VERIFY_MODAL__ = true;
   if (window.__flVerifyDebug === undefined) window.__flVerifyDebug = false;
 
   const qs = (s, r = document) => r.querySelector(s);
 
-  function todayISO() {
+  const todayISO = () => {
     const d = new Date();
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, "0");
     const dd = String(d.getDate()).padStart(2, "0");
     return `${y}-${m}-${dd}`;
-  }
+  };
 
   function readUIPredictions() {
     try {
@@ -26,9 +29,9 @@
           const el = card.querySelector("[data-name], .title, .name, b, strong");
           return ((el && el.textContent) || "").trim();
         });
-        picks.win = names[0] || "";
+        picks.win   = names[0] || "";
         picks.place = names[1] || "";
-        picks.show = names[2] || "";
+        picks.show  = names[2] || "";
         return picks;
       }
 
@@ -36,7 +39,7 @@
         const el = scope.querySelector(selector);
         return el ? (el.textContent || "").trim() : "";
       };
-      picks.win = getPick("[data-pick='win'], .pick-win b, .emoji-win~b");
+      picks.win   = getPick("[data-pick='win'], .pick-win b, .emoji-win~b");
       picks.place = getPick("[data-pick='place'], .pick-place b, .emoji-place~b");
       picks.show  = getPick("[data-pick='show'], .pick-show b, .emoji-show~b");
       return picks;
@@ -46,26 +49,21 @@
   }
 
   function readCtx() {
-    try {
-      const s = sessionStorage.getItem("fl:verify:ctx");
-      if (s) return JSON.parse(s);
-    } catch {}
+    try { const s = sessionStorage.getItem("fl:verify:ctx"); if (s) return JSON.parse(s); } catch {}
     return {};
   }
 
-  function getTopTrack() { return qs("input[placeholder*='track' i]") || qs("input[id*='track' i]") || qs("input[name*='track' i]"); }
-  function getTopRace()  { return qs("input[placeholder*='race'  i]") || qs("input[id*='race'  i]") || qs("input[name*='race'  i]"); }
+  const getTopTrack = () => qs("input[placeholder*='track' i]") || qs("input[id*='track' i]") || qs("input[name*='track' i]");
+  const getTopRace  = () => qs("input[placeholder*='race'  i]") || qs("input[id*='race'  i]") || qs("input[name*='race'  i]");
 
-  function currentTrack() {
+  const currentTrack = () => {
     const input = getTopTrack();
-    if (input && typeof input.value === "string" && input.value.trim()) return input.value.trim();
-    return "";
-  }
-  function currentRaceNo() {
+    return (input && typeof input.value === "string" && input.value.trim()) ? input.value.trim() : "";
+  };
+  const currentRaceNo = () => {
     const input = getTopRace();
-    if (input && typeof input.value === "string" && input.value.trim()) return input.value.trim();
-    return "";
-  }
+    return (input && typeof input.value === "string" && input.value.trim()) ? input.value.trim() : "";
+  };
 
   function scoreGZ(sig) {
     const c = (sig && sig.confidence) || 0;
@@ -86,7 +84,8 @@
     if (wrap) return wrap;
     wrap = document.createElement("div");
     wrap.id = "flv-gz-today";
-    wrap.style.cssText = "margin-top:12px;border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:12px;background:rgba(255,255,255,.03)";
+    wrap.style.cssText =
+      "margin-top:12px;border:1px solid rgba(255,255,255,.14);border-radius:12px;padding:12px;background:rgba(35,37,44,.98);box-shadow:0 6px 18px rgba(0,0,0,.35)";
     wrap.innerHTML = `
       <div style="font:600 14px system-ui;display:flex;gap:8px;align-items:center">
         <span>🟢 Green-Zone (Today)</span>
@@ -95,7 +94,7 @@
       <div id="gz-today-list" style="margin-top:8px"></div>
       <div id="gz-today-summary" style="margin-top:8px;opacity:.9"></div>
     `;
-    const anchor = qs("#flv-raw-details", host)?.parentElement || qs(".flv-card", host) || host;
+    const anchor = qs("#flv-raw-details", host) || qs(".flv-card", host) || host;
     anchor.parentElement?.insertBefore(wrap, anchor.nextSibling);
     return wrap;
   }
@@ -143,11 +142,11 @@
       </tr></thead>
       <tbody>${scored.map(r => `
         <tr>
-          <td style="padding:4px;border-top:1px solid rgba(255,255,255,.08)">${r.track || "—"}</td>
-          <td style="padding:4px;border-top:1px solid rgba(255,255,255,.08)">${r.raceNo || "—"}</td>
-          <td style="padding:4px;border-top:1px solid rgba(255,255,255,.08)">${r.gz.score}</td>
-          <td style="padding:4px;border-top:1px solid rgba(255,255,255,.08)">${r.gz.tier}</td>
-          <td style="padding:4px;border-top:1px solid rgba(255,255,255,.08)">${map[r.gz.suggested] || "ATB"}</td>
+          <td style="padding:4px;border-top:1px solid rgba(255,255,255,.10)">${r.track || "—"}</td>
+          <td style="padding:4px;border-top:1px solid rgba(255,255,255,.10)">${r.raceNo || "—"}</td>
+          <td style="padding:4px;border-top:1px solid rgba(255,255,255,.10)">${r.gz.score}</td>
+          <td style="padding:4px;border-top:1px solid rgba(255,255,255,.10)">${r.gz.tier}</td>
+          <td style="padding:4px;border-top:1px solid rgba(255,255,255,.10)">${map[r.gz.suggested] || "ATB"}</td>
         </tr>`).join("")}
       </tbody>`;
 
@@ -167,7 +166,7 @@
     host.id = "fl-verify-modal-host";
     host.style.cssText = "position:fixed;inset:0;z-index:2147483646;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.5)";
     host.innerHTML = `
-      <div role="dialog" aria-modal="true" class="flv-card" style="width:min(880px,96vw);max-height:90vh;overflow:auto;border-radius:16px;border:1px solid rgba(255,255,255,.12);background:rgba(23,23,28,.92);backdrop-filter:blur(6px);padding:18px;">
+      <div role="dialog" aria-modal="true" class="flv-card" style="width:min(880px,96vw);max-height:90vh;overflow:auto;border-radius:16px;border:1px solid rgba(255,255,255,.12);background:rgba(23,23,28,.98);backdrop-filter:blur(6px);padding:18px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
           <h3 style="margin:0;font:600 20px/1.2 system-ui">Verify Race</h3>
           <button id="flv-close" style="border:none;background:transparent;color:inherit;font:600 16px;opacity:.8">✕</button>
@@ -175,7 +174,7 @@
 
         <div id="flv-status" style="font:600 12px/1.2 system-ui;opacity:.85;margin-bottom:10px">Idle</div>
 
-        <div style="display:grid;gap:10px;margin-bottom:12px;grid-template-columns:1fr 150px;">
+        <div style="display:grid;gap:10px;margin-bottom:12px;grid-template-columns:1fr 120px 160px;">
           <div>
             <label style="display:block;margin:0 0 6px 0;opacity:.9">Track <span style="color:#ffcc00">*</span></label>
             <input id="flv-track" type="text" placeholder="Track"
@@ -188,13 +187,18 @@
                    style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:transparent;color:inherit"/>
             <small id="flv-race-warn" style="display:none;color:#ffcc00">Server asked for a Race # — please add one.</small>
           </div>
+          <div>
+            <label style="display:block;margin:0 0 6px 0;opacity:.9">Date</label>
+            <input id="flv-date" type="date"
+                   style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:transparent;color:inherit"/>
+          </div>
         </div>
 
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
           <button id="flv-run" style="padding:10px 14px;border-radius:10px;border:none;background:#6b46c1;color:#fff;font-weight:700">Verify Now</button>
           <button id="flv-open-top" style="padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:transparent;color:inherit">Open Top Result</button>
           <button id="flv-open-google" style="padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:transparent;color:inherit">Open Google (debug)</button>
-          <small style="opacity:.75">Track is required; Race # helps context.</small>
+          <small style="opacity:.75">Track & Date required; Race # helps context.</small>
         </div>
 
         <details id="flv-sum" open>
@@ -223,6 +227,9 @@
     const warnRace   = qs("#flv-race-warn", host);
     const trackInput = qs("#flv-track", host);
     const raceInput  = qs("#flv-race", host);
+    const dateInput  = qs("#flv-date", host);
+
+    if (dateInput) dateInput.value = todayISO();
 
     ensureGreenZoneSection(host);
 
@@ -231,6 +238,7 @@
       runBtn.addEventListener("click", async () => {
         const track = ((trackInput && trackInput.value) || "").trim();
         const raceNo = ((raceInput && raceInput.value) || "").trim();
+        const date = ((dateInput && dateInput.value) || "").trim() || todayISO();
 
         if (warnTrack) warnTrack.style.display = track ? "none" : "";
         if (!track) { try { trackInput && trackInput.focus(); } catch {} return; }
@@ -249,7 +257,7 @@
           const resp = await fetch("/api/verify_race", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ track, raceNo: raceNo || undefined, predicted })
+            body: JSON.stringify({ track, date, raceNo: raceNo || undefined, predicted })
           });
           const data = await resp.json().catch(() => ({}));
 
@@ -270,18 +278,17 @@
             if (data.query) lines.push(`Query: ${data.query}`);
             const summaryText =
               data.summary ||
-              (data.top && data.top.title ? `Top Result: ${data.top.title}${data.top.link ? `\n${data.top.link}` : ""}` : "");
+              (data.top && data.top.title ? `Top Result: ${data.top.title}${data.top.link ? `\n${data.top.link}` : ""}` : "") ||
+              (data.error ? `Server message: ${data.error}` : "");
             if (summaryText) lines.push(summaryText);
             if (data.outcome && (data.outcome.win || data.outcome.place || data.outcome.show)) {
-              lines.push(
-                `Outcome: ${[data.outcome.win, data.outcome.place, data.outcome.show].filter(Boolean).join(" / ")}`
-              );
+              lines.push(`Outcome: ${[data.outcome.win, data.outcome.place, data.outcome.show].filter(Boolean).join(" / ")}`);
             }
             if (data.hits) {
               const hitText = [
-                data.hits.winHit   ? "Win"   : null,
+                data.hits.winHit ? "Win" : null,
                 data.hits.placeHit ? "Place" : null,
-                data.hits.showHit  ? "Show"  : null
+                data.hits.showHit ? "Show" : null
               ].filter(Boolean).join(", ");
               if (hitText) lines.push(`Hits: ${hitText}`);
             }
@@ -290,6 +297,7 @@
         } catch (error) {
           if (statusEl) { statusEl.textContent = "Error"; statusEl.style.color = "#f87171"; }
           if (rawEl) rawEl.textContent = String((error && error.message) || error || "Unknown error");
+          if (summaryEl) summaryEl.textContent = "Request failed. See Raw for details.";
           console.error(error);
         } finally {
           runBtn.disabled = false;
@@ -302,13 +310,11 @@
     qs("#flv-open-top", host)?.addEventListener("click", () => {
       try { const last = host.__flvLast || {}; const url = last.top && last.top.link; if (url) window.open(url, "_blank", "noopener"); } catch {}
     });
-
     qs("#flv-open-google", host)?.addEventListener("click", () => {
       try { const last = host.__flvLast || {}; const q = last.query || ""; const u = "https://www.google.com/search?q=" + encodeURIComponent(q); window.open(u, "_blank", "noopener"); } catch {}
     });
 
     host.__flvUpdateGZ = () => updateGreenZoneToday(host);
-
     return host;
   }
 
@@ -319,12 +325,15 @@
 
     const trackVal = (ctx && ctx.track)  || (topTrack && topTrack.value) || saved.track  || "";
     const raceVal  = (ctx && ctx.raceNo) || (topRace  && topRace.value)  || saved.raceNo || "";
+    const dateVal  = todayISO();
 
     const trackInput = qs("#flv-track", host);
     const raceInput  = qs("#flv-race",  host);
+    const dateInput  = qs("#flv-date",  host);
 
     if (trackInput) trackInput.value = trackVal;
     if (raceInput)  raceInput.value  = raceVal || "";
+    if (dateInput)  dateInput.value  = dateVal;
 
     host.__flvLast = { top: null, query: "" };
 
@@ -342,18 +351,13 @@
     if (warnTrack)  warnTrack.style.display = trackVal ? "none" : "";
     if (warnRace)   warnRace.style.display  = "none";
 
-    // Seed a same-day snapshot immediately so Green-Zone has at least one row.
     (function pushImmediateSnapshot() {
       try {
         const picks = readUIPredictions();
         const track = trackVal || currentTrack();
         if (!track) return;
         const raceNow = (raceInput && raceInput.value && raceInput.value.trim()) || currentRaceNo() || "";
-        const t = new Date();
-        const y = t.getFullYear();
-        const m = String(t.getMonth() + 1).padStart(2, "0");
-        const d = String(t.getDate()).padStart(2, "0");
-        const dayKey = `${y}-${m}-${d}`;
+        const dayKey = todayISO();
         const key = `fl:snap:${dayKey}:${track}:${raceNow || "nr"}`;
         const payload = {
           ts: Date.now(),
@@ -379,3 +383,4 @@
 
   window.__FL_OPEN_VERIFY_MODAL__ = open;
 })();
+
