@@ -79,7 +79,7 @@
 
   function ensureGreenZoneSection(host){
     let wrap = qs("#flv-gz-today", host);
-    if(wrap) return wrap;
+    if (wrap) return wrap;
     wrap = document.createElement("div");
     wrap.id = "flv-gz-today";
     wrap.style.cssText = "margin-top:12px;border:1px solid rgba(255,255,255,.14);border-radius:12px;padding:12px;background:rgba(35,37,44,.98);box-shadow:0 6px 18px rgba(0,0,0,.35)";
@@ -111,14 +111,14 @@
         if(!key.startsWith(`fl:snap:${dayKey}:`)) continue;
         try{
           const raw = sessionStorage.getItem(key);
-          if(!raw) continue;
+          if (!raw) continue;
           const parsed = JSON.parse(raw);
-          if(parsed && parsed.signals) rows.push(parsed);
-        }catch{}
+          if (parsed && parsed.signals) rows.push(parsed);
+        } catch {}
       }
-    }catch{}
+    } catch {}
 
-    if(!rows.length){
+    if (!rows.length) {
       list.textContent = "No predictions captured today yet.";
       summary.textContent = "";
       return;
@@ -129,7 +129,7 @@
 
     const map = { WinOnly:"Win-Only", ATB:"Across The Board", ExactaBox:"Exacta Box", TrifectaBox:"Trifecta Box" };
     const tbl = document.createElement("table");
-    tbl.style.cssText="width:100%;border-collapse:collapse;font:12px system-ui";
+    tbl.style.cssText = "width:100%;border-collapse:collapse;font:12px system-ui";
     tbl.innerHTML = `<thead><tr>
       <th style="text-align:left;padding:6px 4px;opacity:.8">Track</th>
       <th style="text-align:left;padding:6px 4px;opacity:.8">Race</th>
@@ -174,7 +174,7 @@
           <label class="flv-field flv-field--track">
             <div style="margin-bottom:6px;opacity:.9">Track <span style="color:#ffcc00">*</span></div>
             <input id="flv-track" type="text" placeholder="Track"
-                   style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:transparent;color:inherit"/>
+              style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:transparent;color:inherit"/>
             <small id="flv-track-warn" style="display:none;color:#ffcc00">Track is required.</small>
           </label>
 
@@ -236,7 +236,7 @@
       dateInput.setAttribute("placeholder", todayISO());
     }
 
-    ensureGreenZoneSection(host);
+    if (dateInput && !dateInput.value) dateInput.value = todayISO();
 
     if (runBtn){
       const defaultLabel = runBtn.textContent || "Verify Now";
@@ -305,7 +305,7 @@
       try{ const q = host.__flvLast?.query || ""; const u = "https://www.google.com/search?q="+encodeURIComponent(q); window.open(u,"_blank","noopener"); }catch{}
     });
 
-    host.__flvUpdateGZ = () => updateGreenZoneToday(host);
+    host.__flvUpdateGZ = () => updateGreenZoneToday(qs("#flv-gz-host", host) || host);
     return host;
   }
 
