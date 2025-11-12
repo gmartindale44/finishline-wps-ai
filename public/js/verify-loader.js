@@ -6,7 +6,7 @@
   if (window.__flVerifyDebug === undefined) window.__flVerifyDebug = false;
 
   try {
-    console.info("%c FinishLine Verify Loader — modal r20 ", "background:#6b46c1;color:#fff;padding:2px 6px;border-radius:4px");
+    console.info("%c FinishLine Verify Loader — modal r22 ", "background:#6b46c1;color:#fff;padding:2px 6px;border-radius:4px");
   } catch {}
 
   const withPrefix = (p) => {
@@ -33,11 +33,11 @@
   });
 
   const run = async () => {
-    try { await inject("/js/track-guard.js?v=v2025-11-11-20"); } catch {}
-    try { await inject("/js/verify-button.js?v=v2025-11-11-20"); } catch {}
-    try { await inject("/js/verify-modal.js?v=v2025-11-11-20"); } catch {}
-    try { await inject("/js/green-zone-panel.js?v=v2025-11-11-20"); } catch {}
-    try { await inject("/js/prediction-snapshots.js?v=v2025-11-11-20"); } catch {}
+    try { await inject("/js/track-guard.js?v=v2025-11-10-21"); } catch {}
+    try { await inject("/js/verify-button.js?v=v2025-11-10-21"); } catch {}
+    try { await inject("/js/verify-modal.js?v=v2025-11-10-22"); } catch {}
+    try { await inject("/js/green-zone-panel.js?v=v2025-11-10-21"); } catch {}
+    try { await inject("/js/prediction-snapshots.js?v=v2025-11-10-21"); } catch {}
   };
 
   if (document.readyState === "loading") {

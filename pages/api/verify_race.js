@@ -183,6 +183,11 @@ export default async function handler(req, res) {
       if (hitList.length) lines.push(`Hits: ${hitList.join(', ')}`);
       return lines.filter(Boolean).join('\n');
     })();
+    const summarySafe =
+      summary ||
+      (top?.title
+        ? `Top Result: ${top.title}${top.link ? `\n${top.link}` : ''}`
+        : 'No summary returned.');
 
     const tsIso  = new Date().toISOString();
     const redis = getRedis();
@@ -208,7 +213,7 @@ export default async function handler(req, res) {
           predicted: predictedSafe,
           outcome,
           hits,
-          summary,
+          summary: summarySafe,
         }));
         await redis.expire(eventKey, TTL_SECONDS);
         await redis.lpush(`${ns}:log`, eventKey);
@@ -231,7 +236,7 @@ export default async function handler(req, res) {
           outcome,
           predicted: predictedSafe,
           hits,
-          summary,
+          summary: summarySafe,
         };
         await redis.rpush(RECON_LIST, JSON.stringify(row));
         const dayKey = `${RECON_DAY_PREFIX}${date}`;
@@ -283,7 +288,7 @@ export default async function handler(req, res) {
       outcome,
       predicted: predictedSafe,
       hits,
-      summary,
+      summary: summarySafe,
     });
   } catch (err) {
     return res.status(500).json({ error: 'verify_race failed', details: err?.message || String(err) });
