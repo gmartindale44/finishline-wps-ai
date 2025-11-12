@@ -15,29 +15,6 @@
     const dd = String(d.getDate()).padStart(2, "0");
     return `${y}-${m}-${dd}`;
   };
-
-  // Inject minimal CSS to force date input to render consistently
-  (function ensureStyles(){
-    if (document.getElementById("flv-inline-css")) return;
-    const css = `
-      #fl-verify-modal-host input[type="date"]{
-        appearance:auto !important;
-        -webkit-appearance:auto !important;
-        -moz-appearance:auto !important;
-        background:#1e1f24; color:#fff; border:1px solid rgba(255,255,255,.18);
-      }
-      #flv-field-row{ display:flex; gap:10px; flex-wrap:wrap }
-      #flv-field-row .flv-field{ display:block; }
-      #flv-field-row .flv-field--track{ flex:1 1 280px; min-width:260px; }
-      #flv-field-row .flv-field--race { flex:0 0 160px; min-width:140px; }
-      #flv-field-row .flv-field--date { flex:0 0 200px; min-width:180px; }
-    `.trim();
-    const el = document.createElement("style");
-    el.id = "flv-inline-css";
-    el.textContent = css;
-    document.head.appendChild(el);
-  })();
-
   function readUIPredictions() {
     try {
       const scope = document.querySelector('[data-panel="predictions"], .predictions-panel') || document;
@@ -170,25 +147,24 @@
 
         <div id="flv-status" style="font:600 12px/1.2 system-ui;opacity:.85;margin-bottom:10px">Idle</div>
 
-        <div id="flv-field-row">
-          <label class="flv-field flv-field--track">
-            <div style="margin-bottom:6px;opacity:.9">Track <span style="color:#ffcc00">*</span></div>
+        <div id="flv-field-row" style="display:grid;gap:10px;margin-bottom:12px;grid-template-columns:1fr 1fr;grid-template-areas:'track track' 'race date';">
+          <div style="grid-area:track">
+            <label style="display:block;margin:0 0 6px 0;opacity:.9">Track <span style="color:#ffcc00">*</span></label>
             <input id="flv-track" type="text" placeholder="Track"
-              style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:transparent;color:inherit"/>
+                   style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:transparent;color:inherit"/>
             <small id="flv-track-warn" style="display:none;color:#ffcc00">Track is required.</small>
-          </label>
-
-          <label class="flv-field flv-field--race">
-            <div style="margin-bottom:6px;opacity:.9">Race # (optional)</div>
-            <input id="flv-race" type="text" inputmode="numeric" placeholder="e.g. 6"
+          </div>
+          <div style="grid-area:race">
+            <label style="display:block;margin:0 0 6px 0;opacity:.9">Race # (optional)</label>
+            <input id="flv-race" type="text" placeholder="e.g. 6"
                    style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:transparent;color:inherit"/>
             <small id="flv-race-warn" style="display:none;color:#ffcc00">Server asked for a Race # — please add one.</small>
-          </label>
-
-          <label class="flv-field flv-field--date">
-            <div style="margin-bottom:6px;opacity:.9">Date (YYYY-MM-DD)</div>
-            <input id="flv-date" style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.18);color:#fff;"/>
-          </label>
+          </div>
+          <div style="grid-area:date">
+            <label style="display:block;margin:0 0 6px 0;opacity:.9">Date</label>
+            <input id="flv-date" type="text" placeholder="YYYY-MM-DD"
+                   style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:transparent;color:inherit"/>
+          </div>
         </div>
 
         <div style="display:flex;gap:8px;align-items:center;margin:12px 0;flex-wrap:wrap">
@@ -203,6 +179,11 @@
           <pre id="flv-sum-body" style="white-space:pre-wrap;margin-top:8px;max-height:220px;overflow:auto;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.04);font:12px/1.5 ui-monospace, Menlo, Consolas">No summary returned.</pre>
         </details>
 
+        <details id="flv-raw-details" style="margin-top:10px;">
+          <summary style="cursor:pointer;opacity:.9">Green-Zone Log</summary>
+          <pre id="flv-raw-body" style="white-space:pre-wrap;margin-top:8px;max-height:220px;overflow:auto;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:rgba(0,0,0,.35);font:12px/1.5 ui-monospace, Menlo, Consolas">No log entries yet.</pre>
+        </details>
+
         <div id="flv-gz-anchor"></div>
       </div>
     `;
@@ -215,41 +196,38 @@
     const runBtn     = qs("#flv-run", host);
     const statusEl   = qs("#flv-status", host);
     const summaryEl  = qs("#flv-sum-body", host);
+    const rawEl      = qs("#flv-raw-body", host);
     const warnTrack  = qs("#flv-track-warn", host);
     const warnRace   = qs("#flv-race-warn", host);
     const trackInput = qs("#flv-track", host);
     const raceInput  = qs("#flv-race", host);
     const dateInput  = qs("#flv-date", host);
 
-    // Build date input programmatically with a fallback
-    try {
-      dateInput.setAttribute("type","date");
+    if (dateInput) {
+      dateInput.setAttribute("inputmode", "numeric");
+      dateInput.setAttribute("pattern", "\\d{4}-\\d{2}-\\d{2}");
       if (!dateInput.value) dateInput.value = todayISO();
-      // If the UA ignores type=date (some skins), keep a text fallback placeholder
-      if (dateInput.type !== "date") {
-        dateInput.setAttribute("type","text");
-        dateInput.setAttribute("placeholder", todayISO());
-        dateInput.setAttribute("pattern","\\d{4}-\\d{2}-\\d{2}");
-      }
-    } catch {
-      dateInput.setAttribute("type","text");
-      dateInput.setAttribute("placeholder", todayISO());
     }
-
-    if (dateInput && !dateInput.value) dateInput.value = todayISO();
 
     if (runBtn){
       const defaultLabel = runBtn.textContent || "Verify Now";
       runBtn.addEventListener("click", async () => {
         const track = (trackInput?.value || "").trim();
         const raceNo = (raceInput?.value || "").trim();
-        const date = (dateInput?.value || "").trim() || todayISO();
+        let date = (dateInput?.value || "").trim() || todayISO();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) date = todayISO();
 
         warnTrack && (warnTrack.style.display = track ? "none" : "");
         if (!track) { try { trackInput?.focus(); } catch {} return; }
 
+        const requestDetails = { track, raceNo: raceNo || null, date };
+
         if (statusEl){ statusEl.textContent="Running…"; statusEl.style.color="#cbd5f5"; }
         if (summaryEl) summaryEl.textContent = "Working…";
+        if (rawEl) {
+          try { rawEl.textContent = JSON.stringify({ request: requestDetails }, null, 2); }
+          catch { rawEl.textContent = "Request prepared."; }
+        }
         warnRace && (warnRace.style.display = "none");
         host.__flvLast = { top:null, query:"" };
 
@@ -257,10 +235,11 @@
 
         try{
           const predicted = readUIPredictions();
+          const payload = { track, date, raceNo: raceNo || undefined, predicted };
           const resp = await fetch("/api/verify_race", {
             method:"POST",
             headers:{ "Content-Type":"application/json" },
-            body: JSON.stringify({ track, date, raceNo: raceNo || undefined, predicted })
+            body: JSON.stringify(payload)
           });
           const data = await resp.json().catch(()=> ({}));
 
@@ -271,23 +250,49 @@
 
           host.__flvLast = { top: data?.top || null, query: data?.query || "" };
 
+          if (rawEl) {
+            try { rawEl.textContent = JSON.stringify({ request: payload, response: data }, null, 2); }
+            catch { rawEl.textContent = String(data); }
+          }
+
           if (summaryEl){
             const lines = [];
-            if (data?.query) lines.push(`Query: ${data.query}`);
-            const summaryText =
-              data?.summary ||
-              (data?.top?.title ? `Top Result: ${data.top.title}${data.top.link?`\n${data.top.link}`:""}` : "") ||
-              (data?.error ? `Server message: ${data.error}` : "");
-            if (summaryText) lines.push(summaryText);
-            if (data?.outcome && (data.outcome.win||data.outcome.place||data.outcome.show)){
-              lines.push(`Outcome: ${[data.outcome.win,data.outcome.place,data.outcome.show].filter(Boolean).join(" / ")}`);
+            if (data && data.query) {
+              lines.push(`Query: ${data.query}`);
             }
-            if (!lines.length) lines.push("No summary returned.");
-            summaryEl.textContent = lines.join("\n");
+            if (data && data.outcome && (data.outcome.win || data.outcome.place || data.outcome.show)) {
+              const parts = [];
+              if (data.outcome.win) parts.push(`Win: ${data.outcome.win}`);
+              if (data.outcome.place) parts.push(`Place: ${data.outcome.place}`);
+              if (data.outcome.show) parts.push(`Show: ${data.outcome.show}`);
+              if (parts.length) lines.push(parts.join(" • "));
+            }
+            const top = data && data.top;
+            if (top && top.title) {
+              lines.push(`Top Result: ${top.title}${top.link ? `\n${top.link}` : ""}`);
+            }
+            if (data && data.hits) {
+              const hitParts = [];
+              if (data.hits.winHit) hitParts.push("Win");
+              if (data.hits.placeHit) hitParts.push("Place");
+              if (data.hits.showHit) hitParts.push("Show");
+              if (hitParts.length) {
+                lines.push(`Hits: ${hitParts.join(", ")}`);
+              }
+            }
+            if (!lines.length && data && data.error) {
+              lines.push(`Server message: ${data.error}`);
+            }
+            summaryEl.textContent = lines.join("\n") || "No summary returned.";
           }
         } catch (err){
           if (statusEl){ statusEl.textContent="Error"; statusEl.style.color="#f87171"; }
-          if (summaryEl){ summaryEl.textContent = String(err?.message || err || "Unknown error"); }
+          if (summaryEl){ summaryEl.textContent = "Request failed. See Green-Zone Log for details."; }
+          if (rawEl) {
+            const msg = err?.message || err || "Unknown error";
+            try { rawEl.textContent = JSON.stringify({ request: requestDetails, error: String(msg) }, null, 2); }
+            catch { rawEl.textContent = String(msg); }
+          }
           console.error(err);
         } finally {
           runBtn.disabled = false; runBtn.textContent = defaultLabel;
@@ -317,13 +322,23 @@
     const trackInput=qs("#flv-track",host);
     const raceInput =qs("#flv-race",host);
     const dateInput =qs("#flv-date",host);
+    const rawEl    =qs("#flv-raw-body",host);
 
     if (trackInput) trackInput.value = trackVal;
     if (raceInput)  raceInput.value  = raceVal || "";
-    if (dateInput && !dateInput.value) dateInput.value = todayISO();
+    if (dateInput) {
+      const ctxDate = (ctx && typeof ctx.date === "string" && ctx.date.trim()) ? ctx.date.trim() : "";
+      const savedDate = (saved && typeof saved.date === "string" && saved.date.trim()) ? saved.date.trim() : "";
+      const fallback = todayISO();
+      dateInput.value = ctxDate || dateInput.value || savedDate || fallback;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateInput.value)) {
+        dateInput.value = fallback;
+      }
+    }
 
     const summaryEl=qs("#flv-sum-body",host);
     if (summaryEl) summaryEl.textContent = "No summary returned.";
+    if (rawEl) rawEl.textContent = "No log entries yet.";
 
     (function pushSnap(){
       try{
