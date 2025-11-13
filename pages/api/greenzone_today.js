@@ -33,7 +33,11 @@ export default async function handler(req, res) {
   } catch (error) {
     const message = error?.message || String(error);
     console.error("[greenzone_today] error", message);
-    return res.status(500).json({ ok: false, error: message });
+    return res.status(500).json({
+      ok: false,
+      error: "greenzone_today failed",
+      details: message,
+    });
   }
 }
 
