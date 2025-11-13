@@ -67,7 +67,7 @@ export default function VerifyPage() {
         <title>Verify • FinishLine WPS AI</title>
       </Head>
 
-      <Script id="fl-verify-loader" src="/js/verify-loader.js?v=v2025-11-13-datefix-visible" strategy="afterInteractive" />
+      <Script id="fl-verify-loader" src="/js/verify-loader.js?v=v2025-11-13-datefix-visible-2" strategy="afterInteractive" />
 
       <main className="min-h-screen p-6">
         <div className="max-w-4xl mx-auto">

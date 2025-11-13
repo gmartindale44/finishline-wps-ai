@@ -276,7 +276,7 @@
           <button id="flv-close" style="border:none;background:transparent;color:inherit;font:600 16px;opacity:.8;cursor:pointer">✕</button>
         </div>
 
-        <!-- TRACK + RACE ROW -->
+        <!-- TRACK + RACE row -->
         <div class="flv-row"
           style="display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,0.7fr);gap:10px;margin-bottom:10px;">
           <div>
@@ -297,10 +297,10 @@
           </div>
         </div>
 
-        <!-- DATE ROW (FULL WIDTH) -->
+        <!-- DATE row (FULL WIDTH) -->
         <div class="flv-row" style="margin-bottom:14px;">
           <label style="display:block;width:100%;">
-            <div style="margin-bottom:6px;opacity:.9">Date</div>
+            <div style="margin-bottom:6px;opacity:.9">Date (picker)</div>
             <input id="flv-date" type="date"
               style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.28);background:rgba(17,17,23,1);color:inherit"/>
           </label>
