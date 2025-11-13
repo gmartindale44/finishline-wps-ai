@@ -105,6 +105,9 @@
     if (data && typeof data.summary === "string" && data.summary.trim()) {
       lines.push(data.summary.trim());
     }
+    if (data && data.usedDate) {
+      lines.push(`Using date: ${data.usedDate}`);
+    }
 
     if (data && data.outcome) {
       const parts = [];
@@ -262,20 +265,19 @@
       "position:fixed;inset:0;z-index:2147483646;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.5)";
 
     host.innerHTML = `
-      <div role="dialog" aria-modal="true" class="flv-card" data-build="datefix3"
+      <div role="dialog" aria-modal="true" class="flv-card" data-build="datefix4"
         style="width:min(880px,96vw);max-height:90vh;overflow:auto;border-radius:16px;border:1px solid rgba(255,255,255,.12);background:rgba(23,23,28,.96);backdrop-filter:blur(6px);padding:18px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
           <h3 style="margin:0;font:600 20px/1.2 system-ui">
             Verify Race
-            <span style="font-size:11px;opacity:.5;margin-left:8px;">Build: datefix3</span>
+            <span style="font-size:11px;opacity:.5;margin-left:8px;">Build: datefix4</span>
           </h3>
           <button id="flv-close" style="border:none;background:transparent;color:inherit;font:600 16px;opacity:.8;cursor:pointer">✕</button>
         </div>
 
         <div id="flv-status" style="font:600 12px/1.2 system-ui;opacity:.85;margin-bottom:10px">Idle</div>
 
-        <div class="flv-row"
-          style="display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,0.7fr) minmax(0,0.9fr);gap:10px;margin-bottom:14px;">
+        <div style="display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,0.8fr);gap:10px;margin-bottom:8px;">
           <div>
             <label style="display:block">
               <div style="margin-bottom:6px;opacity:.9">Track <span style="color:#ffcc00">*</span></div>
@@ -292,13 +294,14 @@
             </label>
             <small id="flv-race-warn" style="display:none;color:#ffcc00">Server asked for a Race # — please add one.</small>
           </div>
-          <div>
-            <label style="display:block">
-              <div style="margin-bottom:6px;opacity:.9">Date</div>
-              <input id="flv-date" type="date"
-                style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.28);background:rgba(17,17,23,1);color:inherit"/>
-            </label>
-          </div>
+        </div>
+
+        <div style="margin-bottom:14px;">
+          <label style="display:block">
+            <div style="margin-bottom:6px;opacity:.9">Date <span style="color:#ffcc00">*</span></div>
+            <input id="flv-date" type="date"
+              style="width:100%;max-width:260px;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.28);background:rgba(17,17,23,1);color:inherit"/>
+          </label>
         </div>
 
         <div style="display:flex;gap:10px;align-items:center;margin:14px 0;flex-wrap:wrap">
@@ -347,15 +350,7 @@
     }
     try {
       console.info(
-        "[verify-modal] mounted build=datefix3 dateInput=",
-        dateInput && dateInput.type
-      );
-    } catch {
-      /* ignore logging failures */
-    }
-    try {
-      console.info(
-        "[verify-modal] mounted build=datefix2 dateInput=",
+        "[verify-modal] mounted build=datefix4 dateInput=",
         dateInput && dateInput.type
       );
     } catch {
@@ -421,9 +416,10 @@
           };
 
           const summaryPayload = resp.ok
-            ? data
+            ? { ...data, usedDate: date }
             : {
                 ...data,
+                usedDate: date,
                 error: data?.error || `Request failed (${resp.status})`,
                 details: data?.details || data?.message || null,
                 step: data?.step || "verify_race",
@@ -452,6 +448,7 @@
             statusEl.style.color = "#f87171";
           }
           renderSummary(summaryEl, {
+            usedDate: date,
             error: "Request failed",
             details: error?.message || String(error),
             step: "verify_race_fetch",
