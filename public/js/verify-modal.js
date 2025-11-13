@@ -100,12 +100,9 @@
     summaryEl.textContent = "";
 
     const lines = [];
-    if (data && data.usedDate) {
-      lines.push(`Using date: ${data.usedDate}`);
-    } else if (data && data.date) {
-      lines.push(`Using date: ${data.date}`);
-    } else if (data && data.requestedDate) {
-      lines.push(`Using date: ${data.requestedDate}`);
+    if (data && (data.date || data.usedDate)) {
+      const used = data.date || data.usedDate;
+      lines.push(`Using date: ${used}`);
     }
     if (data && data.query) lines.push(`Query: ${data.query}`);
     if (data && typeof data.summary === "string" && data.summary.trim()) {
@@ -268,46 +265,42 @@
       "position:fixed;inset:0;z-index:2147483646;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.5)";
 
     host.innerHTML = `
-      <div role="dialog" aria-modal="true" class="flv-card" data-build="datefix6"
+      <div role="dialog" aria-modal="true" class="flv-card" data-build="datefix-final"
         style="width:min(880px,96vw);max-height:90vh;overflow:auto;border-radius:16px;border:1px solid rgba(255,255,255,.12);background:rgba(23,23,28,.96);backdrop-filter:blur(6px);padding:18px;">
 
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
           <h3 style="margin:0;font:600 20px/1.2 system-ui">
             Verify Race
-            <span style="font-size:11px;opacity:.5;margin-left:8px;">Build: datefix6</span>
+            <span style="font-size:11px;opacity:.5;margin-left:8px;">Build: datefix-final</span>
           </h3>
           <button id="flv-close" style="border:none;background:transparent;color:inherit;font:600 16px;opacity:.8;cursor:pointer">✕</button>
         </div>
 
-        <!-- TRACK / RACE / DATE -->
-        <div class="flv-row"
-          style="display:grid;grid-template-columns:1fr 0.5fr 0.7fr;gap:12px;margin-bottom:16px;">
-
+        <div class="flv-row" style="display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,0.7fr);gap:10px;margin-bottom:10px;">
           <div>
             <label style="display:block">
               <div style="margin-bottom:6px;opacity:.9">Track <span style="color:#ffcc00">*</span></div>
               <input id="flv-track" type="text" placeholder="Track"
-                style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.25);background:#15151b;color:inherit"/>
+                style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.28);background:rgba(17,17,23,1);color:inherit"/>
             </label>
             <small id="flv-track-warn" style="display:none;color:#ffcc00">Track is required.</small>
           </div>
-
           <div>
             <label style="display:block">
               <div style="margin-bottom:6px;opacity:.9">Race # (optional)</div>
               <input id="flv-race" type="text" placeholder="e.g. 6"
-                style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.25);background:#15151b;color:inherit"/>
+                style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.28);background:rgba(17,17,23,1);color:inherit"/>
             </label>
             <small id="flv-race-warn" style="display:none;color:#ffcc00">Server asked for a Race # — please add one.</small>
           </div>
+        </div>
 
-          <div>
-            <label style="display:block">
-              <div style="margin-bottom:6px;opacity:.9">Date</div>
-              <input id="flv-date" type="date"
-                style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.25);background:#15151b;color:inherit"/>
-            </label>
-          </div>
+        <div class="flv-row" style="margin-bottom:14px;">
+          <label style="display:block;width:100%;">
+            <div style="margin-bottom:6px;opacity:.9">Date</div>
+            <input id="flv-date" type="date"
+              style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.28);background:rgba(17,17,23,1);color:inherit"/>
+          </label>
         </div>
 
         <div id="flv-status" style="font:600 12px/1.2 system-ui;opacity:.85;margin-bottom:10px">Idle</div>
@@ -358,7 +351,7 @@
     }
     try {
       console.info(
-        "[verify-modal] mounted build=datefix6 dateInput=",
+        "[verify-modal] mounted build=datefix-final dateInput=",
         dateInput && dateInput.type
       );
     } catch {
@@ -419,14 +412,12 @@
             query: data?.query || "",
           };
 
-          const usedDate = date || null;
-
           const summaryPayload = resp.ok
-            ? { ...data, usedDate, requestedDate: date }
+            ? { ...data, date, usedDate: date }
             : {
                 ...data,
-                usedDate,
-                requestedDate: date,
+                date,
+                usedDate: date,
                 error: data?.error || `Request failed (${resp.status})`,
                 details: data?.details || data?.message || null,
                 step: data?.step || "verify_race",
@@ -454,10 +445,9 @@
             statusEl.textContent = "Error";
             statusEl.style.color = "#f87171";
           }
-          const usedDate = date || null;
           renderSummary(summaryEl, {
-            usedDate,
-            requestedDate: date,
+            date,
+            usedDate: date,
             error: "Request failed",
             details: error?.message || String(error),
             step: "verify_race_fetch",
