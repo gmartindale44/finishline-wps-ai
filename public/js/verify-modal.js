@@ -98,6 +98,9 @@
     if (!summaryEl) return;
 
     const lines = [];
+    if (data && typeof data.summary === "string" && data.summary.trim()) {
+      lines.push(data.summary.trim());
+    }
     if (data && data.query) lines.push(`Query: ${data.query}`);
 
     if (data && data.outcome) {
@@ -121,8 +124,16 @@
       if (hitParts.length) lines.push(`Hits: ${hitParts.join(", ")}`);
     }
 
-    if (!lines.length && data && data.error) {
-      lines.push(`Server message: ${data.error}`);
+    if (data && data.error) {
+      lines.push(`Error: ${data.error}`);
+    }
+
+    if (data && data.details && data.details !== data.error) {
+      lines.push(`Details: ${data.details}`);
+    }
+
+    if (data && data.step) {
+      lines.push(`Step: ${data.step}`);
     }
 
     summaryEl.textContent = lines.join("\n") || "No summary returned.";
@@ -230,34 +241,43 @@
       "position:fixed;inset:0;z-index:2147483646;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.5)";
 
     host.innerHTML = `
-      <div role="dialog" aria-modal="true" class="flv-card" style="width:min(900px,96vw);max-height:90vh;overflow:auto;border-radius:18px;border:1px solid rgba(255,255,255,.12);background:rgba(23,23,28,.98);backdrop-filter:blur(8px);padding:20px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-          <h3 style="margin:0;font:600 22px/1.2 system-ui">Verify Race</h3>
-          <button id="flv-close" style="border:none;background:transparent;color:inherit;font:600 18px;opacity:.8;cursor:pointer">✕</button>
+      <div role="dialog" aria-modal="true" class="flv-card" data-build="datefix2"
+        style="width:min(880px,96vw);max-height:90vh;overflow:auto;border-radius:16px;border:1px solid rgba(255,255,255,.12);background:rgba(23,23,28,.96);backdrop-filter:blur(6px);padding:18px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+          <h3 style="margin:0;font:600 20px/1.2 system-ui">
+            Verify Race
+            <span style="font-size:11px;opacity:.5;margin-left:8px;">Build: datefix2</span>
+          </h3>
+          <button id="flv-close" style="border:none;background:transparent;color:inherit;font:600 16px;opacity:.8;cursor:pointer">✕</button>
         </div>
 
-        <div id="flv-status" style="font:600 13px/1.2 system-ui;opacity:.85;margin-bottom:12px">Idle</div>
+        <div id="flv-status" style="font:600 12px/1.2 system-ui;opacity:.85;margin-bottom:10px">Idle</div>
 
-        <div style="display:grid;gap:10px;margin-bottom:14px;grid-template-columns:1.4fr 0.6fr 0.9fr;">
-          <label style="display:block">
-            <div style="margin-bottom:6px;opacity:.9">Track <span style="color:#ffcc00">*</span></div>
-            <input id="flv-track" type="text" placeholder="Track"
-              style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:rgba(0,0,0,.15);color:inherit"/>
+        <div class="flv-row"
+          style="display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,0.6fr) minmax(0,0.9fr);gap:10px;margin-bottom:14px;">
+          <div>
+            <label style="display:block">
+              <div style="margin-bottom:6px;opacity:.9">Track <span style="color:#ffcc00">*</span></div>
+              <input id="flv-track" type="text" placeholder="Track"
+                style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:rgba(17,17,23,1);color:inherit"/>
+            </label>
             <small id="flv-track-warn" style="display:none;color:#ffcc00">Track is required.</small>
-          </label>
-
-          <label style="display:block">
-            <div style="margin-bottom:6px;opacity:.9">Race # (optional)</div>
-            <input id="flv-race" type="text" placeholder="e.g. 6"
-              style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:rgba(0,0,0,.15);color:inherit"/>
+          </div>
+          <div>
+            <label style="display:block">
+              <div style="margin-bottom:6px;opacity:.9">Race # (optional)</div>
+              <input id="flv-race" type="text" placeholder="e.g. 6"
+                style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:rgba(17,17,23,1);color:inherit"/>
+            </label>
             <small id="flv-race-warn" style="display:none;color:#ffcc00">Server asked for a Race # — please add one.</small>
-          </label>
-
-          <label style="display:block">
-            <div style="margin-bottom:6px;opacity:.9">Date</div>
-            <input id="flv-date" type="date"
-              style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:rgba(0,0,0,.15);color:inherit"/>
-          </label>
+          </div>
+          <div>
+            <label style="display:block">
+              <div style="margin-bottom:6px;opacity:.9">Date</div>
+              <input id="flv-date" type="date"
+                style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:rgba(17,17,23,1);color:inherit"/>
+            </label>
+          </div>
         </div>
 
         <div style="display:flex;gap:10px;align-items:center;margin:14px 0;flex-wrap:wrap">
@@ -303,13 +323,21 @@
     if (dateInput && !dateInput.value) {
       dateInput.value = todayISO();
     }
+    try {
+      console.info(
+        "[verify-modal] mounted build=datefix2 dateInput=",
+        dateInput && dateInput.type
+      );
+    } catch {
+      /* ignore logging failures */
+    }
 
     if (runBtn) {
       const defaultLabel = runBtn.textContent || "Verify Now";
       runBtn.addEventListener("click", async () => {
         const track = (trackInput?.value || "").trim();
         const raceNo = (raceInput?.value || "").trim();
-        let date = (dateInput?.value || "").trim();
+        let date = ((dateInput && dateInput.value) || "").trim() || todayISO();
         if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
           date = todayISO();
           if (dateInput) dateInput.value = date;
@@ -386,6 +414,8 @@
           }
           renderSummary(summaryEl, {
             error: error?.message || "Request failed.",
+            details: error && error.stack ? error.stack.split("\n")[0] : undefined,
+            step: "network_request",
           });
           if (window.__flVerifyDebug) {
             console.error("[Verify Modal] request failed", error);
