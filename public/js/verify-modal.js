@@ -98,6 +98,9 @@
     if (!summaryEl) return;
 
     const lines = [];
+    if (data && typeof data.summary === "string" && data.summary.trim()) {
+      lines.push(data.summary.trim());
+    }
     if (data && data.query) lines.push(`Query: ${data.query}`);
     if (data && typeof data.summary === "string" && data.summary.trim()) {
       lines.push(data.summary.trim());
@@ -345,6 +348,14 @@
     try {
       console.info(
         "[verify-modal] mounted build=datefix3 dateInput=",
+        dateInput && dateInput.type
+      );
+    } catch {
+      /* ignore logging failures */
+    }
+    try {
+      console.info(
+        "[verify-modal] mounted build=datefix2 dateInput=",
         dateInput && dateInput.type
       );
     } catch {
