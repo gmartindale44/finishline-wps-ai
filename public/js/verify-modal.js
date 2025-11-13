@@ -102,6 +102,10 @@
     const lines = [];
     if (data && data.usedDate) {
       lines.push(`Using date: ${data.usedDate}`);
+    } else if (data && data.date) {
+      lines.push(`Using date: ${data.date}`);
+    } else if (data && data.requestedDate) {
+      lines.push(`Using date: ${data.requestedDate}`);
     }
     if (data && data.query) lines.push(`Query: ${data.query}`);
     if (data && typeof data.summary === "string" && data.summary.trim()) {
@@ -276,7 +280,8 @@
 
         <div id="flv-status" style="font:600 12px/1.2 system-ui;opacity:.85;margin-bottom:10px">Idle</div>
 
-        <div style="display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,0.8fr);gap:10px;margin-bottom:8px;">
+        <div class="flv-row"
+          style="display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,0.6fr) minmax(0,0.9fr);gap:10px;margin-bottom:14px;">
           <div>
             <label style="display:block">
               <div style="margin-bottom:6px;opacity:.9">Track <span style="color:#ffcc00">*</span></div>
@@ -293,14 +298,13 @@
             </label>
             <small id="flv-race-warn" style="display:none;color:#ffcc00">Server asked for a Race # — please add one.</small>
           </div>
-        </div>
-
-        <div style="margin-bottom:14px;">
-          <label style="display:block">
-            <div style="margin-bottom:6px;opacity:.9">Date <span style="color:#ffcc00">*</span></div>
-            <input id="flv-date" type="text" placeholder="YYYY-MM-DD"
-              style="width:100%;max-width:260px;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.28);background:rgba(17,17,23,1);color:inherit"/>
-          </label>
+          <div>
+            <label style="display:block">
+              <div style="margin-bottom:6px;opacity:.9">Date</div>
+              <input id="flv-date" type="date"
+                style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.28);background:rgba(17,17,23,1);color:inherit"/>
+            </label>
+          </div>
         </div>
 
         <div style="display:flex;gap:10px;align-items:center;margin:14px 0;flex-wrap:wrap">
@@ -361,7 +365,7 @@
       runBtn.addEventListener("click", async () => {
         const track = (trackInput?.value || "").trim();
         const raceNo = (raceInput?.value || "").trim();
-        const date = (dateInput?.value || "").trim();
+        const date = (dateInput && dateInput.value ? dateInput.value : todayISO());
 
         if (warnTrack) warnTrack.style.display = track ? "none" : "";
         if (!track) {
@@ -413,10 +417,11 @@
           const usedDate = date || null;
 
           const summaryPayload = resp.ok
-            ? { ...data, usedDate }
+            ? { ...data, usedDate, requestedDate: date }
             : {
                 ...data,
                 usedDate,
+                requestedDate: date,
                 error: data?.error || `Request failed (${resp.status})`,
                 details: data?.details || data?.message || null,
                 step: data?.step || "verify_race",
@@ -447,6 +452,7 @@
           const usedDate = date || null;
           renderSummary(summaryEl, {
             usedDate,
+            requestedDate: date,
             error: "Request failed",
             details: error?.message || String(error),
             step: "verify_race_fetch",
