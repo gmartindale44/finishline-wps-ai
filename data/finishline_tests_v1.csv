@@ -65,3 +65,22 @@ Test_ID,Track,Race_No,Surface,Distance,Confidence,Top_3_Mass,AI_Picks,Strategy,R
 70,Lone Star,3,Dirt,?,,,WIN: ? | PLACE: ? | SHOW: ?,ATB (light),Pending,,Placeholder; backfill from Redis,Test
 71,Lone Star,4,Dirt,?,,,WIN: ? | PLACE: ? | SHOW: ?,ATB (light),Pending,,Placeholder; backfill from Redis,Test
 72,Lone Star,6,Dirt,?,,,WIN: ? | PLACE: ? | SHOW: ?,ATB (light),Pending,,Placeholder; backfill from Redis,Test
+race_id,track,race_num,bet_type,confidence,top3_mass,gap_1_2,gap_2_3,ai_top_pick,ai_place_pick,ai_show_pick,strategy_flag,wager_results,payout_win,payout_place,payout_show,exotics_hit,profit_loss
+CT-R4-1108,Charles Town,4,WPS,65,62,2.6,2.6,"Don't Blink","Collegeville Queen","Miss Shack Attack",ATB,"Win hit",4.00,3.00,3.80,No,+1.80
+LA-R1-1108,Los Alamitos QH,1,WPS,67,54,1.9,1.9,"Navy Man","Nabers","The Key Is Unity",ATB,Lost,0.00,0.00,0.00,No,-12.00
+DD-R8-1108,Delta Downs,8,WPS,68,43,1.1,1.1,"Zaghurta","Sophie's Cruiser","Legal Empress",ATB,Lost,0.00,0.00,0.00,No,-3.00
+LS-R6-1108,Lone Star,6,WPS,68,43,1.1,1.1,"Mr Coyote Five O","Chicks With Beers","Gin Spirit",ATB,"Place/Show Hit",0.00,3.20,2.40,No,-0.40
+LS-R7-1108,Lone Star,7,WPS,68,43,1.1,1.1,"Baileys","Tela Leaving You","Shes Fancy Prize",ATB,"Win hit",6.80,3.60,2.60,No,+7.00
+WM-R9-1108,Woodbine Mohawk,9,Trifecta,66,54,1.9,1.9,"Tito N Cheddar","Winchester Phoenix","Wills Watchin",EXA/TRY,Lost,0.00,0.00,0.00,No,-6.00
+CT-R8-1108,Charles Town,8,WPS,65,62,2.7,2.7,"Mi Kataleya","Tolly's Bourbon","Last Glance",ATB,"Win hit",4.00,2.40,2.20,No,+2.60
+Haw-R9-1108,Hawthorne Harness,9,WPS,65,62,2.7,2.7,"Mighty Engine","Fox Valley Onassis","Laser Focused",ATB,"Win hit",35.20,3.80,2.40,No,+53.10
+LAQH-R7-1108,Los Al QH,7,WPS,67,54,1.9,1.9,"Hezaspanishdancer","Bravery","Woman In Gold",ATB,Lost,0.00,0.00,0.00,No,-9.00
+AUSW-R4-1108,AUS Warren,4,WPS,68,43,1.1,1.1,"Rouge Moulin","Brief Statement","Stratified",ATB,Lost,0.00,0.00,0.00,No,-8.25
+LS-R12-1108,Lone Star,12,WPS,68,43,1.1,1.1,"Poppin Off","Maxis Round Up","Di Fdd Dancer",ATB,Lost,0.00,0.00,0.00,No,-12.00
+AUS-H2-R5-1108,Australia Harness 2,5,WPS,68,43,1.1,1.1,"Write About Angus","Willroby","Tarifa Girl",ATB,Lost,0.00,0.00,0.00,No,-6.00
+CD-R9-1109,Churchill Downs,9,WPS,67,54,1.9,1.9,"Tom Cat Tuesday","Incursion","Master Mule",ATB,"Win hit",10.86,2.92,2.80,No,+11.56
+MNR-R7-1109,Mountaineer,7,WPS,64,72,4.0,4.0,"Skylar's Brother","Blanton","Wow Bubble","SKIP (bankroll save)","Win hit",4.60,3.00,0.00,No,+3.60
+PRX-R5-1110,Parx Racing,5,WPS,68,48,1.4,1.4,"Phone Eats First","Love Like Crazy","Lady Arwen",ATB,"Win hit",6.00,3.80,2.80,No,+6.60
+PRX-R7-1110,Parx Racing,7,WPS,63,72,4.0,4.0,"Got Game","Repaynt","Starship Legend",SKIP,"Win hit",2.40,2.10,2.10,No,+0.60
+Laurel-R9-1110,Laurel Simulcast,9,WPS,67,48,1.4,1.4,"Laugh Forever","Jacta d'Anafer","Mittag",ATB,Lost,0.00,0.00,0.00,No,+1.40
+DD-R4-1111,Dover Downs,4,WPS,67,48,1.4,1.4,"Sujin Hanover","Big Hunk a Money","Alwaysinafrenzy G",ATB,Lost,0.00,0.00,0.00,No,-6.00

@@ -591,14 +591,14 @@ async function handleOcrTextAndPopulate(ocrText) {
     }
 
     async function postImageB64(base64, filename, mimetype) {
-      const payload = {
+          const payload = {
         b64: base64, // Backend expects "b64" key
       };
       console.log(LOG_PREFIX, "POST", API_ENDPOINT, { size: base64?.length, filename, mimetype });
       const res = await fetch(API_ENDPOINT, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
       });
       let json = null;
       try { json = await res.json(); } catch (e) {}
@@ -616,8 +616,8 @@ async function handleOcrTextAndPopulate(ocrText) {
         console.log(LOG_PREFIX, "onFilesSelected fired", { count: files.length });
         if (!files.length) {
           setStatus("No file selected.");
-          return;
-        }
+              return;
+            }
         const f = files[0];
         console.log(LOG_PREFIX, "file", { name: f.name, type: f.type, size: f.size });
 
@@ -670,10 +670,10 @@ async function handleOcrTextAndPopulate(ocrText) {
         const input = el("photo-input-main");
         if (!input) {
           toast("Internal error: file input not found.");
-          return;
-        }
+              return;
+            }
         input.click();
-      } catch (e) {
+          } catch (e) {
         console.error(LOG_PREFIX, "click error", e);
         toast(`Open dialog error: ${e?.message || e}`);
       }
@@ -713,7 +713,7 @@ async function handleOcrTextAndPopulate(ocrText) {
 
     if (document.readyState === "loading") {
       document.addEventListener("DOMContentLoaded", initPhotoPicker, { once: true });
-    } else {
+          } else {
       initPhotoPicker();
     }
 

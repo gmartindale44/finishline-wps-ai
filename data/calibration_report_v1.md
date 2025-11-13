@@ -1,7 +1,7 @@
 # FinishLine Calibration Report
 
 - Version: v1
-- Generated: 2025-11-12T08:15:37.834Z
+- Generated: 2025-11-13T01:09:46.504Z
 
 ## Bin Metrics
 | Bin | Samples | Win Rate | Top-3 Rate | Avg ROI (ATB) | Exotic Hit Rate |
@@ -13,7 +13,7 @@
 | 70-74 | 16 | 68.8% | 81.3% | 58.5% | 70.0% |
 | 75-79 | 2 | 100.0% | 100.0% | 58.0% | — |
 | 80-84 | 0 | 0.0% | 0.0% | — | — |
-| 85+ | 0 | 0.0% | 0.0% | — | — |
+| 85+ | 18 | 0.0% | 0.0% | 0.0% | — |
 
 ## Stake Curve
 - Confidence ≥ 50% → Stake x1

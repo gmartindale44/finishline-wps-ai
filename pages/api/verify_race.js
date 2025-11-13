@@ -57,9 +57,9 @@ async function cseViaBridge(req, query) {
 }
 
 const preferHosts = [
-  'equibase.com',
-  'entries.horseracingnation.com',
   'horseracingnation.com',
+  'entries.horseracingnation.com',
+  'equibase.com',
 ];
 
 function pickBest(items) {
