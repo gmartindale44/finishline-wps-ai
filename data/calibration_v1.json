@@ -1,13 +1,13 @@
 {
   "version": "v1",
-  "generated_at": "2025-11-12T08:15:37.834Z",
+  "generated_at": "2025-11-13T02:08:35.545Z",
   "bin_metrics": [
     {
       "bin": "50-54",
-      "count": 0,
+      "count": 2,
       "win_rate": 0,
       "top3_rate": 0,
-      "avg_roi_atb2": null,
+      "avg_roi_atb2": 7.6,
       "exotic_hit_rate": null
     },
     {
@@ -20,34 +20,34 @@
     },
     {
       "bin": "60-64",
-      "count": 1,
-      "win_rate": 0,
-      "top3_rate": 0,
-      "avg_roi_atb2": -100,
-      "exotic_hit_rate": 0
-    },
-    {
-      "bin": "65-69",
-      "count": 39,
-      "win_rate": 0.333,
-      "top3_rate": 0.718,
-      "avg_roi_atb2": 31.3,
-      "exotic_hit_rate": 0.529
-    },
-    {
-      "bin": "70-74",
-      "count": 16,
-      "win_rate": 0.688,
-      "top3_rate": 0.813,
-      "avg_roi_atb2": 58.53,
-      "exotic_hit_rate": 0.7
-    },
-    {
-      "bin": "75-79",
       "count": 2,
       "win_rate": 1,
       "top3_rate": 1,
-      "avg_roi_atb2": 58,
+      "avg_roi_atb2": 2.1,
+      "exotic_hit_rate": null
+    },
+    {
+      "bin": "65-69",
+      "count": 16,
+      "win_rate": 0.375,
+      "top3_rate": 0.438,
+      "avg_roi_atb2": 1.34,
+      "exotic_hit_rate": 0
+    },
+    {
+      "bin": "70-74",
+      "count": 0,
+      "win_rate": 0,
+      "top3_rate": 0,
+      "avg_roi_atb2": null,
+      "exotic_hit_rate": null
+    },
+    {
+      "bin": "75-79",
+      "count": 0,
+      "win_rate": 0,
+      "top3_rate": 0,
+      "avg_roi_atb2": null,
       "exotic_hit_rate": null
     },
     {

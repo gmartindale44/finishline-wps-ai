@@ -1,0 +1,26 @@
+{
+  "version": "v1",
+  "generated_at": "2025-11-13T02:08:35.547Z",
+  "by_strategy_flag": {
+    "ATB": {
+      "count": 15,
+      "avg_roi": 1.83
+    },
+    "EXA/TRY": {
+      "count": 1,
+      "avg_roi": -6
+    },
+    "SKIP (bankroll save)": {
+      "count": 1,
+      "avg_roi": 3.6
+    },
+    "SKIP": {
+      "count": 1,
+      "avg_roi": 0.6
+    },
+    "HISTORICAL": {
+      "count": 2,
+      "avg_roi": 7.6
+    }
+  }
+}

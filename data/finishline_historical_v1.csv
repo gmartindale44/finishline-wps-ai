@@ -1,0 +1,3 @@
+race_id,track,race_num,bet_type,confidence,top3_mass,gap_1_2,gap_2_3,ai_top_pick,ai_place_pick,ai_show_pick,strategy_flag,wager_results,payout_win,payout_place,payout_show,exotics_hit,profit_loss
+GULFSTREAMPARK-R3-20241012,Gulfstream Park,3,WPS,0,0,0,0,Fast Break,Silver Jet,Evening Star,HISTORICAL,HISTORICAL,8.80,4.20,3.10,Unknown,10.10
+BELMONTPARK-R5-20241018,Belmont Park,5,WPS,0,0,0,0,Sunrise Meadow,Coastal Runner,Night Owl,HISTORICAL,HISTORICAL,5.40,3.10,2.60,Unknown,5.10

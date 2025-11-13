@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2025-11-13T01:09:46.504Z",
+  "generated_at": "2025-11-10T08:16:24.857Z",
   "bin_metrics": [
     {
       "bin": "50-54",
@@ -60,10 +60,10 @@
     },
     {
       "bin": "85+",
-      "count": 18,
+      "count": 0,
       "win_rate": 0,
       "top3_rate": 0,
-      "avg_roi_atb2": 0,
+      "avg_roi_atb2": null,
       "exotic_hit_rate": null
     }
   ],

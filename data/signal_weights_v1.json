@@ -1,0 +1,19 @@
+{
+  "version": "v1",
+  "generated_at": "2025-11-13T02:08:35.547Z",
+  "feature_order": [
+    "confidence",
+    "top3_mass",
+    "gap_1_2",
+    "gap_2_3"
+  ],
+  "intercept": 0,
+  "weights": [
+    0.5,
+    0.3,
+    0.1,
+    0.1
+  ],
+  "fallback": true,
+  "sample_size": 20
+}
