@@ -268,7 +268,7 @@
       <div role="dialog" aria-modal="true" class="flv-card" data-build="datefix-final"
         style="width:min(880px,96vw);max-height:90vh;overflow:auto;border-radius:16px;border:1px solid rgba(255,255,255,.12);background:rgba(23,23,28,.96);backdrop-filter:blur(6px);padding:18px;">
 
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
           <h3 style="margin:0;font:600 20px/1.2 system-ui">
             Verify Race
             <span style="font-size:11px;opacity:.5;margin-left:8px;">Build: datefix-final</span>
@@ -276,7 +276,9 @@
           <button id="flv-close" style="border:none;background:transparent;color:inherit;font:600 16px;opacity:.8;cursor:pointer">✕</button>
         </div>
 
-        <div class="flv-row" style="display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,0.7fr);gap:10px;margin-bottom:10px;">
+        <!-- TRACK + RACE ROW -->
+        <div class="flv-row"
+          style="display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,0.7fr);gap:10px;margin-bottom:10px;">
           <div>
             <label style="display:block">
               <div style="margin-bottom:6px;opacity:.9">Track <span style="color:#ffcc00">*</span></div>
@@ -295,6 +297,7 @@
           </div>
         </div>
 
+        <!-- DATE ROW (FULL WIDTH) -->
         <div class="flv-row" style="margin-bottom:14px;">
           <label style="display:block;width:100%;">
             <div style="margin-bottom:6px;opacity:.9">Date</div>
@@ -362,8 +365,9 @@
       const defaultLabel = runBtn.textContent || "Verify Now";
       runBtn.addEventListener("click", async () => {
         const track = (trackInput?.value || "").trim();
-        const raceNo = (raceInput?.value || "").trim();
-        const date = dateInput?.value || todayISO();
+        const raceNo = (raceInput && raceInput.value ? raceInput.value.trim() : "") || null;
+        const rawDate = dateInput && dateInput.value ? dateInput.value : null;
+        const date = rawDate || todayISO();
 
         if (warnTrack) warnTrack.style.display = track ? "none" : "";
         if (!track) {
@@ -413,11 +417,10 @@
           };
 
           const summaryPayload = resp.ok
-            ? { ...data, date, usedDate: date }
+            ? { ...data, date }
             : {
                 ...data,
                 date,
-                usedDate: date,
                 error: data?.error || `Request failed (${resp.status})`,
                 details: data?.details || data?.message || null,
                 step: data?.step || "verify_race",
@@ -447,7 +450,6 @@
           }
           renderSummary(summaryEl, {
             date,
-            usedDate: date,
             error: "Request failed",
             details: error?.message || String(error),
             step: "verify_race_fetch",
