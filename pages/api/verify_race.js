@@ -92,7 +92,7 @@ export default async function handler(req, res) {
   try {
     if (req.method !== 'POST') {
       res.setHeader('Allow', 'POST');
-      return res.status(405).json({ error: 'Method Not Allowed' });
+      return res.status(405).json({ ok: false, error: 'Method Not Allowed' });
     }
 
     // Be tolerant of either req.body object or JSON string
@@ -141,7 +141,9 @@ export default async function handler(req, res) {
         results = items;
         if (items.length) break;
       } catch (error) {
-        lastError = error;
+        const errObj = error instanceof Error ? error : new Error(String(error));
+        if (!errObj.step) errObj.step = 'cse_lookup';
+        lastError = errObj;
       }
     }
 
@@ -296,6 +298,14 @@ export default async function handler(req, res) {
       summary: summarySafe,
     });
   } catch (err) {
-    return res.status(500).json({ error: 'verify_race failed', details: err?.message || String(err) });
+    const details = err?.message || String(err);
+    const payload = {
+      ok: false,
+      error: 'verify_race failed',
+      details,
+      step: err?.step || 'verify_race',
+    };
+    console.error('[verify_race] error', payload);
+    return res.status(500).json(payload);
   }
 }
