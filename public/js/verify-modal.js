@@ -97,16 +97,15 @@
   function renderSummary(summaryEl, data) {
     if (!summaryEl) return;
 
+    summaryEl.textContent = "";
+
     const lines = [];
-    if (data && typeof data.summary === "string" && data.summary.trim()) {
-      lines.push(data.summary.trim());
+    if (data && data.usedDate) {
+      lines.push(`Using date: ${data.usedDate}`);
     }
     if (data && data.query) lines.push(`Query: ${data.query}`);
     if (data && typeof data.summary === "string" && data.summary.trim()) {
       lines.push(data.summary.trim());
-    }
-    if (data && data.usedDate) {
-      lines.push(`Using date: ${data.usedDate}`);
     }
 
     if (data && data.outcome) {
@@ -265,12 +264,12 @@
       "position:fixed;inset:0;z-index:2147483646;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.5)";
 
     host.innerHTML = `
-      <div role="dialog" aria-modal="true" class="flv-card" data-build="datefix4"
+      <div role="dialog" aria-modal="true" class="flv-card" data-build="datefix5"
         style="width:min(880px,96vw);max-height:90vh;overflow:auto;border-radius:16px;border:1px solid rgba(255,255,255,.12);background:rgba(23,23,28,.96);backdrop-filter:blur(6px);padding:18px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
           <h3 style="margin:0;font:600 20px/1.2 system-ui">
             Verify Race
-            <span style="font-size:11px;opacity:.5;margin-left:8px;">Build: datefix4</span>
+            <span style="font-size:11px;opacity:.5;margin-left:8px;">Build: datefix5</span>
           </h3>
           <button id="flv-close" style="border:none;background:transparent;color:inherit;font:600 16px;opacity:.8;cursor:pointer">✕</button>
         </div>
@@ -299,7 +298,7 @@
         <div style="margin-bottom:14px;">
           <label style="display:block">
             <div style="margin-bottom:6px;opacity:.9">Date <span style="color:#ffcc00">*</span></div>
-            <input id="flv-date" type="date"
+            <input id="flv-date" type="text" placeholder="YYYY-MM-DD"
               style="width:100%;max-width:260px;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.28);background:rgba(17,17,23,1);color:inherit"/>
           </label>
         </div>
@@ -350,7 +349,7 @@
     }
     try {
       console.info(
-        "[verify-modal] mounted build=datefix4 dateInput=",
+        "[verify-modal] mounted build=datefix5 dateInput=",
         dateInput && dateInput.type
       );
     } catch {
@@ -362,11 +361,7 @@
       runBtn.addEventListener("click", async () => {
         const track = (trackInput?.value || "").trim();
         const raceNo = (raceInput?.value || "").trim();
-        let date = ((dateInput && dateInput.value) || "").trim() || todayISO();
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-          date = todayISO();
-          if (dateInput) dateInput.value = date;
-        }
+        const date = (dateInput?.value || "").trim();
 
         if (warnTrack) warnTrack.style.display = track ? "none" : "";
         if (!track) {
@@ -415,11 +410,13 @@
             query: data?.query || "",
           };
 
+          const usedDate = date || null;
+
           const summaryPayload = resp.ok
-            ? { ...data, usedDate: date }
+            ? { ...data, usedDate }
             : {
                 ...data,
-                usedDate: date,
+                usedDate,
                 error: data?.error || `Request failed (${resp.status})`,
                 details: data?.details || data?.message || null,
                 step: data?.step || "verify_race",
@@ -447,8 +444,9 @@
             statusEl.textContent = "Error";
             statusEl.style.color = "#f87171";
           }
+          const usedDate = date || null;
           renderSummary(summaryEl, {
-            usedDate: date,
+            usedDate,
             error: "Request failed",
             details: error?.message || String(error),
             step: "verify_race_fetch",
