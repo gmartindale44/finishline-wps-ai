@@ -98,6 +98,9 @@
     if (!summaryEl) return;
 
     const lines = [];
+    if (data && typeof data.summary === "string" && data.summary.trim()) {
+      lines.push(data.summary.trim());
+    }
     if (data && data.query) lines.push(`Query: ${data.query}`);
     if (data && typeof data.summary === "string" && data.summary.trim()) {
       lines.push(data.summary.trim());
