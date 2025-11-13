@@ -98,10 +98,10 @@
     if (!summaryEl) return;
 
     const lines = [];
+    if (data && data.query) lines.push(`Query: ${data.query}`);
     if (data && typeof data.summary === "string" && data.summary.trim()) {
       lines.push(data.summary.trim());
     }
-    if (data && data.query) lines.push(`Query: ${data.query}`);
 
     if (data && data.outcome) {
       const parts = [];
@@ -136,7 +136,7 @@
       lines.push(`Step: ${data.step}`);
     }
 
-    summaryEl.textContent = lines.join("\n") || "No summary returned.";
+    summaryEl.textContent = lines.length ? lines.join("\n") : "No summary returned.";
   }
 
   function renderGreenZone(host, payload) {
@@ -149,11 +149,19 @@
     const suggestions = Array.isArray(payload?.suggestions)
       ? payload.suggestions
       : [];
+    const hasError = payload && payload.error;
 
     try {
       debugEl.textContent = JSON.stringify(payload ?? {}, null, 2);
     } catch {
       debugEl.textContent = String(payload ?? "");
+    }
+
+    if (hasError) {
+      msgEl.innerHTML =
+        "GreenZone service error. See debug JSON below.";
+      tableWrap.innerHTML = "";
+      return;
     }
 
     if (!suggestions.length) {
@@ -220,14 +228,24 @@
 
     try {
       const res = await fetch("/api/greenzone_today", { method: "GET" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        const status = res.status;
+        throw Object.assign(new Error(`HTTP ${status}`), { status });
+      }
       const json = await res.json().catch(() => ({}));
       renderGreenZone(host, json);
     } catch (error) {
       if (window.__flVerifyDebug) {
         console.error("[Verify Modal] GreenZone fetch failed", error);
       }
-      renderGreenZone(host, { suggestions: [] });
+      const errPayload = {
+        suggestions: [],
+        error: error?.message || "Request failed",
+      };
+      if (typeof error?.status !== "undefined") {
+        errPayload.status = error.status;
+      }
+      renderGreenZone(host, errPayload);
     }
   }
 
@@ -241,12 +259,12 @@
       "position:fixed;inset:0;z-index:2147483646;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.5)";
 
     host.innerHTML = `
-      <div role="dialog" aria-modal="true" class="flv-card" data-build="datefix2"
+      <div role="dialog" aria-modal="true" class="flv-card" data-build="datefix3"
         style="width:min(880px,96vw);max-height:90vh;overflow:auto;border-radius:16px;border:1px solid rgba(255,255,255,.12);background:rgba(23,23,28,.96);backdrop-filter:blur(6px);padding:18px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
           <h3 style="margin:0;font:600 20px/1.2 system-ui">
             Verify Race
-            <span style="font-size:11px;opacity:.5;margin-left:8px;">Build: datefix2</span>
+            <span style="font-size:11px;opacity:.5;margin-left:8px;">Build: datefix3</span>
           </h3>
           <button id="flv-close" style="border:none;background:transparent;color:inherit;font:600 16px;opacity:.8;cursor:pointer">✕</button>
         </div>
@@ -254,12 +272,12 @@
         <div id="flv-status" style="font:600 12px/1.2 system-ui;opacity:.85;margin-bottom:10px">Idle</div>
 
         <div class="flv-row"
-          style="display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,0.6fr) minmax(0,0.9fr);gap:10px;margin-bottom:14px;">
+          style="display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,0.7fr) minmax(0,0.9fr);gap:10px;margin-bottom:14px;">
           <div>
             <label style="display:block">
               <div style="margin-bottom:6px;opacity:.9">Track <span style="color:#ffcc00">*</span></div>
               <input id="flv-track" type="text" placeholder="Track"
-                style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:rgba(17,17,23,1);color:inherit"/>
+                style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.28);background:rgba(17,17,23,1);color:inherit"/>
             </label>
             <small id="flv-track-warn" style="display:none;color:#ffcc00">Track is required.</small>
           </div>
@@ -267,7 +285,7 @@
             <label style="display:block">
               <div style="margin-bottom:6px;opacity:.9">Race # (optional)</div>
               <input id="flv-race" type="text" placeholder="e.g. 6"
-                style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:rgba(17,17,23,1);color:inherit"/>
+                style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.28);background:rgba(17,17,23,1);color:inherit"/>
             </label>
             <small id="flv-race-warn" style="display:none;color:#ffcc00">Server asked for a Race # — please add one.</small>
           </div>
@@ -275,7 +293,7 @@
             <label style="display:block">
               <div style="margin-bottom:6px;opacity:.9">Date</div>
               <input id="flv-date" type="date"
-                style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:rgba(17,17,23,1);color:inherit"/>
+                style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.28);background:rgba(17,17,23,1);color:inherit"/>
             </label>
           </div>
         </div>
@@ -321,11 +339,12 @@
     const dateInput = qs("#flv-date", host);
 
     if (dateInput && !dateInput.value) {
-      dateInput.value = todayISO();
+      const today = todayISO();
+      dateInput.value = today;
     }
     try {
       console.info(
-        "[verify-modal] mounted build=datefix2 dateInput=",
+        "[verify-modal] mounted build=datefix3 dateInput=",
         dateInput && dateInput.type
       );
     } catch {
@@ -390,7 +409,16 @@
             query: data?.query || "",
           };
 
-          renderSummary(summaryEl, data);
+          const summaryPayload = resp.ok
+            ? data
+            : {
+                ...data,
+                error: data?.error || `Request failed (${resp.status})`,
+                details: data?.details || data?.message || null,
+                step: data?.step || "verify_race",
+              };
+
+          renderSummary(summaryEl, summaryPayload);
 
           const debugEl = qs("#flv-gz-json", host);
           if (debugEl) {
@@ -413,9 +441,9 @@
             statusEl.style.color = "#f87171";
           }
           renderSummary(summaryEl, {
-            error: error?.message || "Request failed.",
-            details: error && error.stack ? error.stack.split("\n")[0] : undefined,
-            step: "network_request",
+            error: "Request failed",
+            details: error?.message || String(error),
+            step: "verify_race_fetch",
           });
           if (window.__flVerifyDebug) {
             console.error("[Verify Modal] request failed", error);
