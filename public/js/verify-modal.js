@@ -646,10 +646,17 @@
       const saved = readCtx();
       const trackVal = initial.track || currentTrack() || saved.track || "";
       const raceVal = initial.raceNo || currentRaceNo() || saved.raceNo || "";
+      const incomingDate = initial.date;
       
-      if (trackInput) trackInput.value = trackVal;
-      if (raceInput) raceInput.value = raceVal;
-      if (dateInput && !dateInput.value) dateInput.value = todayISO();
+      if (trackInput && initial.track) trackInput.value = trackVal;
+      if (raceInput && initial.raceNo) raceInput.value = raceVal;
+      if (dateInput) {
+        if (incomingDate) {
+          dateInput.value = incomingDate;
+        } else if (!dateInput.value) {
+          dateInput.value = todayISO();
+        }
+      }
       if (warnTrack) warnTrack.style.display = trackVal ? "none" : "";
       if (warnRace) warnRace.style.display = "none";
       if (summaryBody) summaryBody.textContent = "No summary returned.";

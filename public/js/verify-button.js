@@ -1,69 +1,64 @@
+// public/js/verify-button.js
 (function () {
   if (typeof document === "undefined") return;
 
   console.log("[FL] verify-button.js loaded");
 
-  function handleClick(event) {
-    const btn = event.target.closest("[data-role='fl-open-verify']");
-    if (!btn) return;
-
-    console.log("[FL] Verify clicked");
-
-    if (typeof window.__FL_OPEN_VERIFY_MODAL__ === "function") {
-      // Collect initial values
-      const trackInput =
-        document.querySelector("[data-role='fl-track']") ||
-        document.querySelector("#track") ||
-        document.querySelector("input[placeholder*='track' i]") ||
-        document.querySelector("input[id*='track' i]") ||
-        document.querySelector("input[name*='track' i]");
-      const raceInput =
-        document.querySelector("[data-role='fl-race']") ||
-        document.querySelector("#raceNo") ||
-        document.querySelector("input[placeholder*='race' i]") ||
-        document.querySelector("input[id*='race' i]") ||
-        document.querySelector("input[name*='race' i]");
-
-      const initial = {
-        track: trackInput ? trackInput.value : "",
-        raceNo: raceInput ? raceInput.value : ""
-      };
-
-      window.__FL_OPEN_VERIFY_MODAL__(initial);
-    } else {
-      console.error("[FL] ERROR: __FL_OPEN_VERIFY_MODAL__ missing");
+  function todayISO() {
+    try {
+      return new Date().toISOString().slice(0, 10);
+    } catch {
+      return "";
     }
   }
 
-  document.addEventListener("click", handleClick);
+  function bindVerifyButton() {
+    const btn = document.getElementById("fl-verify-btn");
 
-  // Also create Verify button dynamically if toolbar exists
-  function mountVerifyButton() {
-    const pills = Array.from(document.querySelectorAll("button, a")).filter(b => {
-      const t = (b.textContent || "").trim().toLowerCase();
-      return t === "copy" || t === "pin" || t === "new race";
+    if (!btn) {
+      console.error("[FL] Verify button not found (#fl-verify-btn)");
+      return;
+    }
+
+    console.log("[FL] Verify button bound");
+
+    btn.addEventListener("click", function handleVerifyClick(event) {
+      event.preventDefault();
+      console.log("[FL] Verify clicked");
+
+      const trackInput =
+        document.querySelector("[data-role='fl-track']") ||
+        document.getElementById("fl-track");
+
+      const raceInput =
+        document.querySelector("[data-role='fl-race']") ||
+        document.getElementById("fl-race-no");
+
+      const dateInput =
+        document.querySelector("[data-role='fl-date']") ||
+        document.getElementById("fl-race-date");
+
+      const track = trackInput && "value" in trackInput ? trackInput.value : "";
+      const raceNo =
+        raceInput && "value" in raceInput ? String(raceInput.value || "").trim() : "";
+      const rawDate =
+        dateInput && "value" in dateInput ? String(dateInput.value || "").trim() : "";
+      const date = rawDate || todayISO();
+
+      const initial = { track, raceNo, date };
+
+      if (typeof window !== "undefined" && typeof window.__FL_OPEN_VERIFY_MODAL__ === "function") {
+        console.log("[FL] Opening verify modal with:", initial);
+        window.__FL_OPEN_VERIFY_MODAL__(initial);
+      } else {
+        console.error("[FL] ERROR: __FL_OPEN_VERIFY_MODAL__ is not defined");
+      }
     });
-    if (!pills.length) return;
-    const toolbar = pills[0].parentElement;
-    if (!toolbar) return;
-    if (document.querySelector("#fl-verify-pill")) return;
-
-    const ref = pills.find(b => /new race/i.test((b.textContent || "").trim())) || pills[0];
-    if (!ref) return;
-
-    const pill = ref.cloneNode(true);
-    pill.id = "fl-verify-pill";
-    pill.textContent = "Verify";
-    pill.setAttribute("data-role", "fl-open-verify");
-    if (pill.tagName.toLowerCase() === "a") pill.removeAttribute("href");
-    toolbar.appendChild(pill);
   }
 
-  const mo = new MutationObserver(() => mountVerifyButton());
-  mo.observe(document.documentElement, { subtree: true, childList: true });
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", mountVerifyButton, { once: true });
+    document.addEventListener("DOMContentLoaded", bindVerifyButton);
   } else {
-    mountVerifyButton();
+    bindVerifyButton();
   }
 })();
