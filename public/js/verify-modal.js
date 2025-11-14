@@ -3,19 +3,19 @@
 (function () {
   "use strict";
 
+  if (typeof window === "undefined" || typeof document === "undefined") return;
+  if (window.__FL_VERIFY_MODAL__) return;
+  window.__FL_VERIFY_MODAL__ = true;
+  if (window.__flVerifyDebug === undefined) window.__flVerifyDebug = false;
+
+  const qs = (selector, root = document) => root.querySelector(selector);
+
   function todayISO() {
     const d = new Date();
     const m = String(d.getMonth() + 1).padStart(2, "0");
     const day = String(d.getDate()).padStart(2, "0");
     return `${d.getFullYear()}-${m}-${day}`;
   }
-
-  const qs = (selector, root) => {
-    if (typeof root === "undefined") {
-      root = typeof document !== "undefined" ? document : null;
-    }
-    return root ? root.querySelector(selector) : null;
-  };
 
   function readUIPredictions() {
     try {
@@ -257,10 +257,6 @@
   }
 
   function openVerifyModal(initial) {
-    if (typeof document === "undefined" || typeof window === "undefined") {
-      console.error("Verify modal requires DOM");
-      return;
-    }
     // Remove existing host if open
     const existing = document.getElementById("fl-verify-modal-host");
     if (existing) existing.remove();
@@ -601,7 +597,7 @@
           details: error?.message || String(error),
           step: "verify_race_fetch",
         });
-        if (typeof window !== "undefined" && window.__flVerifyDebug) {
+        if (window.__flVerifyDebug) {
           console.error("[Verify Modal] request failed", error);
         }
       } finally {
@@ -671,9 +667,6 @@
   }
 
   if (typeof window !== "undefined") {
-    if (window.__FL_VERIFY_MODAL__) return;
-    window.__FL_VERIFY_MODAL__ = true;
-    if (window.__flVerifyDebug === undefined) window.__flVerifyDebug = false;
     window.__FL_OPEN_VERIFY_MODAL__ = openVerifyModal;
   }
 })();
