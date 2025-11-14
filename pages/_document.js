@@ -11,7 +11,7 @@ export default class MyDocument extends Document {
           <NextScript />
           <Script
             id="fl-verify-loader-backstop"
-            src="/js/verify-loader.js?v=v2025-11-14-wirefix5"
+            src="/js/verify-loader.js?v=v2025-11-14-wirefix3"
             strategy="afterInteractive"
           />
         </body>

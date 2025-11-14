@@ -5,19 +5,19 @@
   
   console.log("[FL] verify-modal.js loaded");
 
+  if (typeof window === "undefined" || typeof document === "undefined") return;
+  if (window.__FL_VERIFY_MODAL__) return;
+  window.__FL_VERIFY_MODAL__ = true;
+  if (window.__flVerifyDebug === undefined) window.__flVerifyDebug = false;
+
+  const qs = (selector, root = document) => root.querySelector(selector);
+
   function todayISO() {
     const d = new Date();
     const m = String(d.getMonth() + 1).padStart(2, "0");
     const day = String(d.getDate()).padStart(2, "0");
     return `${d.getFullYear()}-${m}-${day}`;
   }
-
-  const qs = (selector, root) => {
-    if (typeof root === "undefined") {
-      root = typeof document !== "undefined" ? document : null;
-    }
-    return root ? root.querySelector(selector) : null;
-  };
 
   function readUIPredictions() {
     try {
@@ -259,10 +259,6 @@
   }
 
   function openVerifyModal(initial) {
-    if (typeof document === "undefined" || typeof window === "undefined") {
-      console.error("Verify modal requires DOM");
-      return;
-    }
     // Remove existing host if open
     const existing = document.getElementById("fl-verify-modal-host");
     if (existing) existing.remove();
@@ -603,7 +599,7 @@
           details: error?.message || String(error),
           step: "verify_race_fetch",
         });
-        if (typeof window !== "undefined" && window.__flVerifyDebug) {
+        if (window.__flVerifyDebug) {
           console.error("[Verify Modal] request failed", error);
         }
       } finally {
@@ -646,17 +642,10 @@
       const saved = readCtx();
       const trackVal = initial.track || currentTrack() || saved.track || "";
       const raceVal = initial.raceNo || currentRaceNo() || saved.raceNo || "";
-      const incomingDate = initial.date;
       
-      if (trackInput && initial.track) trackInput.value = trackVal;
-      if (raceInput && initial.raceNo) raceInput.value = raceVal;
-      if (dateInput) {
-        if (incomingDate) {
-          dateInput.value = incomingDate;
-        } else if (!dateInput.value) {
-          dateInput.value = todayISO();
-        }
-      }
+      if (trackInput) trackInput.value = trackVal;
+      if (raceInput) raceInput.value = raceVal;
+      if (dateInput && !dateInput.value) dateInput.value = todayISO();
       if (warnTrack) warnTrack.style.display = trackVal ? "none" : "";
       if (warnRace) warnRace.style.display = "none";
       if (summaryBody) summaryBody.textContent = "No summary returned.";
@@ -680,11 +669,7 @@
   }
 
   if (typeof window !== "undefined") {
-    if (window.__FL_VERIFY_MODAL__) return;
-    window.__FL_VERIFY_MODAL__ = true;
-    if (window.__flVerifyDebug === undefined) window.__flVerifyDebug = false;
     window.__FL_OPEN_VERIFY_MODAL__ = openVerifyModal;
-    console.log("[FL] verify-modal registered");
   }
 })();
 
