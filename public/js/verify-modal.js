@@ -10,13 +10,12 @@
 
   const qs = (selector, root = document) => root.querySelector(selector);
 
-  const todayISO = () => {
+  function todayISO() {
     const d = new Date();
-    const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${dd}`;
-  };
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${d.getFullYear()}-${m}-${day}`;
+  }
 
   function readUIPredictions() {
     try {
@@ -254,14 +253,15 @@
     }
   }
 
-  function buildModal() {
-    let host = qs("#fl-verify-modal-host");
-    if (host) return host;
+  function openVerifyModal(initial) {
+    // Remove existing host if open
+    const existing = document.getElementById("fl-verify-modal-host");
+    if (existing) existing.remove();
 
-    host = document.createElement("div");
+    const host = document.createElement("div");
     host.id = "fl-verify-modal-host";
     host.style.cssText =
-      "position:fixed;inset:0;z-index:2147483646;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.55);";
+      "position:fixed;inset:0;z-index:2147483646;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55);";
 
     const card = document.createElement("div");
     card.className = "flv-card";
@@ -483,25 +483,15 @@
     gzDetails.appendChild(gzWrap);
     card.appendChild(gzDetails);
 
-    document.body.appendChild(host);
     host.__flvLast = { top: null, query: "" };
 
-    qs("#flv-close", host)?.addEventListener("click", () => {
+    closeBtn.addEventListener("click", () => {
       host.style.display = "none";
     });
 
-    const runBtn = qs("#flv-run", host);
-    const statusEl = qs("#flv-status", host);
-    const summaryEl = qs("#flv-sum-body", host);
-    const warnTrack = qs("#flv-track-warn", host);
-    const warnRace = qs("#flv-race-warn", host);
-    const trackInput = qs("#flv-track", host);
-    const raceInput = qs("#flv-race", host);
-    const dateInput = qs("#flv-date", host);
-
+    // Wire event listeners
     if (dateInput && !dateInput.value) {
-      const today = todayISO();
-      dateInput.value = today;
+      dateInput.value = todayISO();
     }
     try {
       console.info(
@@ -512,116 +502,114 @@
       /* ignore logging failures */
     }
 
-    if (runBtn) {
-      const defaultLabel = runBtn.textContent || "Verify Now";
-      runBtn.addEventListener("click", async () => {
-        const track = (trackInput?.value || "").trim();
-        const raceNo = (raceInput && raceInput.value ? raceInput.value.trim() : "") || null;
-        const rawDate = dateInput && dateInput.value ? dateInput.value : null;
-        const date = rawDate || todayISO();
+    const defaultLabel = runBtn.textContent || "Verify Now";
+    runBtn.addEventListener("click", async () => {
+      const track = (trackInput?.value || "").trim();
+      const raceNo = (raceInput && raceInput.value ? raceInput.value.trim() : "") || null;
+      const rawDate = dateInput && dateInput.value ? dateInput.value : null;
+      const date = rawDate || todayISO();
 
-        if (warnTrack) warnTrack.style.display = track ? "none" : "";
-        if (!track) {
-          try {
-            trackInput?.focus();
-          } catch {
-            /* ignore */
-          }
-          return;
-        }
-        if (warnRace) warnRace.style.display = "none";
-
-        const requestInfo = { track, raceNo: raceNo || null, date };
-        if (statusEl) {
-          statusEl.textContent = "Running…";
-          statusEl.style.color = "#cbd5f5";
-        }
-        if (summaryEl) summaryEl.textContent = "Working…";
-        runBtn.disabled = true;
-        runBtn.textContent = "Running…";
-        host.__flvLast = { top: null, query: "" };
-
-        pushSnapshot(track, raceNo, readUIPredictions());
-
+      if (warnTrack) warnTrack.style.display = track ? "none" : "";
+      if (!track) {
         try {
-          const predicted = readUIPredictions();
-          const resp = await fetch("/api/verify_race", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              track,
-              date,
-              raceNo: raceNo || undefined,
-              predicted,
-            }),
-          });
-          const data = await resp.json().catch(() => ({}));
+          trackInput?.focus();
+        } catch {
+          /* ignore */
+        }
+        return;
+      }
+      if (warnRace) warnRace.style.display = "none";
 
-          if (statusEl) {
-            statusEl.textContent = resp.ok ? "OK" : `Error ${resp.status}`;
-            statusEl.style.color = resp.ok ? "#cbd5f5" : "#f87171";
-          }
+      const requestInfo = { track, raceNo: raceNo || null, date };
+      if (statusEl) {
+        statusEl.textContent = "Running…";
+        statusEl.style.color = "#cbd5f5";
+      }
+      if (summaryBody) summaryBody.textContent = "Working…";
+      runBtn.disabled = true;
+      runBtn.textContent = "Running…";
+      host.__flvLast = { top: null, query: "" };
 
-          host.__flvLast = {
-            top: data?.top || null,
-            query: data?.query || "",
-          };
+      pushSnapshot(track, raceNo, readUIPredictions());
 
-          const summaryPayload = resp.ok
-            ? { ...data, date }
-            : {
-                ...data,
-                date,
-                error: data?.error || `Request failed (${resp.status})`,
-                details: data?.details || data?.message || null,
-                step: data?.step || "verify_race",
-              };
-
-          renderSummary(summaryEl, summaryPayload);
-
-          const debugEl = qs("#flv-gz-json", host);
-          if (debugEl) {
-            try {
-              const existing = JSON.parse(debugEl.textContent || "[]");
-              const arr = Array.isArray(existing) ? existing : [];
-              arr.unshift({ request: requestInfo, response: data });
-              debugEl.textContent = JSON.stringify(arr.slice(0, 5), null, 2);
-            } catch {
-              debugEl.textContent = JSON.stringify(
-                [{ request: requestInfo, response: data }],
-                null,
-                2
-              );
-            }
-          }
-        } catch (error) {
-          if (statusEl) {
-            statusEl.textContent = "Error";
-            statusEl.style.color = "#f87171";
-          }
-          renderSummary(summaryEl, {
+      try {
+        const predicted = readUIPredictions();
+        const resp = await fetch("/api/verify_race", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            track,
             date,
-            error: "Request failed",
-            details: error?.message || String(error),
-            step: "verify_race_fetch",
-          });
-          if (window.__flVerifyDebug) {
-            console.error("[Verify Modal] request failed", error);
-          }
-        } finally {
-          runBtn.disabled = false;
-          runBtn.textContent = defaultLabel;
-          refreshGreenZone(host);
+            raceNo: raceNo || undefined,
+            predicted,
+          }),
+        });
+        const data = await resp.json().catch(() => ({}));
+
+        if (statusEl) {
+          statusEl.textContent = resp.ok ? "OK" : `Error ${resp.status}`;
+          statusEl.style.color = resp.ok ? "#cbd5f5" : "#f87171";
+        }
+
+        host.__flvLast = {
+          top: data?.top || null,
+          query: data?.query || "",
+        };
+
+        const summaryPayload = resp.ok
+          ? { ...data, date }
+          : {
+              ...data,
+              date,
+              error: data?.error || `Request failed (${resp.status})`,
+              details: data?.details || data?.message || null,
+              step: data?.step || "verify_race",
+            };
+
+        renderSummary(summaryBody, summaryPayload);
+
+        const debugEl = qs("#flv-gz-json", host);
+        if (debugEl) {
           try {
-            fetch("/api/verify_backfill", { method: "POST" }).catch(() => {});
+            const existing = JSON.parse(debugEl.textContent || "[]");
+            const arr = Array.isArray(existing) ? existing : [];
+            arr.unshift({ request: requestInfo, response: data });
+            debugEl.textContent = JSON.stringify(arr.slice(0, 5), null, 2);
           } catch {
-            /* ignore background errors */
+            debugEl.textContent = JSON.stringify(
+              [{ request: requestInfo, response: data }],
+              null,
+              2
+            );
           }
         }
-      });
-    }
+      } catch (error) {
+        if (statusEl) {
+          statusEl.textContent = "Error";
+          statusEl.style.color = "#f87171";
+        }
+        renderSummary(summaryBody, {
+          date,
+          error: "Request failed",
+          details: error?.message || String(error),
+          step: "verify_race_fetch",
+        });
+        if (window.__flVerifyDebug) {
+          console.error("[Verify Modal] request failed", error);
+        }
+      } finally {
+        runBtn.disabled = false;
+        runBtn.textContent = defaultLabel;
+        refreshGreenZone(host);
+        try {
+          fetch("/api/verify_backfill", { method: "POST" }).catch(() => {});
+        } catch {
+          /* ignore background errors */
+        }
+      }
+    });
 
-    qs("#flv-open-top", host)?.addEventListener("click", () => {
+    openTopBtn.addEventListener("click", () => {
       try {
         const url = host.__flvLast?.top?.link;
         if (url) window.open(url, "_blank", "noopener");
@@ -630,7 +618,7 @@
       }
     });
 
-    qs("#flv-open-google", host)?.addEventListener("click", () => {
+    openGoogleBtn.addEventListener("click", () => {
       try {
         const query = host.__flvLast?.query || "";
         if (query) {
@@ -644,52 +632,40 @@
 
     host.__flvRefreshGreenZone = () => refreshGreenZone(host);
 
-    return host;
-  }
-
-  function prefill(host, ctx) {
-    const saved = readCtx();
-    const trackVal = ctx?.track || currentTrack() || saved.track || "";
-    const raceVal = ctx?.raceNo || currentRaceNo() || saved.raceNo || "";
-
-    const trackInput = qs("#flv-track", host);
-    const raceInput = qs("#flv-race", host);
-    const dateInput = qs("#flv-date", host);
-    const statusEl = qs("#flv-status", host);
-    const summaryEl = qs("#flv-sum-body", host);
-    const warnTrack = qs("#flv-track-warn", host);
-    const warnRace = qs("#flv-race-warn", host);
-
-    if (trackInput) trackInput.value = trackVal || "";
-    if (raceInput) raceInput.value = raceVal || "";
-    if (dateInput && !dateInput.value) dateInput.value = todayISO();
-    if (statusEl) {
-      statusEl.textContent = "Idle";
-      statusEl.style.color = "#cbd5f5";
+    // Prefill with initial values
+    if (initial) {
+      const saved = readCtx();
+      const trackVal = initial.track || currentTrack() || saved.track || "";
+      const raceVal = initial.raceNo || currentRaceNo() || saved.raceNo || "";
+      
+      if (trackInput) trackInput.value = trackVal;
+      if (raceInput) raceInput.value = raceVal;
+      if (dateInput && !dateInput.value) dateInput.value = todayISO();
+      if (warnTrack) warnTrack.style.display = trackVal ? "none" : "";
+      if (warnRace) warnRace.style.display = "none";
+      if (summaryBody) summaryBody.textContent = "No summary returned.";
+      if (statusEl) {
+        statusEl.textContent = "Idle";
+        statusEl.style.color = "#cbd5f5";
+      }
+      pushSnapshot(trackVal || currentTrack(), raceVal || currentRaceNo(), readUIPredictions());
+      if (typeof host.__flvRefreshGreenZone === "function") {
+        host.__flvRefreshGreenZone();
+      }
     }
-    if (summaryEl) summaryEl.textContent = "No summary returned.";
-    if (warnTrack) warnTrack.style.display = trackVal ? "none" : "";
-    if (warnRace) warnRace.style.display = "none";
 
-    pushSnapshot(trackVal || currentTrack(), raceVal || currentRaceNo(), readUIPredictions());
-
-    if (typeof host.__flvRefreshGreenZone === "function") {
-      host.__flvRefreshGreenZone();
-    }
-  }
-
-  function open(ctx) {
-    const host = buildModal();
-    prefill(host, ctx);
-    host.style.display = "flex";
+    // Append to body and show modal
+    document.body.appendChild(host);
     try {
-      qs("#flv-track", host)?.focus();
+      trackInput?.focus();
     } catch {
       /* ignore */
     }
   }
 
-  window.__FL_OPEN_VERIFY_MODAL__ = open;
+  if (typeof window !== "undefined") {
+    window.__FL_OPEN_VERIFY_MODAL__ = openVerifyModal;
+  }
 })();
 
 
