@@ -2,6 +2,8 @@
 
 (function () {
   "use strict";
+  
+  console.log("[FL] verify-modal.js loaded");
 
   function todayISO() {
     const d = new Date();
@@ -675,6 +677,7 @@
     window.__FL_VERIFY_MODAL__ = true;
     if (window.__flVerifyDebug === undefined) window.__flVerifyDebug = false;
     window.__FL_OPEN_VERIFY_MODAL__ = openVerifyModal;
+    console.log("[FL] verify-modal registered");
   }
 })();
 
