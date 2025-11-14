@@ -5,6 +5,10 @@
   const log=(...a)=>{ try{ if(window.__flVerifyDebug) console.log("[FL:verify-btn]",...a);}catch{} };
   const qs=(s,r=document)=>r.querySelector(s);
   const qsa=(s,r=document)=>Array.from(r.querySelectorAll(s));
+  
+  try {
+    console.log("[FL] verify-button wired");
+  } catch {}
 
   function getTrackInput(){
     return qs("input[placeholder*='track' i]") || qs("input[id*='track' i]") || qs("input[name*='track' i]");
@@ -69,7 +73,14 @@
         return;
       }
       try{sessionStorage.setItem("fl:verify:ctx",JSON.stringify({track,raceNo:raceNo||undefined,ts:Date.now()}));}catch{}
-      if(window.__FL_OPEN_VERIFY_MODAL__) window.__FL_OPEN_VERIFY_MODAL__({ track, raceNo });
+      try {
+        console.log("[FL] Verify clicked");
+      } catch {}
+      if(typeof window !== "undefined" && typeof window.__FL_OPEN_VERIFY_MODAL__ === "function") {
+        window.__FL_OPEN_VERIFY_MODAL__({ track, raceNo });
+      } else {
+        console.error("[FL] Verify modal function not available");
+      }
     });
     toolbar.appendChild(pill);
     log("verify pill mounted");
