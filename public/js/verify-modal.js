@@ -2,6 +2,8 @@
 
 (function () {
   "use strict";
+  
+  console.log("[FL] verify-modal.js loaded");
 
   if (typeof window === "undefined" || typeof document === "undefined") return;
   if (window.__FL_VERIFY_MODAL__) return;
