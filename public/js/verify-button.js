@@ -1,5 +1,14 @@
-(function () {
-  if (typeof document === "undefined") return;
+;(function(){
+  if (typeof window==="undefined"||typeof document==="undefined") return;
+  if (window.__FL_VERIFY_BTN__) return; window.__FL_VERIFY_BTN__=true;
+  if (window.__flVerifyDebug===undefined) window.__flVerifyDebug=false;
+  const log=(...a)=>{ try{ if(window.__flVerifyDebug) console.log("[FL:verify-btn]",...a);}catch{} };
+  const qs=(s,r=document)=>r.querySelector(s);
+  const qsa=(s,r=document)=>Array.from(r.querySelectorAll(s));
+  
+  try {
+    console.log("[FL] verify-button wired");
+  } catch {}
 
   console.log("[FL] verify-button.js loaded");
 
@@ -51,11 +60,34 @@
     const ref = pills.find(b => /new race/i.test((b.textContent || "").trim())) || pills[0];
     if (!ref) return;
 
-    const pill = ref.cloneNode(true);
-    pill.id = "fl-verify-pill";
-    pill.textContent = "Verify";
-    pill.setAttribute("data-role", "fl-open-verify");
-    if (pill.tagName.toLowerCase() === "a") pill.removeAttribute("href");
+    const pill=ref.cloneNode(true);
+    pill.id="fl-verify-pill";
+    pill.textContent="Verify";
+    if(pill.tagName.toLowerCase()==="a") pill.removeAttribute("href");
+    pill.addEventListener("click", (e)=>{
+      e.preventDefault();
+      const trackEl=getTrackInput();
+      const raceEl=getRaceNoInput();
+      const track=(trackEl&&trackEl.value||"").trim();
+      const raceNo=(raceEl&&raceEl.value||"").trim();
+      if(!track){
+        const wrap=(trackEl&&(trackEl.closest("label, .field, .form-group, .input, .row")||trackEl.parentElement))||document.body;
+        let w=qs("#fl-track-warn",wrap);
+        if(!w){w=document.createElement("div");w.id="fl-track-warn";w.style.cssText="margin-top:6px;color:#ffcc00;font:600 12px/1.2 system-ui";wrap.appendChild(w);} 
+        w.textContent="Please enter/select a Track before verifying.";
+        try{trackEl&&trackEl.focus();}catch{}
+        return;
+      }
+      try{sessionStorage.setItem("fl:verify:ctx",JSON.stringify({track,raceNo:raceNo||undefined,ts:Date.now()}));}catch{}
+      try {
+        console.log("[FL] Verify clicked");
+      } catch {}
+      if(typeof window !== "undefined" && typeof window.__FL_OPEN_VERIFY_MODAL__ === "function") {
+        window.__FL_OPEN_VERIFY_MODAL__({ track, raceNo });
+      } else {
+        console.error("[FL] Verify modal function not available");
+      }
+    });
     toolbar.appendChild(pill);
   }
 
