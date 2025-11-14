@@ -1,14 +1,7 @@
 /* public/js/verify-modal.js — GreenZone Lab v2 */
 
-;(() => {
+(function () {
   "use strict";
-
-  if (typeof window === "undefined" || typeof document === "undefined") return;
-  if (window.__FL_VERIFY_MODAL__) return;
-  window.__FL_VERIFY_MODAL__ = true;
-  if (window.__flVerifyDebug === undefined) window.__flVerifyDebug = false;
-
-  const qs = (selector, root = document) => root.querySelector(selector);
 
   function todayISO() {
     const d = new Date();
@@ -17,8 +10,16 @@
     return `${d.getFullYear()}-${m}-${day}`;
   }
 
+  const qs = (selector, root) => {
+    if (typeof root === "undefined") {
+      root = typeof document !== "undefined" ? document : null;
+    }
+    return root ? root.querySelector(selector) : null;
+  };
+
   function readUIPredictions() {
     try {
+      if (typeof document === "undefined") return { win: "", place: "", show: "" };
       const scope =
         document.querySelector('[data-panel="predictions"], .predictions-panel') ||
         document;
@@ -47,6 +48,7 @@
 
   function readCtx() {
     try {
+      if (typeof sessionStorage === "undefined") return {};
       const raw = sessionStorage.getItem("fl:verify:ctx");
       if (raw) return JSON.parse(raw);
     } catch {
@@ -70,7 +72,7 @@
 
   function pushSnapshot(track, raceNo, picks) {
     try {
-      if (!track) return;
+      if (!track || typeof sessionStorage === "undefined") return;
       const r = raceNo || "nr";
       const dayKey = todayISO();
       const key = `fl:snap:${dayKey}:${track}:${r}`;
@@ -227,6 +229,7 @@
   }
 
   async function refreshGreenZone(host) {
+    if (typeof fetch === "undefined" || typeof document === "undefined") return;
     const msgEl = qs("#flv-gz-message", host);
     if (msgEl) msgEl.textContent = "Loading…";
 
@@ -239,7 +242,7 @@
       const json = await res.json().catch(() => ({}));
       renderGreenZone(host, json);
     } catch (error) {
-      if (window.__flVerifyDebug) {
+      if (typeof window !== "undefined" && window.__flVerifyDebug) {
         console.error("[Verify Modal] GreenZone fetch failed", error);
       }
       const errPayload = {
@@ -254,6 +257,10 @@
   }
 
   function openVerifyModal(initial) {
+    if (typeof document === "undefined" || typeof window === "undefined") {
+      console.error("Verify modal requires DOM");
+      return;
+    }
     // Remove existing host if open
     const existing = document.getElementById("fl-verify-modal-host");
     if (existing) existing.remove();
@@ -267,7 +274,7 @@
     card.className = "flv-card";
     card.setAttribute("role", "dialog");
     card.setAttribute("aria-modal", "true");
-    card.setAttribute("data-build", "datefix-final3");
+    card.setAttribute("data-build", "datefix-final4");
     card.style.cssText =
       "width:min(880px,96vw);max-height:90vh;overflow:auto;border-radius:16px;border:1px solid rgba(255,255,255,.12);background:rgba(23,23,28,.96);backdrop-filter:blur(6px);padding:18px;";
 
@@ -285,7 +292,7 @@
 
     const buildTag = document.createElement("span");
     buildTag.style.cssText = "font-size:11px;opacity:.5;margin-left:8px;";
-    buildTag.textContent = "Build: datefix-final3";
+    buildTag.textContent = "Build: datefix-final4";
     title.appendChild(buildTag);
 
     const closeBtn = document.createElement("button");
@@ -495,7 +502,7 @@
     }
     try {
       console.info(
-        "[verify-modal] mounted build=datefix-final3 dateInput=",
+        "[verify-modal] mounted build=datefix-final4 dateInput=",
         dateInput && dateInput.type
       );
     } catch {
@@ -594,7 +601,7 @@
           details: error?.message || String(error),
           step: "verify_race_fetch",
         });
-        if (window.__flVerifyDebug) {
+        if (typeof window !== "undefined" && window.__flVerifyDebug) {
           console.error("[Verify Modal] request failed", error);
         }
       } finally {
@@ -664,6 +671,9 @@
   }
 
   if (typeof window !== "undefined") {
+    if (window.__FL_VERIFY_MODAL__) return;
+    window.__FL_VERIFY_MODAL__ = true;
+    if (window.__flVerifyDebug === undefined) window.__flVerifyDebug = false;
     window.__FL_OPEN_VERIFY_MODAL__ = openVerifyModal;
   }
 })();
