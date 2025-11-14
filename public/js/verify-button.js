@@ -13,7 +13,8 @@
   }
 
   function bindVerifyButton() {
-    const btn = document.getElementById("fl-verify-btn");
+    const btn = document.getElementById("fl-verify-btn") ||
+      document.querySelector("[data-role='fl-open-verify']");
 
     if (!btn) {
       console.error("[FL] Verify button not found (#fl-verify-btn)");
@@ -28,7 +29,8 @@
 
       const trackInput =
         document.querySelector("[data-role='fl-track']") ||
-        document.getElementById("fl-track");
+        document.getElementById("fl-track") ||
+        document.getElementById("race-track");
 
       const raceInput =
         document.querySelector("[data-role='fl-race']") ||
@@ -38,7 +40,8 @@
         document.querySelector("[data-role='fl-date']") ||
         document.getElementById("fl-race-date");
 
-      const track = trackInput && "value" in trackInput ? trackInput.value : "";
+      const track =
+        trackInput && "value" in trackInput ? String(trackInput.value || "").trim() : "";
       const raceNo =
         raceInput && "value" in raceInput ? String(raceInput.value || "").trim() : "";
       const rawDate =
@@ -49,7 +52,11 @@
 
       if (typeof window !== "undefined" && typeof window.__FL_OPEN_VERIFY_MODAL__ === "function") {
         console.log("[FL] Opening verify modal with:", initial);
-        window.__FL_OPEN_VERIFY_MODAL__(initial);
+        try {
+          window.__FL_OPEN_VERIFY_MODAL__(initial);
+        } catch (err) {
+          console.error("[FL] Error calling __FL_OPEN_VERIFY_MODAL__", err);
+        }
       } else {
         console.error("[FL] ERROR: __FL_OPEN_VERIFY_MODAL__ is not defined");
       }

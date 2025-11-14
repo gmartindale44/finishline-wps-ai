@@ -33,11 +33,12 @@
   });
 
   const run = async () => {
-    try { await inject("/js/track-guard.js?v=v2025-11-10-21"); } catch {}
-    try { await inject("/js/verify-button.js?v=v2025-11-14-wirefix4"); } catch {}
-    try { await inject("/js/verify-modal.js?v=v2025-11-14-wirefix4"); } catch {}
-    try { await inject("/js/green-zone-panel.js?v=v2025-11-10-21"); } catch {}
-    try { await inject("/js/prediction-snapshots.js?v=v2025-11-10-21"); } catch {}
+    try { await inject("/js/track-guard.js?v=v2025-11-14-wirefix5"); } catch {}
+    try { await inject("/js/track-combobox.js?v=v2025-11-14-wirefix5"); } catch {}
+    try { await inject("/js/verify-button.js?v=v2025-11-14-wirefix5"); } catch {}
+    try { await inject("/js/verify-modal.js?v=v2025-11-14-wirefix5"); } catch {}
+    try { await inject("/js/green-zone-panel.js?v=v2025-11-14-wirefix5"); } catch {}
+    try { await inject("/js/prediction-snapshots.js?v=v2025-11-14-wirefix5"); } catch {}
   };
 
   if (document.readyState === "loading") {
