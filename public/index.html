@@ -26,14 +26,24 @@
     </div>
 
     <div class="grid grid-2">
+      <!-- Race Date -->
       <label class="field">
         <span>Race Date</span>
-        <input id="race-date" type="text" placeholder="mm/dd/yyyy" />
+        <input id="fl-race-date" type="date" />
       </label>
+
+      <!-- Track -->
       <label class="field">
         <span>Track</span>
-        <input id="race-track" type="text" placeholder="e.g., Churchill Downs" />
+        <input
+          id="race-track"
+          type="text"
+          placeholder="e.g., Churchill Downs"
+        />
+        <small>Type to search tracks...</small>
       </label>
+
+      <!-- Surface -->
       <label class="field">
         <span>Surface</span>
         <select id="race-surface">
@@ -42,9 +52,21 @@
           <option value="Synthetic">Synthetic</option>
         </select>
       </label>
+
+      <!-- Distance -->
       <label class="field">
         <span>Distance</span>
         <input id="race-distance" type="text" placeholder="e.g., 1 1/4 miles" />
+      </label>
+
+      <!-- Race # -->
+      <label class="field">
+        <span>Race #</span>
+        <input
+          id="fl-race-number"
+          type="text"
+          placeholder="e.g., 6"
+        />
       </label>
     </div>
 
@@ -141,6 +163,43 @@
         });
       }
     });
+
+    // Set default Race Date to today
+    (function () {
+      function todayISO() {
+        const d = new Date();
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}`;
+      }
+
+      document.addEventListener("DOMContentLoaded", function () {
+        var dateInput = document.getElementById("fl-race-date");
+        if (dateInput && !dateInput.value) {
+          dateInput.value = todayISO();
+        }
+      });
+    })();
+  </script>
+  <!-- Set default Race Date to today -->
+  <script>
+    (function () {
+      function todayISO() {
+        const d = new Date();
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        return `${y}-${m}-${day}`;
+      }
+
+      document.addEventListener("DOMContentLoaded", function () {
+        var dateInput = document.getElementById("fl-race-date");
+        if (dateInput && !dateInput.value) {
+          dateInput.value = todayISO();
+        }
+      });
+    })();
   </script>
   <script src="/js/verify-loader.js?v=v2025-11-15-verify-stable" defer></script>
 </body>
