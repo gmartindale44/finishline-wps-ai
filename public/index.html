@@ -28,11 +28,11 @@
     <div class="grid grid-2">
       <label class="field">
         <span>Race Date</span>
-        <input id="race-date" type="text" placeholder="mm/dd/yyyy" />
+        <input id="fl-race-date" data-role="fl-date" type="date" placeholder="YYYY-MM-DD" />
       </label>
       <label class="field">
         <span>Track</span>
-        <input id="race-track" type="text" placeholder="e.g., Churchill Downs" />
+        <input id="fl-track" data-role="fl-track" type="text" placeholder="e.g., Churchill Downs" />
       </label>
       <label class="field">
         <span>Surface</span>
@@ -45,6 +45,10 @@
       <label class="field">
         <span>Distance</span>
         <input id="race-distance" type="text" placeholder="e.g., 1 1/4 miles" />
+      </label>
+      <label class="field">
+        <span>Race #</span>
+        <input id="fl-race-no" data-role="fl-race" type="text" placeholder="e.g., 6" />
       </label>
     </div>
 
@@ -70,6 +74,7 @@
         <!-- Action buttons (keep your styling; just ensure these data hooks exist) -->
         <button type="button" data-fl-analyze id="analyze-btn" class="btn btn-secondary disabled" disabled>Analyze with AI</button>
         <button type="button" data-fl-predict id="predict-btn" class="btn btn-primary disabled" disabled>Predict W/P/S</button>
+        <button type="button" id="fl-verify-btn" data-role="fl-open-verify" class="btn btn-secondary">Verify</button>
         <button type="button" id="fl-new-race" class="btn btn-secondary">New Race</button>
         
         <div class="chips">
@@ -113,8 +118,15 @@
     // This can be set via Vercel environment variable FINISHLINE_SHOW_CAL_STATUS
     window.FINISHLINE_SHOW_CAL_STATUS = false; // Default off - set to true in Vercel preview env if needed
     
-    // Distance tooltip helper
+    // Set default Race Date to today
     window.addEventListener('DOMContentLoaded', () => {
+      const dateInput = document.getElementById('fl-race-date');
+      if (dateInput && !dateInput.value) {
+        const today = new Date().toISOString().slice(0, 10);
+        dateInput.value = today;
+      }
+      
+      // Distance tooltip helper
       const distInput = document.getElementById('race-distance');
       const distLabel = distInput?.closest('label');
       if (distInput && distLabel) {
@@ -142,6 +154,6 @@
       }
     });
   </script>
-  <script src="/js/verify-loader.js?v=v2025-11-14-datefix-final3" defer></script>
+  <script src="/js/verify-loader.js?v=v2025-11-14-wirefix3" defer></script>
 </body>
 </html>
