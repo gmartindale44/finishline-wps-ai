@@ -460,9 +460,9 @@
     }
   }
 
-  function open(ctx) {
+  function openVerifyModal(initialCtx) {
     const host = buildModal();
-    prefill(host, ctx);
+    prefill(host, initialCtx);
     host.style.display = "flex";
     try {
       qs("#flv-track", host)?.focus();
@@ -471,7 +471,13 @@
     }
   }
 
-  window.__FL_OPEN_VERIFY_MODAL__ = open;
+  // Always register the global opener function
+  window.__FL_OPEN_VERIFY_MODAL__ = openVerifyModal;
+  
+  // Debug log to confirm registration
+  try {
+    console.log("[verify-modal] registered window.__FL_OPEN_VERIFY_MODAL__");
+  } catch (e) {}
 })();
 
 

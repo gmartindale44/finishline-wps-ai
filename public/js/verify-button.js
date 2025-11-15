@@ -7,10 +7,20 @@
   const qsa=(s,r=document)=>Array.from(r.querySelectorAll(s));
 
   function getTrackInput(){
-    return qs("input[placeholder*='track' i]") || qs("input[id*='track' i]") || qs("input[name*='track' i]");
+    return qs("#race-track") || qs("input[placeholder*='track' i]") || qs("input[id*='track' i]") || qs("input[name*='track' i]");
+  }
+  function getRaceDateInput(){
+    return qs("#fl-race-date");
   }
   function getRaceNoInput(){
-    return qs("input[placeholder*='race' i]") || qs("input[id*='race' i]") || qs("input[name*='race' i]");
+    return qs("#fl-race-number") || qs("input[placeholder*='race' i]") || qs("input[id*='race' i]") || qs("input[name*='race' i]");
+  }
+  function todayISO() {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
   }
 
   function findToolbar(){
@@ -36,7 +46,10 @@
   }
 
   function hideDate(){
+    // Hide old date fields but NOT our new fl-race-date field
     qsa("input[type='date'], input[placeholder*='date' i], input[id*='date' i], [data-field='date']").forEach(el=>{
+      // Skip our new main form date field
+      if (el.id === "fl-race-date") return;
       const wrap=el.closest("label, .field, .form-group, .input, .row")||el;
       wrap.style.display="none";
     });
@@ -56,10 +69,18 @@
     if(pill.tagName.toLowerCase()==="a") pill.removeAttribute("href");
     pill.addEventListener("click", (e)=>{
       e.preventDefault();
-      const trackEl=getTrackInput();
-      const raceEl=getRaceNoInput();
-      const track=(trackEl&&trackEl.value||"").trim();
-      const raceNo=(raceEl&&raceEl.value||"").trim();
+      const trackEl = getTrackInput();
+      const raceDateEl = getRaceDateInput();
+      const raceNoEl = getRaceNoInput();
+      const track = (trackEl && trackEl.value || "").trim();
+      let date = (raceDateEl && raceDateEl.value) ? raceDateEl.value.trim() : null;
+      const raceNo = (raceNoEl && raceNoEl.value || "").trim();
+      
+      // If date is blank, default to today
+      if (!date) {
+        date = todayISO();
+      }
+      
       if(!track){
         const wrap=(trackEl&&(trackEl.closest("label, .field, .form-group, .input, .row")||trackEl.parentElement))||document.body;
         let w=qs("#fl-track-warn",wrap);
@@ -68,11 +89,27 @@
         try{trackEl&&trackEl.focus();}catch{}
         return;
       }
-      try{sessionStorage.setItem("fl:verify:ctx",JSON.stringify({track,raceNo:raceNo||undefined,ts:Date.now()}));}catch{}
-      if(window.__FL_OPEN_VERIFY_MODAL__) window.__FL_OPEN_VERIFY_MODAL__({ track, raceNo });
+      
+      // Log the click
+      console.log("[verify-button] clicked", { track, date, raceNo });
+      
+      // Save to sessionStorage
+      try{
+        sessionStorage.setItem("fl:verify:last", JSON.stringify({ track, date, raceNo, ts: Date.now() }));
+      } catch {}
+      
+      // Check if modal opener is available
+      if (!window.__FL_OPEN_VERIFY_MODAL__) {
+        console.error("[verify-button] __FL_OPEN_VERIFY_MODAL__ is not defined");
+        return;
+      }
+      
+      // Open the modal with context
+      window.__FL_OPEN_VERIFY_MODAL__({ track, date, raceNo });
     });
     toolbar.appendChild(pill);
     log("verify pill mounted");
+    console.log("[verify-button] mounted");
   }
 
   const mo=new MutationObserver(()=>mount());
