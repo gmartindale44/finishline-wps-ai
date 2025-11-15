@@ -271,7 +271,7 @@
           <button id="flv-run" style="padding:10px 18px;border-radius:12px;border:none;background:#6b46c1;color:#fff;font-weight:700;cursor:pointer">Verify Now</button>
           <button id="flv-open-top" style="padding:10px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:transparent;color:inherit;cursor:pointer">Open Top Result</button>
           <button id="flv-open-google" style="padding:10px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:transparent;color:inherit;cursor:pointer">Open Google (debug)</button>
-          <small style="opacity:.75">Track &amp; Date required; Race # helps context.</small>
+          <small style="opacity:.75">Race # helps context.</small>
         </div>
 
         <details id="flv-sum" open>
