@@ -1,5 +1,3 @@
-import type { NextApiRequest, NextApiResponse } from "next";
-
 import { loadMergedDataset } from "../../lib/calibration/dataset.js";
 import { scoreGreenZone } from "../../lib/greenZone";
 
@@ -7,65 +5,44 @@ const MIN_CONFIDENCE = 60;
 const MIN_TOP3 = 50;
 const MAX_SUGGESTIONS = 12;
 
-type Suggestion = {
-  track: string;
-  raceNo?: string;
-  raceId: string;
-  score: number;
-  matchTier: "Green" | "Amber" | "Red";
-  suggested: string;
-  note: string;
-  confidence: number;
-  top3Mass: number;
-  gap12: number;
-  gap23: number;
-  profitLoss: number;
-  source: string;
-};
+export default async function handler(req, res) {
+  if (req.method !== "GET") {
+    res.setHeader("Allow", "GET");
+    return res.status(405).json({ ok: false, error: "Method not allowed" });
+  }
 
-type ResponseBody = {
-  ok: boolean;
-  suggestions: Suggestion[];
-  reason?: string;
-  sourceCounts?: {
-    main_rows: number;
-    historical_rows: number;
-    merged_rows: number;
-    deduped: number;
-  };
-};
-
-export default function handler(
-  _req: NextApiRequest,
-  res: NextApiResponse<ResponseBody>
-) {
   try {
     const dataset = loadMergedDataset({ silent: true });
-    const suggestions = buildPatternSuggestions(dataset.rows);
+    const rows = Array.isArray(dataset?.rows) ? dataset.rows : [];
+    const suggestions = buildPatternSuggestions(rows);
+
     if (!suggestions.length) {
       return res.status(200).json({
         ok: true,
         suggestions: [],
         reason: "not_enough_data_yet",
-        sourceCounts: dataset.sourceCounts,
+        sourceCounts: dataset?.sourceCounts,
       });
     }
 
     return res.status(200).json({
       ok: true,
       suggestions,
-      sourceCounts: dataset.sourceCounts,
+      sourceCounts: dataset?.sourceCounts,
     });
   } catch (error) {
-    if (process.env.NODE_ENV !== "production") {
-      console.error("[greenzone_today]", error);
-    }
-    res.status(200).json({ ok: true, suggestions: [], reason: "error" });
+    const message = error?.message || String(error);
+    console.error("[greenzone_today] error", message);
+    return res.status(500).json({
+      ok: false,
+      error: "greenzone_today failed",
+      details: message,
+    });
   }
 }
 
-function buildPatternSuggestions(rows: any[]): Suggestion[] {
-  const candidates = rows.filter((row) => {
+function buildPatternSuggestions(rows = []) {
+  const filtered = rows.filter((row) => {
     const confidence = Number(row.confidence);
     const top3 = Number(row.top3_mass ?? row.top3Mass);
     const profit = Number(row.profit_loss ?? row.profitLoss);
@@ -75,7 +52,7 @@ function buildPatternSuggestions(rows: any[]): Suggestion[] {
     return true;
   });
 
-  const scored = candidates
+  const scored = filtered
     .map((row) => {
       const confidence = Number(row.confidence) || 0;
       const top3 = Number(row.top3_mass ?? row.top3Mass) || 0;
@@ -90,8 +67,7 @@ function buildPatternSuggestions(rows: any[]): Suggestion[] {
         gap23,
       });
 
-      const tier =
-        gz.tier === "Yellow" ? ("Amber" as const) : (gz.tier as "Green" | "Red");
+      const tier = gz.tier === "Yellow" ? "Amber" : gz.tier;
 
       return {
         track: row.track || "",
@@ -123,3 +99,4 @@ function buildPatternSuggestions(rows: any[]): Suggestion[] {
     )
     .slice(0, MAX_SUGGESTIONS);
 }
+
