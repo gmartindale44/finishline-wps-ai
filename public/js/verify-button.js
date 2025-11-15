@@ -7,10 +7,20 @@
   const qsa=(s,r=document)=>Array.from(r.querySelectorAll(s));
 
   function getTrackInput(){
-    return qs("input[placeholder*='track' i]") || qs("input[id*='track' i]") || qs("input[name*='track' i]");
+    return qs("#race-track") || qs("input[placeholder*='track' i]") || qs("input[id*='track' i]") || qs("input[name*='track' i]");
   }
   function getRaceNoInput(){
-    return qs("input[placeholder*='race' i]") || qs("input[id*='race' i]") || qs("input[name*='race' i]");
+    return qs("#fl-race-number") || qs("input[placeholder*='race' i]") || qs("input[id*='race' i]") || qs("input[name*='race' i]");
+  }
+  function getRaceDateInput(){
+    return qs("#fl-race-date");
+  }
+  function todayISO() {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${dd}`;
   }
 
   function findToolbar(){
@@ -58,8 +68,10 @@
       e.preventDefault();
       const trackEl=getTrackInput();
       const raceEl=getRaceNoInput();
+      const dateEl=getRaceDateInput();
       const track=(trackEl&&trackEl.value||"").trim();
       const raceNo=(raceEl&&raceEl.value||"").trim();
+      const date=(dateEl&&dateEl.value) ? dateEl.value : todayISO();
       if(!track){
         const wrap=(trackEl&&(trackEl.closest("label, .field, .form-group, .input, .row")||trackEl.parentElement))||document.body;
         let w=qs("#fl-track-warn",wrap);
@@ -68,8 +80,13 @@
         try{trackEl&&trackEl.focus();}catch{}
         return;
       }
-      try{sessionStorage.setItem("fl:verify:ctx",JSON.stringify({track,raceNo:raceNo||undefined,ts:Date.now()}));}catch{}
-      if(window.__FL_OPEN_VERIFY_MODAL__) window.__FL_OPEN_VERIFY_MODAL__({ track, raceNo });
+      console.log("[verify-button] clicked", { track, date, raceNo });
+      try{sessionStorage.setItem("fl:verify:ctx",JSON.stringify({track,raceNo:raceNo||undefined,date,ts:Date.now()}));}catch{}
+      if(window.__FL_OPEN_VERIFY_MODAL__) {
+        window.__FL_OPEN_VERIFY_MODAL__({ track, raceNo, date });
+      } else {
+        console.error("[verify-button] __FL_OPEN_VERIFY_MODAL__ is not defined");
+      }
     });
     toolbar.appendChild(pill);
     log("verify pill mounted");

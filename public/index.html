@@ -28,7 +28,11 @@
     <div class="grid grid-2">
       <label class="field">
         <span>Race Date</span>
-        <input id="race-date" type="text" placeholder="mm/dd/yyyy" />
+        <input id="fl-race-date" type="date" />
+      </label>
+      <label class="field">
+        <span>Race #</span>
+        <input id="fl-race-number" type="text" placeholder="e.g., 6" />
       </label>
       <label class="field">
         <span>Track</span>
@@ -141,7 +145,20 @@
         });
       }
     });
+
+    // Set default Race Date to today
+    const todayISO = () => {
+      const d = new Date();
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const dd = String(d.getDate()).padStart(2, "0");
+      return `${y}-${m}-${dd}`;
+    };
+    const raceDateInput = document.getElementById('fl-race-date');
+    if (raceDateInput && !raceDateInput.value) {
+      raceDateInput.value = todayISO();
+    }
   </script>
-  <script src="/js/verify-loader.js?v=v2025-11-12-gzv2" defer></script>
+  <script src="/js/verify-loader.js?v=v2025-11-15-mainform-date" defer></script>
 </body>
 </html>
