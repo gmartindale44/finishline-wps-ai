@@ -499,7 +499,7 @@
     }
   }
 
-  function open(ctx) {
+  function openVerifyModal(ctx) {
     const host = buildModal();
     prefill(host, ctx);
     host.style.display = "flex";
@@ -510,7 +510,13 @@
     }
   }
 
-  window.__FL_OPEN_VERIFY_MODAL__ = open;
+  // Always register the global opener function
+  window.__FL_OPEN_VERIFY_MODAL__ = openVerifyModal;
+  
+  // Debug log to confirm registration
+  try {
+    console.info("[verify-modal] registered window.__FL_OPEN_VERIFY_MODAL__");
+  } catch (e) {}
 })();
 
 
