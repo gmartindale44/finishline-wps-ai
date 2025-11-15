@@ -98,6 +98,9 @@
     if (!summaryEl) return;
 
     const lines = [];
+    if (data && data.date) {
+      lines.push(`Using date: ${data.date}`);
+    }
     if (data && data.query) lines.push(`Query: ${data.query}`);
 
     if (data && data.outcome) {
@@ -351,6 +354,11 @@
             }),
           });
           const data = await resp.json().catch(() => ({}));
+          
+          // Include date in response data for summary display
+          if (date && !data.date) {
+            data.date = date;
+          }
 
           if (statusEl) {
             statusEl.textContent = resp.ok ? "OK" : `Error ${resp.status}`;
@@ -433,6 +441,7 @@
     const saved = readCtx();
     const trackVal = ctx?.track || currentTrack() || saved.track || "";
     const raceVal = ctx?.raceNo || currentRaceNo() || saved.raceNo || "";
+    const dateVal = ctx?.date || saved.date || todayISO();
 
     const trackInput = qs("#flv-track", host);
     const raceInput = qs("#flv-race", host);
@@ -442,9 +451,21 @@
     const warnTrack = qs("#flv-track-warn", host);
     const warnRace = qs("#flv-race-warn", host);
 
-    if (trackInput) trackInput.value = trackVal || "";
-    if (raceInput) raceInput.value = raceVal || "";
-    if (dateInput && !dateInput.value) dateInput.value = todayISO();
+    if (ctx && ctx.track && trackInput && !trackInput.value) {
+      trackInput.value = ctx.track;
+    } else if (trackInput) {
+      trackInput.value = trackVal || "";
+    }
+    if (ctx && ctx.raceNo && raceInput && !raceInput.value) {
+      raceInput.value = ctx.raceNo;
+    } else if (raceInput) {
+      raceInput.value = raceVal || "";
+    }
+    if (ctx && ctx.date && dateInput && !dateInput.value) {
+      dateInput.value = ctx.date;
+    } else if (dateInput && !dateInput.value) {
+      dateInput.value = dateVal || todayISO();
+    }
     if (statusEl) {
       statusEl.textContent = "Idle";
       statusEl.style.color = "#cbd5f5";
