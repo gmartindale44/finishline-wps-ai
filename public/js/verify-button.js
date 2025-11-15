@@ -12,6 +12,16 @@
   function getRaceNoInput(){
     return qs("#fl-race-number") || qs("input[placeholder*='race' i]") || qs("input[id*='race' i]") || qs("input[name*='race' i]");
   }
+  function getRaceDateInput(){
+    return qs("#fl-race-date");
+  }
+  function todayISO() {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${dd}`;
+  }
 
   function findToolbar(){
     const pills = qsa("button, a").filter(b=>{
@@ -56,12 +66,12 @@
     if(pill.tagName.toLowerCase()==="a") pill.removeAttribute("href");
     pill.addEventListener("click", (e)=>{
       e.preventDefault();
-      const trackInput = getTrackInput();
-      const raceNoInput = getRaceNoInput();
-      const dateInput = qs("#fl-race-date");
-      const track = trackInput ? trackInput.value.trim() : "";
-      const raceNo = raceNoInput ? raceNoInput.value.trim() : "";
-      const date = dateInput && dateInput.value ? dateInput.value : null;
+      const trackEl=getTrackInput();
+      const raceEl=getRaceNoInput();
+      const dateEl=getRaceDateInput();
+      const track=(trackEl&&trackEl.value||"").trim();
+      const raceNo=(raceEl&&raceEl.value||"").trim();
+      const date=(dateEl&&dateEl.value) ? dateEl.value : todayISO();
       if(!track){
         const wrap=(trackInput&&(trackInput.closest("label, .field, .form-group, .input, .row")||trackInput.parentElement))||document.body;
         let w=qs("#fl-track-warn",wrap);
@@ -70,12 +80,12 @@
         try{trackInput&&trackInput.focus();}catch{}
         return;
       }
-      console.log("[verify-button] clicked", { track, raceNo, date });
+      console.log("[verify-button] clicked", { track, date, raceNo });
       try{sessionStorage.setItem("fl:verify:ctx",JSON.stringify({track,raceNo:raceNo||undefined,date,ts:Date.now()}));}catch{}
       if(window.__FL_OPEN_VERIFY_MODAL__) {
         window.__FL_OPEN_VERIFY_MODAL__({ track, raceNo, date });
       } else {
-        console.warn("[verify-button] __FL_OPEN_VERIFY_MODAL__ is not defined");
+        console.error("[verify-button] __FL_OPEN_VERIFY_MODAL__ is not defined");
       }
     });
     toolbar.appendChild(pill);
