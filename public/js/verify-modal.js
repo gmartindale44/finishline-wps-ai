@@ -96,11 +96,15 @@
 
   function renderSummary(summaryEl, data) {
     if (!summaryEl) return;
+    if (!data) data = {};
 
     const lines = [];
-    if (data && data.query) lines.push(`Query: ${data.query}`);
+    if (data.date) {
+      lines.push(`Using date: ${data.date}`);
+    }
+    if (data.query) lines.push(`Query: ${data.query}`);
 
-    if (data && data.outcome) {
+    if (data.outcome) {
       const parts = [];
       if (data.outcome.win) parts.push(`Win: ${data.outcome.win}`);
       if (data.outcome.place) parts.push(`Place: ${data.outcome.place}`);
@@ -121,9 +125,16 @@
       if (hitParts.length) lines.push(`Hits: ${hitParts.join(", ")}`);
     }
 
-    if (!lines.length && data && data.error) {
-      lines.push(`Server message: ${data.error}`);
+    if (data.summary && typeof data.summary === "string") {
+      lines.push(data.summary);
     }
+
+    // Always show error info if present (not just when no other lines)
+    if (data.error) lines.push(`Error: ${data.error}`);
+    if (data.details && data.details !== data.error) {
+      lines.push(`Details: ${data.details}`);
+    }
+    if (data.step) lines.push(`Step: ${data.step}`);
 
     summaryEl.textContent = lines.join("\n") || "No summary returned.";
   }
@@ -352,6 +363,22 @@
           });
           const data = await resp.json().catch(() => ({}));
 
+          // Build summary payload with date and error info
+          const baseSummary = {};
+          if (date) {
+            baseSummary.date = date;
+          }
+
+          const summaryPayload = resp.ok
+            ? { ...baseSummary, ...data }
+            : {
+                ...baseSummary,
+                ...data,
+                error: data && data.error ? data.error : `Request failed (${resp.status})`,
+                details: data && (data.details || data.message) ? (data.details || data.message) : null,
+                step: data && data.step ? data.step : "verify_race",
+              };
+
           if (statusEl) {
             statusEl.textContent = resp.ok ? "OK" : `Error ${resp.status}`;
             statusEl.style.color = resp.ok ? "#cbd5f5" : "#f87171";
@@ -362,7 +389,7 @@
             query: data?.query || "",
           };
 
-          renderSummary(summaryEl, data);
+          renderSummary(summaryEl, summaryPayload);
 
           const debugEl = qs("#flv-gz-json", host);
           if (debugEl) {
@@ -385,7 +412,10 @@
             statusEl.style.color = "#f87171";
           }
           renderSummary(summaryEl, {
-            error: error?.message || "Request failed.",
+            date,
+            error: "Request failed",
+            details: error && (error.message || String(error)),
+            step: "verify_race_fetch",
           });
           if (window.__flVerifyDebug) {
             console.error("[Verify Modal] request failed", error);
@@ -460,7 +490,7 @@
     }
   }
 
-  function open(ctx) {
+  function openVerifyModal(ctx) {
     const host = buildModal();
     prefill(host, ctx);
     host.style.display = "flex";
@@ -471,7 +501,15 @@
     }
   }
 
-  window.__FL_OPEN_VERIFY_MODAL__ = open;
+  // Always register the global opener function
+  window.__FL_OPEN_VERIFY_MODAL__ = openVerifyModal;
+  
+  // Debug log to confirm registration
+  try {
+    if (window.__flVerifyDebug) {
+      console.log("[verify-modal] registered opener", typeof window.__FL_OPEN_VERIFY_MODAL__);
+    }
+  } catch (_) {}
 })();
 
 
