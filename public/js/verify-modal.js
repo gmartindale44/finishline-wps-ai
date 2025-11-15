@@ -96,19 +96,17 @@
 
   function renderSummary(summaryEl, data) {
     if (!summaryEl) return;
+    if (!data) data = {};
 
     summaryEl.textContent = "";
 
     const lines = [];
-    if (data && data.date) {
+    if (data.date) {
       lines.push(`Using date: ${data.date}`);
     }
-    if (data && data.query) lines.push(`Query: ${data.query}`);
-    if (data && typeof data.summary === "string" && data.summary.trim()) {
-      lines.push(data.summary.trim());
-    }
+    if (data.query) lines.push(`Query: ${data.query}`);
 
-    if (data && data.outcome) {
+    if (data.outcome) {
       const parts = [];
       if (data.outcome.win) parts.push(`Win: ${data.outcome.win}`);
       if (data.outcome.place) parts.push(`Place: ${data.outcome.place}`);
@@ -116,12 +114,12 @@
       if (parts.length) lines.push(parts.join(" • "));
     }
 
-    const top = data && data.top;
+    const top = data.top;
     if (top && top.title) {
       lines.push(`Top Result: ${top.title}${top.link ? `\n${top.link}` : ""}`);
     }
 
-    if (data && data.hits) {
+    if (data.hits) {
       const hitParts = [];
       if (data.hits.winHit) hitParts.push("Win");
       if (data.hits.placeHit) hitParts.push("Place");
@@ -129,9 +127,12 @@
       if (hitParts.length) lines.push(`Hits: ${hitParts.join(", ")}`);
     }
 
-    if (data && data.error) {
-      lines.push(`Error: ${data.error}`);
+    // Always show error info if present (not just when no other lines)
+    if (data.error) lines.push(`Error: ${data.error}`);
+    if (data.details && data.details !== data.error) {
+      lines.push(`Details: ${data.details}`);
     }
+    if (data.step) lines.push(`Step: ${data.step}`);
 
     if (data && data.details && data.details !== data.error) {
       lines.push(`Details: ${data.details}`);
@@ -557,10 +558,21 @@
           });
           const data = await resp.json().catch(() => ({}));
           
-          // Include date in response data for summary display
-          if (date && !data.date) {
-            data.date = date;
+          // Build summary payload with date and error info
+          const baseSummary = {};
+          if (date) {
+            baseSummary.date = date;
           }
+
+          const summaryPayload = resp.ok
+            ? { ...baseSummary, ...data }
+            : {
+                ...baseSummary,
+                ...data,
+                error: data && data.error ? data.error : `Request failed (${resp.status})`,
+                details: data && (data.details || data.message) ? (data.details || data.message) : null,
+                step: data && data.step ? data.step : "verify_race",
+              };
 
           if (statusEl) {
             statusEl.textContent = resp.ok ? "OK" : `Error ${resp.status}`;
@@ -571,16 +583,6 @@
             top: data?.top || null,
             query: data?.query || "",
           };
-
-          const summaryPayload = resp.ok
-            ? { ...data, date }
-            : {
-                ...data,
-                date,
-                error: data?.error || `Request failed (${resp.status})`,
-                details: data?.details || data?.message || null,
-                step: data?.step || "verify_race",
-              };
 
           renderSummary(summaryEl, summaryPayload);
 
@@ -607,7 +609,7 @@
           renderSummary(summaryEl, {
             date,
             error: "Request failed",
-            details: error?.message || String(error),
+            details: error && (error.message || String(error)),
             step: "verify_race_fetch",
           });
           if (window.__flVerifyDebug) {
@@ -666,9 +668,21 @@
     const warnTrack = qs("#flv-track-warn", host);
     const warnRace = qs("#flv-race-warn", host);
 
-    if (trackInput) trackInput.value = trackVal || "";
-    if (raceInput) raceInput.value = raceVal || "";
-    if (dateInput) dateInput.value = dateVal || todayISO();
+    if (ctx && ctx.track && trackInput && !trackInput.value) {
+      trackInput.value = ctx.track;
+    } else if (trackInput) {
+      trackInput.value = trackVal || "";
+    }
+    if (ctx && ctx.raceNo && raceInput && !raceInput.value) {
+      raceInput.value = ctx.raceNo;
+    } else if (raceInput) {
+      raceInput.value = raceVal || "";
+    }
+    if (ctx && ctx.date && dateInput && !dateInput.value) {
+      dateInput.value = ctx.date;
+    } else if (dateInput && !dateInput.value) {
+      dateInput.value = dateVal || todayISO();
+    }
     if (statusEl) {
       statusEl.textContent = "Idle";
       statusEl.style.color = "#cbd5f5";

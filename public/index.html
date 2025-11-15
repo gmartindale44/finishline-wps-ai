@@ -31,10 +31,6 @@
         <input id="fl-race-date" type="date" />
       </label>
       <label class="field">
-        <span>Race #</span>
-        <input id="fl-race-number" type="text" placeholder="e.g., 6" />
-      </label>
-      <label class="field">
         <span>Track</span>
         <input id="race-track" type="text" placeholder="e.g., Churchill Downs" />
       </label>
@@ -151,18 +147,23 @@
     });
 
     // Set default Race Date to today
-    const todayISO = () => {
-      const d = new Date();
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, "0");
-      const dd = String(d.getDate()).padStart(2, "0");
-      return `${y}-${m}-${dd}`;
-    };
-    const raceDateInput = document.getElementById('fl-race-date');
-    if (raceDateInput && !raceDateInput.value) {
-      raceDateInput.value = todayISO();
-    }
+    (function () {
+      function todayISO() {
+        const d = new Date();
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}`;
+      }
+
+      document.addEventListener("DOMContentLoaded", function () {
+        var dateInput = document.getElementById("fl-race-date");
+        if (dateInput && !dateInput.value) {
+          dateInput.value = todayISO();
+        }
+      });
+    })();
   </script>
-  <script src="/js/verify-loader.js?v=v2025-11-14-datefix-final3" defer></script>
+  <script src="/js/verify-loader.js?v=v2025-11-15-main-verify" defer></script>
 </body>
 </html>

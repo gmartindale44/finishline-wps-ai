@@ -12,16 +12,6 @@
   function getRaceNoInput(){
     return qs("#fl-race-number") || qs("input[placeholder*='race' i]") || qs("input[id*='race' i]") || qs("input[name*='race' i]");
   }
-  function getRaceDateInput(){
-    return qs("#fl-race-date");
-  }
-  function todayISO() {
-    const d = new Date();
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${dd}`;
-  }
 
   function findToolbar(){
     const pills = qsa("button, a").filter(b=>{
@@ -46,7 +36,10 @@
   }
 
   function hideDate(){
+    // Hide old date fields but NOT our new fl-race-date field
     qsa("input[type='date'], input[placeholder*='date' i], input[id*='date' i], [data-field='date']").forEach(el=>{
+      // Skip our new main form date field
+      if (el.id === "fl-race-date") return;
       const wrap=el.closest("label, .field, .form-group, .input, .row")||el;
       wrap.style.display="none";
     });
@@ -66,12 +59,12 @@
     if(pill.tagName.toLowerCase()==="a") pill.removeAttribute("href");
     pill.addEventListener("click", (e)=>{
       e.preventDefault();
-      const trackEl=getTrackInput();
-      const raceEl=getRaceNoInput();
-      const dateEl=getRaceDateInput();
-      const track=(trackEl&&trackEl.value||"").trim();
-      const raceNo=(raceEl&&raceEl.value||"").trim();
-      const date=(dateEl&&dateEl.value) ? dateEl.value : todayISO();
+      const trackInput = getTrackInput();
+      const raceNoInput = getRaceNoInput();
+      const dateInput = qs("#fl-race-date");
+      const track = trackInput ? trackInput.value.trim() : "";
+      const raceNo = raceNoInput ? raceNoInput.value.trim() : "";
+      const date = dateInput && dateInput.value ? dateInput.value : null;
       if(!track){
         const wrap=(trackInput&&(trackInput.closest("label, .field, .form-group, .input, .row")||trackInput.parentElement))||document.body;
         let w=qs("#fl-track-warn",wrap);
@@ -80,12 +73,12 @@
         try{trackInput&&trackInput.focus();}catch{}
         return;
       }
-      console.log("[verify-button] clicked", { track, date, raceNo });
+      console.log("[verify-button] clicked", { track, raceNo, date });
       try{sessionStorage.setItem("fl:verify:ctx",JSON.stringify({track,raceNo:raceNo||undefined,date,ts:Date.now()}));}catch{}
       if(window.__FL_OPEN_VERIFY_MODAL__) {
         window.__FL_OPEN_VERIFY_MODAL__({ track, raceNo, date });
       } else {
-        console.error("[verify-button] __FL_OPEN_VERIFY_MODAL__ is not defined");
+        console.warn("[verify-button] __FL_OPEN_VERIFY_MODAL__ is not defined");
       }
     });
     toolbar.appendChild(pill);
