@@ -98,8 +98,6 @@
     if (!summaryEl) return;
     if (!data) data = {};
 
-    summaryEl.textContent = "";
-
     const lines = [];
     if (data.date) {
       lines.push(`Using date: ${data.date}`);
@@ -127,20 +125,16 @@
       if (hitParts.length) lines.push(`Hits: ${hitParts.join(", ")}`);
     }
 
+    if (data.summary && typeof data.summary === "string") {
+      lines.push(data.summary);
+    }
+
     // Always show error info if present (not just when no other lines)
     if (data.error) lines.push(`Error: ${data.error}`);
     if (data.details && data.details !== data.error) {
       lines.push(`Details: ${data.details}`);
     }
     if (data.step) lines.push(`Step: ${data.step}`);
-
-    if (data && data.details && data.details !== data.error) {
-      lines.push(`Details: ${data.details}`);
-    }
-
-    if (data && data.step) {
-      lines.push(`Step: ${data.step}`);
-    }
 
     summaryEl.textContent = lines.length ? lines.join("\n") : "No summary returned.";
   }
@@ -574,6 +568,22 @@
                 step: data && data.step ? data.step : "verify_race",
               };
 
+          // Build summary payload with date and error info
+          const baseSummary = {};
+          if (date) {
+            baseSummary.date = date;
+          }
+
+          const summaryPayload = resp.ok
+            ? { ...baseSummary, ...data }
+            : {
+                ...baseSummary,
+                ...data,
+                error: data && data.error ? data.error : `Request failed (${resp.status})`,
+                details: data && (data.details || data.message) ? (data.details || data.message) : null,
+                step: data && data.step ? data.step : "verify_race",
+              };
+
           if (statusEl) {
             statusEl.textContent = resp.ok ? "OK" : `Error ${resp.status}`;
             statusEl.style.color = resp.ok ? "#cbd5f5" : "#f87171";
@@ -698,7 +708,7 @@
     }
   }
 
-  function openVerifyModal(initialCtx) {
+  function openVerifyModal(ctx) {
     const host = buildModal();
     prefill(host, initialCtx);
     host.style.display = "flex";
@@ -714,8 +724,10 @@
   
   // Debug log to confirm registration
   try {
-    console.log("[verify-modal] registered window.__FL_OPEN_VERIFY_MODAL__");
-  } catch (e) {}
+    if (window.__flVerifyDebug) {
+      console.log("[verify-modal] registered opener", typeof window.__FL_OPEN_VERIFY_MODAL__);
+    }
+  } catch (_) {}
 })();
 
 

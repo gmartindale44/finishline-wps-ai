@@ -104,8 +104,27 @@
         return;
       }
       
-      // Open the modal with context
-      window.__FL_OPEN_VERIFY_MODAL__({ track, date, raceNo });
+      // Build context object
+      const ctx = {
+        track,
+        raceNo: raceNo || undefined,
+        date,
+      };
+      
+      // Log the click
+      console.log("[verify-button] clicked", ctx);
+      
+      // Save to sessionStorage
+      try{
+        sessionStorage.setItem("fl:verify:last", JSON.stringify({ ...ctx, ts: Date.now() }));
+      } catch {}
+      
+      // Check if modal opener is available
+      if (typeof window.__FL_OPEN_VERIFY_MODAL__ === "function") {
+        window.__FL_OPEN_VERIFY_MODAL__(ctx);
+      } else {
+        console.error("[verify-button] __FL_OPEN_VERIFY_MODAL__ is not defined");
+      }
     });
     toolbar.appendChild(pill);
     log("verify pill mounted");
