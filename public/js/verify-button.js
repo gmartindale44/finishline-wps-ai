@@ -36,7 +36,10 @@
   }
 
   function hideDate(){
+    // Hide old date fields but NOT our new fl-race-date field
     qsa("input[type='date'], input[placeholder*='date' i], input[id*='date' i], [data-field='date']").forEach(el=>{
+      // Skip our new main form date field
+      if (el.id === "fl-race-date") return;
       const wrap=el.closest("label, .field, .form-group, .input, .row")||el;
       wrap.style.display="none";
     });
