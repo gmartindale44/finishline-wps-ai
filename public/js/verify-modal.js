@@ -1,11 +1,29 @@
 /* public/js/verify-modal.js — GreenZone Lab v2 */
 
-;(() => {
+(function () {
   "use strict";
 
   if (typeof window === "undefined" || typeof document === "undefined") return;
-  if (window.__FL_VERIFY_MODAL__) return;
-  window.__FL_VERIFY_MODAL__ = true;
+  
+  // Define the opener function first (before any early returns)
+  function openVerifyModal(ctx) {
+    // This will be defined below, but we reference it here for the early assignment
+    if (typeof window.__FL_VERIFY_MODAL_OPEN_IMPL__ === "function") {
+      return window.__FL_VERIFY_MODAL_OPEN_IMPL__(ctx);
+    }
+    // Fallback: try to build modal if implementation not ready yet
+    console.warn("[verify-modal] openVerifyModal called before implementation ready");
+  }
+  
+  // *** CRITICAL: Register the global IMMEDIATELY, before any guards or early returns ***
+  window.__FL_OPEN_VERIFY_MODAL__ = openVerifyModal;
+  
+  // Guard to prevent double DOM initialization
+  if (window.__FL_VERIFY_MODAL_INIT__) {
+    // Already initialized DOM, but global is now registered above
+    return;
+  }
+  window.__FL_VERIFY_MODAL_INIT__ = true;
   if (window.__flVerifyDebug === undefined) window.__flVerifyDebug = false;
 
   const qs = (selector, root = document) => root.querySelector(selector);
@@ -521,7 +539,8 @@
     }
   }
 
-  function openVerifyModal(ctx) {
+  // Implementation function (stored separately so the wrapper can call it)
+  function openVerifyModalImpl(ctx) {
     const host = buildModal();
     prefill(host, ctx);
     host.style.display = "flex";
@@ -531,16 +550,19 @@
       /* ignore */
     }
   }
-
-  // Always register the global opener function
-  window.__FL_OPEN_VERIFY_MODAL__ = openVerifyModal;
+  
+  // Store the implementation so the wrapper function can use it
+  window.__FL_VERIFY_MODAL_OPEN_IMPL__ = openVerifyModalImpl;
+  
+  // Update the global to point directly to the implementation now that it's ready
+  window.__FL_OPEN_VERIFY_MODAL__ = openVerifyModalImpl;
   
   // Debug log to confirm registration
-  try {
-    if (window.__flVerifyDebug) {
-      console.log("[verify-modal] registered opener", typeof window.__FL_OPEN_VERIFY_MODAL__);
-    }
-  } catch (_) {}
+  if (window.__flVerifyDebug) {
+    try {
+      console.log("[verify-modal] registered window.__FL_OPEN_VERIFY_MODAL__");
+    } catch (_) {}
+  }
 })();
 
 
