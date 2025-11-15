@@ -84,6 +84,13 @@ async function runSearch(req, query) {
 }
 
 export default async function handler(req, res) {
+  // Base response fields that should always be present
+  let baseResponse = {
+    date: null,
+    track: null,
+    raceNo: null,
+  };
+
   try {
     if (req.method !== 'POST') {
       res.setHeader('Allow', 'POST');
@@ -108,10 +115,21 @@ export default async function handler(req, res) {
 
     const raceNumber = raceNo ?? race_no;
     if (!track) {
-      return res.status(400).json({ error: 'Missing required field: track' });
+      baseResponse.track = null;
+      baseResponse.date = (inputDate && String(inputDate).trim()) || new Date().toISOString().slice(0, 10);
+      baseResponse.raceNo = raceNumber ?? null;
+      return res.status(200).json({
+        ...baseResponse,
+        error: 'Missing required field: track',
+        details: 'Track is required to verify a race',
+        step: 'verify_race_validation',
+      });
     }
 
     const date = (inputDate && String(inputDate).trim()) || new Date().toISOString().slice(0, 10);
+    baseResponse.date = date;
+    baseResponse.track = track;
+    baseResponse.raceNo = raceNumber ?? null;
 
     const dWords = date.replace(/-/g, ' ');
     const racePart = raceNumber ? ` Race ${raceNumber}` : '';
@@ -129,25 +147,50 @@ export default async function handler(req, res) {
     let results = [];
     let queryUsed = queries[0];
     let lastError = null;
-    for (const q of queries) {
-      try {
-        const items = await runSearch(req, q);
-        queryUsed = q;
-        results = items;
-        if (items.length) break;
-      } catch (error) {
-        lastError = error;
+    let searchStep = 'verify_race_search';
+    
+    try {
+      for (const q of queries) {
+        try {
+          const items = await runSearch(req, q);
+          queryUsed = q;
+          results = items;
+          if (items.length) break;
+        } catch (error) {
+          lastError = error;
+          console.error('[verify_race] Search query failed', { query: q, error: error?.message || String(error) });
+        }
       }
-    }
 
-    if (!results.length && lastError) {
-      throw lastError;
+      if (!results.length && lastError) {
+        throw lastError;
+      }
+    } catch (error) {
+      console.error('[verify_race] Search failed', { error: error?.message || String(error), stack: error?.stack });
+      return res.status(200).json({
+        ...baseResponse,
+        error: 'Search failed',
+        details: lastError?.message || error?.message || 'Unable to fetch race results from search providers',
+        step: searchStep,
+        query: queryUsed || queries[0] || null,
+      });
     }
 
     const topPreferred = pickBest(results);
     const top = topPreferred || results[0] || null;
 
-    const outcome = top?.link ? await fetchAndParseResults(top.link) : { win: '', place: '', show: '' };
+    let outcome = { win: '', place: '', show: '' };
+    let parseError = null;
+    
+    if (top?.link) {
+      try {
+        outcome = await fetchAndParseResults(top.link);
+      } catch (error) {
+        parseError = error;
+        console.error('[verify_race] Parse results failed', { url: top.link, error: error?.message || String(error) });
+        // Continue with empty outcome - not a fatal error
+      }
+    }
     const normalizeName = (value = '') => value.toLowerCase().replace(/\s+/g, ' ').trim();
     const predictedSafe = {
       win: (predicted && predicted.win) ? String(predicted.win) : '',
@@ -163,6 +206,25 @@ export default async function handler(req, res) {
         .map(normalizeName)
         .some((name) => [outcome.win, outcome.place, outcome.show].map(normalizeName).includes(name)),
     };
+
+    // Build a concise summary line for the frontend
+    const summaryLine = (() => {
+      const parts = [];
+      if (raceNumber) {
+        parts.push(`Race ${raceNumber}`);
+      }
+      parts.push(track);
+      parts.push(`on ${date}`);
+      if (distance || surface) {
+        const dist = distance ? distance : '';
+        const surf = surface ? surface : '';
+        const distSurf = [dist, surf].filter(Boolean).join(' ');
+        if (distSurf) {
+          parts.push(`(${distSurf})`);
+        }
+      }
+      return `Verified ${parts.join(' ')}.`;
+    })();
 
     const summary = (() => {
       const lines = [];
@@ -279,8 +341,11 @@ export default async function handler(req, res) {
       }
     }
 
+    // Success response - always return 200 with structured data
     return res.status(200).json({
-      ok: true,
+      date,
+      track,
+      raceNo: raceNumber ?? null,
       query: queryUsed,
       count: results.length,
       top,
@@ -288,9 +353,25 @@ export default async function handler(req, res) {
       outcome,
       predicted: predictedSafe,
       hits,
-      summary: summarySafe,
+      summary: summaryLine, // Use the concise summary line for frontend display
+      summaryFull: summarySafe, // Keep full summary for debugging/logging
     });
   } catch (err) {
-    return res.status(500).json({ error: 'verify_race failed', details: err?.message || String(err) });
+    // Log the full error for debugging
+    console.error('[verify_race] Unhandled error', {
+      error: err?.message || String(err),
+      stack: err?.stack,
+      track: baseResponse.track,
+      date: baseResponse.date,
+      raceNo: baseResponse.raceNo,
+    });
+    
+    // Always return 200 with structured error response
+    return res.status(200).json({
+      ...baseResponse,
+      error: 'verify_race failed',
+      details: err?.message || String(err) || 'Unknown error occurred',
+      step: 'verify_race',
+    });
   }
 }
