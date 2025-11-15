@@ -1,11 +1,30 @@
-/* public/js/verify-modal.js — GreenZone Lab v2 */
+/* public/js/verify-modal.js — GreenZone Lab v2 (verify wiring fixed) */
 
-;(() => {
+(function () {
   "use strict";
 
   if (typeof window === "undefined" || typeof document === "undefined") return;
-  if (window.__FL_VERIFY_MODAL__) return;
-  window.__FL_VERIFY_MODAL__ = true;
+
+  // ---- Global opener stub (registered immediately) ----
+  function openVerifyModal(ctx) {
+    if (typeof window.__FL_VERIFY_MODAL_OPEN_IMPL__ === "function") {
+      return window.__FL_VERIFY_MODAL_OPEN_IMPL__(ctx);
+    }
+    console.warn(
+      "[verify-modal] openVerifyModal called before implementation ready",
+      ctx
+    );
+  }
+
+  // Register stub BEFORE any early returns so the global always exists
+  window.__FL_OPEN_VERIFY_MODAL__ = openVerifyModal;
+
+  // Guard to prevent double DOM initialization
+  if (window.__FL_VERIFY_MODAL_INIT__) {
+    // DOM already initialized; global is already registered above
+    return;
+  }
+  window.__FL_VERIFY_MODAL_INIT__ = true;
   if (window.__flVerifyDebug === undefined) window.__flVerifyDebug = false;
 
   const qs = (selector, root = document) => root.querySelector(selector);
@@ -21,13 +40,19 @@
   function readUIPredictions() {
     try {
       const scope =
-        document.querySelector('[data-panel="predictions"], .predictions-panel') ||
-        document;
+        document.querySelector(
+          '[data-panel="predictions"], .predictions-panel'
+        ) || document;
       const picks = { win: "", place: "", show: "" };
-      const cards = Array.from(scope.querySelectorAll(".prediction-card, [data-pick]"));
+
+      const cards = Array.from(
+        scope.querySelectorAll(".prediction-card, [data-pick]")
+      );
       if (cards.length >= 3) {
         const names = cards.slice(0, 3).map((card) => {
-          const el = card.querySelector("[data-name], .title, .name, b, strong");
+          const el = card.querySelector(
+            "[data-name], .title, .name, b, strong"
+          );
           return ((el && el.textContent) || "").trim();
         });
         picks.win = names[0] || "";
@@ -35,11 +60,16 @@
         picks.show = names[2] || "";
         return picks;
       }
+
       const fetchText = (selector) =>
         (scope.querySelector(selector)?.textContent || "").trim();
       picks.win = fetchText("[data-pick='win'], .pick-win b, .emoji-win~b");
-      picks.place = fetchText("[data-pick='place'], .pick-place b, .emoji-place~b");
-      picks.show = fetchText("[data-pick='show'], .pick-show b, .emoji-show~b");
+      picks.place = fetchText(
+        "[data-pick='place'], .pick-place b, .emoji-place~b"
+      );
+      picks.show = fetchText(
+        "[data-pick='show'], .pick-show b, .emoji-show~b"
+      );
       return picks;
     } catch {
       return { win: "", place: "", show: "" };
@@ -99,12 +129,12 @@
     if (!data) data = {};
 
     const lines = [];
-    
+
     // Always show date if present
     if (data.date) {
       lines.push(`Using date: ${data.date}`);
     }
-    
+
     // Show error info first if present
     if (data.error) {
       lines.push(`Error: ${data.error}`);
@@ -115,7 +145,7 @@
     if (data.step) {
       lines.push(`Step: ${data.step}`);
     }
-    
+
     // Show query if present
     if (data.query) {
       lines.push(`Query: ${data.query}`);
@@ -132,7 +162,11 @@
 
     // Show top result if present (with safe checks)
     if (data.top && typeof data.top === "object" && data.top.title) {
-      lines.push(`Top Result: ${data.top.title}${data.top.link ? `\n${data.top.link}` : ""}`);
+      lines.push(
+        `Top Result: ${data.top.title}${
+          data.top.link ? `\n${data.top.link}` : ""
+        }`
+      );
     }
 
     // Show hits if present (with safe checks)
@@ -153,7 +187,6 @@
     if (!lines.length) {
       lines.push("No summary returned.");
     }
-    if (data.step) lines.push(`Step: ${data.step}`);
 
     summaryEl.textContent = lines.join("\n");
   }
@@ -372,7 +405,8 @@
     const raceWarn = document.createElement("small");
     raceWarn.id = "flv-race-warn";
     raceWarn.style.cssText = "display:none;color:#ffcc00;";
-    raceWarn.textContent = "Server asked for a Race # — please add one.";
+    raceWarn.textContent =
+      "Server asked for a Race # — please add one.";
     raceWrap.appendChild(raceWarn);
 
     grid1.appendChild(raceWrap);
@@ -407,32 +441,38 @@
     // Status
     const statusEl = document.createElement("div");
     statusEl.id = "flv-status";
-    statusEl.style.cssText = "font:600 12px/1.2 system-ui;opacity:.85;margin-bottom:10px;";
+    statusEl.style.cssText =
+      "font:600 12px/1.2 system-ui;opacity:.85;margin-bottom:10px;";
     statusEl.textContent = "Idle";
     card.appendChild(statusEl);
 
     // Buttons row
     const buttonsRow = document.createElement("div");
-    buttonsRow.style.cssText = "display:flex;gap:10px;align-items:center;margin:14px 0;flex-wrap:wrap;";
+    buttonsRow.style.cssText =
+      "display:flex;gap:10px;align-items:center;margin:14px 0;flex-wrap:wrap;";
 
     const runBtn = document.createElement("button");
     runBtn.id = "flv-run";
     runBtn.textContent = "Verify Now";
-    runBtn.style.cssText = "padding:10px 18px;border-radius:12px;border:none;background:#6b46c1;color:#fff;font-weight:700;cursor:pointer";
+    runBtn.style.cssText =
+      "padding:10px 18px;border-radius:12px;border:none;background:#6b46c1;color:#fff;font-weight:700;cursor:pointer";
 
     const openTopBtn = document.createElement("button");
     openTopBtn.id = "flv-open-top";
     openTopBtn.textContent = "Open Top Result";
-    openTopBtn.style.cssText = "padding:10px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:transparent;color:inherit;cursor:pointer";
+    openTopBtn.style.cssText =
+      "padding:10px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:transparent;color:inherit;cursor:pointer";
 
     const openGoogleBtn = document.createElement("button");
     openGoogleBtn.id = "flv-open-google";
     openGoogleBtn.textContent = "Open Google (debug)";
-    openGoogleBtn.style.cssText = "padding:10px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:transparent;color:inherit;cursor:pointer";
+    openGoogleBtn.style.cssText =
+      "padding:10px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:transparent;color:inherit;cursor:pointer";
 
     const helpText = document.createElement("small");
     helpText.style.opacity = ".75";
-    helpText.textContent = "Track & Date required; Race # helps context.";
+    // You asked to remove "Track & Date required" from this helper text
+    helpText.textContent = "Race # helps context.";
 
     buttonsRow.appendChild(runBtn);
     buttonsRow.appendChild(openTopBtn);
@@ -451,7 +491,8 @@
 
     const summaryBody = document.createElement("pre");
     summaryBody.id = "flv-sum-body";
-    summaryBody.style.cssText = "white-space:pre-wrap;margin-top:8px;max-height:240px;overflow:auto;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.05);font:12px/1.5 ui-monospace, Menlo, Consolas;";
+    summaryBody.style.cssText =
+      "white-space:pre-wrap;margin-top:8px;max-height:240px;overflow:auto;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.05);font:12px/1.5 ui-monospace, Menlo, Consolas;";
     summaryBody.textContent = "No summary returned.";
 
     summaryDetails.appendChild(summarySummary);
@@ -486,7 +527,8 @@
 
     const gzJson = document.createElement("pre");
     gzJson.id = "flv-gz-json";
-    gzJson.style.cssText = "white-space:pre-wrap;margin-top:6px;max-height:220px;overflow:auto;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:rgba(0,0,0,.4);font:11px/1.5 ui-monospace, Menlo, Consolas;";
+    gzJson.style.cssText =
+      "white-space:pre-wrap;margin-top:6px;max-height:220px;overflow:auto;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:rgba(0,0,0,.4);font:11px/1.5 ui-monospace, Menlo, Consolas;";
     gzJson.textContent = "[]";
 
     gzWrap.appendChild(gzMessage);
@@ -500,59 +542,65 @@
     document.body.appendChild(host);
     host.__flvLast = { top: null, query: "" };
 
+    // Wire up controls
     qs("#flv-close", host)?.addEventListener("click", () => {
       host.style.display = "none";
     });
 
-    const runBtn = qs("#flv-run", host);
-    const statusEl = qs("#flv-status", host);
+    const runBtnEl = qs("#flv-run", host);
+    const statusElEl = qs("#flv-status", host);
     const summaryEl = qs("#flv-sum-body", host);
-    const warnTrack = qs("#flv-track-warn", host);
-    const warnRace = qs("#flv-race-warn", host);
-    const trackInput = qs("#flv-track", host);
-    const raceInput = qs("#flv-race", host);
-    const dateInput = qs("#flv-date", host);
+    const warnTrackEl = qs("#flv-track-warn", host);
+    const warnRaceEl = qs("#flv-race-warn", host);
+    const trackInputEl = qs("#flv-track", host);
+    const raceInputEl = qs("#flv-race", host);
+    const dateInputEl = qs("#flv-date", host);
 
-    if (dateInput && !dateInput.value) {
-      const today = todayISO();
-      dateInput.value = today;
+    if (dateInputEl && !dateInputEl.value) {
+      dateInputEl.value = todayISO();
     }
+
     try {
       console.info(
         "[verify-modal] mounted build=datefix-final3 dateInput=",
-        dateInput && dateInput.type
+        dateInputEl && dateInputEl.type
       );
     } catch {
       /* ignore logging failures */
     }
 
-    if (runBtn) {
-      const defaultLabel = runBtn.textContent || "Verify Now";
-      runBtn.addEventListener("click", async () => {
-        const track = (trackInput?.value || "").trim();
-        const raceNo = (raceInput && raceInput.value ? raceInput.value.trim() : "") || null;
-        const rawDate = dateInput && dateInput.value ? dateInput.value : null;
+    if (runBtnEl) {
+      const defaultLabel = runBtnEl.textContent || "Verify Now";
+      runBtnEl.addEventListener("click", async () => {
+        const track = (trackInputEl?.value || "").trim();
+        const raceNo =
+          (raceInputEl && raceInputEl.value
+            ? raceInputEl.value.trim()
+            : "") || null;
+        const rawDate =
+          dateInputEl && dateInputEl.value ? dateInputEl.value : null;
         const date = rawDate || todayISO();
 
-        if (warnTrack) warnTrack.style.display = track ? "none" : "";
+        if (warnTrackEl) warnTrackEl.style.display = track ? "none" : "";
         if (!track) {
           try {
-            trackInput?.focus();
+            trackInputEl?.focus();
           } catch {
             /* ignore */
           }
           return;
         }
-        if (warnRace) warnRace.style.display = "none";
+        if (warnRaceEl) warnRaceEl.style.display = "none";
 
         const requestInfo = { track, raceNo: raceNo || null, date };
-        if (statusEl) {
-          statusEl.textContent = "Running…";
-          statusEl.style.color = "#cbd5f5";
+
+        if (statusElEl) {
+          statusElEl.textContent = "Running…";
+          statusElEl.style.color = "#cbd5f5";
         }
         if (summaryEl) summaryEl.textContent = "Working…";
-        runBtn.disabled = true;
-        runBtn.textContent = "Running…";
+        runBtnEl.disabled = true;
+        runBtnEl.textContent = "Running…";
         host.__flvLast = { top: null, query: "" };
 
         pushSnapshot(track, raceNo, readUIPredictions());
@@ -570,8 +618,8 @@
             }),
           });
           const data = await resp.json().catch(() => ({}));
-          
-          // Build summary payload with date and error info
+
+          // Build summary payload with date and error info (single, non-duplicated block)
           const baseSummary = {};
           if (date) {
             baseSummary.date = date;
@@ -582,46 +630,21 @@
             : {
                 ...baseSummary,
                 ...data,
-                error: data && data.error ? data.error : `Request failed (${resp.status})`,
-                details: data && (data.details || data.message) ? (data.details || data.message) : null,
+                error: data && data.error
+                  ? data.error
+                  : `Request failed (${resp.status})`,
+                details:
+                  data && (data.details || data.message)
+                    ? data.details || data.message
+                    : null,
                 step: data && data.step ? data.step : "verify_race",
               };
 
-          // Build summary payload with date and error info
-          const baseSummary = {};
-          if (date) {
-            baseSummary.date = date;
-          }
-
-          const summaryPayload = resp.ok
-            ? { ...baseSummary, ...data }
-            : {
-                ...baseSummary,
-                ...data,
-                error: data && data.error ? data.error : `Request failed (${resp.status})`,
-                details: data && (data.details || data.message) ? (data.details || data.message) : null,
-                step: data && data.step ? data.step : "verify_race",
-              };
-
-          // Build summary payload with date and error info
-          const baseSummary = {};
-          if (date) {
-            baseSummary.date = date;
-          }
-
-          const summaryPayload = resp.ok
-            ? { ...baseSummary, ...data }
-            : {
-                ...baseSummary,
-                ...data,
-                error: data && data.error ? data.error : `Request failed (${resp.status})`,
-                details: data && (data.details || data.message) ? (data.details || data.message) : null,
-                step: data && data.step ? data.step : "verify_race",
-              };
-
-          if (statusEl) {
-            statusEl.textContent = resp.ok ? "OK" : `Error ${resp.status}`;
-            statusEl.style.color = resp.ok ? "#cbd5f5" : "#f87171";
+          if (statusElEl) {
+            statusElEl.textContent = resp.ok
+              ? "OK"
+              : `Error ${resp.status}`;
+            statusElEl.style.color = resp.ok ? "#cbd5f5" : "#f87171";
           }
 
           host.__flvLast = {
@@ -647,9 +670,9 @@
             }
           }
         } catch (error) {
-          if (statusEl) {
-            statusEl.textContent = "Error";
-            statusEl.style.color = "#f87171";
+          if (statusElEl) {
+            statusElEl.textContent = "Error";
+            statusElEl.style.color = "#f87171";
           }
           renderSummary(summaryEl, {
             date,
@@ -661,11 +684,13 @@
             console.error("[Verify Modal] request failed", error);
           }
         } finally {
-          runBtn.disabled = false;
-          runBtn.textContent = defaultLabel;
+          runBtnEl.disabled = false;
+          runBtnEl.textContent = defaultLabel;
           refreshGreenZone(host);
           try {
-            fetch("/api/verify_backfill", { method: "POST" }).catch(() => {});
+            fetch("/api/verify_backfill", { method: "POST" }).catch(
+              () => {}
+            );
           } catch {
             /* ignore background errors */
           }
@@ -686,7 +711,9 @@
       try {
         const query = host.__flvLast?.query || "";
         if (query) {
-          const url = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+          const url = `https://www.google.com/search?q=${encodeURIComponent(
+            query
+          )}`;
           window.open(url, "_blank", "noopener");
         }
       } catch {
@@ -713,19 +740,13 @@
     const warnTrack = qs("#flv-track-warn", host);
     const warnRace = qs("#flv-race-warn", host);
 
-    if (ctx && ctx.track && trackInput && !trackInput.value) {
-      trackInput.value = ctx.track;
-    } else if (trackInput) {
+    if (trackInput) {
       trackInput.value = trackVal || "";
     }
-    if (ctx && ctx.raceNo && raceInput && !raceInput.value) {
-      raceInput.value = ctx.raceNo;
-    } else if (raceInput) {
+    if (raceInput) {
       raceInput.value = raceVal || "";
     }
-    if (ctx && ctx.date && dateInput && !dateInput.value) {
-      dateInput.value = ctx.date;
-    } else if (dateInput && !dateInput.value) {
+    if (dateInput) {
       dateInput.value = dateVal || todayISO();
     }
     if (statusEl) {
@@ -736,16 +757,21 @@
     if (warnTrack) warnTrack.style.display = trackVal ? "none" : "";
     if (warnRace) warnRace.style.display = "none";
 
-    pushSnapshot(trackVal || currentTrack(), raceVal || currentRaceNo(), readUIPredictions());
+    pushSnapshot(
+      trackVal || currentTrack(),
+      raceVal || currentRaceNo(),
+      readUIPredictions()
+    );
 
     if (typeof host.__flvRefreshGreenZone === "function") {
       host.__flvRefreshGreenZone();
     }
   }
 
-  function openVerifyModal(ctx) {
+  // Implementation function (stored separately so the wrapper can call it)
+  function openVerifyModalImpl(ctx) {
     const host = buildModal();
-    prefill(host, initialCtx);
+    prefill(host, ctx || {});
     host.style.display = "flex";
     try {
       qs("#flv-track", host)?.focus();
@@ -754,15 +780,18 @@
     }
   }
 
-  // Always register the global opener function
-  window.__FL_OPEN_VERIFY_MODAL__ = openVerifyModal;
-  
+  // Store the implementation so the wrapper function can use it
+  window.__FL_VERIFY_MODAL_OPEN_IMPL__ = openVerifyModalImpl;
+
+  // Update the global to point directly to the implementation now that it's ready
+  window.__FL_OPEN_VERIFY_MODAL__ = openVerifyModalImpl;
+
   // Debug log to confirm registration
-  try {
-    if (window.__flVerifyDebug) {
-      console.log("[verify-modal] registered opener", typeof window.__FL_OPEN_VERIFY_MODAL__);
-    }
-  } catch (_) {}
+  if (window.__flVerifyDebug) {
+    try {
+      console.log(
+        "[verify-modal] registered window.__FL_OPEN_VERIFY_MODAL__"
+      );
+    } catch (_) {}
+  }
 })();
-
-

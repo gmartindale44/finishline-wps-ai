@@ -38,6 +38,15 @@
     try { await inject("/js/verify-modal.js?v=v2025-11-15-verify-final"); } catch {}
     try { await inject("/js/green-zone-panel.js?v=v2025-11-10-21"); } catch {}
     try { await inject("/js/prediction-snapshots.js?v=v2025-11-10-21"); } catch {}
+    
+    // Verify registration after a short delay to allow scripts to execute
+    setTimeout(() => {
+      if (typeof window.__FL_OPEN_VERIFY_MODAL__ !== "function") {
+        console.warn("[verify-loader] __FL_OPEN_VERIFY_MODAL__ not registered after script injection");
+      } else if (window.__flVerifyDebug) {
+        console.log("[verify-loader] __FL_OPEN_VERIFY_MODAL__ successfully registered");
+      }
+    }, 100);
   };
 
   if (document.readyState === "loading") {
