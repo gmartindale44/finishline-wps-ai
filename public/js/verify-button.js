@@ -97,12 +97,14 @@
         date,
       };
       
-      // Log the click
-      console.log("[verify-button] clicked", ctx);
+      // Log the click (when debug is enabled)
+      if (window.__flVerifyDebug) {
+        console.log("[verify-button] clicked", ctx);
+      }
       
-      // Save to sessionStorage
+      // Save to sessionStorage (use the key that verify-modal.js expects)
       try{
-        sessionStorage.setItem("fl:verify:last", JSON.stringify({ ...ctx, ts: Date.now() }));
+        sessionStorage.setItem("fl:verify:ctx", JSON.stringify({ ...ctx, ts: Date.now() }));
       } catch {}
       
       // Check if modal opener is available
