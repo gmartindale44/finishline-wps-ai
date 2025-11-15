@@ -2,8 +2,8 @@ import crypto from 'node:crypto';
 import { Redis } from '@upstash/redis';
 import { fetchAndParseResults } from '../../lib/results';
 
-const GOOGLE_KEY = (process.env.GOOGLE_API_KEY || '').replace(/^"+|"+$/g, '');
-const GOOGLE_CX  = (process.env.GOOGLE_CSE_ID  || '').replace(/^"+|"+$/g, '');
+const GOOGLE_API_KEY = (process.env.GOOGLE_API_KEY ?? '').trim();
+const GOOGLE_CSE_ID = (process.env.GOOGLE_CSE_ID ?? '').trim();
 
 const TTL_SECONDS = 60 * 60 * 24; // 24h
 const isVercel = !!process.env.VERCEL;
@@ -32,9 +32,14 @@ const slug = (s = '') =>
     .replace(/^_+|_+$/g, '');
 
 async function cseDirect(query) {
+  if (!GOOGLE_API_KEY || !GOOGLE_CSE_ID) {
+    const err = new Error('Google CSE credentials missing');
+    err.step = 'cse_credentials';
+    throw err;
+  }
   const u = new URL('https://www.googleapis.com/customsearch/v1');
-  u.searchParams.set('key', GOOGLE_KEY);
-  u.searchParams.set('cx', GOOGLE_CX);
+  u.searchParams.set('key', GOOGLE_API_KEY);
+  u.searchParams.set('cx', GOOGLE_CSE_ID);
   u.searchParams.set('q', query);
   const r = await fetch(u.toString());
   if (!r.ok) throw new Error(`Google CSE ${r.status}: ${await r.text()}`);
@@ -78,7 +83,7 @@ function pickBest(items) {
 }
 
 async function runSearch(req, query) {
-  return (GOOGLE_KEY && GOOGLE_CX)
+  return (GOOGLE_API_KEY && GOOGLE_CSE_ID)
     ? await cseDirect(query)
     : await cseViaBridge(req, query);
 }
@@ -92,7 +97,7 @@ export default async function handler(req, res) {
   try {
     if (req.method !== 'POST') {
       res.setHeader('Allow', 'POST');
-      return res.status(405).json({ error: 'Method Not Allowed' });
+      return res.status(405).json({ ok: false, error: 'Method Not Allowed' });
     }
 
     // Be tolerant of either req.body object or JSON string

@@ -7,10 +7,10 @@
   const qsa=(s,r=document)=>Array.from(r.querySelectorAll(s));
 
   function getTrackInput(){
-    return qs("input[placeholder*='track' i]") || qs("input[id*='track' i]") || qs("input[name*='track' i]");
+    return qs("#race-track") || qs("input[placeholder*='track' i]") || qs("input[id*='track' i]") || qs("input[name*='track' i]");
   }
   function getRaceNoInput(){
-    return qs("input[placeholder*='race' i]") || qs("input[id*='race' i]") || qs("input[name*='race' i]");
+    return qs("#fl-race-number") || qs("input[placeholder*='race' i]") || qs("input[id*='race' i]") || qs("input[name*='race' i]");
   }
 
   function findToolbar(){
@@ -36,7 +36,10 @@
   }
 
   function hideDate(){
+    // Hide old date fields but NOT our new fl-race-date field
     qsa("input[type='date'], input[placeholder*='date' i], input[id*='date' i], [data-field='date']").forEach(el=>{
+      // Skip our new main form date field
+      if (el.id === "fl-race-date") return;
       const wrap=el.closest("label, .field, .form-group, .input, .row")||el;
       wrap.style.display="none";
     });
@@ -56,20 +59,27 @@
     if(pill.tagName.toLowerCase()==="a") pill.removeAttribute("href");
     pill.addEventListener("click", (e)=>{
       e.preventDefault();
-      const trackEl=getTrackInput();
-      const raceEl=getRaceNoInput();
-      const track=(trackEl&&trackEl.value||"").trim();
-      const raceNo=(raceEl&&raceEl.value||"").trim();
+      const trackInput = getTrackInput();
+      const raceNoInput = getRaceNoInput();
+      const dateInput = qs("#fl-race-date");
+      const track = trackInput ? trackInput.value.trim() : "";
+      const raceNo = raceNoInput ? raceNoInput.value.trim() : "";
+      const date = dateInput && dateInput.value ? dateInput.value : null;
       if(!track){
-        const wrap=(trackEl&&(trackEl.closest("label, .field, .form-group, .input, .row")||trackEl.parentElement))||document.body;
+        const wrap=(trackInput&&(trackInput.closest("label, .field, .form-group, .input, .row")||trackInput.parentElement))||document.body;
         let w=qs("#fl-track-warn",wrap);
         if(!w){w=document.createElement("div");w.id="fl-track-warn";w.style.cssText="margin-top:6px;color:#ffcc00;font:600 12px/1.2 system-ui";wrap.appendChild(w);} 
         w.textContent="Please enter/select a Track before verifying.";
-        try{trackEl&&trackEl.focus();}catch{}
+        try{trackInput&&trackInput.focus();}catch{}
         return;
       }
-      try{sessionStorage.setItem("fl:verify:ctx",JSON.stringify({track,raceNo:raceNo||undefined,ts:Date.now()}));}catch{}
-      if(window.__FL_OPEN_VERIFY_MODAL__) window.__FL_OPEN_VERIFY_MODAL__({ track, raceNo });
+      console.log("[verify-button] clicked", { track, raceNo, date });
+      try{sessionStorage.setItem("fl:verify:ctx",JSON.stringify({track,raceNo:raceNo||undefined,date,ts:Date.now()}));}catch{}
+      if(window.__FL_OPEN_VERIFY_MODAL__) {
+        window.__FL_OPEN_VERIFY_MODAL__({ track, raceNo, date });
+      } else {
+        console.warn("[verify-button] __FL_OPEN_VERIFY_MODAL__ is not defined");
+      }
     });
     toolbar.appendChild(pill);
     log("verify pill mounted");
