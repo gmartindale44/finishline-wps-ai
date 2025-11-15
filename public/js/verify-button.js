@@ -82,11 +82,11 @@
       }
       
       if(!track){
-        const wrap=(trackEl&&(trackEl.closest("label, .field, .form-group, .input, .row")||trackEl.parentElement))||document.body;
+        const wrap=(trackInput&&(trackInput.closest("label, .field, .form-group, .input, .row")||trackInput.parentElement))||document.body;
         let w=qs("#fl-track-warn",wrap);
         if(!w){w=document.createElement("div");w.id="fl-track-warn";w.style.cssText="margin-top:6px;color:#ffcc00;font:600 12px/1.2 system-ui";wrap.appendChild(w);} 
         w.textContent="Please enter/select a Track before verifying.";
-        try{trackEl&&trackEl.focus();}catch{}
+        try{trackInput&&trackInput.focus();}catch{}
         return;
       }
       
