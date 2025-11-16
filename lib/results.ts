@@ -8,7 +8,10 @@ function cleanName(name: string): string {
   return name.replace(/\s+/g, ' ').replace(/[^A-Za-z0-9' .\-]/g, '').trim();
 }
 
-export async function fetchAndParseResults(url: string): Promise<ParsedOutcome> {
+export async function fetchAndParseResults(
+  url: string,
+  options?: { raceNo?: string | number | null },
+): Promise<ParsedOutcome> {
   const outcome: ParsedOutcome = { win: '', place: '', show: '' };
   if (!url) return outcome;
 
@@ -22,8 +25,35 @@ export async function fetchAndParseResults(url: string): Promise<ParsedOutcome> 
     if (!res.ok) return outcome;
     const html = await res.text();
 
+    let scopeHtml = html;
+    const raceNo = options?.raceNo;
+    if (raceNo != null && raceNo !== '') {
+      const num = String(raceNo).trim();
+      try {
+        const patterns = [
+          new RegExp(`Race\\s*${num}[\\s\\S]{0,4000}?(?:Finish\\s+Order|Win\\b)`, 'i'),
+          new RegExp(`Race\\s*${num}[\\s\\S]{0,4000}?<table[\\s\\S]{0,4000}?</table>`, 'i'),
+        ];
+        for (const re of patterns) {
+          const m = html.match(re);
+          if (m) {
+            scopeHtml = m[0];
+            break;
+          }
+        }
+      } catch {
+        // fall back to full html on any regex error
+      }
+    }
+
     const trySetFromList = (names: string[]) => {
-      const filtered = names.map(cleanName).filter(Boolean);
+      const filtered = names
+        .map(cleanName)
+        .filter(Boolean)
+        .filter((n) => {
+          const lower = n.toLowerCase();
+          return lower !== 'win' && lower !== 'place' && lower !== 'show';
+        });
       if (filtered.length >= 3) {
         outcome.win = outcome.win || filtered[0];
         outcome.place = outcome.place || filtered[1];
@@ -31,7 +61,7 @@ export async function fetchAndParseResults(url: string): Promise<ParsedOutcome> 
       }
     };
 
-    const finishMatch = html.match(/Finish\s+Order[\s\S]{0,2000}?<\/table>/i);
+    const finishMatch = scopeHtml.match(/Finish\s+Order[\s\S]{0,2000}?<\/table>/i);
     if (finishMatch) {
       const block = finishMatch[0];
       const names = Array.from(block.matchAll(/>([A-Za-z0-9' .\-]+)</g)).map((m) => m[1]);
@@ -39,14 +69,18 @@ export async function fetchAndParseResults(url: string): Promise<ParsedOutcome> 
     }
 
     if (!outcome.win) {
-      const hrn = html.match(/Win[^A-Za-z0-9]{1,10}([A-Za-z0-9' .\-]+)[\s\S]{0,400}?Place[^A-Za-z0-9]{1,10}([A-Za-z0-9' .\-]+)[\s\S]{0,400}?Show[^A-Za-z0-9]{1,10}([A-Za-z0-9' .\-]+)/i);
+      const hrn = scopeHtml.match(
+        /Win[^A-Za-z0-9]{1,10}([A-Za-z0-9' .\-]+)[\s\S]{0,400}?Place[^A-Za-z0-9]{1,10}([A-Za-z0-9' .\-]+)[\s\S]{0,400}?Show[^A-Za-z0-9]{1,10}([A-Za-z0-9' .\-]+)/i,
+      );
       if (hrn) {
         trySetFromList([hrn[1], hrn[2], hrn[3]]);
       }
     }
 
     if (!outcome.win) {
-      const fallback = html.match(/1st[^A-Za-z0-9]{1,10}([A-Za-z0-9' .\-]+)[\s\S]{0,400}?2nd[^A-Za-z0-9]{1,10}([A-Za-z0-9' .\-]+)[\s\S]{0,400}?3rd[^A-Za-z0-9]{1,10}([A-Za-z0-9' .\-]+)/i);
+      const fallback = scopeHtml.match(
+        /1st[^A-Za-z0-9]{1,10}([A-Za-z0-9' .\-]+)[\s\S]{0,400}?2nd[^A-Za-z0-9]{1,10}([A-Za-z0-9' .\-]+)[\s\S]{0,400}?3rd[^A-Za-z0-9]{1,10}([A-Za-z0-9' .\-]+)/i,
+      );
       if (fallback) {
         trySetFromList([fallback[1], fallback[2], fallback[3]]);
       }

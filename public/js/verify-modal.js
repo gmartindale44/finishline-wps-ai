@@ -470,7 +470,6 @@
 
     const helpText = document.createElement("small");
     helpText.style.opacity = ".75";
-    // Updated helper text
     helpText.textContent = "Race # helps context.";
 
     buttonsRow.appendChild(runBtn);
@@ -618,7 +617,7 @@
           });
           const data = await resp.json().catch(() => ({}));
 
-          // Build summary payload with date and error info (single, non-duplicated block)
+          // Build summary payload with date and error info
           const baseSummary = {};
           if (date) {
             baseSummary.date = date;
