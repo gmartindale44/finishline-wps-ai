@@ -210,8 +210,7 @@
     }
 
     if (hasError) {
-      msgEl.innerHTML =
-        "GreenZone service error. See debug JSON below.";
+      msgEl.innerHTML = "GreenZone service error. See debug JSON below.";
       tableWrap.innerHTML = "";
       return;
     }
@@ -405,8 +404,7 @@
     const raceWarn = document.createElement("small");
     raceWarn.id = "flv-race-warn";
     raceWarn.style.cssText = "display:none;color:#ffcc00;";
-    raceWarn.textContent =
-      "Server asked for a Race # — please add one.";
+    raceWarn.textContent = "Server asked for a Race # — please add one.";
     raceWrap.appendChild(raceWarn);
 
     grid1.appendChild(raceWrap);
@@ -471,7 +469,7 @@
 
     const helpText = document.createElement("small");
     helpText.style.opacity = ".75";
-    // You asked to remove "Track & Date required" from this helper text
+    // Updated helper text
     helpText.textContent = "Race # helps context.";
 
     buttonsRow.appendChild(runBtn);
@@ -688,9 +686,7 @@
           runBtnEl.textContent = defaultLabel;
           refreshGreenZone(host);
           try {
-            fetch("/api/verify_backfill", { method: "POST" }).catch(
-              () => {}
-            );
+            fetch("/api/verify_backfill", { method: "POST" }).catch(() => {});
           } catch {
             /* ignore background errors */
           }
@@ -789,9 +785,7 @@
   // Debug log to confirm registration
   if (window.__flVerifyDebug) {
     try {
-      console.log(
-        "[verify-modal] registered window.__FL_OPEN_VERIFY_MODAL__"
-      );
+      console.log("[verify-modal] registered window.__FL_OPEN_VERIFY_MODAL__");
     } catch (_) {}
   }
 })();
