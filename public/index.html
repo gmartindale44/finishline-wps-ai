@@ -1,147 +1,375 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>FinishLine WPS AI</title>
-  <link rel="stylesheet" href="./styles.css" />
-  <link rel="stylesheet" href="/finishline-picker-guard.css" />
-  <link rel="stylesheet" href="/css/finishline.css" />
-  <link rel="stylesheet" href="/css/combobox.css" />
-</head>
-<body>
-  <header class="hero">
-    <div class="logo-row">
-      <span class="logo-horse">🐎</span>
-      <h1>FinishLine WPS AI</h1>
-    </div>
-    <p class="subtitle">Win / Place / Show Predictor</p>
-  </header>
+  <head>
+    <meta charset="UTF-8" />
+    <title>FinishLine WPS AI — Win / Place / Show Predictor</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <!-- Main Panel (single canonical form) -->
-  <section class="panel panel-main" id="mainPanel">
-    <div class="panel-header">
-      <h2>Race Information</h2>
-      <span class="badge" id="statusBadge" data-ocr-badge>Idle</span>
-    </div>
+    <!-- Core styles (keep or point to your existing CSS bundle) -->
+    <link rel="stylesheet" href="/css/main.css" />
+    <style>
+      /* Minimal safe styling so the page isn't naked if main.css changes */
 
-    <div class="grid grid-2">
-      <label class="field">
-        <span>Race Date</span>
-        <input id="race-date" type="text" placeholder="mm/dd/yyyy" />
-      </label>
-      <label class="field">
-        <span>Track</span>
-        <input id="race-track" type="text" placeholder="e.g., Churchill Downs" />
-      </label>
-      <label class="field">
-        <span>Surface</span>
-        <select id="race-surface">
-          <option value="Dirt" selected>Dirt</option>
-          <option value="Turf">Turf</option>
-          <option value="Synthetic">Synthetic</option>
-        </select>
-      </label>
-      <label class="field">
-        <span>Distance</span>
-        <input id="race-distance" type="text" placeholder="e.g., 1 1/4 miles" />
-      </label>
-    </div>
-
-    <!-- Horse Data Section -->
-    <section id="horse-section" class="panel mt-4">
-      <div class="section-header">
-        <h3 class="section-title">Horse Data</h3>
-        <button id="add-row-btn" class="btn btn-secondary btn-sm">+ Add Horse</button>
-      </div>
-
-      <!-- Table / rows container -->
-      <div id="horse-rows" class="rows"></div>
-
-      <div class="controls">
-        <!-- File picker UI -->
-        <div id="fl-picker-wrap" class="flex items-center gap-2">
-          <button type="button" data-fl-file-btn class="btn">Choose Photos</button>
-          <span id="file-selected-label" class="text-sm opacity-80">No file selected</span>
-          <!-- Hidden file input -->
-          <input id="fl-file" type="file" hidden accept="image/*,application/pdf" multiple>
-        </div>
-        
-        <!-- Action buttons (keep your styling; just ensure these data hooks exist) -->
-        <button type="button" data-fl-analyze id="analyze-btn" class="btn btn-secondary disabled" disabled>Analyze with AI</button>
-        <button type="button" data-fl-predict id="predict-btn" class="btn btn-primary disabled" disabled>Predict W/P/S</button>
-        <button type="button" id="fl-new-race" class="btn btn-secondary">New Race</button>
-        
-        <div class="chips">
-          <span data-chip="choose" class="chip chip--idle">Idle</span>
-          <span data-chip="analyze" class="chip chip--idle">Idle</span>
-          <span data-chip="predict" class="chip chip--idle">Idle</span>
-        </div>
-      </div>
-
-    </section>
-
-  <footer class="foot">
-    <p>© NovaSpark Collective LLC · FinishLine WPS AI</p>
-    <p class="muted">Disclaimer: This tool is for informational/entertainment purposes only and does not constitute betting advice.</p>
-    <div id="fl-debug" style="opacity:.6;font-size:12px;margin-top:.5rem;"></div>
-  </footer>
-  <!-- Progress toast container -->
-  <div id="fl-toast" style="position:fixed;bottom:20px;right:20px;max-width:400px;padding:12px;background:#2a2f3a;color:#fff;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:10000;display:none;"></div>
-  <!-- Results panel container -->
-  <div id="fl-results-root" aria-live="polite"></div>
-  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.4.168/build/pdf.min.js" defer></script>
-  <script>
-    window.addEventListener('DOMContentLoaded', () => {
-      if (window.pdfjsLib) {
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.4.168/build/pdf.worker.min.js';
+      :root {
+        color-scheme: dark;
       }
-    });
-  </script>
-  <script src="/js/table.js" defer></script>
-  <script type="module" src="/js/features.js" defer></script>
-  <script type="module" src="/js/predictor.js" defer></script>
-  <script type="module" src="/js/ocr-extract.js" defer></script>
-  <script type="module" src="/js/utils-distance.js" defer></script>
-  <script defer src="/js/distance-normalizer.js"></script>
-  <script src="/js/calibration-loader.js" defer></script>
-  <script src="/js/results-panel.js" defer></script>
-  <script type="module" src="/js/finishline-picker-bootstrap.js" defer></script>
-  <script src="/js/picker-autobind.js" defer></script>
-  <script>
-    // Set calibration status flag if env var is enabled (server-side check via Vercel)
-    // This can be set via Vercel environment variable FINISHLINE_SHOW_CAL_STATUS
-    window.FINISHLINE_SHOW_CAL_STATUS = false; // Default off - set to true in Vercel preview env if needed
-    
-    // Distance tooltip helper
-    window.addEventListener('DOMContentLoaded', () => {
-      const distInput = document.getElementById('race-distance');
-      const distLabel = distInput?.closest('label');
-      if (distInput && distLabel) {
-        let tooltip = null;
-        distInput.addEventListener('input', async () => {
-          const value = distInput.value.trim();
-          if (!value) {
-            if (tooltip) { tooltip.remove(); tooltip = null; }
-            return;
-          }
-          const { parseDistanceToMiles } = await import('/js/utils-distance.js');
-          const miles = parseDistanceToMiles(value);
-          if (miles != null && !isNaN(miles) && miles > 0) {
-            if (!tooltip) {
-              tooltip = document.createElement('span');
-              tooltip.style.cssText = 'font-size:11px;opacity:0.7;margin-left:6px;color:#b8bdd4;';
-              distLabel.appendChild(tooltip);
-            }
-            tooltip.textContent = `≈ ${miles.toFixed(2)} mi`;
-          } else if (tooltip) {
-            tooltip.remove();
-            tooltip = null;
-          }
-        });
+
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        background: radial-gradient(circle at top, #1f2937, #020617);
+        color: #e5e7eb;
       }
-    });
-  </script>
-  <script src="/js/verify-loader.js?v=v2025-11-15-verify-stable" defer></script>
-</body>
+
+      .fl-shell {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+
+      header {
+        padding: 16px 24px;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.35);
+        background: radial-gradient(circle at top left, #1d2433, #020617);
+      }
+
+      .fl-title {
+        font-size: 20px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .fl-subtitle {
+        font-size: 12px;
+        opacity: 0.7;
+        margin-top: 4px;
+      }
+
+      main {
+        flex: 1;
+        padding: 24px;
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+      }
+
+      .fl-card {
+        width: min(1100px, 100%);
+        border-radius: 18px;
+        border: 1px solid rgba(148, 163, 184, 0.4);
+        background: radial-gradient(circle at top left, #111827, #020617);
+        box-shadow: 0 24px 60px rgba(15, 23, 42, 0.8);
+        padding: 24px 24px 18px;
+      }
+
+      .fl-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 16px;
+        margin-bottom: 20px;
+      }
+
+      .fl-card-title {
+        font-size: 18px;
+        font-weight: 600;
+      }
+
+      .fl-card-caption {
+        font-size: 12px;
+        opacity: 0.7;
+      }
+
+      .fl-form-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+        gap: 24px;
+        align-items: flex-start;
+      }
+
+      .fl-field-group {
+        margin-bottom: 16px;
+      }
+
+      .fl-label {
+        font-size: 12px;
+        opacity: 0.85;
+        margin-bottom: 6px;
+      }
+
+      .fl-input,
+      .fl-select {
+        width: 100%;
+        border-radius: 10px;
+        border: 1px solid rgba(148, 163, 184, 0.55);
+        background: rgba(15, 23, 42, 0.95);
+        color: inherit;
+        padding: 9px 11px;
+        font-size: 14px;
+        box-sizing: border-box;
+      }
+
+      .fl-input::placeholder {
+        color: rgba(148, 163, 184, 0.8);
+      }
+
+      .fl-row {
+        display: flex;
+        gap: 12px;
+      }
+
+      .fl-row > * {
+        flex: 1;
+      }
+
+      .fl-buttons-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 18px;
+      }
+
+      .btn {
+        border-radius: 999px;
+        padding: 9px 16px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        border: 1px solid transparent;
+        background: transparent;
+        color: inherit;
+      }
+
+      .btn-primary {
+        background: linear-gradient(135deg, #7c3aed, #4f46e5);
+        border-color: rgba(129, 140, 248, 0.9);
+        color: #f9fafb;
+      }
+
+      .btn-outline {
+        border-color: rgba(148, 163, 184, 0.7);
+        background: transparent;
+      }
+
+      .btn:disabled {
+        opacity: 0.6;
+        cursor: default;
+      }
+
+      .fl-footer {
+        font-size: 11px;
+        opacity: 0.6;
+        margin-top: 18px;
+        border-top: 1px solid rgba(148, 163, 184, 0.25);
+        padding-top: 10px;
+      }
+
+      .fl-predictions-panel {
+        border-radius: 14px;
+        border: 1px solid rgba(148, 163, 184, 0.45);
+        background: radial-gradient(circle at top left, #020617, #020617);
+        padding: 12px 14px;
+        font-size: 12px;
+      }
+
+      .fl-predictions-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 11px;
+        border: 1px solid rgba(52, 211, 153, 0.5);
+        color: #a7f3d0;
+      }
+
+      .prediction-card {
+        border-radius: 10px;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        padding: 8px 9px;
+        margin-bottom: 6px;
+        font-size: 12px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .prediction-card .title {
+        font-weight: 500;
+      }
+
+      .prediction-card small {
+        opacity: 0.7;
+      }
+
+      @media (max-width: 900px) {
+        main {
+          padding: 16px;
+        }
+
+        .fl-form-grid {
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="fl-shell">
+      <header>
+        <div class="fl-title">FinishLine WPS AI</div>
+        <div class="fl-subtitle">Win / Place / Show Predictor · NovaSpark Collective</div>
+      </header>
+
+      <main>
+        <section class="fl-card">
+          <div class="fl-card-header">
+            <div>
+              <div class="fl-card-title">Race Information</div>
+              <div class="fl-card-caption">
+                Enter today’s card details, run predictions, then verify the results once official charts post.
+              </div>
+            </div>
+          </div>
+
+          <div class="fl-form-grid">
+            <!-- Left: Main race form -->
+            <div>
+              <div class="fl-field-group">
+                <label class="fl-label" for="race-date">Race Date</label>
+                <input
+                  id="race-date"
+                  name="race-date"
+                  type="date"
+                  class="fl-input"
+                  placeholder="YYYY-MM-DD"
+                />
+              </div>
+
+              <div class="fl-field-group">
+                <div class="fl-row">
+                  <div>
+                    <label class="fl-label" for="track-input">Track</label>
+                    <input
+                      id="track-input"
+                      name="track"
+                      type="text"
+                      class="fl-input"
+                      placeholder="Type to search tracks…"
+                    />
+                  </div>
+                  <div style="max-width: 120px;">
+                    <label class="fl-label" for="race-no-input">Race #</label>
+                    <input
+                      id="race-no-input"
+                      name="raceNo"
+                      type="number"
+                      min="1"
+                      class="fl-input"
+                      placeholder="1"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <!-- You can restore Distance / Surface / Class etc. here if your old file had them -->
+
+              <div class="fl-buttons-row">
+                <button
+                  type="button"
+                  id="predict-button"
+                  class="btn btn-primary"
+                >
+                  Predict W/P/S
+                </button>
+
+                <!-- ✅ Verify button wired to the modal global -->
+                <button
+                  type="button"
+                  id="verify-race-button"
+                  class="btn btn-outline"
+                  onclick="
+                    window.__FL_OPEN_VERIFY_MODAL__ &&
+                    window.__FL_OPEN_VERIFY_MODAL__({
+                      track: document.querySelector('input[name=&quot;track&quot;], input[id*=&quot;track&quot; i], input[placeholder*=&quot;track&quot; i]')?.value || '',
+                      raceNo: document.querySelector('input[name=&quot;raceNo&quot;], input[id*=&quot;race&quot; i], input[placeholder*=&quot;race&quot; i]')?.value || '',
+                      date: document.querySelector('input[type=&quot;date&quot;], input[name*=&quot;date&quot; i], input[id*=&quot;date&quot; i]')?.value || ''
+                    });
+                  "
+                >
+                  Verify Race
+                </button>
+
+                <!-- Add any other legacy buttons here (New Race, Clear, etc.) -->
+              </div>
+
+              <div class="fl-footer">
+                © NovaSpark Collective LLC · FinishLine WPS AI<br />
+                Tool is for entertainment / informational use only and does not
+                constitute betting advice.
+              </div>
+            </div>
+
+            <!-- Right: Predictions panel (kept simple, but wired for readUIPredictions) -->
+            <aside
+              class="fl-predictions-panel"
+              data-panel="predictions"
+            >
+              <div class="fl-predictions-header">
+                <div style="font-weight: 500;">Current AI Picks</div>
+                <span class="badge">
+                  <span>AI</span>
+                  <span>W · P · S</span>
+                </span>
+              </div>
+
+              <!-- These .prediction-card elements are what readUIPredictions() looks for -->
+              <div class="prediction-card" data-pick="win">
+                <div>
+                  <div class="title" data-name>Win horse</div>
+                  <small>Tap Predict W/P/S to populate</small>
+                </div>
+                <small>WIN</small>
+              </div>
+
+              <div class="prediction-card" data-pick="place">
+                <div>
+                  <div class="title" data-name>Place horse</div>
+                  <small>Top 2 finish</small>
+                </div>
+                <small>PLACE</small>
+              </div>
+
+              <div class="prediction-card" data-pick="show">
+                <div>
+                  <div class="title" data-name>Show horse</div>
+                  <small>Top 3 finish</small>
+                </div>
+                <small>SHOW</small>
+              </div>
+
+              <!-- Your real JS will overwrite these with live predictions -->
+            </aside>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <!-- Your existing bundles; keep any that were in the old file -->
+    <!-- Example: -->
+    <!-- <script src="/js/track-combobox.js" defer></script> -->
+    <!-- <script src="/js/predict-wps.js" defer></script> -->
+
+    <!-- ✅ Verify modal JS (the file you pasted) -->
+    <script src="/js/verify-modal.js" defer></script>
+  </body>
 </html>

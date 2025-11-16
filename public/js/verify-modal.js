@@ -1,26 +1,26 @@
-/* public/js/verify-modal.js — GreenZone Lab v2 */
+/* public/js/verify-modal.js — GreenZone Lab v2 (verify wiring + date sync) */
 
 (function () {
   "use strict";
 
   if (typeof window === "undefined" || typeof document === "undefined") return;
-  
-  // Define the opener function first (before any early returns)
+
+  // ---- Global opener stub (registered immediately) ----
   function openVerifyModal(ctx) {
-    // This will be defined below, but we reference it here for the early assignment
     if (typeof window.__FL_VERIFY_MODAL_OPEN_IMPL__ === "function") {
       return window.__FL_VERIFY_MODAL_OPEN_IMPL__(ctx);
     }
-    // Fallback: try to build modal if implementation not ready yet
-    console.warn("[verify-modal] openVerifyModal called before implementation ready");
+    console.warn(
+      "[verify-modal] openVerifyModal called before implementation ready",
+      ctx,
+    );
   }
-  
-  // *** CRITICAL: Register the global IMMEDIATELY, before any guards or early returns ***
+
+  // Register stub BEFORE any early returns so the global always exists
   window.__FL_OPEN_VERIFY_MODAL__ = openVerifyModal;
-  
+
   // Guard to prevent double DOM initialization
   if (window.__FL_VERIFY_MODAL_INIT__) {
-    // Already initialized DOM, but global is now registered above
     return;
   }
   window.__FL_VERIFY_MODAL_INIT__ = true;
@@ -39,13 +39,19 @@
   function readUIPredictions() {
     try {
       const scope =
-        document.querySelector('[data-panel="predictions"], .predictions-panel') ||
-        document;
+        document.querySelector(
+          '[data-panel="predictions"], .predictions-panel',
+        ) || document;
       const picks = { win: "", place: "", show: "" };
-      const cards = Array.from(scope.querySelectorAll(".prediction-card, [data-pick]"));
+
+      const cards = Array.from(
+        scope.querySelectorAll(".prediction-card, [data-pick]"),
+      );
       if (cards.length >= 3) {
         const names = cards.slice(0, 3).map((card) => {
-          const el = card.querySelector("[data-name], .title, .name, b, strong");
+          const el = card.querySelector(
+            "[data-name], .title, .name, b, strong",
+          );
           return ((el && el.textContent) || "").trim();
         });
         picks.win = names[0] || "";
@@ -53,11 +59,16 @@
         picks.show = names[2] || "";
         return picks;
       }
+
       const fetchText = (selector) =>
         (scope.querySelector(selector)?.textContent || "").trim();
       picks.win = fetchText("[data-pick='win'], .pick-win b, .emoji-win~b");
-      picks.place = fetchText("[data-pick='place'], .pick-place b, .emoji-place~b");
-      picks.show = fetchText("[data-pick='show'], .pick-show b, .emoji-show~b");
+      picks.place = fetchText(
+        "[data-pick='place'], .pick-place b, .emoji-place~b",
+      );
+      picks.show = fetchText(
+        "[data-pick='show'], .pick-show b, .emoji-show~b",
+      );
       return picks;
     } catch {
       return { win: "", place: "", show: "" };
@@ -84,7 +95,11 @@
     qs("input[id*='race' i]") ||
     qs("input[name*='race' i]");
 
-  // Try to read the main form's race date so the modal respects it
+  const currentTrack = () => (getTopTrack()?.value || "").trim();
+  const currentRaceNo = () => (getTopRace()?.value || "").trim();
+
+  // ----- date helpers wired to the main Race Date field -----
+
   const getTopDateInput = () =>
     qs("input[type='date']") ||
     qs("input[placeholder*='date' i]") ||
@@ -103,23 +118,19 @@
       let mm = m[1].padStart(2, "0");
       let dd = m[2].padStart(2, "0");
       let yy = m[3];
-      if (yy.length === 2) yy = "20" + yy; // naive 2-digit year handling
+      if (yy.length === 2) yy = "20" + yy;
       return `${yy}-${mm}-${dd}`;
     }
 
     return null;
   }
 
-  // Best-guess current race date from the main UI (top form)
   const currentDateIso = () => {
     const el = getTopDateInput();
     if (!el) return null;
     const raw = el.value || el.getAttribute("value") || "";
     return normalizeToIsoDate(raw);
   };
-
-  const currentTrack = () => (getTopTrack()?.value || "").trim();
-  const currentRaceNo = () => (getTopRace()?.value || "").trim();
 
   function pushSnapshot(track, raceNo, picks) {
     try {
@@ -151,12 +162,12 @@
     if (!data) data = {};
 
     const lines = [];
-    
+
     // Always show date if present
     if (data.date) {
       lines.push(`Using date: ${data.date}`);
     }
-    
+
     // Show error info first if present
     if (data.error) {
       lines.push(`Error: ${data.error}`);
@@ -167,7 +178,7 @@
     if (data.step) {
       lines.push(`Step: ${data.step}`);
     }
-    
+
     // Show query if present
     if (data.query) {
       lines.push(`Query: ${data.query}`);
@@ -182,12 +193,16 @@
       if (parts.length) lines.push(parts.join(" • "));
     }
 
-    // Show top result if present (with safe checks)
+    // Show top result if present
     if (data.top && typeof data.top === "object" && data.top.title) {
-      lines.push(`Top Result: ${data.top.title}${data.top.link ? `\n${data.top.link}` : ""}`);
+      lines.push(
+        `Top Result: ${data.top.title}${
+          data.top.link ? `\n${data.top.link}` : ""
+        }`,
+      );
     }
 
-    // Show hits if present (with safe checks)
+    // Show hits if present
     if (data.hits && typeof data.hits === "object") {
       const hitParts = [];
       if (data.hits.winHit) hitParts.push("Win");
@@ -201,7 +216,6 @@
       lines.push(data.summary);
     }
 
-    // Fallback if absolutely nothing meaningful
     if (!lines.length) {
       lines.push("No summary returned.");
     }
@@ -219,11 +233,18 @@
     const suggestions = Array.isArray(payload?.suggestions)
       ? payload.suggestions
       : [];
+    const hasError = payload && payload.error;
 
     try {
       debugEl.textContent = JSON.stringify(payload ?? {}, null, 2);
     } catch {
       debugEl.textContent = String(payload ?? "");
+    }
+
+    if (hasError) {
+      msgEl.innerHTML = "GreenZone service error. See debug JSON below.";
+      tableWrap.innerHTML = "";
+      return;
     }
 
     if (!suggestions.length) {
@@ -274,7 +295,7 @@
         acc[key] = (acc[key] || 0) + 1;
         return acc;
       },
-      {}
+      {},
     );
 
     const summaryText = Object.entries(counts)
@@ -290,14 +311,24 @@
 
     try {
       const res = await fetch("/api/greenzone_today", { method: "GET" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        const status = res.status;
+        throw Object.assign(new Error(`HTTP ${status}`), { status });
+      }
       const json = await res.json().catch(() => ({}));
       renderGreenZone(host, json);
     } catch (error) {
       if (window.__flVerifyDebug) {
         console.error("[Verify Modal] GreenZone fetch failed", error);
       }
-      renderGreenZone(host, { suggestions: [] });
+      const errPayload = {
+        suggestions: [],
+        error: error?.message || "Request failed",
+      };
+      if (typeof error?.status !== "undefined") {
+        errPayload.status = error.status;
+      }
+      renderGreenZone(host, errPayload);
     }
   }
 
@@ -308,62 +339,229 @@
     host = document.createElement("div");
     host.id = "fl-verify-modal-host";
     host.style.cssText =
-      "position:fixed;inset:0;z-index:2147483646;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.5)";
+      "position:fixed;inset:0;z-index:2147483646;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.55);";
 
-    host.innerHTML = `
-      <div role="dialog" aria-modal="true" class="flv-card" style="width:min(900px,96vw);max-height:90vh;overflow:auto;border-radius:18px;border:1px solid rgba(255,255,255,.12);background:rgba(23,23,28,.98);backdrop-filter:blur(8px);padding:20px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-          <h3 style="margin:0;font:600 22px/1.2 system-ui">Verify Race</h3>
-          <button id="flv-close" style="border:none;background:transparent;color:inherit;font:600 18px;opacity:.8;cursor:pointer">✕</button>
-        </div>
+    const card = document.createElement("div");
+    card.className = "flv-card";
+    card.setAttribute("role", "dialog");
+    card.setAttribute("aria-modal", "true");
+    card.setAttribute("data-build", "datefix-final3");
+    card.style.cssText =
+      "width:min(880px,96vw);max-height:90vh;overflow:auto;border-radius:16px;border:1px solid rgba(255,255,255,.12);background:rgba(23,23,28,.96);backdrop-filter:blur(6px);padding:18px;";
 
-        <div id="flv-status" style="font:600 13px/1.2 system-ui;opacity:.85;margin-bottom:12px">Idle</div>
+    host.appendChild(card);
 
-        <div style="display:grid;gap:10px;margin-bottom:14px;grid-template-columns:1.4fr 0.6fr 0.9fr;">
-          <label style="display:block">
-            <div style="margin-bottom:6px;opacity:.9">Track <span style="color:#ffcc00">*</span></div>
-            <input id="flv-track" type="text" placeholder="Track"
-              style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:rgba(0,0,0,.15);color:inherit"/>
-            <small id="flv-track-warn" style="display:none;color:#ffcc00">Track is required.</small>
-          </label>
+    // Header row
+    const headerRow = document.createElement("div");
+    headerRow.style.cssText =
+      "display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;";
 
-          <label style="display:block">
-            <div style="margin-bottom:6px;opacity:.9">Race # (optional)</div>
-            <input id="flv-race" type="text" placeholder="e.g. 6"
-              style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:rgba(0,0,0,.15);color:inherit"/>
-            <small id="flv-race-warn" style="display:none;color:#ffcc00">Server asked for a Race # — please add one.</small>
-          </label>
+    const title = document.createElement("h3");
+    title.style.margin = "0";
+    title.style.font = "600 20px/1.2 system-ui";
+    title.textContent = "Verify Race ";
 
-          <label style="display:block">
-            <div style="margin-bottom:6px;opacity:.9">Date</div>
-            <input id="flv-date" type="date"
-              style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:rgba(0,0,0,.15);color:inherit"/>
-          </label>
-        </div>
+    const buildTag = document.createElement("span");
+    buildTag.style.cssText = "font-size:11px;opacity:.5;margin-left:8px;";
+    buildTag.textContent = "Build: datefix-final3";
+    title.appendChild(buildTag);
 
-        <div style="display:flex;gap:10px;align-items:center;margin:14px 0;flex-wrap:wrap">
-          <button id="flv-run" style="padding:10px 18px;border-radius:12px;border:none;background:#6b46c1;color:#fff;font-weight:700;cursor:pointer">Verify Now</button>
-          <button id="flv-open-top" style="padding:10px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:transparent;color:inherit;cursor:pointer">Open Top Result</button>
-          <button id="flv-open-google" style="padding:10px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:transparent;color:inherit;cursor:pointer">Open Google (debug)</button>
-          <small style="opacity:.75">Track &amp; Date required; Race # helps context.</small>
-        </div>
+    const closeBtn = document.createElement("button");
+    closeBtn.id = "flv-close";
+    closeBtn.textContent = "✕";
+    closeBtn.style.cssText =
+      "border:none;background:transparent;color:inherit;font:600 16px;opacity:.8;cursor:pointer";
 
-        <details id="flv-sum" open>
-          <summary style="cursor:pointer;opacity:.9">Summary</summary>
-          <pre id="flv-sum-body" style="white-space:pre-wrap;margin-top:8px;max-height:240px;overflow:auto;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.05);font:12px/1.5 ui-monospace, Menlo, Consolas">No summary returned.</pre>
-        </details>
+    headerRow.appendChild(title);
+    headerRow.appendChild(closeBtn);
+    card.appendChild(headerRow);
 
-        <details id="flv-gz-details" style="margin-top:14px;">
-          <summary style="cursor:pointer;opacity:.9">GreenZone Data</summary>
-          <div id="flv-gz-wrap" style="margin-top:10px;">
-            <div id="flv-gz-message" style="font:12px/1.4 system-ui;opacity:.8">Loading…</div>
-            <div id="flv-gz-table" style="margin-top:10px;"></div>
-            <div style="margin-top:10px;opacity:.55;font-size:11px;">Debug JSON (latest suggestions)</div>
-            <pre id="flv-gz-json" style="white-space:pre-wrap;margin-top:6px;max-height:220px;overflow:auto;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:rgba(0,0,0,.4);font:11px/1.5 ui-monospace, Menlo, Consolas">[]</pre>
-          </div>
-        </details>
-      </div>
-    `;
+    // Track + Race
+    const row1 = document.createElement("div");
+    row1.className = "flv-row";
+    row1.style.cssText = "margin-bottom:14px;";
+
+    const grid1 = document.createElement("div");
+    grid1.style.cssText =
+      "display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,0.7fr);gap:10px;";
+
+    const trackWrap = document.createElement("div");
+    const trackLabel = document.createElement("label");
+    trackLabel.style.display = "block";
+
+    const trackTitle = document.createElement("div");
+    trackTitle.style.cssText = "margin-bottom:6px;opacity:.9;";
+    trackTitle.innerHTML = 'Track <span style="color:#ffcc00">*</span>';
+
+    const trackInput = document.createElement("input");
+    trackInput.id = "flv-track";
+    trackInput.type = "text";
+    trackInput.placeholder = "Track";
+    trackInput.style.cssText =
+      "width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.28);background:rgba(17,17,23,1);color:inherit";
+
+    trackLabel.appendChild(trackTitle);
+    trackLabel.appendChild(trackInput);
+    trackWrap.appendChild(trackLabel);
+
+    const trackWarn = document.createElement("small");
+    trackWarn.id = "flv-track-warn";
+    trackWarn.style.cssText = "display:none;color:#ffcc00;";
+    trackWarn.textContent = "Track is required.";
+    trackWrap.appendChild(trackWarn);
+
+    grid1.appendChild(trackWrap);
+
+    const raceWrap = document.createElement("div");
+    const raceLabel = document.createElement("label");
+    raceLabel.style.display = "block";
+
+    const raceTitle = document.createElement("div");
+    raceTitle.style.cssText = "margin-bottom:6px;opacity:.9;";
+    raceTitle.textContent = "Race #";
+
+    const raceInput = document.createElement("input");
+    raceInput.id = "flv-race";
+    raceInput.type = "text";
+    raceInput.placeholder = "e.g. 6";
+    raceInput.style.cssText =
+      "width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.28);background:rgba(17,17,23,1);color:inherit";
+
+    raceLabel.appendChild(raceTitle);
+    raceLabel.appendChild(raceInput);
+    raceWrap.appendChild(raceLabel);
+
+    const raceWarn = document.createElement("small");
+    raceWarn.id = "flv-race-warn";
+    raceWarn.style.cssText = "display:none;color:#ffcc00;";
+    raceWarn.textContent =
+      "Server asked for a Race # — please add one.";
+    raceWrap.appendChild(raceWarn);
+
+    grid1.appendChild(raceWrap);
+    row1.appendChild(grid1);
+    card.appendChild(row1);
+
+    // Date row
+    const row2 = document.createElement("div");
+    row2.className = "flv-row";
+    row2.style.cssText = "margin-bottom:16px;";
+
+    const dateWrap = document.createElement("div");
+    const dateLabel = document.createElement("label");
+    dateLabel.style.display = "block";
+
+    const dateTitle = document.createElement("div");
+    dateTitle.style.cssText = "margin-bottom:6px;opacity:.9;";
+    dateTitle.textContent = "Date";
+
+    const dateInput = document.createElement("input");
+    dateInput.id = "flv-date";
+    dateInput.type = "date";
+    dateInput.style.cssText =
+      "width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.28);background:rgba(17,17,23,1);color:inherit";
+
+    dateLabel.appendChild(dateTitle);
+    dateLabel.appendChild(dateInput);
+    dateWrap.appendChild(dateLabel);
+    row2.appendChild(dateWrap);
+    card.appendChild(row2);
+
+    const statusEl = document.createElement("div");
+    statusEl.id = "flv-status";
+    statusEl.style.cssText =
+      "font:600 12px/1.2 system-ui;opacity:.85;margin-bottom:10px;";
+    statusEl.textContent = "Idle";
+    card.appendChild(statusEl);
+
+    const buttonsRow = document.createElement("div");
+    buttonsRow.style.cssText =
+      "display:flex;gap:10px;align-items:center;margin:14px 0;flex-wrap:wrap;";
+
+    const runBtn = document.createElement("button");
+    runBtn.id = "flv-run";
+    runBtn.textContent = "Verify Now";
+    runBtn.style.cssText =
+      "padding:10px 18px;border-radius:12px;border:none;background:#6b46c1;color:#fff;font-weight:700;cursor:pointer";
+
+    const openTopBtn = document.createElement("button");
+    openTopBtn.id = "flv-open-top";
+    openTopBtn.textContent = "Open Top Result";
+    openTopBtn.style.cssText =
+      "padding:10px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:transparent;color:inherit;cursor:pointer";
+
+    const openGoogleBtn = document.createElement("button");
+    openGoogleBtn.id = "flv-open-google";
+    openGoogleBtn.textContent = "Open Google (debug)";
+    openGoogleBtn.style.cssText =
+      "padding:10px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:transparent;color:inherit;cursor:pointer";
+
+    const helpText = document.createElement("small");
+    helpText.style.opacity = ".75";
+    helpText.textContent = "Race # helps context.";
+
+    buttonsRow.appendChild(runBtn);
+    buttonsRow.appendChild(openTopBtn);
+    buttonsRow.appendChild(openGoogleBtn);
+    buttonsRow.appendChild(helpText);
+    card.appendChild(buttonsRow);
+
+    const summaryDetails = document.createElement("details");
+    summaryDetails.id = "flv-sum";
+    summaryDetails.open = true;
+
+    const summarySummary = document.createElement("summary");
+    summarySummary.style.cssText = "cursor:pointer;opacity:.9;";
+    summarySummary.textContent = "Summary";
+
+    const summaryBody = document.createElement("pre");
+    summaryBody.id = "flv-sum-body";
+    summaryBody.style.cssText =
+      "white-space:pre-wrap;margin-top:8px;max-height:240px;overflow:auto;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.05);font:12px/1.5 ui-monospace, Menlo, Consolas;";
+    summaryBody.textContent = "No summary returned.";
+
+    summaryDetails.appendChild(summarySummary);
+    summaryDetails.appendChild(summaryBody);
+    card.appendChild(summaryDetails);
+
+    const gzDetails = document.createElement("details");
+    gzDetails.id = "flv-gz-details";
+    gzDetails.style.cssText = "margin-top:14px;";
+
+    const gzSummary = document.createElement("summary");
+    gzSummary.style.cssText = "cursor:pointer;opacity:.9;";
+    gzSummary.textContent = "GreenZone Data";
+
+    const gzWrap = document.createElement("div");
+    gzWrap.id = "flv-gz-wrap";
+    gzWrap.style.cssText = "margin-top:10px;";
+
+    const gzMessage = document.createElement("div");
+    gzMessage.id = "flv-gz-message";
+    gzMessage.style.cssText = "font:12px/1.4 system-ui;opacity:.8;";
+    gzMessage.textContent = "Loading…";
+
+    const gzTable = document.createElement("div");
+    gzTable.id = "flv-gz-table";
+    gzTable.style.cssText = "margin-top:10px;";
+
+    const gzDebugLabel = document.createElement("div");
+    gzDebugLabel.style.cssText = "margin-top:10px;opacity:.55;font-size:11px;";
+    gzDebugLabel.textContent = "Debug JSON (latest suggestions)";
+
+    const gzJson = document.createElement("pre");
+    gzJson.id = "flv-gz-json";
+    gzJson.style.cssText =
+      "white-space:pre-wrap;margin-top:6px;max-height:220px;overflow:auto;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:rgba(0,0,0,.4);font:11px/1.5 ui-monospace, Menlo, Consolas;";
+    gzJson.textContent = "[]";
+
+    gzWrap.appendChild(gzMessage);
+    gzWrap.appendChild(gzTable);
+    gzWrap.appendChild(gzDebugLabel);
+    gzWrap.appendChild(gzJson);
+    gzDetails.appendChild(gzSummary);
+    gzDetails.appendChild(gzWrap);
+    card.appendChild(gzDetails);
 
     document.body.appendChild(host);
     host.__flvLast = { top: null, query: "" };
@@ -372,49 +570,60 @@
       host.style.display = "none";
     });
 
-    const runBtn = qs("#flv-run", host);
-    const statusEl = qs("#flv-status", host);
+    const runBtnEl = qs("#flv-run", host);
+    const statusElEl = qs("#flv-status", host);
     const summaryEl = qs("#flv-sum-body", host);
-    const warnTrack = qs("#flv-track-warn", host);
-    const warnRace = qs("#flv-race-warn", host);
-    const trackInput = qs("#flv-track", host);
-    const raceInput = qs("#flv-race", host);
-    const dateInput = qs("#flv-date", host);
+    const warnTrackEl = qs("#flv-track-warn", host);
+    const warnRaceEl = qs("#flv-race-warn", host);
+    const trackInputEl = qs("#flv-track", host);
+    const raceInputEl = qs("#flv-race", host);
+    const dateInputEl = qs("#flv-date", host);
 
-    if (dateInput && !dateInput.value) {
-      dateInput.value = todayISO();
+    if (dateInputEl && !dateInputEl.value) {
+      dateInputEl.value = currentDateIso() || todayISO();
     }
 
-    if (runBtn) {
-      const defaultLabel = runBtn.textContent || "Verify Now";
-      runBtn.addEventListener("click", async () => {
-        const track = (trackInput?.value || "").trim();
-        const raceNo = (raceInput?.value || "").trim();
-        let date = (dateInput?.value || "").trim();
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-          date = todayISO();
-          if (dateInput) dateInput.value = date;
-        }
+    try {
+      console.info(
+        "[verify-modal] mounted build=datefix-final3 dateInput=",
+        dateInputEl && dateInputEl.type,
+      );
+    } catch {
+      /* ignore */
+    }
 
-        if (warnTrack) warnTrack.style.display = track ? "none" : "";
+    if (runBtnEl) {
+      const defaultLabel = runBtnEl.textContent || "Verify Now";
+      runBtnEl.addEventListener("click", async () => {
+        const track = (trackInputEl?.value || "").trim();
+        const raceNo =
+          (raceInputEl && raceInputEl.value
+            ? raceInputEl.value.trim()
+            : "") || null;
+        const rawDate =
+          dateInputEl && dateInputEl.value ? dateInputEl.value : null;
+        const date = rawDate || currentDateIso() || todayISO();
+
+        if (warnTrackEl) warnTrackEl.style.display = track ? "none" : "";
         if (!track) {
           try {
-            trackInput?.focus();
+            trackInputEl?.focus();
           } catch {
             /* ignore */
           }
           return;
         }
-        if (warnRace) warnRace.style.display = "none";
+        if (warnRaceEl) warnRaceEl.style.display = "none";
 
         const requestInfo = { track, raceNo: raceNo || null, date };
-        if (statusEl) {
-          statusEl.textContent = "Running…";
-          statusEl.style.color = "#cbd5f5";
+
+        if (statusElEl) {
+          statusElEl.textContent = "Running…";
+          statusElEl.style.color = "#cbd5f5";
         }
         if (summaryEl) summaryEl.textContent = "Working…";
-        runBtn.disabled = true;
-        runBtn.textContent = "Running…";
+        runBtnEl.disabled = true;
+        runBtnEl.textContent = "Running…";
         host.__flvLast = { top: null, query: "" };
 
         pushSnapshot(track, raceNo, readUIPredictions());
@@ -433,7 +642,6 @@
           });
           const data = await resp.json().catch(() => ({}));
 
-          // Build summary payload with date and error info
           const baseSummary = {};
           if (date) {
             baseSummary.date = date;
@@ -444,14 +652,21 @@
             : {
                 ...baseSummary,
                 ...data,
-                error: data && data.error ? data.error : `Request failed (${resp.status})`,
-                details: data && (data.details || data.message) ? (data.details || data.message) : null,
+                error: data && data.error
+                  ? data.error
+                  : `Request failed (${resp.status})`,
+                details:
+                  data && (data.details || data.message)
+                    ? data.details || data.message
+                    : null,
                 step: data && data.step ? data.step : "verify_race",
               };
 
-          if (statusEl) {
-            statusEl.textContent = resp.ok ? "OK" : `Error ${resp.status}`;
-            statusEl.style.color = resp.ok ? "#cbd5f5" : "#f87171";
+          if (statusElEl) {
+            statusElEl.textContent = resp.ok
+              ? "OK"
+              : `Error ${resp.status}`;
+            statusElEl.style.color = resp.ok ? "#cbd5f5" : "#f87171";
           }
 
           host.__flvLast = {
@@ -472,14 +687,14 @@
               debugEl.textContent = JSON.stringify(
                 [{ request: requestInfo, response: data }],
                 null,
-                2
+                2,
               );
             }
           }
         } catch (error) {
-          if (statusEl) {
-            statusEl.textContent = "Error";
-            statusEl.style.color = "#f87171";
+          if (statusElEl) {
+            statusElEl.textContent = "Error";
+            statusElEl.style.color = "#f87171";
           }
           renderSummary(summaryEl, {
             date,
@@ -491,13 +706,13 @@
             console.error("[Verify Modal] request failed", error);
           }
         } finally {
-          runBtn.disabled = false;
-          runBtn.textContent = defaultLabel;
+          runBtnEl.disabled = false;
+          runBtnEl.textContent = defaultLabel;
           refreshGreenZone(host);
           try {
             fetch("/api/verify_backfill", { method: "POST" }).catch(() => {});
           } catch {
-            /* ignore background errors */
+            /* ignore */
           }
         }
       });
@@ -516,7 +731,9 @@
       try {
         const query = host.__flvLast?.query || "";
         if (query) {
-          const url = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+          const url = `https://www.google.com/search?q=${encodeURIComponent(
+            query,
+          )}`;
           window.open(url, "_blank", "noopener");
         }
       } catch {
@@ -536,7 +753,7 @@
     const dateVal =
       ctx?.date ||
       saved.date ||
-      currentDateIso() || // pull from main Race Date input if present
+      currentDateIso() ||
       todayISO();
 
     const trackInput = qs("#flv-track", host);
@@ -547,19 +764,13 @@
     const warnTrack = qs("#flv-track-warn", host);
     const warnRace = qs("#flv-race-warn", host);
 
-    if (ctx && ctx.track && trackInput && !trackInput.value) {
-      trackInput.value = ctx.track;
-    } else if (trackInput) {
+    if (trackInput) {
       trackInput.value = trackVal || "";
     }
-    if (ctx && ctx.raceNo && raceInput && !raceInput.value) {
-      raceInput.value = ctx.raceNo;
-    } else if (raceInput) {
+    if (raceInput) {
       raceInput.value = raceVal || "";
     }
-    if (ctx && ctx.date && dateInput && !dateInput.value) {
-      dateInput.value = ctx.date;
-    } else if (dateInput && !dateInput.value) {
+    if (dateInput) {
       dateInput.value = dateVal || todayISO();
     }
     if (statusEl) {
@@ -570,17 +781,20 @@
     if (warnTrack) warnTrack.style.display = trackVal ? "none" : "";
     if (warnRace) warnRace.style.display = "none";
 
-    pushSnapshot(trackVal || currentTrack(), raceVal || currentRaceNo(), readUIPredictions());
+    pushSnapshot(
+      trackVal || currentTrack(),
+      raceVal || currentRaceNo(),
+      readUIPredictions(),
+    );
 
     if (typeof host.__flvRefreshGreenZone === "function") {
       host.__flvRefreshGreenZone();
     }
   }
 
-  // Implementation function (stored separately so the wrapper can call it)
   function openVerifyModalImpl(ctx) {
     const host = buildModal();
-    prefill(host, ctx);
+    prefill(host, ctx || {});
     host.style.display = "flex";
     try {
       qs("#flv-track", host)?.focus();
@@ -588,19 +802,13 @@
       /* ignore */
     }
   }
-  
-  // Store the implementation so the wrapper function can use it
+
   window.__FL_VERIFY_MODAL_OPEN_IMPL__ = openVerifyModalImpl;
-  
-  // Update the global to point directly to the implementation now that it's ready
   window.__FL_OPEN_VERIFY_MODAL__ = openVerifyModalImpl;
-  
-  // Debug log to confirm registration
+
   if (window.__flVerifyDebug) {
     try {
       console.log("[verify-modal] registered window.__FL_OPEN_VERIFY_MODAL__");
     } catch (_) {}
   }
 })();
-
-
