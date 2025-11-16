@@ -6,6 +6,9 @@ export type ParsedOutcome = {
   show: string;
 };
 
+/**
+ * Clean up a horse name: collapse whitespace, strip weird characters.
+ */
 function cleanName(name: string): string {
   return name
     .replace(/\s+/g, " ")
@@ -13,22 +16,21 @@ function cleanName(name: string): string {
     .trim();
 }
 
+/**
+ * Strip HTML tags from a snippet.
+ */
 function stripTags(html: string): string {
   return html.replace(/<[^>]*>/g, " ");
 }
 
 /**
  * Fetch a results page and try to extract Win / Place / Show names.
- * Primary targets: Equibase + HorseRacingNation (entries.horseracingnation.com).
- *
- * The parser:
- * - Scopes HTML to the requested race (Race N ... Finish Order / table).
- * - Handles HRN Runner / Win / Place / Show table explicitly.
- * - Has generic fallbacks for Finish Order tables and Win/Place/Show text.
+ * This is race-aware (when raceNo is provided) and has special handling
+ * for HorseRacingNation's Runner / Win / Place / Show table.
  */
 export async function fetchAndParseResults(
   url: string,
-  options?: { raceNo?: string | number | null },
+  options?: { raceNo?: string | number | null }
 ): Promise<ParsedOutcome> {
   const outcome: ParsedOutcome = { win: "", place: "", show: "" };
   if (!url) return outcome;
@@ -46,22 +48,22 @@ export async function fetchAndParseResults(
 
     const html = await res.text();
 
-    // Narrow HTML to the requested race, if we have a raceNo
+    // --- Narrow HTML to the requested race, if we have a raceNo ---
     let scopeHtml = html;
     const raceNo = options?.raceNo;
     if (raceNo != null && raceNo !== "") {
       const num = String(raceNo).trim();
       try {
         const patterns = [
-          // Race 3 ... Finish Order / Win
+          // Example: "Race 3 ... Finish Order / Win"
           new RegExp(
             `Race\\s*${num}[\\s\\S]{0,4000}?(?:Finish\\s+Order|Win\\b)`,
-            "i",
+            "i"
           ),
-          // Race 3 ... <table>...</table>
+          // Example: "Race 3 ... <table>...</table>"
           new RegExp(
             `Race\\s*${num}[\\s\\S]{0,4000}?<table[\\s\\S]{0,4000}?</table>`,
-            "i",
+            "i"
           ),
         ];
         for (const re of patterns) {
@@ -108,7 +110,7 @@ export async function fetchAndParseResults(
       }
     };
 
-    // HorseRacingNation-specific parsing (Entries & Results tables)
+    // --- 1) HorseRacingNation-specific parsing (Runner / Win / Place / Show table) ---
     if (/horseracingnation\.com/i.test(url)) {
       try {
         const tableRe = /<table[\s\S]*?<\/table>/gi;
@@ -125,12 +127,12 @@ export async function fetchAndParseResults(
 
           const headerCells = Array.from(
             headerMatch[0].matchAll(
-              /<(?:th|td)[^>]*>([\s\S]*?)<\/(?:th|td)>/gi,
-            ),
+              /<(?:th|td)[^>]*>([\s\S]*?)<\/(?:th|td)>/gi
+            )
           ).map((cell) => cleanName(stripTags(cell[1])).toLowerCase());
 
           const runnerIdx = headerCells.findIndex(
-            (h) => h.includes("runner") || h.includes("horse"),
+            (h) => h.includes("runner") || h.includes("horse")
           );
           const winIdx = headerCells.findIndex((h) => h.includes("win"));
           const placeIdx = headerCells.findIndex((h) => h.includes("place"));
@@ -146,14 +148,14 @@ export async function fetchAndParseResults(
           }
 
           const rowMatches = Array.from(
-            table.matchAll(/<tr[\s\S]*?<\/tr>/gi),
+            table.matchAll(/<tr[\s\S]*?<\/tr>/gi)
           ).slice(1); // skip header
 
           for (const row of rowMatches) {
             const cells = Array.from(
               row[0].matchAll(
-                /<(?:th|td)[^>]*>([\s\S]*?)<\/(?:th|td)>/gi,
-              ),
+                /<(?:th|td)[^>]*>([\s\S]*?)<\/(?:th|td)>/gi
+              )
             ).map((cell) => stripTags(cell[1]).trim());
 
             const runner = cells[runnerIdx] || "";
@@ -176,32 +178,34 @@ export async function fetchAndParseResults(
       }
     }
 
-    // 1) Try “Finish Order” table (scoped to race)
+    // --- 2) Generic parsing fallbacks ---
+
+    // (a) "Finish Order" table (scoped to race)
     const finishMatch = scopeHtml.match(
-      /Finish\s+Order[\s\S]{0,2000}?<\/table>/i,
+      /Finish\s+Order[\s\S]{0,2000}?<\/table>/i
     );
     if (finishMatch) {
       const block = finishMatch[0];
       const names = Array.from(
-        block.matchAll(/>([A-Za-z0-9' .\-]+)</g),
+        block.matchAll(/>([A-Za-z0-9' .\-]+)</g)
       ).map((m) => m[1]);
       trySetFromList(names);
     }
 
-    // 2) Try explicit Win / Place / Show labels (scoped)
+    // (b) Win / Place / Show text block
     if (!outcome.win) {
-      const hrn = scopeHtml.match(
-        /Win[^A-Za-z0-9]{1,10}([A-Za-z0-9' .\-]+)[\s\S]{0,400}?Place[^A-Za-z0-9]{1,10}([A-Za-z0-9' .\-]+)[\s\S]{0,400}?Show[^A-Za-z0-9]{1,10}([A-Za-z0-9' .\-]+)/i,
+      const tri = scopeHtml.match(
+        /Win[^A-Za-z0-9]{1,10}([A-Za-z0-9' .\-]+)[\s\S]{0,400}?Place[^A-Za-z0-9]{1,10}([A-Za-z0-9' .\-]+)[\s\S]{0,400}?Show[^A-Za-z0-9]{1,10}([A-Za-z0-9' .\-]+)/i
       );
-      if (hrn) {
-        trySetFromList([hrn[1], hrn[2], hrn[3]]);
+      if (tri) {
+        trySetFromList([tri[1], tri[2], tri[3]]);
       }
     }
 
-    // 3) Fallback: 1st / 2nd / 3rd labels (scoped)
+    // (c) 1st / 2nd / 3rd style text
     if (!outcome.win) {
       const fallback = scopeHtml.match(
-        /1st[^A-Za-z0-9]{1,10}([A-Za-z0-9' .\-]+)[\s\S]{0,400}?2nd[^A-Za-z0-9]{1,10}([A-Za-z0-9' .\-]+)[\s\S]{0,400}?3rd[^A-Za-z0-9]{1,10}([A-Za-z0-9' .\-]+)/i,
+        /1st[^A-Za-z0-9]{1,10}([A-Za-z0-9' .\-]+)[\s\S]{0,400}?2nd[^A-Za-z0-9]{1,10}([A-Za-z0-9' .\-]+)[\s\S]{0,400}?3rd[^A-Za-z0-9]{1,10}([A-Za-z0-9' .\-]+)/i
       );
       if (fallback) {
         trySetFromList([fallback[1], fallback[2], fallback[3]]);
