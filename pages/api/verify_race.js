@@ -1,3 +1,5 @@
+// pages/api/verify_race.js
+
 import crypto from "node:crypto";
 import { Redis } from "@upstash/redis";
 import { fetchAndParseResults } from "../../lib/results.js";
@@ -157,7 +159,6 @@ export default async function handler(req, res) {
     safeTrack = track || null;
     safeRaceNo = raceNumber ?? null;
 
-    // Log request
     console.info("[verify_race] request", {
       track: safeTrack,
       date: safeDate,
@@ -240,7 +241,7 @@ export default async function handler(req, res) {
     let outcome = { win: "", place: "", show: "" };
     if (top?.link) {
       try {
-        // 👉 Race-aware parsing
+        // race-aware parsing
         outcome = await fetchAndParseResults(top.link, {
           raceNo: raceNumber,
         });
@@ -255,11 +256,13 @@ export default async function handler(req, res) {
 
     const normalizeName = (value = "") =>
       value.toLowerCase().replace(/\s+/g, " ").trim();
+
     const predictedSafe = {
       win: predicted && predicted.win ? String(predicted.win) : "",
       place: predicted && predicted.place ? String(predicted.place) : "",
       show: predicted && predicted.show ? String(predicted.show) : "",
     };
+
     const hits = {
       winHit:
         predictedSafe.win &&
@@ -279,7 +282,7 @@ export default async function handler(req, res) {
         .some((name) =>
           [outcome.win, outcome.place, outcome.show]
             .map(normalizeName)
-            .includes(name)
+            .includes(name),
         ),
     };
 
@@ -343,7 +346,7 @@ export default async function handler(req, res) {
             outcome,
             hits,
             summary: summarySafe,
-          })
+          }),
         );
         await redis.expire(eventKey, TTL_SECONDS);
         await redis.lpush(`${ns}:log`, eventKey);
@@ -388,7 +391,7 @@ export default async function handler(req, res) {
         const path = await import("node:path");
         const csvPath = path.resolve(
           process.cwd(),
-          "data/reconciliations_v1.csv"
+          "data/reconciliations_v1.csv",
         );
         const header =
           "ts,date,track,raceNo,query,topTitle,topUrl,winHit,placeHit,showHit,top3Hit\n";
@@ -412,7 +415,7 @@ export default async function handler(req, res) {
       } catch (error) {
         console.warn(
           "Local CSV append failed (dev only):",
-          error?.message || error
+          error?.message || error,
         );
       }
     }
@@ -431,7 +434,6 @@ export default async function handler(req, res) {
       summary: summarySafe,
     });
   } catch (err) {
-    // Log the full error for debugging
     console.error("[verify_race] error", {
       error: err?.message || String(err),
       stack: err?.stack,

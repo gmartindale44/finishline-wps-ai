@@ -546,7 +546,7 @@
     });
 
     const runBtnEl = qs("#flv-run", host);
-    const statusElEl = qs("#flv-status", host);
+    const statusNode = qs("#flv-status", host);
     const summaryEl = qs("#flv-sum-body", host);
     const warnTrackEl = qs("#flv-track-warn", host);
     const warnRaceEl = qs("#flv-race-warn", host);
@@ -592,9 +592,9 @@
 
         const requestInfo = { track, raceNo: raceNo || null, date };
 
-        if (statusElEl) {
-          statusElEl.textContent = "Running…";
-          statusElEl.style.color = "#cbd5f5";
+        if (statusNode) {
+          statusNode.textContent = "Running…";
+          statusNode.style.color = "#cbd5f5";
         }
         if (summaryEl) summaryEl.textContent = "Working…";
         runBtnEl.disabled = true;
@@ -638,11 +638,11 @@
                 step: data && data.step ? data.step : "verify_race",
               };
 
-          if (statusElEl) {
-            statusElEl.textContent = resp.ok
+          if (statusNode) {
+            statusNode.textContent = resp.ok
               ? "OK"
               : `Error ${resp.status}`;
-            statusElEl.style.color = resp.ok ? "#cbd5f5" : "#f87171";
+            statusNode.style.color = resp.ok ? "#cbd5f5" : "#f87171";
           }
 
           host.__flvLast = {
@@ -668,9 +668,9 @@
             }
           }
         } catch (error) {
-          if (statusElEl) {
-            statusElEl.textContent = "Error";
-            statusElEl.style.color = "#f87171";
+          if (statusNode) {
+            statusNode.textContent = "Error";
+            statusNode.style.color = "#f87171";
           }
           renderSummary(summaryEl, {
             date,
@@ -742,7 +742,7 @@
     if (raceInput) {
       raceInput.value = raceVal || "";
     }
-    if (dateInput) {
+    if (dateInput && !dateInput.value) {
       dateInput.value = dateVal || todayISO();
     }
     if (statusEl) {
