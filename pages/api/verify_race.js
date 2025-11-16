@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { Redis } from '@upstash/redis';
-import { fetchAndParseResults } from '../../lib/results';
+import { fetchAndParseResults } from '../../lib/results.js';
 
 const GOOGLE_API_KEY = (process.env.GOOGLE_API_KEY ?? '').trim();
 const GOOGLE_CSE_ID = (process.env.GOOGLE_CSE_ID ?? '').trim();
