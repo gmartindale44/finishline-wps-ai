@@ -185,7 +185,7 @@ export default async function handler(req, res) {
     let outcome = { win: '', place: '', show: '' };
     if (top?.link) {
       try {
-        outcome = await fetchAndParseResults(top.link);
+        outcome = await fetchAndParseResults(top.link, { raceNo: raceNumber });
       } catch (error) {
         console.error('[verify_race] Parse results failed', { url: top.link, error: error?.message || String(error) });
         // Continue with empty outcome - not a fatal error
