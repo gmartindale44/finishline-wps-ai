@@ -84,6 +84,40 @@
     qs("input[id*='race' i]") ||
     qs("input[name*='race' i]");
 
+  // Try to read the main form's race date so the modal respects it
+  const getTopDateInput = () =>
+    qs("input[type='date']") ||
+    qs("input[placeholder*='date' i]") ||
+    qs("input[id*='date' i]") ||
+    qs("input[name*='date' i]");
+
+  function normalizeToIsoDate(raw) {
+    if (!raw) return null;
+    const v = String(raw).trim();
+    // Already ISO yyyy-mm-dd
+    if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+
+    // Common US format: mm/dd/yyyy or mm-dd-yyyy
+    const m = v.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+    if (m) {
+      let mm = m[1].padStart(2, "0");
+      let dd = m[2].padStart(2, "0");
+      let yy = m[3];
+      if (yy.length === 2) yy = "20" + yy; // naive 2-digit year handling
+      return `${yy}-${mm}-${dd}`;
+    }
+
+    return null;
+  }
+
+  // Best-guess current race date from the main UI (top form)
+  const currentDateIso = () => {
+    const el = getTopDateInput();
+    if (!el) return null;
+    const raw = el.value || el.getAttribute("value") || "";
+    return normalizeToIsoDate(raw);
+  };
+
   const currentTrack = () => (getTopTrack()?.value || "").trim();
   const currentRaceNo = () => (getTopRace()?.value || "").trim();
 
@@ -499,7 +533,11 @@
     const saved = readCtx();
     const trackVal = ctx?.track || currentTrack() || saved.track || "";
     const raceVal = ctx?.raceNo || currentRaceNo() || saved.raceNo || "";
-    const dateVal = ctx?.date || saved.date || todayISO();
+    const dateVal =
+      ctx?.date ||
+      saved.date ||
+      currentDateIso() || // pull from main Race Date input if present
+      todayISO();
 
     const trackInput = qs("#flv-track", host);
     const raceInput = qs("#flv-race", host);
