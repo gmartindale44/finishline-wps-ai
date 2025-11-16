@@ -67,7 +67,7 @@ async function cseViaBridge(req, query) {
       : `/${basePath}`
     : "";
   const url = `${proto}://${host}${pathPrefix}/api/cse_resolver?q=${encodeURIComponent(
-    query
+    query,
   )}`;
   const r = await fetch(url, { cache: "no-store" });
   const j = await r.json().catch(() => ({}));
@@ -177,7 +177,6 @@ export default async function handler(req, res) {
     }
 
     const date = safeDate;
-
     const dWords = date.replace(/-/g, " ");
     const racePart = raceNumber ? ` Race ${raceNumber}` : "";
     const baseQuery = `${track}${racePart} ${date} results Win Place Show order`;
@@ -442,7 +441,6 @@ export default async function handler(req, res) {
       raceNo: safeRaceNo,
     });
 
-    // Always return 200 with structured error response
     return res.status(200).json({
       date: safeDate,
       track: safeTrack,

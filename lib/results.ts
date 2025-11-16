@@ -7,44 +7,61 @@ export type ParsedOutcome = {
 };
 
 function cleanName(name: string): string {
-  return name.replace(/\s+/g, ' ').replace(/[^A-Za-z0-9' .\-]/g, '').trim();
+  return name
+    .replace(/\s+/g, " ")
+    .replace(/[^A-Za-z0-9' .\-]/g, "")
+    .trim();
 }
 
 function stripTags(html: string): string {
-  return html.replace(/<[^>]*>/g, ' ');
+  return html.replace(/<[^>]*>/g, " ");
 }
 
+/**
+ * Fetch a results page and try to extract Win / Place / Show names.
+ * Primary targets: Equibase + HorseRacingNation (entries.horseracingnation.com).
+ *
+ * The parser:
+ * - Scopes HTML to the requested race (Race N ... Finish Order / table).
+ * - Handles HRN Runner / Win / Place / Show table explicitly.
+ * - Has generic fallbacks for Finish Order tables and Win/Place/Show text.
+ */
 export async function fetchAndParseResults(
   url: string,
   options?: { raceNo?: string | number | null },
 ): Promise<ParsedOutcome> {
-  const outcome: ParsedOutcome = { win: '', place: '', show: '' };
+  const outcome: ParsedOutcome = { win: "", place: "", show: "" };
   if (!url) return outcome;
 
   try {
     const res = await fetch(url, {
       headers: {
-        'user-agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0 Safari/537.36',
-        'accept-language': 'en-US,en;q=0.9',
+        "user-agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0 Safari/537.36",
+        "accept-language": "en-US,en;q=0.9",
       },
     });
+
     if (!res.ok) return outcome;
+
     const html = await res.text();
 
+    // Narrow HTML to the requested race, if we have a raceNo
     let scopeHtml = html;
     const raceNo = options?.raceNo;
-    if (raceNo != null && raceNo !== '') {
+    if (raceNo != null && raceNo !== "") {
       const num = String(raceNo).trim();
       try {
         const patterns = [
+          // Race 3 ... Finish Order / Win
           new RegExp(
             `Race\\s*${num}[\\s\\S]{0,4000}?(?:Finish\\s+Order|Win\\b)`,
-            'i',
+            "i",
           ),
+          // Race 3 ... <table>...</table>
           new RegExp(
             `Race\\s*${num}[\\s\\S]{0,4000}?<table[\\s\\S]{0,4000}?</table>`,
-            'i',
+            "i",
           ),
         ];
         for (const re of patterns) {
@@ -66,14 +83,15 @@ export async function fetchAndParseResults(
         .filter((n) => {
           const lower = n.toLowerCase();
 
-          if (lower === 'win' || lower === 'place' || lower === 'show') {
+          // avoid grabbing label text like "Win", "Place", "Show"
+          if (lower === "win" || lower === "place" || lower === "show") {
             return false;
           }
 
           // Drop pure ordinals like "4th", "2nd", etc.
           if (/^\d+(st|nd|rd|th)$/i.test(lower)) return false;
 
-          const alpha = lower.replace(/[^a-z]/g, '');
+          const alpha = lower.replace(/[^a-z]/g, "");
           // Drop very short alpha fragments (e.g. "th")
           if (alpha.length < 3) return false;
 
@@ -94,9 +112,9 @@ export async function fetchAndParseResults(
     if (/horseracingnation\.com/i.test(url)) {
       try {
         const tableRe = /<table[\s\S]*?<\/table>/gi;
-        let hrnWin = '';
-        let hrnPlace = '';
-        let hrnShow = '';
+        let hrnWin = "";
+        let hrnPlace = "";
+        let hrnShow = "";
 
         let m: RegExpExecArray | null;
         // Scan tables to find one whose header row has Runner + Win + Place + Show
@@ -112,11 +130,11 @@ export async function fetchAndParseResults(
           ).map((cell) => cleanName(stripTags(cell[1])).toLowerCase());
 
           const runnerIdx = headerCells.findIndex(
-            (h) => h.includes('runner') || h.includes('horse'),
+            (h) => h.includes("runner") || h.includes("horse"),
           );
-          const winIdx = headerCells.findIndex((h) => h.includes('win'));
-          const placeIdx = headerCells.findIndex((h) => h.includes('place'));
-          const showIdx = headerCells.findIndex((h) => h.includes('show'));
+          const winIdx = headerCells.findIndex((h) => h.includes("win"));
+          const placeIdx = headerCells.findIndex((h) => h.includes("place"));
+          const showIdx = headerCells.findIndex((h) => h.includes("show"));
 
           if (
             runnerIdx === -1 ||
@@ -138,10 +156,10 @@ export async function fetchAndParseResults(
               ),
             ).map((cell) => stripTags(cell[1]).trim());
 
-            const runner = cells[runnerIdx] || '';
-            const winVal = cells[winIdx] || '';
-            const placeVal = cells[placeIdx] || '';
-            const showVal = cells[showIdx] || '';
+            const runner = cells[runnerIdx] || "";
+            const winVal = cells[winIdx] || "";
+            const placeVal = cells[placeIdx] || "";
+            const showVal = cells[showIdx] || "";
 
             if (!hrnWin && winVal && runner) hrnWin = runner;
             if (!hrnPlace && placeVal && runner) hrnPlace = runner;
@@ -158,7 +176,7 @@ export async function fetchAndParseResults(
       }
     }
 
-    // Try to parse a Finish Order table first
+    // 1) Try “Finish Order” table (scoped to race)
     const finishMatch = scopeHtml.match(
       /Finish\s+Order[\s\S]{0,2000}?<\/table>/i,
     );
@@ -170,7 +188,7 @@ export async function fetchAndParseResults(
       trySetFromList(names);
     }
 
-    // Fallback: Win / Place / Show text block
+    // 2) Try explicit Win / Place / Show labels (scoped)
     if (!outcome.win) {
       const hrn = scopeHtml.match(
         /Win[^A-Za-z0-9]{1,10}([A-Za-z0-9' .\-]+)[\s\S]{0,400}?Place[^A-Za-z0-9]{1,10}([A-Za-z0-9' .\-]+)[\s\S]{0,400}?Show[^A-Za-z0-9]{1,10}([A-Za-z0-9' .\-]+)/i,
@@ -180,7 +198,7 @@ export async function fetchAndParseResults(
       }
     }
 
-    // Fallback: 1st / 2nd / 3rd style text
+    // 3) Fallback: 1st / 2nd / 3rd labels (scoped)
     if (!outcome.win) {
       const fallback = scopeHtml.match(
         /1st[^A-Za-z0-9]{1,10}([A-Za-z0-9' .\-]+)[\s\S]{0,400}?2nd[^A-Za-z0-9]{1,10}([A-Za-z0-9' .\-]+)[\s\S]{0,400}?3rd[^A-Za-z0-9]{1,10}([A-Za-z0-9' .\-]+)/i,
@@ -190,7 +208,7 @@ export async function fetchAndParseResults(
       }
     }
   } catch (error) {
-    console.error('[results] parse failed', error);
+    console.error("[results] parse failed", error);
   }
 
   return outcome;

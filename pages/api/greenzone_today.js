@@ -1,8 +1,8 @@
 // pages/api/greenzone_today.js
+// Safe stub for GreenZone lab – always returns 200 with empty suggestions.
 
 export default async function handler(req, res) {
   try {
-    // Stub implementation for GreenZone lab – always returns 200 with no suggestions.
     return res.status(200).json({
       suggestions: [],
       info: "GreenZone lab stub: no suggestions yet.",
