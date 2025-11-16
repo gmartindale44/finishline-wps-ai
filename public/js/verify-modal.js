@@ -404,7 +404,8 @@
     const raceWarn = document.createElement("small");
     raceWarn.id = "flv-race-warn";
     raceWarn.style.cssText = "display:none;color:#ffcc00;";
-    raceWarn.textContent = "Server asked for a Race # — please add one.";
+    raceWarn.textContent =
+      "Server asked for a Race # — please add one.";
     raceWrap.appendChild(raceWarn);
 
     grid1.appendChild(raceWrap);
