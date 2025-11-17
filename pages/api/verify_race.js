@@ -233,9 +233,27 @@ function parseHRNRaceOutcome($, raceNo) {
 
         // Extract Win/Place/Show values - get text content and check for non-empty
         // CRITICAL: Use the exact column indices we found - do not swap or infer
-        const winVal = $(cells[winIdx]).text().trim();
-        const placeVal = $(cells[placeIdx]).text().trim();
-        const showVal = $(cells[showIdx]).text().trim();
+        // Also check for images/icons that might indicate a payout (some sites use checkmarks/images)
+        const winCell = $(cells[winIdx]);
+        const placeCell = $(cells[placeIdx]);
+        const showCell = $(cells[showIdx]);
+
+        // Get text content - also check if cell has images or other indicators
+        let winVal = winCell.text().trim();
+        let placeVal = placeCell.text().trim();
+        let showVal = showCell.text().trim();
+
+        // If text is empty but cell has images/icons, treat as non-empty
+        // (some sites use images to indicate payouts)
+        if (!winVal && winCell.find("img, svg, [class*='icon'], [class*='check']").length > 0) {
+          winVal = "X"; // Mark as non-empty
+        }
+        if (!placeVal && placeCell.find("img, svg, [class*='icon'], [class*='check']").length > 0) {
+          placeVal = "X"; // Mark as non-empty
+        }
+        if (!showVal && showCell.find("img, svg, [class*='icon'], [class*='check']").length > 0) {
+          showVal = "X"; // Mark as non-empty
+        }
 
         // Debug: log column indices and values for first few rows (server-side only)
         if (process.env.VERIFY_DEBUG === "true") {
