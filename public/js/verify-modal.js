@@ -151,31 +151,37 @@
       lines.push(`Query: ${data.query}`);
     }
 
-    // Show outcome if present (with safe checks)
-    if (data.outcome && typeof data.outcome === "object") {
-      const parts = [];
-      if (data.outcome.win) parts.push(`Win: ${data.outcome.win}`);
-      if (data.outcome.place) parts.push(`Place: ${data.outcome.place}`);
-      if (data.outcome.show) parts.push(`Show: ${data.outcome.show}`);
-      if (parts.length) lines.push(parts.join(" • "));
-    }
-
-    // Show top result if present (with safe checks)
+    // Show top result if present (with safe checks) - BEFORE outcome
     if (data.top && typeof data.top === "object" && data.top.title) {
       lines.push(
         `Top Result: ${data.top.title}${
           data.top.link ? `\n${data.top.link}` : ""
         }`
       );
+    } else if (data.link) {
+      lines.push(`Link: ${data.link}`);
     }
 
-    // Show hits if present (with safe checks)
+    // Show outcome if present (with safe checks)
+    if (data.outcome && typeof data.outcome === "object") {
+      const parts = [];
+      if (data.outcome.win) parts.push(`Win ${data.outcome.win}`);
+      if (data.outcome.place) parts.push(`Place ${data.outcome.place}`);
+      if (data.outcome.show) parts.push(`Show ${data.outcome.show}`);
+      if (parts.length) {
+        lines.push(`Outcome: ${parts.join(" • ")}`);
+      }
+    }
+
+    // Show hits if present (with safe checks) - always show
     if (data.hits && typeof data.hits === "object") {
       const hitParts = [];
       if (data.hits.winHit) hitParts.push("Win");
       if (data.hits.placeHit) hitParts.push("Place");
       if (data.hits.showHit) hitParts.push("Show");
-      if (hitParts.length) lines.push(`Hits: ${hitParts.join(", ")}`);
+      lines.push(
+        hitParts.length ? `Hits: ${hitParts.join(", ")}` : "Hits: (none)"
+      );
     }
 
     // Show summary text if present
@@ -628,9 +634,10 @@
             : {
                 ...baseSummary,
                 ...data,
-                error: data && data.error
-                  ? data.error
-                  : `Request failed (${resp.status})`,
+                error:
+                  data && data.error
+                    ? data.error
+                    : `Request failed (${resp.status})`,
                 details:
                   data && (data.details || data.message)
                     ? data.details || data.message
