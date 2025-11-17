@@ -13,9 +13,13 @@
 html,body{margin:0;padding:0}
 body{background:var(--bg);color:var(--fg);font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif}
 .hero{padding:28px 20px 8px;max-width:1080px;margin:0 auto;text-align:center}
+.hero::before,.hero::after{content:""}
 .logo-row{display:flex;align-items:center;gap:10px;justify-content:center}
+.logo-row::before,.logo-row::after{content:""}
 .logo-horse{font-size:28px;text-shadow:0 0 24px rgba(124,55,255,.55), 0 0 10px rgba(29,228,255,.35)}
+.logo-horse::before,.logo-horse::after{content:""}
 h1{font-weight:800;letter-spacing:.3px;color:var(--fg);text-shadow:0 0 24px rgba(124,55,255,.55), 0 0 10px rgba(29,228,255,.35)}
+h1::before,h1::after{content:""}
 .subtitle{color:var(--muted);margin:4px 0 0}
 .panel{max-width:1080px;margin:16px auto;padding:20px;background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.35), 0 0 0 1px rgba(124,55,255,.08) inset}
 .panel-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
