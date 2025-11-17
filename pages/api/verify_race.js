@@ -170,10 +170,29 @@ function parseHRNRaceOutcome($, raceNo) {
       }
 
       // Parse rows to find Win/Place/Show horses
+      // The Runner (speed) table encodes finishing positions:
+      // - Row with non-empty Win column = winner
+      // - Row with non-empty Place column = place horse
+      // - Row with non-empty Show column = show horse
       const rows = $table.find("tr").slice(1); // Skip header
       let winHorse = null;
       let placeHorse = null;
       let showHorse = null;
+
+      /**
+       * Check if a cell value indicates a payout/result (non-empty)
+       * Accepts: dollar amounts ($8.20), numbers, or any non-whitespace text
+       * Rejects: empty, "-", whitespace-only, or speed figures like "98*"
+       */
+      const isNonEmptyPayout = (val) => {
+        if (!val) return false;
+        const trimmed = val.trim();
+        if (!trimmed || trimmed === "-") return false;
+        // Reject if it looks like a speed figure (number followed by *)
+        if (/^\d+\s*\*?\s*$/.test(trimmed)) return false;
+        // Accept anything else that's not just whitespace
+        return trimmed.length > 0;
+      };
 
       rows.each((_, row) => {
         const cells = $(row).find("td, th").toArray();
@@ -183,34 +202,29 @@ function parseHRNRaceOutcome($, raceNo) {
 
         // Extract runner name (strip speed figure suffix like "(98*)")
         let runnerName = $(cells[runnerIdx]).text().trim();
+        // Remove speed figure in parentheses: "Full Time Strutin (98*)" -> "Full Time Strutin"
         runnerName = runnerName.replace(/\s*\([^)]*\)\s*$/, "").trim();
         runnerName = normalizeHorseName(runnerName);
 
         if (!runnerName) return;
 
-        // Extract Win/Place/Show values
+        // Extract Win/Place/Show values - get text content and check for non-empty
         const winVal = $(cells[winIdx]).text().trim();
         const placeVal = $(cells[placeIdx]).text().trim();
         const showVal = $(cells[showIdx]).text().trim();
 
-        // Determine winners (first non-empty value for each position)
-        if (!winHorse && winVal && winVal !== "-" && winVal !== "") {
+        // Assign positions based on which columns have non-empty payout values
+        // Each position should be assigned to the FIRST row that has a non-empty value in that column
+        // and hasn't already been assigned to a higher position
+        if (!winHorse && isNonEmptyPayout(winVal)) {
           winHorse = runnerName;
         }
-        if (
-          !placeHorse &&
-          placeVal &&
-          placeVal !== "-" &&
-          placeVal !== "" &&
-          runnerName !== winHorse
-        ) {
+        if (!placeHorse && isNonEmptyPayout(placeVal) && runnerName !== winHorse) {
           placeHorse = runnerName;
         }
         if (
           !showHorse &&
-          showVal &&
-          showVal !== "-" &&
-          showVal !== "" &&
+          isNonEmptyPayout(showVal) &&
           runnerName !== winHorse &&
           runnerName !== placeHorse
         ) {
@@ -218,13 +232,142 @@ function parseHRNRaceOutcome($, raceNo) {
         }
       });
 
+      // Store what we found from the Runner (speed) table
       if (winHorse || placeHorse || showHorse) {
         if (winHorse) outcome.win = winHorse;
         if (placeHorse) outcome.place = placeHorse;
         if (showHorse) outcome.show = showHorse;
-        return false; // Found it, break the each loop
+        // Break after processing the Runner (speed) table
+        // We'll use fallback only if positions are missing
+        return false; // Found Runner table, break the each loop
       }
     });
+
+    // Fallback: If we didn't get all three positions from Runner (speed) table,
+    // try the Pool / Finish / $2 Payout table
+    if (!outcome.win || !outcome.place || !outcome.show) {
+      // Look for Pool/Finish table with Trifecta or Exacta rows
+      raceSection.find("table").each((_, table) => {
+        const $table = $(table);
+        const headerRow = $table.find("tr").first();
+        const headerTexts = headerRow
+          .find("th, td")
+          .toArray()
+          .map((cell) => $(cell).text().toLowerCase().trim());
+
+        const poolIdx = headerTexts.findIndex((h) => h.includes("pool"));
+        const finishIdx = headerTexts.findIndex((h) => h.includes("finish"));
+        const payoutIdx = headerTexts.findIndex((h) =>
+          h.includes("payout") || h.includes("$2")
+        );
+
+        if (finishIdx === -1) return; // Need Finish column
+
+        // Find Trifecta row (preferred) or Exacta row
+        const rows = $table.find("tr").slice(1);
+        let finishPattern = null;
+
+        rows.each((_, row) => {
+          const cells = $(row).find("td, th").toArray();
+          const poolCell =
+            poolIdx >= 0 && cells[poolIdx]
+              ? $(cells[poolIdx]).text().toLowerCase().trim()
+              : "";
+          const finishCell =
+            finishIdx >= 0 && cells[finishIdx]
+              ? $(cells[finishIdx]).text().trim()
+              : "";
+
+          // Prefer Trifecta (has 3 numbers), fallback to Exacta (has 2)
+          if (
+            (poolCell.includes("trifecta") || poolCell.includes("exacta")) &&
+            finishCell
+          ) {
+            // Finish pattern like "2-5-3" or "2-5"
+            const match = finishCell.match(/^(\d+)[\s\-]+(\d+)(?:[\s\-]+(\d+))?/);
+            if (match) {
+              finishPattern = {
+                winProg: match[1],
+                placeProg: match[2],
+                showProg: match[3] || null, // Exacta only has 2 numbers
+              };
+              return false; // break
+            }
+          }
+        });
+
+        if (finishPattern) {
+          // Now map program numbers to horse names using the entries table
+          // Look for a table with PP (post position) or program number column
+          raceSection.find("table").each((_, entriesTable) => {
+            const $entriesTable = $(entriesTable);
+            const entriesHeader = $entriesTable.find("tr").first();
+            const entriesHeaderTexts = entriesHeader
+              .find("th, td")
+              .toArray()
+              .map((cell) => $(cell).text().toLowerCase().trim());
+
+            const ppIdx = entriesHeaderTexts.findIndex(
+              (h) => h.includes("pp") || h.includes("post") || h === "#"
+            );
+            const horseIdx = entriesHeaderTexts.findIndex(
+              (h) =>
+                h.includes("horse") ||
+                h.includes("runner") ||
+                h.includes("name") ||
+                h.includes("last")
+            );
+
+            if (ppIdx === -1 || horseIdx === -1) return;
+
+            const programToHorse = new Map();
+            $entriesTable
+              .find("tr")
+              .slice(1)
+              .each((_, row) => {
+                const cells = $(row).find("td, th").toArray();
+                if (cells.length <= Math.max(ppIdx, horseIdx)) return;
+
+                const ppText = $(cells[ppIdx]).text().trim();
+                const ppMatch = ppText.match(/^(\d+)/);
+                if (!ppMatch) return;
+
+                const programNum = ppMatch[1];
+                let horseName = $(cells[horseIdx]).text().trim();
+                // Remove speed figures and normalize
+                horseName = horseName.replace(/\s*\([^)]*\)\s*$/, "").trim();
+                horseName = normalizeHorseName(horseName);
+
+                if (horseName) {
+                  programToHorse.set(programNum, horseName);
+                }
+              });
+
+            // Map finish pattern to horse names
+            if (finishPattern.winProg && programToHorse.has(finishPattern.winProg)) {
+              if (!outcome.win)
+                outcome.win = programToHorse.get(finishPattern.winProg);
+            }
+            if (
+              finishPattern.placeProg &&
+              programToHorse.has(finishPattern.placeProg)
+            ) {
+              if (!outcome.place)
+                outcome.place = programToHorse.get(finishPattern.placeProg);
+            }
+            if (
+              finishPattern.showProg &&
+              programToHorse.has(finishPattern.showProg)
+            ) {
+              if (!outcome.show)
+                outcome.show = programToHorse.get(finishPattern.showProg);
+            }
+
+            return false; // Found entries table, break
+          });
+        }
+      });
+    }
   } catch (error) {
     console.error("[verify_race] parseHRNRaceOutcome failed", error);
   }
