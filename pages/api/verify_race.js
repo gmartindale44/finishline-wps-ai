@@ -143,6 +143,8 @@ function parseHRNRaceOutcome($, raceNo) {
     }
 
     // Now find the Runner (speed) table within the race section
+    // This table has columns: Runner (speed), Win, Place, Show
+    // and contains the actual finishing positions for this race
     raceSection.find("table").each((_, table) => {
       const $table = $(table);
       const headerRow = $table.find("tr").first();
@@ -153,6 +155,26 @@ function parseHRNRaceOutcome($, raceNo) {
         $(cell).text().toLowerCase().trim()
       );
 
+      // Verify this is the Runner (speed) W/P/S table, not the summary table
+      // The summary table has columns like: Race, HRN, Horse, Sire, Age
+      // The Runner table has: Runner (speed), Win, Place, Show
+      const hasRunnerCol = headerTexts.some(
+        (h) => h.includes("runner") || h.includes("horse")
+      );
+      const hasWinCol = headerTexts.some((h) => h.includes("win"));
+      const hasPlaceCol = headerTexts.some((h) => h.includes("place"));
+      const hasShowCol = headerTexts.some((h) => h.includes("show"));
+
+      // Reject if this looks like the summary table (has HRN, Sire, Age columns)
+      const hasSummaryCols =
+        headerTexts.some((h) => h.includes("hrn") || h.includes("sire")) &&
+        !hasWinCol;
+
+      if (hasSummaryCols) {
+        return; // This is the summary table, skip it
+      }
+
+      // Must have all required columns: Runner, Win, Place, Show
       const runnerIdx = headerTexts.findIndex(
         (h) => h.includes("runner") || h.includes("horse")
       );
