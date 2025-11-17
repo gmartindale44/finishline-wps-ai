@@ -193,28 +193,10 @@ function parseHRNRaceOutcome($, raceNo) {
 
       // Parse rows to find Win/Place/Show horses
       // The Runner (speed) table encodes finishing positions:
-      // - Row with non-empty Win column = winner
-      // - Row with non-empty Place column = place horse
-      // - Row with non-empty Show column = show horse
+      // - Row with payout in first payout cell (Win) = winner
+      // - Row with payout in second payout cell (Place) = place horse
+      // - Row with payout in third payout cell (Show) = show horse
       const rows = $table.find("tr").slice(1); // Skip header
-      let winHorse = null;
-      let placeHorse = null;
-      let showHorse = null;
-
-      /**
-       * Check if a cell value indicates a payout/result (non-empty)
-       * Accepts: dollar amounts ($8.20), numbers, or any non-whitespace text
-       * Rejects: empty, "-", whitespace-only, or speed figures like "98*"
-       */
-      const isNonEmptyPayout = (val) => {
-        if (!val) return false;
-        const trimmed = val.trim();
-        if (!trimmed || trimmed === "-") return false;
-        // Reject if it looks like a speed figure (number followed by *)
-        if (/^\d+\s*\*?\s*$/.test(trimmed)) return false;
-        // Accept anything else that's not just whitespace
-        return trimmed.length > 0;
-      };
 
       rows.each((_, row) => {
         const cells = $(row).find("td, th").toArray();
