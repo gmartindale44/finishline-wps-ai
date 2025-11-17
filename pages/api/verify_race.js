@@ -2,6 +2,7 @@
 
 import crypto from "node:crypto";
 import { Redis } from "@upstash/redis";
+import * as cheerio from "cheerio";
 import { fetchAndParseResults } from "../../lib/results.js";
 
 const GOOGLE_API_KEY = (process.env.GOOGLE_API_KEY ?? "").trim();
@@ -33,6 +34,110 @@ const slug = (s = "") =>
     .replace(/\p{Diacritic}/gu, "")
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
+
+/**
+ * Normalize horse name for comparison
+ * @param {string} name
+ * @returns {string}
+ */
+function normalizeHorseName(name) {
+  return (name || "").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Parse outcome from HTML using cheerio
+ * @param {string} html
+ * @param {string} url
+ * @returns {{ win?: string; place?: string; show?: string }}
+ */
+function parseOutcomeFromHtml(html, url) {
+  const outcome = {};
+  try {
+    const $ = cheerio.load(html);
+    const rows = [];
+
+    // Try to find a results table with finishing positions
+    $("table tr").each((_, el) => {
+      const cells = $(el).find("td, th");
+      if (cells.length < 2) return;
+
+      const firstCell = $(cells[0]).text().trim();
+      // Match position: "1", "1st", "2", "2nd", etc.
+      const posMatch =
+        firstCell.match(/^(\d+)[a-z]{0,2}$/i) || firstCell.match(/^(\d+)$/);
+      if (!posMatch) return;
+
+      const pos = parseInt(posMatch[1], 10);
+      // Only care about positions 1, 2, 3
+      if (pos < 1 || pos > 3) return;
+
+      let name = $(cells[1]).text();
+      name = normalizeHorseName(name);
+      if (!name) return;
+
+      rows.push({ pos, name });
+    });
+
+    // Build outcome from rows
+    const byPos = new Map();
+    rows.forEach(({ pos, name }) => {
+      if (!byPos.has(pos)) {
+        byPos.set(pos, name);
+      }
+    });
+
+    if (byPos.get(1)) outcome.win = byPos.get(1);
+    if (byPos.get(2)) outcome.place = byPos.get(2);
+    if (byPos.get(3)) outcome.show = byPos.get(3);
+
+    // If we didn't find anything in tables, try text-based heuristics
+    if (!outcome.win && !outcome.place && !outcome.show) {
+      // Look for "Win: HorseName" patterns
+      const winMatch = html.match(/Win[:\s]+([A-Za-z0-9' .\-]+)/i);
+      const placeMatch = html.match(/Place[:\s]+([A-Za-z0-9' .\-]+)/i);
+      const showMatch = html.match(/Show[:\s]+([A-Za-z0-9' .\-]+)/i);
+
+      if (winMatch) outcome.win = normalizeHorseName(winMatch[1]);
+      if (placeMatch) outcome.place = normalizeHorseName(placeMatch[1]);
+      if (showMatch) outcome.show = normalizeHorseName(showMatch[1]);
+    }
+  } catch (error) {
+    console.error("[verify_race] parseOutcomeFromHtml failed", error);
+  }
+
+  return outcome;
+}
+
+/**
+ * Extract outcome from result page using cheerio
+ * @param {string} url
+ * @param {{ track: string; date: string; raceNo?: string | null }} ctx
+ * @returns {Promise<{ win?: string; place?: string; show?: string }>}
+ */
+async function extractOutcomeFromResultPage(url, ctx) {
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (FinishLineVerifyBot)",
+      },
+    });
+
+    if (!res.ok) {
+      return {};
+    }
+
+    const html = await res.text();
+    const outcome = parseOutcomeFromHtml(html, url);
+    return outcome;
+  } catch (error) {
+    // Best-effort only; swallow errors and return empty so UI still works
+    console.error("[verify_race] extractOutcomeFromResultPage failed", {
+      url,
+      error: error?.message || String(error),
+    });
+    return {};
+  }
+}
 
 async function cseDirect(query) {
   if (!GOOGLE_API_KEY || !GOOGLE_CSE_ID) {
@@ -241,10 +346,26 @@ export default async function handler(req, res) {
     let outcome = { win: "", place: "", show: "" };
     if (top?.link) {
       try {
-        // race-aware parsing
-        outcome = await fetchAndParseResults(top.link, {
+        // Try cheerio-based parser first
+        const cheerioOutcome = await extractOutcomeFromResultPage(top.link, {
+          track: safeTrack || "",
+          date: safeDate || "",
           raceNo: raceNumber,
         });
+
+        // If cheerio found results, use them; otherwise fall back to regex parser
+        if (cheerioOutcome.win || cheerioOutcome.place || cheerioOutcome.show) {
+          outcome = {
+            win: cheerioOutcome.win || "",
+            place: cheerioOutcome.place || "",
+            show: cheerioOutcome.show || "",
+          };
+        } else {
+          // Fallback to existing regex-based parser
+          outcome = await fetchAndParseResults(top.link, {
+            raceNo: raceNumber,
+          });
+        }
       } catch (error) {
         console.error("[verify_race] Parse results failed", {
           url: top.link,
@@ -255,7 +376,7 @@ export default async function handler(req, res) {
     }
 
     const normalizeName = (value = "") =>
-      value.toLowerCase().replace(/\s+/g, " ").trim();
+      (value || "").toLowerCase().replace(/\s+/g, " ").trim();
 
     const predictedSafe = {
       win: predicted && predicted.win ? String(predicted.win) : "",
@@ -263,28 +384,24 @@ export default async function handler(req, res) {
       show: predicted && predicted.show ? String(predicted.show) : "",
     };
 
-    const hits = {
-      winHit:
-        predictedSafe.win &&
-        outcome.win &&
-        normalizeName(predictedSafe.win) === normalizeName(outcome.win),
-      placeHit:
-        predictedSafe.place &&
-        outcome.place &&
-        normalizeName(predictedSafe.place) === normalizeName(outcome.place),
-      showHit:
-        predictedSafe.show &&
-        outcome.show &&
-        normalizeName(predictedSafe.show) === normalizeName(outcome.show),
-      top3Hit: [predictedSafe.win, predictedSafe.place, predictedSafe.show]
-        .filter(Boolean)
-        .map(normalizeName)
-        .some((name) =>
-          [outcome.win, outcome.place, outcome.show]
-            .map(normalizeName)
-            .includes(name),
-        ),
-    };
+    const hits = (() => {
+      if (!predictedSafe || !outcome) {
+        return { winHit: false, placeHit: false, showHit: false };
+      }
+
+      const pWin = normalizeName(predictedSafe.win);
+      const pPlace = normalizeName(predictedSafe.place);
+      const pShow = normalizeName(predictedSafe.show);
+      const oWin = normalizeName(outcome.win);
+      const oPlace = normalizeName(outcome.place);
+      const oShow = normalizeName(outcome.show);
+
+      return {
+        winHit: pWin && oWin && pWin === oWin,
+        placeHit: pPlace && oPlace && pPlace === oPlace,
+        showHit: pShow && oShow && pShow === oShow,
+      };
+    })();
 
     const summary = (() => {
       const lines = [];
@@ -316,6 +433,15 @@ export default async function handler(req, res) {
       (top?.title
         ? `Top Result: ${top.title}${top.link ? `\n${top.link}` : ""}`
         : "No summary returned.");
+
+    // Log outcome for debugging (minimal logging)
+    console.info("[verify_race] outcome", {
+      track: safeTrack,
+      date: safeDate,
+      raceNo: safeRaceNo,
+      outcome,
+      hits,
+    });
 
     const tsIso = new Date().toISOString();
     const redis = getRedis();
