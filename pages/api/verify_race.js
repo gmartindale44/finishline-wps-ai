@@ -233,10 +233,22 @@ function parseHRNRaceOutcome($, raceNo) {
       });
 
       // Store what we found from the Runner (speed) table
+      // CRITICAL: Assign exactly as found - Win column => win, Place column => place, Show column => show
       if (winHorse || placeHorse || showHorse) {
         if (winHorse) outcome.win = winHorse;
         if (placeHorse) outcome.place = placeHorse;
         if (showHorse) outcome.show = showHorse;
+
+        // Debug logging for HRN parsing (server-side only)
+        if (process.env.VERIFY_DEBUG === "true") {
+          console.log("[verify_race] HRN Runner table result", {
+            winHorse,
+            placeHorse,
+            showHorse,
+            outcome: { ...outcome },
+          });
+        }
+
         // Break after processing the Runner (speed) table
         // We'll use fallback only if positions are missing
         return false; // Found Runner table, break the each loop
