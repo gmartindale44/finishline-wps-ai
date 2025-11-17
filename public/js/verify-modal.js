@@ -173,7 +173,7 @@
       }
     }
 
-    // Show hits if present (with safe checks)
+    // Show hits if present (with safe checks) - always show
     if (data.hits && typeof data.hits === "object") {
       const hitParts = [];
       if (data.hits.winHit) hitParts.push("Win");
@@ -634,9 +634,10 @@
             : {
                 ...baseSummary,
                 ...data,
-                error: data && data.error
-                  ? data.error
-                  : `Request failed (${resp.status})`,
+                error:
+                  data && data.error
+                    ? data.error
+                    : `Request failed (${resp.status})`,
                 details:
                   data && (data.details || data.message)
                     ? data.details || data.message

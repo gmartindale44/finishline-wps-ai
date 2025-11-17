@@ -450,6 +450,8 @@ export default async function handler(req, res) {
       error: "verify_race failed",
       details: err?.message || String(err) || "Unknown error occurred",
       step: "verify_race",
+      outcome: { win: "", place: "", show: "" },
+      hits: { winHit: false, placeHit: false, showHit: false },
     });
   }
 }
