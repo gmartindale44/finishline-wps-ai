@@ -45,18 +45,217 @@ function normalizeHorseName(name) {
 }
 
 /**
+ * Parse HRN race-specific outcome from HTML using cheerio
+ * Finds the specific race section and parses the Runner (speed) W/P/S table
+ * @param {cheerio.CheerioAPI} $
+ * @param {string} raceNo
+ * @returns {{ win?: string; place?: string; show?: string }}
+ */
+function parseHRNRaceOutcome($, raceNo) {
+  const outcome = {};
+
+  try {
+    // Find the race section by looking for a heading that contains "Race # {raceNo}"
+    const raceLabel = `Race # ${raceNo}`;
+    const raceLabelAlt = `Race ${raceNo}`;
+    let raceSection = null;
+
+    // Search for headings that match the race number
+    $("h1, h2, h3, h4, h5, h6, div, span, p").each((_, el) => {
+      const text = $(el).text().trim();
+      if (
+        text.includes(raceLabel) ||
+        text.includes(raceLabelAlt) ||
+        new RegExp(`Race\\s*#?\\s*${raceNo}\\b`, "i").test(text)
+      ) {
+        // Found the race heading, now find its containing section
+        // Climb up to find a parent container that likely contains the race tables
+        let parent = $(el).parent();
+        for (let i = 0; i < 5 && parent.length; i++) {
+          // Check if this parent contains tables with Runner/Win/Place/Show
+          const hasRunnerTable = parent
+            .find("table")
+            .toArray()
+            .some((table) => {
+              const headerText = $(table).find("tr").first().text().toLowerCase();
+              return (
+                headerText.includes("runner") &&
+                headerText.includes("win") &&
+                headerText.includes("place") &&
+                headerText.includes("show")
+              );
+            });
+
+          if (hasRunnerTable) {
+            raceSection = parent;
+            break;
+          }
+          parent = parent.parent();
+        }
+        if (raceSection) return false; // break the each loop
+      }
+    });
+
+    if (!raceSection) {
+      // Try a simpler approach: find all tables and check if they're in a race section
+      $("table").each((_, table) => {
+        const $table = $(table);
+        const headerText = $table.find("tr").first().text().toLowerCase();
+
+        // Check if this is a Runner/Win/Place/Show table
+        if (
+          headerText.includes("runner") &&
+          headerText.includes("win") &&
+          headerText.includes("place") &&
+          headerText.includes("show")
+        ) {
+          // Check if this table is NOT in the "Today's racing results" summary
+          // by looking at preceding text/headings
+          let prevText = "";
+          $table
+            .prevAll()
+            .slice(0, 10)
+            .each((_, el) => {
+              prevText += $(el).text() + " ";
+            });
+
+          const isSummaryTable =
+            /today'?s\s+racing\s+results/i.test(prevText) ||
+            /speed\s+figures/i.test(prevText);
+
+          if (!isSummaryTable) {
+            // This might be a race-specific table, check if it's near our race number
+            const nearbyText = prevText + $table.text();
+            if (
+              new RegExp(`Race\\s*#?\\s*${raceNo}\\b`, "i").test(nearbyText)
+            ) {
+              raceSection = $table.closest("div, section, article, main");
+              if (!raceSection.length) raceSection = $table.parent();
+              return false; // break
+            }
+          }
+        }
+      });
+    }
+
+    if (!raceSection || !raceSection.length) {
+      return outcome; // Could not find race section
+    }
+
+    // Now find the Runner (speed) table within the race section
+    raceSection.find("table").each((_, table) => {
+      const $table = $(table);
+      const headerRow = $table.find("tr").first();
+      const headerCells = headerRow.find("th, td").toArray();
+
+      // Check if this table has Runner, Win, Place, Show columns
+      const headerTexts = headerCells.map((cell) =>
+        $(cell).text().toLowerCase().trim()
+      );
+
+      const runnerIdx = headerTexts.findIndex(
+        (h) => h.includes("runner") || h.includes("horse")
+      );
+      const winIdx = headerTexts.findIndex((h) => h.includes("win"));
+      const placeIdx = headerTexts.findIndex((h) => h.includes("place"));
+      const showIdx = headerTexts.findIndex((h) => h.includes("show"));
+
+      if (
+        runnerIdx === -1 ||
+        winIdx === -1 ||
+        placeIdx === -1 ||
+        showIdx === -1
+      ) {
+        return; // Not the right table, continue
+      }
+
+      // Parse rows to find Win/Place/Show horses
+      const rows = $table.find("tr").slice(1); // Skip header
+      let winHorse = null;
+      let placeHorse = null;
+      let showHorse = null;
+
+      rows.each((_, row) => {
+        const cells = $(row).find("td, th").toArray();
+        if (cells.length <= Math.max(runnerIdx, winIdx, placeIdx, showIdx)) {
+          return; // Not enough cells
+        }
+
+        // Extract runner name (strip speed figure suffix like "(98*)")
+        let runnerName = $(cells[runnerIdx]).text().trim();
+        runnerName = runnerName.replace(/\s*\([^)]*\)\s*$/, "").trim();
+        runnerName = normalizeHorseName(runnerName);
+
+        if (!runnerName) return;
+
+        // Extract Win/Place/Show values
+        const winVal = $(cells[winIdx]).text().trim();
+        const placeVal = $(cells[placeIdx]).text().trim();
+        const showVal = $(cells[showIdx]).text().trim();
+
+        // Determine winners (first non-empty value for each position)
+        if (!winHorse && winVal && winVal !== "-" && winVal !== "") {
+          winHorse = runnerName;
+        }
+        if (
+          !placeHorse &&
+          placeVal &&
+          placeVal !== "-" &&
+          placeVal !== "" &&
+          runnerName !== winHorse
+        ) {
+          placeHorse = runnerName;
+        }
+        if (
+          !showHorse &&
+          showVal &&
+          showVal !== "-" &&
+          showVal !== "" &&
+          runnerName !== winHorse &&
+          runnerName !== placeHorse
+        ) {
+          showHorse = runnerName;
+        }
+      });
+
+      if (winHorse || placeHorse || showHorse) {
+        if (winHorse) outcome.win = winHorse;
+        if (placeHorse) outcome.place = placeHorse;
+        if (showHorse) outcome.show = showHorse;
+        return false; // Found it, break the each loop
+      }
+    });
+  } catch (error) {
+    console.error("[verify_race] parseHRNRaceOutcome failed", error);
+  }
+
+  return outcome;
+}
+
+/**
  * Parse outcome from HTML using cheerio
  * @param {string} html
  * @param {string} url
+ * @param {string | number | null} raceNo
  * @returns {{ win?: string; place?: string; show?: string }}
  */
-function parseOutcomeFromHtml(html, url) {
+function parseOutcomeFromHtml(html, url, raceNo = null) {
   const outcome = {};
   try {
     const $ = cheerio.load(html);
-    const rows = [];
+    const isHRN = /horseracingnation\.com/i.test(url);
 
-    // Try to find a results table with finishing positions
+    // For HRN pages, use race-specific parsing
+    if (isHRN && raceNo) {
+      const hrnOutcome = parseHRNRaceOutcome($, String(raceNo));
+      if (hrnOutcome.win || hrnOutcome.place || hrnOutcome.show) {
+        return hrnOutcome;
+      }
+      // If HRN parsing failed, fall through to generic parsing
+    }
+
+    // Generic parsing: Try to find a results table with finishing positions
+    const rows = [];
     $("table tr").each((_, el) => {
       const cells = $(el).find("td, th");
       if (cells.length < 2) return;
@@ -127,7 +326,7 @@ async function extractOutcomeFromResultPage(url, ctx) {
     }
 
     const html = await res.text();
-    const outcome = parseOutcomeFromHtml(html, url);
+    const outcome = parseOutcomeFromHtml(html, url, ctx.raceNo);
     return outcome;
   } catch (error) {
     // Best-effort only; swallow errors and return empty so UI still works
@@ -435,13 +634,23 @@ export default async function handler(req, res) {
         : "No summary returned.");
 
     // Log outcome for debugging (minimal logging)
-    console.info("[verify_race] outcome", {
-      track: safeTrack,
-      date: safeDate,
-      raceNo: safeRaceNo,
-      outcome,
-      hits,
-    });
+    const isHRN = top?.link && /horseracingnation\.com/i.test(top.link);
+    if (isHRN) {
+      console.info("[verify_race] Parsed HRN outcome", {
+        track: safeTrack,
+        date: safeDate,
+        raceNo: safeRaceNo,
+        outcome,
+      });
+    } else {
+      console.info("[verify_race] outcome", {
+        track: safeTrack,
+        date: safeDate,
+        raceNo: safeRaceNo,
+        outcome,
+        hits,
+      });
+    }
 
     const tsIso = new Date().toISOString();
     const redis = getRedis();
