@@ -1,4 +1,4 @@
-/* public/js/verify-modal.js — GreenZone Lab v2 (verify wiring fixed) */
+/* public/js/verify-modal.js — GreenZone Lab v2 (verify wiring + date sync) */
 
 (function () {
   "use strict";
@@ -12,7 +12,7 @@
     }
     console.warn(
       "[verify-modal] openVerifyModal called before implementation ready",
-      ctx
+      ctx,
     );
   }
 
@@ -21,7 +21,6 @@
 
   // Guard to prevent double DOM initialization
   if (window.__FL_VERIFY_MODAL_INIT__) {
-    // DOM already initialized; global is already registered above
     return;
   }
   window.__FL_VERIFY_MODAL_INIT__ = true;
@@ -41,17 +40,17 @@
     try {
       const scope =
         document.querySelector(
-          '[data-panel="predictions"], .predictions-panel'
+          '[data-panel="predictions"], .predictions-panel',
         ) || document;
       const picks = { win: "", place: "", show: "" };
 
       const cards = Array.from(
-        scope.querySelectorAll(".prediction-card, [data-pick]")
+        scope.querySelectorAll(".prediction-card, [data-pick]"),
       );
       if (cards.length >= 3) {
         const names = cards.slice(0, 3).map((card) => {
           const el = card.querySelector(
-            "[data-name], .title, .name, b, strong"
+            "[data-name], .title, .name, b, strong",
           );
           return ((el && el.textContent) || "").trim();
         });
@@ -65,10 +64,10 @@
         (scope.querySelector(selector)?.textContent || "").trim();
       picks.win = fetchText("[data-pick='win'], .pick-win b, .emoji-win~b");
       picks.place = fetchText(
-        "[data-pick='place'], .pick-place b, .emoji-place~b"
+        "[data-pick='place'], .pick-place b, .emoji-place~b",
       );
       picks.show = fetchText(
-        "[data-pick='show'], .pick-show b, .emoji-show~b"
+        "[data-pick='show'], .pick-show b, .emoji-show~b",
       );
       return picks;
     } catch {
@@ -98,6 +97,40 @@
 
   const currentTrack = () => (getTopTrack()?.value || "").trim();
   const currentRaceNo = () => (getTopRace()?.value || "").trim();
+
+  // ----- date helpers wired to the main Race Date field -----
+
+  const getTopDateInput = () =>
+    qs("input[type='date']") ||
+    qs("input[placeholder*='date' i]") ||
+    qs("input[id*='date' i]") ||
+    qs("input[name*='date' i]");
+
+  function normalizeToIsoDate(raw) {
+    if (!raw) return null;
+    const v = String(raw).trim();
+    // Already ISO yyyy-mm-dd
+    if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+
+    // Common US format: mm/dd/yyyy or mm-dd-yyyy
+    const m = v.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+    if (m) {
+      let mm = m[1].padStart(2, "0");
+      let dd = m[2].padStart(2, "0");
+      let yy = m[3];
+      if (yy.length === 2) yy = "20" + yy;
+      return `${yy}-${mm}-${dd}`;
+    }
+
+    return null;
+  }
+
+  const currentDateIso = () => {
+    const el = getTopDateInput();
+    if (!el) return null;
+    const raw = el.value || el.getAttribute("value") || "";
+    return normalizeToIsoDate(raw);
+  };
 
   function pushSnapshot(track, raceNo, picks) {
     try {
@@ -160,16 +193,16 @@
       if (parts.length) lines.push(parts.join(" • "));
     }
 
-    // Show top result if present (with safe checks)
+    // Show top result if present
     if (data.top && typeof data.top === "object" && data.top.title) {
       lines.push(
         `Top Result: ${data.top.title}${
           data.top.link ? `\n${data.top.link}` : ""
-        }`
+        }`,
       );
     }
 
-    // Show hits if present (with safe checks)
+    // Show hits if present
     if (data.hits && typeof data.hits === "object") {
       const hitParts = [];
       if (data.hits.winHit) hitParts.push("Win");
@@ -183,7 +216,6 @@
       lines.push(data.summary);
     }
 
-    // Fallback if absolutely nothing meaningful
     if (!lines.length) {
       lines.push("No summary returned.");
     }
@@ -263,7 +295,7 @@
         acc[key] = (acc[key] || 0) + 1;
         return acc;
       },
-      {}
+      {},
     );
 
     const summaryText = Object.entries(counts)
@@ -344,7 +376,7 @@
     headerRow.appendChild(closeBtn);
     card.appendChild(headerRow);
 
-    // === Track + Race row ===
+    // Track + Race
     const row1 = document.createElement("div");
     row1.className = "flv-row";
     row1.style.cssText = "margin-bottom:14px;";
@@ -353,7 +385,6 @@
     grid1.style.cssText =
       "display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,0.7fr);gap:10px;";
 
-    // Track
     const trackWrap = document.createElement("div");
     const trackLabel = document.createElement("label");
     trackLabel.style.display = "block";
@@ -381,7 +412,6 @@
 
     grid1.appendChild(trackWrap);
 
-    // Race #
     const raceWrap = document.createElement("div");
     const raceLabel = document.createElement("label");
     raceLabel.style.display = "block";
@@ -412,7 +442,7 @@
     row1.appendChild(grid1);
     card.appendChild(row1);
 
-    // === Date row (full width) ===
+    // Date row
     const row2 = document.createElement("div");
     row2.className = "flv-row";
     row2.style.cssText = "margin-bottom:16px;";
@@ -437,7 +467,6 @@
     row2.appendChild(dateWrap);
     card.appendChild(row2);
 
-    // Status
     const statusEl = document.createElement("div");
     statusEl.id = "flv-status";
     statusEl.style.cssText =
@@ -445,7 +474,6 @@
     statusEl.textContent = "Idle";
     card.appendChild(statusEl);
 
-    // Buttons row
     const buttonsRow = document.createElement("div");
     buttonsRow.style.cssText =
       "display:flex;gap:10px;align-items:center;margin:14px 0;flex-wrap:wrap;";
@@ -478,7 +506,6 @@
     buttonsRow.appendChild(helpText);
     card.appendChild(buttonsRow);
 
-    // Summary details
     const summaryDetails = document.createElement("details");
     summaryDetails.id = "flv-sum";
     summaryDetails.open = true;
@@ -497,7 +524,6 @@
     summaryDetails.appendChild(summaryBody);
     card.appendChild(summaryDetails);
 
-    // GreenZone details
     const gzDetails = document.createElement("details");
     gzDetails.id = "flv-gz-details";
     gzDetails.style.cssText = "margin-top:14px;";
@@ -540,13 +566,12 @@
     document.body.appendChild(host);
     host.__flvLast = { top: null, query: "" };
 
-    // Wire up controls
     qs("#flv-close", host)?.addEventListener("click", () => {
       host.style.display = "none";
     });
 
     const runBtnEl = qs("#flv-run", host);
-    const statusNode = qs("#flv-status", host);
+    const statusElEl = qs("#flv-status", host);
     const summaryEl = qs("#flv-sum-body", host);
     const warnTrackEl = qs("#flv-track-warn", host);
     const warnRaceEl = qs("#flv-race-warn", host);
@@ -555,16 +580,16 @@
     const dateInputEl = qs("#flv-date", host);
 
     if (dateInputEl && !dateInputEl.value) {
-      dateInputEl.value = todayISO();
+      dateInputEl.value = currentDateIso() || todayISO();
     }
 
     try {
       console.info(
         "[verify-modal] mounted build=datefix-final3 dateInput=",
-        dateInputEl && dateInputEl.type
+        dateInputEl && dateInputEl.type,
       );
     } catch {
-      /* ignore logging failures */
+      /* ignore */
     }
 
     if (runBtnEl) {
@@ -577,7 +602,7 @@
             : "") || null;
         const rawDate =
           dateInputEl && dateInputEl.value ? dateInputEl.value : null;
-        const date = rawDate || todayISO();
+        const date = rawDate || currentDateIso() || todayISO();
 
         if (warnTrackEl) warnTrackEl.style.display = track ? "none" : "";
         if (!track) {
@@ -592,9 +617,9 @@
 
         const requestInfo = { track, raceNo: raceNo || null, date };
 
-        if (statusNode) {
-          statusNode.textContent = "Running…";
-          statusNode.style.color = "#cbd5f5";
+        if (statusElEl) {
+          statusElEl.textContent = "Running…";
+          statusElEl.style.color = "#cbd5f5";
         }
         if (summaryEl) summaryEl.textContent = "Working…";
         runBtnEl.disabled = true;
@@ -617,7 +642,6 @@
           });
           const data = await resp.json().catch(() => ({}));
 
-          // Build summary payload with date and error info
           const baseSummary = {};
           if (date) {
             baseSummary.date = date;
@@ -638,11 +662,11 @@
                 step: data && data.step ? data.step : "verify_race",
               };
 
-          if (statusNode) {
-            statusNode.textContent = resp.ok
+          if (statusElEl) {
+            statusElEl.textContent = resp.ok
               ? "OK"
               : `Error ${resp.status}`;
-            statusNode.style.color = resp.ok ? "#cbd5f5" : "#f87171";
+            statusElEl.style.color = resp.ok ? "#cbd5f5" : "#f87171";
           }
 
           host.__flvLast = {
@@ -663,14 +687,14 @@
               debugEl.textContent = JSON.stringify(
                 [{ request: requestInfo, response: data }],
                 null,
-                2
+                2,
               );
             }
           }
         } catch (error) {
-          if (statusNode) {
-            statusNode.textContent = "Error";
-            statusNode.style.color = "#f87171";
+          if (statusElEl) {
+            statusElEl.textContent = "Error";
+            statusElEl.style.color = "#f87171";
           }
           renderSummary(summaryEl, {
             date,
@@ -688,7 +712,7 @@
           try {
             fetch("/api/verify_backfill", { method: "POST" }).catch(() => {});
           } catch {
-            /* ignore background errors */
+            /* ignore */
           }
         }
       });
@@ -708,7 +732,7 @@
         const query = host.__flvLast?.query || "";
         if (query) {
           const url = `https://www.google.com/search?q=${encodeURIComponent(
-            query
+            query,
           )}`;
           window.open(url, "_blank", "noopener");
         }
@@ -726,7 +750,11 @@
     const saved = readCtx();
     const trackVal = ctx?.track || currentTrack() || saved.track || "";
     const raceVal = ctx?.raceNo || currentRaceNo() || saved.raceNo || "";
-    const dateVal = ctx?.date || saved.date || todayISO();
+    const dateVal =
+      ctx?.date ||
+      saved.date ||
+      currentDateIso() ||
+      todayISO();
 
     const trackInput = qs("#flv-track", host);
     const raceInput = qs("#flv-race", host);
@@ -742,7 +770,7 @@
     if (raceInput) {
       raceInput.value = raceVal || "";
     }
-    if (dateInput && !dateInput.value) {
+    if (dateInput) {
       dateInput.value = dateVal || todayISO();
     }
     if (statusEl) {
@@ -756,7 +784,7 @@
     pushSnapshot(
       trackVal || currentTrack(),
       raceVal || currentRaceNo(),
-      readUIPredictions()
+      readUIPredictions(),
     );
 
     if (typeof host.__flvRefreshGreenZone === "function") {
@@ -764,7 +792,6 @@
     }
   }
 
-  // Implementation function (stored separately so the wrapper can call it)
   function openVerifyModalImpl(ctx) {
     const host = buildModal();
     prefill(host, ctx || {});
@@ -776,13 +803,9 @@
     }
   }
 
-  // Store the implementation so the wrapper function can use it
   window.__FL_VERIFY_MODAL_OPEN_IMPL__ = openVerifyModalImpl;
-
-  // Update the global to point directly to the implementation now that it's ready
   window.__FL_OPEN_VERIFY_MODAL__ = openVerifyModalImpl;
 
-  // Debug log to confirm registration
   if (window.__flVerifyDebug) {
     try {
       console.log("[verify-modal] registered window.__FL_OPEN_VERIFY_MODAL__");
