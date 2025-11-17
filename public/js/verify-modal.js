@@ -135,51 +135,33 @@
       lines.push(`Using date: ${data.date}`);
     }
 
-    // Show error info first if present
+    // If there's an error, show a minimal error block and stop
     if (data.error) {
       lines.push(`Error: ${data.error}`);
-    }
-    if (data.details && data.details !== data.error) {
-      lines.push(`Details: ${data.details}`);
-    }
-    if (data.step) {
-      lines.push(`Step: ${data.step}`);
-    }
-
-    // Show query if present
-    if (data.query) {
-      lines.push(`Query: ${data.query}`);
+      if (data.details && data.details !== data.error) {
+        lines.push(`Details: ${data.details}`);
+      }
+      summaryEl.textContent = lines.join("\n");
+      return;
     }
 
-    // Show outcome if present (with safe checks)
+    // Success path: only show Outcome (if present)
     if (data.outcome && typeof data.outcome === "object") {
       const parts = [];
-      if (data.outcome.win) parts.push(`Win: ${data.outcome.win}`);
-      if (data.outcome.place) parts.push(`Place: ${data.outcome.place}`);
-      if (data.outcome.show) parts.push(`Show: ${data.outcome.show}`);
-      if (parts.length) lines.push(parts.join(" • "));
+      if (data.outcome.win) parts.push(`Win ${data.outcome.win}`);
+      if (data.outcome.place) parts.push(`Place ${data.outcome.place}`);
+      if (data.outcome.show) parts.push(`Show ${data.outcome.show}`);
+      if (parts.length) {
+        lines.push(`Outcome: ${parts.join(" • ")}`);
+      }
     }
 
-    // Show top result if present (with safe checks)
-    if (data.top && typeof data.top === "object" && data.top.title) {
-      lines.push(
-        `Top Result: ${data.top.title}${
-          data.top.link ? `\n${data.top.link}` : ""
-        }`
-      );
-    }
-
-    // Show hits if present (with safe checks)
-    if (data.hits && typeof data.hits === "object") {
-      const hitParts = [];
-      if (data.hits.winHit) hitParts.push("Win");
-      if (data.hits.placeHit) hitParts.push("Place");
-      if (data.hits.showHit) hitParts.push("Show");
-      if (hitParts.length) lines.push(`Hits: ${hitParts.join(", ")}`);
-    }
-
-    // Show summary text if present
-    if (data.summary && typeof data.summary === "string") {
+    // If no outcome and no error, but we have some summary text, show that
+    if (
+      !data.error &&
+      (!data.outcome || !lines.some((l) => l.startsWith("Outcome:"))) &&
+      data.summary
+    ) {
       lines.push(data.summary);
     }
 
