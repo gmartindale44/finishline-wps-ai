@@ -55,54 +55,31 @@ function parseHRNRaceOutcome($, raceNo) {
   const outcome = {};
 
   try {
-    // Find the race section by looking for a heading that contains "Race # {raceNo}"
-    const raceLabel = `Race # ${raceNo}`;
-    const raceLabelAlt = `Race ${raceNo}`;
+    // Normalize race number to a string
+    const raceStr = raceNo != null ? String(raceNo).trim() : "";
+
+    // 1) Find the race section we care about
+    // Look for a heading containing "Race # {raceNo}"
     let raceSection = null;
 
-    // Search for headings that match the race number
-    $("h1, h2, h3, h4, h5, h6, div, span, p").each((_, el) => {
-      const text = $(el).text().trim();
-      if (
-        text.includes(raceLabel) ||
-        text.includes(raceLabelAlt) ||
-        new RegExp(`Race\\s*#?\\s*${raceNo}\\b`, "i").test(text)
-      ) {
-        // Found the race heading, now find its containing section
-        // Climb up to find a parent container that likely contains the race tables
-        let parent = $(el).parent();
-        for (let i = 0; i < 5 && parent.length; i++) {
-          // Check if this parent contains tables with Runner/Win/Place/Show
-          const hasRunnerTable = parent
-            .find("table")
-            .toArray()
-            .some((table) => {
-              const headerText = $(table).find("tr").first().text().toLowerCase();
-              return (
-                headerText.includes("runner") &&
-                headerText.includes("win") &&
-                headerText.includes("place") &&
-                headerText.includes("show")
-              );
-            });
+    $("*").each((_, el) => {
+      const text = $(el).text().replace(/\s+/g, " ").trim().toLowerCase();
+      if (!text) return;
 
-          if (hasRunnerTable) {
-            raceSection = parent;
-            break;
-          }
-          parent = parent.parent();
-        }
-        if (raceSection) return false; // break the each loop
+      if (raceStr && text.includes(`race # ${raceStr}`)) {
+        raceSection = $(el).closest("table, section, div");
+        return false; // break
       }
+      return;
     });
 
-    if (!raceSection) {
-      // Try a simpler approach: find all tables and check if they're in a race section
+    // Fallback: if we didn't find a specific race section, try finding by table context
+    if (!raceSection || !raceSection.length) {
       $("table").each((_, table) => {
         const $table = $(table);
         const headerText = $table.find("tr").first().text().toLowerCase();
 
-        // Check if this is a Runner/Win/Place/Show table
+        // Check if this is a Runner/Win/Place/Show table (not the summary table)
         if (
           headerText.includes("runner") &&
           headerText.includes("win") &&
@@ -110,25 +87,18 @@ function parseHRNRaceOutcome($, raceNo) {
           headerText.includes("show")
         ) {
           // Check if this table is NOT in the "Today's racing results" summary
-          // by looking at preceding text/headings
           let prevText = "";
-          $table
-            .prevAll()
-            .slice(0, 10)
-            .each((_, el) => {
-              prevText += $(el).text() + " ";
-            });
+          $table.prevAll().slice(0, 10).each((_, el) => {
+            prevText += $(el).text() + " ";
+          });
 
           const isSummaryTable =
             /today'?s\s+racing\s+results/i.test(prevText) ||
             /speed\s+figures/i.test(prevText);
 
           if (!isSummaryTable) {
-            // This might be a race-specific table, check if it's near our race number
             const nearbyText = prevText + $table.text();
-            if (
-              new RegExp(`Race\\s*#?\\s*${raceNo}\\b`, "i").test(nearbyText)
-            ) {
+            if (raceStr && new RegExp(`Race\\s*#?\\s*${raceStr}\\b`, "i").test(nearbyText)) {
               raceSection = $table.closest("div, section, article, main");
               if (!raceSection.length) raceSection = $table.parent();
               return false; // break
@@ -138,14 +108,132 @@ function parseHRNRaceOutcome($, raceNo) {
       });
     }
 
-    if (!raceSection || !raceSection.length) {
+    // If still no race section found, use body as scope (fallback)
+    const scope = raceSection && raceSection.length ? raceSection : $("body");
+
+    if (!scope || !scope.length) {
       return outcome; // Could not find race section
     }
 
-    // Now find the Runner (speed) table within the race section
-    // This table has columns: Runner (speed), Win, Place, Show
-    // and contains the actual finishing positions for this race
-    raceSection.find("table").each((_, table) => {
+    // 2) Build program number → horse name map from entries table
+    // This map will be used to convert Trifecta Finish numbers (2-5-3) to horse names
+    const programToHorse = new Map();
+
+    scope.find("table").each((_, entriesTable) => {
+      const $entriesTable = $(entriesTable);
+      const entriesHeader = $entriesTable.find("tr").first();
+      const entriesHeaderTexts = entriesHeader
+        .find("th, td")
+        .toArray()
+        .map((cell) => $(cell).text().toLowerCase().trim());
+
+      const ppIdx = entriesHeaderTexts.findIndex(
+        (h) => h.includes("pp") || h.includes("post") || h === "#"
+      );
+      const horseIdx = entriesHeaderTexts.findIndex(
+        (h) =>
+          h.includes("horse") ||
+          h.includes("runner") ||
+          h.includes("name") ||
+          h.includes("last")
+      );
+
+      if (ppIdx === -1 || horseIdx === -1) return;
+
+      $entriesTable
+        .find("tr")
+        .slice(1)
+        .each((_, row) => {
+          const cells = $(row).find("td, th").toArray();
+          if (cells.length <= Math.max(ppIdx, horseIdx)) return;
+
+          const ppText = $(cells[ppIdx]).text().trim();
+          const ppMatch = ppText.match(/^(\d+)/);
+          if (!ppMatch) return;
+
+          const programNum = ppMatch[1];
+          let horseName = $(cells[horseIdx]).text().trim();
+          // Remove speed figures and normalize
+          horseName = horseName.replace(/\s*\([^)]*\)\s*$/, "").trim();
+          horseName = normalizeHorseName(horseName);
+
+          if (horseName) {
+            programToHorse.set(programNum, horseName);
+          }
+        });
+    });
+
+    // 3) PREFERRED STRATEGY: Use Trifecta Finish numbers
+    // Look for Pool/Finish table with Trifecta row
+    scope.find("table").each((_, table) => {
+      const $table = $(table);
+      const headerRow = $table.find("tr").first();
+      const headerTexts = headerRow
+        .find("th, td")
+        .toArray()
+        .map((cell) => $(cell).text().toLowerCase().trim());
+
+      const poolIdx = headerTexts.findIndex((h) => h.includes("pool"));
+      const finishIdx = headerTexts.findIndex((h) => h.includes("finish"));
+
+      if (finishIdx === -1) return; // Need Finish column
+
+      // Find Trifecta row (preferred - has 3 numbers) or Exacta row (fallback - has 2)
+      const rows = $table.find("tr").slice(1);
+      let finishPattern = null;
+
+      rows.each((_, row) => {
+        const cells = $(row).find("td, th").toArray();
+        const poolCell =
+          poolIdx >= 0 && cells[poolIdx]
+            ? $(cells[poolIdx]).text().toLowerCase().trim()
+            : "";
+        const finishCell =
+          finishIdx >= 0 && cells[finishIdx]
+            ? $(cells[finishIdx]).text().trim()
+            : "";
+
+        // Prefer Trifecta (has 3 numbers), fallback to Exacta (has 2)
+        if (
+          (poolCell.includes("trifecta") || poolCell.includes("exacta")) &&
+          finishCell
+        ) {
+          // Finish pattern like "2-5-3" or "2-5"
+          const match = finishCell.match(/^(\d+)[\s\-]+(\d+)(?:[\s\-]+(\d+))?/);
+          if (match) {
+            finishPattern = {
+              winProg: match[1],
+              placeProg: match[2],
+              showProg: match[3] || null, // Exacta only has 2 numbers
+            };
+            return false; // break
+          }
+        }
+      });
+
+      if (finishPattern && programToHorse.size > 0) {
+        // Map finish pattern to horse names using program number map
+        if (finishPattern.winProg && programToHorse.has(finishPattern.winProg)) {
+          outcome.win = programToHorse.get(finishPattern.winProg);
+        }
+        if (finishPattern.placeProg && programToHorse.has(finishPattern.placeProg)) {
+          outcome.place = programToHorse.get(finishPattern.placeProg);
+        }
+        if (finishPattern.showProg && programToHorse.has(finishPattern.showProg)) {
+          outcome.show = programToHorse.get(finishPattern.showProg);
+        }
+
+        // If we got all three positions from Trifecta, we're done
+        if (outcome.win && outcome.place && outcome.show) {
+          return false; // break the table loop
+        }
+      }
+    });
+
+    // 4) FALLBACK STRATEGY: Use Runner (Speed) table if Trifecta didn't work
+    // Only use this if we're missing positions
+    if (!outcome.win || !outcome.place || !outcome.show) {
+      scope.find("table").each((_, table) => {
       const $table = $(table);
       const headerRow = $table.find("tr").first();
       const headerCells = headerRow.find("th, td").toArray();
@@ -256,146 +344,29 @@ function parseHRNRaceOutcome($, raceNo) {
         }
       });
 
-      // If we found at least one position from the Runner (speed) table, we're done with this table
-      // The outcome object was populated directly in the loop above
-      if (outcome.win || outcome.place || outcome.show) {
-        // Debug logging for HRN parsing (server-side only)
-        if (process.env.VERIFY_DEBUG === "true") {
-          console.log("[verify_race] HRN Runner table result", {
-            outcome: { ...outcome },
-          });
-        }
-
-        // Break after processing the Runner (speed) table
-        // We'll use fallback only if positions are missing
-        return false; // Found Runner table, break the each loop
-      }
-    });
-
-    // Fallback: If we didn't get all three positions from Runner (speed) table,
-    // try the Pool / Finish / $2 Payout table
-    if (!outcome.win || !outcome.place || !outcome.show) {
-      // Look for Pool/Finish table with Trifecta or Exacta rows
-      raceSection.find("table").each((_, table) => {
-        const $table = $(table);
-        const headerRow = $table.find("tr").first();
-        const headerTexts = headerRow
-          .find("th, td")
-          .toArray()
-          .map((cell) => $(cell).text().toLowerCase().trim());
-
-        const poolIdx = headerTexts.findIndex((h) => h.includes("pool"));
-        const finishIdx = headerTexts.findIndex((h) => h.includes("finish"));
-        const payoutIdx = headerTexts.findIndex((h) =>
-          h.includes("payout") || h.includes("$2")
-        );
-
-        if (finishIdx === -1) return; // Need Finish column
-
-        // Find Trifecta row (preferred) or Exacta row
-        const rows = $table.find("tr").slice(1);
-        let finishPattern = null;
-
-        rows.each((_, row) => {
-          const cells = $(row).find("td, th").toArray();
-          const poolCell =
-            poolIdx >= 0 && cells[poolIdx]
-              ? $(cells[poolIdx]).text().toLowerCase().trim()
-              : "";
-          const finishCell =
-            finishIdx >= 0 && cells[finishIdx]
-              ? $(cells[finishIdx]).text().trim()
-              : "";
-
-          // Prefer Trifecta (has 3 numbers), fallback to Exacta (has 2)
-          if (
-            (poolCell.includes("trifecta") || poolCell.includes("exacta")) &&
-            finishCell
-          ) {
-            // Finish pattern like "2-5-3" or "2-5"
-            const match = finishCell.match(/^(\d+)[\s\-]+(\d+)(?:[\s\-]+(\d+))?/);
-            if (match) {
-              finishPattern = {
-                winProg: match[1],
-                placeProg: match[2],
-                showProg: match[3] || null, // Exacta only has 2 numbers
-              };
-              return false; // break
-            }
-          }
-        });
-
-        if (finishPattern) {
-          // Now map program numbers to horse names using the entries table
-          // Look for a table with PP (post position) or program number column
-          raceSection.find("table").each((_, entriesTable) => {
-            const $entriesTable = $(entriesTable);
-            const entriesHeader = $entriesTable.find("tr").first();
-            const entriesHeaderTexts = entriesHeader
-              .find("th, td")
-              .toArray()
-              .map((cell) => $(cell).text().toLowerCase().trim());
-
-            const ppIdx = entriesHeaderTexts.findIndex(
-              (h) => h.includes("pp") || h.includes("post") || h === "#"
-            );
-            const horseIdx = entriesHeaderTexts.findIndex(
-              (h) =>
-                h.includes("horse") ||
-                h.includes("runner") ||
-                h.includes("name") ||
-                h.includes("last")
-            );
-
-            if (ppIdx === -1 || horseIdx === -1) return;
-
-            const programToHorse = new Map();
-            $entriesTable
-              .find("tr")
-              .slice(1)
-              .each((_, row) => {
-                const cells = $(row).find("td, th").toArray();
-                if (cells.length <= Math.max(ppIdx, horseIdx)) return;
-
-                const ppText = $(cells[ppIdx]).text().trim();
-                const ppMatch = ppText.match(/^(\d+)/);
-                if (!ppMatch) return;
-
-                const programNum = ppMatch[1];
-                let horseName = $(cells[horseIdx]).text().trim();
-                // Remove speed figures and normalize
-                horseName = horseName.replace(/\s*\([^)]*\)\s*$/, "").trim();
-                horseName = normalizeHorseName(horseName);
-
-                if (horseName) {
-                  programToHorse.set(programNum, horseName);
-                }
-              });
-
-            // Map finish pattern to horse names
-            if (finishPattern.winProg && programToHorse.has(finishPattern.winProg)) {
-              if (!outcome.win)
-                outcome.win = programToHorse.get(finishPattern.winProg);
-            }
-            if (
-              finishPattern.placeProg &&
-              programToHorse.has(finishPattern.placeProg)
-            ) {
-              if (!outcome.place)
-                outcome.place = programToHorse.get(finishPattern.placeProg);
-            }
-            if (
-              finishPattern.showProg &&
-              programToHorse.has(finishPattern.showProg)
-            ) {
-              if (!outcome.show)
-                outcome.show = programToHorse.get(finishPattern.showProg);
-            }
-
-            return false; // Found entries table, break
-          });
+        // If we found positions from Runner table, break
+        if (outcome.win || outcome.place || outcome.show) {
+          return false; // Found Runner table, break the each loop
         }
       });
+    }
+
+    // 5) Sanity check: ensure distinct values
+    // If all three positions are the same non-empty string, something went wrong
+    if (
+      outcome.win &&
+      outcome.place &&
+      outcome.show &&
+      outcome.win === outcome.place &&
+      outcome.place === outcome.show
+    ) {
+      console.warn(
+        "[verify_race] HRN parser returned same horse for all positions - this should not happen",
+        { outcome, raceNo }
+      );
+      // Clear place and show to avoid misleading results
+      outcome.place = undefined;
+      outcome.show = undefined;
     }
   } catch (error) {
     console.error("[verify_race] parseHRNRaceOutcome failed", error);
