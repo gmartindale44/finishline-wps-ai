@@ -193,59 +193,46 @@ function parseHRNRaceOutcome($, raceNo) {
 
       // Parse rows to find Win/Place/Show horses
       // The Runner (speed) table encodes finishing positions:
-      // - Row with payout in first payout cell (Win) = winner
-      // - Row with payout in second payout cell (Place) = place horse
-      // - Row with payout in third payout cell (Show) = show horse
-      const rows = $table.find("tr").slice(1); // Skip header
+      // - Row where Win payout cell (first payout cell) is non-empty and not "-" = winner
+      // - Row where Place payout cell (second payout cell) is non-empty and not "-" = place horse
+      // - Row where Show payout cell (third payout cell) is non-empty and not "-" = show horse
+      const rows = $table.find("tbody tr, tr").slice(1); // Skip header row
 
-      rows.each((_, row) => {
-        const cells = $(row).find("td, th").toArray();
-        if (cells.length < 2) {
-          return; // Need at least runner name + some payout cells
-        }
+      rows.each((_, tr) => {
+        const cells = $(tr).find("td").toArray();
+        if (!cells.length) return;
 
-        // Extract runner name from the first cell (strip speed figure suffix like "(98*)")
-        let runnerName = $(cells[0]).text().trim();
-        // Remove speed figure in parentheses: "Full Time Strutin (98*)" -> "Full Time Strutin"
-        runnerName = runnerName.replace(/\s*\([^)]*\)\s*$/, "").trim();
-        runnerName = normalizeHorseName(runnerName);
+        // First cell is the horse name + speed figure, e.g. "Full Time Strutin (97*)"
+        const rawName = $(cells[0]).text().replace(/\s+/g, " ").trim();
+        if (!rawName) return;
 
-        if (!runnerName) return;
+        // Strip speed figure in parentheses: "Full Time Strutin (97*)" -> "Full Time Strutin"
+        const horseName = rawName.replace(/\(\d+\*?\)\s*$/, "").trim();
+        const normalizedName = normalizeHorseName(horseName);
+        if (!normalizedName) return;
 
-        // Find payout cells: cells that contain "$" (dollar amounts)
-        // In HRN Runner table, payout cells are the ones with dollar amounts like "$8.20"
-        // Other cells may contain post position numbers, speed figures, icons, etc. - ignore those
-        const payoutCells = cells
-          .map((cell, idx) => ({ cell: $(cell), idx }))
-          .filter(({ cell }) => {
-            const text = cell.text().trim();
-            return text.includes("$");
-          });
+        // Identify which cells are payouts. HRN uses "$" for payouts, "-" when no payout.
+        // We look at cells.slice(1) to skip the horse name cell
+        const payoutCells = cells.slice(1).filter((td) => {
+          const txt = $(td).text();
+          return txt.includes("$") || txt.trim() === "-";
+        });
 
-        // We need at least 3 payout cells (Win, Place, Show)
-        // But we'll work with what we have
-        if (payoutCells.length < 1) {
-          return; // No payout cells found in this row
-        }
+        // We expect: [Win, Place, Show] in order, but some may be "-" or empty.
+        const [winCell, placeCell, showCell] = payoutCells;
 
-        // Extract payout text from each payout cell
-        // payoutCells[0] = Win payout, [1] = Place payout, [2] = Show payout
-        const winText =
-          payoutCells[0]?.cell.text().trim() || "";
-        const placeText =
-          payoutCells[1]?.cell.text().trim() || "";
-        const showText =
-          payoutCells[2]?.cell.text().trim() || "";
+        const winText = winCell ? $(winCell).text().trim() : "";
+        const placeText = placeCell ? $(placeCell).text().trim() : "";
+        const showText = showCell ? $(showCell).text().trim() : "";
 
-        // Check if each payout is valid (non-empty and not "-")
-        const hasWin = !!winText && winText !== "-" && winText.length > 0;
-        const hasPlace = !!placeText && placeText !== "-" && placeText.length > 0;
-        const hasShow = !!showText && showText !== "-" && showText.length > 0;
+        const hasWin = !!winText && winText !== "-";
+        const hasPlace = !!placeText && placeText !== "-";
+        const hasShow = !!showText && showText !== "-";
 
         // Debug logging (server-side only)
         if (process.env.VERIFY_DEBUG === "true") {
-          console.log("[verify_race] HRN payout cells", {
-            runnerName,
+          console.log("[verify_race] HRN row", {
+            horseName: normalizedName,
             payoutCellsCount: payoutCells.length,
             winText,
             placeText,
@@ -257,14 +244,15 @@ function parseHRNRaceOutcome($, raceNo) {
         }
 
         // Assign positions: only assign once per bucket (first row with valid payout)
+        // Do NOT set place or show automatically equal to win when they are missing
         if (hasWin && !outcome.win) {
-          outcome.win = runnerName;
+          outcome.win = normalizedName;
         }
         if (hasPlace && !outcome.place) {
-          outcome.place = runnerName;
+          outcome.place = normalizedName;
         }
         if (hasShow && !outcome.show) {
-          outcome.show = runnerName;
+          outcome.show = normalizedName;
         }
       });
 
