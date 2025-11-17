@@ -379,9 +379,13 @@ function parseHRNRaceOutcome($, raceNo) {
     };
   } catch (error) {
     console.error("[verify_race] parseHRNRaceOutcome failed", error);
+    // Return empty outcome on error
+    return {
+      win: null,
+      place: null,
+      show: null,
+    };
   }
-
-  return outcome;
 }
 
 /**
