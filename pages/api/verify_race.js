@@ -218,7 +218,8 @@ function parseHRNRaceOutcome($, raceNo) {
 
       rows.each((_, row) => {
         const cells = $(row).find("td, th").toArray();
-        if (cells.length <= Math.max(runnerIdx, winIdx, placeIdx, showIdx)) {
+        const maxIdx = Math.max(runnerIdx, winIdx, placeIdx, showIdx);
+        if (cells.length <= maxIdx) {
           return; // Not enough cells
         }
 
@@ -231,9 +232,27 @@ function parseHRNRaceOutcome($, raceNo) {
         if (!runnerName) return;
 
         // Extract Win/Place/Show values - get text content and check for non-empty
+        // CRITICAL: Use the exact column indices we found - do not swap or infer
         const winVal = $(cells[winIdx]).text().trim();
         const placeVal = $(cells[placeIdx]).text().trim();
         const showVal = $(cells[showIdx]).text().trim();
+
+        // Debug: log column indices and values for first few rows (server-side only)
+        if (process.env.VERIFY_DEBUG === "true") {
+          console.log("[verify_race] HRN cell values", {
+            runnerName,
+            runnerIdx,
+            winIdx,
+            placeIdx,
+            showIdx,
+            winVal,
+            placeVal,
+            showVal,
+            winIsValid: isNonEmptyPayout(winVal),
+            placeIsValid: isNonEmptyPayout(placeVal),
+            showIsValid: isNonEmptyPayout(showVal),
+          });
+        }
 
         // Assign positions based on which columns have non-empty payout values
         // Each position should be assigned to the FIRST row that has a non-empty value in that column
