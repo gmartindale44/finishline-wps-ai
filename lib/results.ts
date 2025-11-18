@@ -32,9 +32,12 @@ export async function fetchAndParseResults(
     if (!res.ok) return outcome;
     const html = await res.text();
 
+    const isHRN = /horseracingnation\.com/i.test(url);
+
     let scopeHtml = html;
     const raceNo = options?.raceNo;
-    if (raceNo != null && raceNo !== '') {
+    // Narrow to requested race for non-HRN sites when raceNo is provided
+    if (!isHRN && raceNo != null && raceNo !== '') {
       const num = String(raceNo).trim();
       try {
         const patterns = [
@@ -91,7 +94,7 @@ export async function fetchAndParseResults(
     };
 
     // HorseRacingNation-specific parsing (Entries & Results tables)
-    if (/horseracingnation\.com/i.test(url)) {
+    if (isHRN) {
       try {
         const tableRe = /<table[\s\S]*?<\/table>/gi;
         let hrnWin = '';
@@ -100,7 +103,8 @@ export async function fetchAndParseResults(
 
         let m: RegExpExecArray | null;
         // Scan tables to find one whose header row has Runner + Win + Place + Show
-        while ((m = tableRe.exec(scopeHtml))) {
+        // Use full HTML for HRN (not scoped)
+        while ((m = tableRe.exec(html))) {
           const table = m[0];
           const headerMatch = table.match(/<tr[\s\S]*?<\/tr>/i);
           if (!headerMatch) continue;
