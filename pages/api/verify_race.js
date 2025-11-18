@@ -1,9 +1,5 @@
 // pages/api/verify_race.js
-//
-// IMPORTANT: This handler is designed to NEVER return HTTP 500.
-// All errors are caught and returned as HTTP 200 with structured JSON
-// containing error, details, and step fields. This ensures the frontend
-// can always parse the response and display meaningful error messages.
+// RESTORED FROM f5a9052 BASELINE - DO NOT EDIT PARSER LOGIC YET
 
 import crypto from "node:crypto";
 import { Redis } from "@upstash/redis";
@@ -815,6 +811,25 @@ export default async function handler(req, res) {
     })();
 
     const summarySafe = summary || "No summary returned.";
+
+    // Log outcome for debugging (minimal logging)
+    const isHRN = top?.link && /horseracingnation\.com/i.test(top.link);
+    if (isHRN) {
+      console.info("[verify_race] Parsed HRN outcome", {
+        track: safeTrack,
+        date: safeDate,
+        raceNo: safeRaceNo,
+        outcome,
+      });
+    } else {
+      console.info("[verify_race] outcome", {
+        track: safeTrack,
+        date: safeDate,
+        raceNo: safeRaceNo,
+        outcome,
+        hits,
+      });
+    }
 
     // Log outcome for debugging (minimal logging)
     const isHRN = top?.link && /horseracingnation\.com/i.test(top.link);
