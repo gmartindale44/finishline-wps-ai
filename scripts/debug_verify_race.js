@@ -5,9 +5,9 @@ async function runDebug() {
   const mockReq = {
     method: "POST",
     body: {
-      track: "Mahoning Valley",
-      date: "2025-11-17",
-      raceNo: 1,
+      track: "Finger Lakes",
+      date: "2025-11-18",
+      raceNo: 3,
       predicted: { win: "", place: "", show: "" },
     },
     headers: {},
@@ -60,14 +60,30 @@ async function runDebug() {
       console.log("\n✅ Status code is 200");
     }
 
-    // Verify summary format
-    if (mockRes.jsonData?.summary) {
-      const summary = mockRes.jsonData.summary;
-      if (summary.includes("Using date:") && summary.includes("Outcome:")) {
-        console.log("✅ Summary format looks correct");
-      } else {
-        console.warn("⚠️  Summary format may not match expected format");
-        console.log("Expected: 'Using date: ...' and 'Outcome: ...'");
+    // Verify response structure
+    if (mockRes.jsonData) {
+      const hasRequiredFields = 
+        "date" in mockRes.jsonData &&
+        "track" in mockRes.jsonData &&
+        "raceNo" in mockRes.jsonData;
+      
+      if (hasRequiredFields) {
+        console.log("✅ Response has required fields (date, track, raceNo)");
+      }
+      
+      if (mockRes.jsonData.error) {
+        const hasErrorFields =
+          "error" in mockRes.jsonData &&
+          "details" in mockRes.jsonData &&
+          "step" in mockRes.jsonData &&
+          "outcome" in mockRes.jsonData &&
+          "hits" in mockRes.jsonData;
+        
+        if (hasErrorFields) {
+          console.log("✅ Error response has all required fields (error, details, step, outcome, hits)");
+        } else {
+          console.warn("⚠️  Error response missing some required fields");
+        }
       }
     }
   } catch (error) {

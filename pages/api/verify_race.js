@@ -578,14 +578,14 @@ function pickBest(items) {
   if (!Array.isArray(items) || !items.length) return null;
   const scored = items
     .map((item) => {
-      try {
+    try {
         const url = new URL(item.link || "");
         const host = url.hostname || "";
-        const idx = preferHosts.findIndex((h) => host.includes(h));
-        return { item, score: idx === -1 ? 10 : idx };
-      } catch {
-        return { item, score: 10 };
-      }
+      const idx = preferHosts.findIndex((h) => host.includes(h));
+      return { item, score: idx === -1 ? 10 : idx };
+    } catch {
+      return { item, score: 10 };
+    }
     })
     .sort((a, b) => a.score - b.score);
   return scored.length ? scored[0].item : null;
@@ -606,9 +606,17 @@ export default async function handler(req, res) {
   try {
     if (req.method !== "POST") {
       res.setHeader("Allow", "POST");
-      return res
-        .status(405)
-        .json({ ok: false, error: "Method Not Allowed" });
+      // Return 200 with structured error for consistency (never 500)
+      return res.status(200).json({
+        date: safeDate,
+        track: safeTrack,
+        raceNo: safeRaceNo,
+        error: "Method Not Allowed",
+        details: "Only POST requests are accepted",
+        step: "verify_race_method_validation",
+        outcome: { win: "", place: "", show: "" },
+        hits: { winHit: false, placeHit: false, showHit: false },
+      });
     }
 
     // Be tolerant of either req.body object or JSON string
@@ -661,6 +669,8 @@ export default async function handler(req, res) {
         error: "Missing required field: track",
         details: "Track is required to verify a race",
         step: "verify_race_validation",
+        outcome: { win: "", place: "", show: "" },
+        hits: { winHit: false, placeHit: false, showHit: false },
       });
     }
 
@@ -686,23 +696,23 @@ export default async function handler(req, res) {
     const searchStep = "verify_race_search";
 
     try {
-      for (const q of queries) {
-        try {
-          const items = await runSearch(req, q);
-          queryUsed = q;
-          results = items;
-          if (items.length) break;
-        } catch (error) {
-          lastError = error;
+    for (const q of queries) {
+      try {
+        const items = await runSearch(req, q);
+        queryUsed = q;
+        results = items;
+        if (items.length) break;
+      } catch (error) {
+        lastError = error;
           console.error("[verify_race] Search query failed", {
             query: q,
             error: error?.message || String(error),
           });
         }
-      }
+    }
 
-      if (!results.length && lastError) {
-        throw lastError;
+    if (!results.length && lastError) {
+      throw lastError;
       }
     } catch (error) {
       console.error("[verify_race] Search failed", {
@@ -720,6 +730,8 @@ export default async function handler(req, res) {
           "Unable to fetch race results from search providers",
         step: searchStep,
         query: queryUsed || queries[0] || null,
+        outcome: { win: "", place: "", show: "" },
+        hits: { winHit: false, placeHit: false, showHit: false },
       });
     }
 
@@ -788,17 +800,27 @@ export default async function handler(req, res) {
 
     const summary = (() => {
       const lines = [];
-      lines.push(`Using date: ${date}`);
-      const parts = [];
-      if (outcome.win) parts.push(`Win ${outcome.win}`);
-      if (outcome.place) parts.push(`Place ${outcome.place}`);
-      if (outcome.show) parts.push(`Show ${outcome.show}`);
-      if (parts.length) {
-        lines.push(`Outcome: ${parts.join(" / ")}`);
+      lines.push(`Query: ${queryUsed || baseQuery}`);
+      if (top) {
+        if (top.title) lines.push(`Top Result: ${top.title}`);
+        if (top.link) lines.push(`Link: ${top.link}`);
       } else {
-        lines.push("Outcome: (none)");
+        lines.push("No top result returned.");
       }
-      return lines.join("\n");
+      const outcomeParts = [
+        outcome.win,
+        outcome.place,
+        outcome.show,
+      ].filter(Boolean);
+      if (outcomeParts.length)
+        lines.push(`Outcome: ${outcomeParts.join(" / ")}`);
+      const hitList = [
+        hits.winHit ? "Win" : null,
+        hits.placeHit ? "Place" : null,
+        hits.showHit ? "Show" : null,
+      ].filter(Boolean);
+      if (hitList.length) lines.push(`Hits: ${hitList.join(", ")}`);
+      return lines.filter(Boolean).join("\n");
     })();
 
     const summarySafe =
@@ -840,21 +862,21 @@ export default async function handler(req, res) {
         await redis.set(
           eventKey,
           JSON.stringify({
-            ts: tsIso,
-            track,
-            date,
-            raceNo: raceNumber ?? null,
-            distance,
-            surface,
-            strategy,
-            ai_picks,
-            query: queryUsed,
-            count: results.length,
-            results: results.slice(0, 10),
-            predicted: predictedSafe,
-            outcome,
-            hits,
-            summary: summarySafe,
+          ts: tsIso,
+          track,
+          date,
+          raceNo: raceNumber ?? null,
+          distance,
+          surface,
+          strategy,
+          ai_picks,
+          query: queryUsed,
+          count: results.length,
+          results: results.slice(0, 10),
+          predicted: predictedSafe,
+          outcome,
+          hits,
+          summary: summarySafe,
           }),
         );
         await redis.expire(eventKey, TTL_SECONDS);
@@ -907,17 +929,17 @@ export default async function handler(req, res) {
         const exists = fs.existsSync(csvPath);
         const line =
           [
-            Date.now(),
-            date,
-            JSON.stringify(track),
+          Date.now(),
+          date,
+          JSON.stringify(track),
             raceNumber ?? "",
             JSON.stringify(queryUsed || ""),
             JSON.stringify(top?.title || ""),
             JSON.stringify(top?.link || ""),
-            hits.winHit ? 1 : 0,
-            hits.placeHit ? 1 : 0,
-            hits.showHit ? 1 : 0,
-            hits.top3Hit ? 1 : 0,
+          hits.winHit ? 1 : 0,
+          hits.placeHit ? 1 : 0,
+          hits.showHit ? 1 : 0,
+          hits.top3Hit ? 1 : 0,
           ].join(",") + "\n";
         if (!exists) fs.writeFileSync(csvPath, header);
         fs.appendFileSync(csvPath, line);
