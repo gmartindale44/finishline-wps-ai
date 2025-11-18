@@ -583,14 +583,14 @@ function pickBest(items) {
   if (!Array.isArray(items) || !items.length) return null;
   const scored = items
     .map((item) => {
-      try {
+    try {
         const url = new URL(item.link || "");
         const host = url.hostname || "";
-        const idx = preferHosts.findIndex((h) => host.includes(h));
-        return { item, score: idx === -1 ? 10 : idx };
-      } catch {
-        return { item, score: 10 };
-      }
+      const idx = preferHosts.findIndex((h) => host.includes(h));
+      return { item, score: idx === -1 ? 10 : idx };
+    } catch {
+      return { item, score: 10 };
+    }
     })
     .sort((a, b) => a.score - b.score);
   return scored.length ? scored[0].item : null;
@@ -611,7 +611,7 @@ export default async function handler(req, res) {
   try {
     if (req.method !== "POST") {
       res.setHeader("Allow", "POST");
-      // Return 200 with structured error for consistency (never 500)
+      // Return 200 with structured error for consistency (method validation)
       return res.status(200).json({
         date: safeDate,
         track: safeTrack,
@@ -699,23 +699,23 @@ export default async function handler(req, res) {
     const searchStep = "verify_race_search";
 
     try {
-      for (const q of queries) {
-        try {
-          const items = await runSearch(req, q);
-          queryUsed = q;
-          results = items;
-          if (items.length) break;
-        } catch (error) {
-          lastError = error;
+    for (const q of queries) {
+      try {
+        const items = await runSearch(req, q);
+        queryUsed = q;
+        results = items;
+        if (items.length) break;
+      } catch (error) {
+        lastError = error;
           console.error("[verify_race] Search query failed", {
             query: q,
             error: error?.message || String(error),
           });
         }
-      }
+    }
 
-      if (!results.length && lastError) {
-        throw lastError;
+    if (!results.length && lastError) {
+      throw lastError;
       }
     } catch (error) {
       console.error("[verify_race] Search failed", {
@@ -799,18 +799,98 @@ export default async function handler(req, res) {
       };
     })();
 
-    // Simplified summary: only date and outcome
-    const outcomeParts = [];
-    if (outcome.win) outcomeParts.push(`Win ${outcome.win}`);
-    if (outcome.place) outcomeParts.push(`Place ${outcome.place}`);
-    if (outcome.show) outcomeParts.push(`Show ${outcome.show}`);
-
-    const summary = [
-      `Using date: ${date}`,
-      `Outcome: ${outcomeParts.length ? outcomeParts.join(" • ") : "(none)"}`,
-    ].join("\n");
+    const summary = (() => {
+      const lines = [];
+      lines.push(`Using date: ${date}`);
+      const parts = [];
+      if (outcome.win) parts.push(`Win ${outcome.win}`);
+      if (outcome.place) parts.push(`Place ${outcome.place}`);
+      if (outcome.show) parts.push(`Show ${outcome.show}`);
+      if (parts.length) {
+        lines.push(`Outcome: ${parts.join(" • ")}`);
+      } else {
+        lines.push("Outcome: (none)");
+      }
+      return lines.join("\n");
+    })();
 
     const summarySafe = summary || "No summary returned.";
+
+    // Log outcome for debugging (minimal logging)
+    const isHRN = top?.link && /horseracingnation\.com/i.test(top.link);
+    if (isHRN) {
+      console.info("[verify_race] Parsed HRN outcome", {
+        track: safeTrack,
+        date: safeDate,
+        raceNo: safeRaceNo,
+        outcome,
+      });
+    } else {
+      console.info("[verify_race] outcome", {
+        track: safeTrack,
+        date: safeDate,
+        raceNo: safeRaceNo,
+        outcome,
+        hits,
+      });
+    }
+
+    // Log outcome for debugging (minimal logging)
+    const isHRN = top?.link && /horseracingnation\.com/i.test(top.link);
+    if (isHRN) {
+      console.info("[verify_race] Parsed HRN outcome", {
+        track: safeTrack,
+        date: safeDate,
+        raceNo: safeRaceNo,
+        outcome,
+      });
+    } else {
+      console.info("[verify_race] outcome", {
+        track: safeTrack,
+        date: safeDate,
+        raceNo: safeRaceNo,
+        outcome,
+        hits,
+      });
+    }
+
+    // Log outcome for debugging (minimal logging)
+    const isHRN = top?.link && /horseracingnation\.com/i.test(top.link);
+    if (isHRN) {
+      console.info("[verify_race] Parsed HRN outcome", {
+        track: safeTrack,
+        date: safeDate,
+        raceNo: safeRaceNo,
+        outcome,
+      });
+    } else {
+      console.info("[verify_race] outcome", {
+        track: safeTrack,
+        date: safeDate,
+        raceNo: safeRaceNo,
+        outcome,
+        hits,
+      });
+    }
+
+    // Log outcome for debugging (minimal logging)
+    const isHRN = top?.link && /horseracingnation\.com/i.test(top.link);
+    if (isHRN) {
+      console.info("[verify_race] Parsed HRN outcome", {
+        track: safeTrack,
+        date: safeDate,
+        raceNo: safeRaceNo,
+        outcome,
+      });
+    } else {
+      console.info("[verify_race] outcome", {
+        track: safeTrack,
+        date: safeDate,
+        raceNo: safeRaceNo,
+        outcome,
+        hits,
+      });
+    }
 
     // Log outcome for debugging (minimal logging)
     const isHRN = top?.link && /horseracingnation\.com/i.test(top.link);
@@ -845,21 +925,21 @@ export default async function handler(req, res) {
         await redis.set(
           eventKey,
           JSON.stringify({
-            ts: tsIso,
-            track,
-            date,
-            raceNo: raceNumber ?? null,
-            distance,
-            surface,
-            strategy,
-            ai_picks,
-            query: queryUsed,
-            count: results.length,
-            results: results.slice(0, 10),
-            predicted: predictedSafe,
-            outcome,
-            hits,
-            summary: summarySafe,
+          ts: tsIso,
+          track,
+          date,
+          raceNo: raceNumber ?? null,
+          distance,
+          surface,
+          strategy,
+          ai_picks,
+          query: queryUsed,
+          count: results.length,
+          results: results.slice(0, 10),
+          predicted: predictedSafe,
+          outcome,
+          hits,
+          summary: summarySafe,
           }),
         );
         await redis.expire(eventKey, TTL_SECONDS);
@@ -912,17 +992,17 @@ export default async function handler(req, res) {
         const exists = fs.existsSync(csvPath);
         const line =
           [
-            Date.now(),
-            date,
-            JSON.stringify(track),
+          Date.now(),
+          date,
+          JSON.stringify(track),
             raceNumber ?? "",
             JSON.stringify(queryUsed || ""),
             JSON.stringify(top?.title || ""),
             JSON.stringify(top?.link || ""),
-            hits.winHit ? 1 : 0,
-            hits.placeHit ? 1 : 0,
-            hits.showHit ? 1 : 0,
-            hits.top3Hit ? 1 : 0,
+          hits.winHit ? 1 : 0,
+          hits.placeHit ? 1 : 0,
+          hits.showHit ? 1 : 0,
+          hits.top3Hit ? 1 : 0,
           ].join(",") + "\n";
         if (!exists) fs.writeFileSync(csvPath, header);
         fs.appendFileSync(csvPath, line);
@@ -966,7 +1046,6 @@ export default async function handler(req, res) {
       step: "verify_race",
       outcome: { win: "", place: "", show: "" },
       hits: { winHit: false, placeHit: false, showHit: false },
-      summary: `Using date: ${safeDate || "(unknown)"}\nError: ${err?.message || String(err) || "Unknown error occurred"}`,
     });
   }
 }
