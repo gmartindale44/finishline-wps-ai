@@ -1,9 +1,4 @@
 // pages/api/verify_race.js
-//
-// IMPORTANT: This handler is designed to NEVER return HTTP 500.
-// All errors are caught and returned as HTTP 200 with structured JSON
-// containing error, details, and step fields. This ensures the frontend
-// can always parse the response and display meaningful error messages.
 
 import crypto from "node:crypto";
 import { Redis } from "@upstash/redis";
@@ -611,17 +606,9 @@ export default async function handler(req, res) {
   try {
     if (req.method !== "POST") {
       res.setHeader("Allow", "POST");
-      // Return 200 with structured error for consistency (never 500)
-      return res.status(200).json({
-        date: safeDate,
-        track: safeTrack,
-        raceNo: safeRaceNo,
-        error: "Method Not Allowed",
-        details: "Only POST requests are accepted",
-        step: "verify_race_method_validation",
-        outcome: { win: "", place: "", show: "" },
-        hits: { winHit: false, placeHit: false, showHit: false },
-      });
+      return res
+        .status(405)
+        .json({ ok: false, error: "Method Not Allowed" });
     }
 
     // Be tolerant of either req.body object or JSON string
@@ -799,18 +786,36 @@ export default async function handler(req, res) {
       };
     })();
 
-    // Simplified summary: only date and outcome
-    const outcomeParts = [];
-    if (outcome.win) outcomeParts.push(`Win ${outcome.win}`);
-    if (outcome.place) outcomeParts.push(`Place ${outcome.place}`);
-    if (outcome.show) outcomeParts.push(`Show ${outcome.show}`);
+    const summary = (() => {
+      const lines = [];
+      lines.push(`Query: ${queryUsed || baseQuery}`);
+      if (top) {
+        if (top.title) lines.push(`Top Result: ${top.title}`);
+        if (top.link) lines.push(`Link: ${top.link}`);
+      } else {
+        lines.push("No top result returned.");
+      }
+      const outcomeParts = [
+        outcome.win,
+        outcome.place,
+        outcome.show,
+      ].filter(Boolean);
+      if (outcomeParts.length)
+        lines.push(`Outcome: ${outcomeParts.join(" / ")}`);
+      const hitList = [
+        hits.winHit ? "Win" : null,
+        hits.placeHit ? "Place" : null,
+        hits.showHit ? "Show" : null,
+      ].filter(Boolean);
+      if (hitList.length) lines.push(`Hits: ${hitList.join(", ")}`);
+      return lines.filter(Boolean).join("\n");
+    })();
 
-    const summary = [
-      `Using date: ${date}`,
-      `Outcome: ${outcomeParts.length ? outcomeParts.join(" • ") : "(none)"}`,
-    ].join("\n");
-
-    const summarySafe = summary || "No summary returned.";
+    const summarySafe =
+      summary ||
+      (top?.title
+        ? `Top Result: ${top.title}${top.link ? `\n${top.link}` : ""}`
+        : "No summary returned.");
 
     // Log outcome for debugging (minimal logging)
     const isHRN = top?.link && /horseracingnation\.com/i.test(top.link);
@@ -966,7 +971,6 @@ export default async function handler(req, res) {
       step: "verify_race",
       outcome: { win: "", place: "", show: "" },
       hits: { winHit: false, placeHit: false, showHit: false },
-      summary: `Using date: ${safeDate || "(unknown)"}\nError: ${err?.message || String(err) || "Unknown error occurred"}`,
     });
   }
 }
