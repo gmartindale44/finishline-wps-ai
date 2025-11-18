@@ -747,6 +747,25 @@ export default async function handler(req, res) {
       });
     }
 
+    // Log outcome for debugging (minimal logging)
+    const isHRN = top?.link && /horseracingnation\.com/i.test(top.link);
+    if (isHRN) {
+      console.info("[verify_race] Parsed HRN outcome", {
+        track: safeTrack,
+        date: safeDate,
+        raceNo: safeRaceNo,
+        outcome,
+      });
+    } else {
+      console.info("[verify_race] outcome", {
+        track: safeTrack,
+        date: safeDate,
+        raceNo: safeRaceNo,
+        outcome,
+        hits,
+      });
+    }
+
     const tsIso = new Date().toISOString();
     const redis = getRedis();
 
@@ -880,6 +899,8 @@ export default async function handler(req, res) {
       error: "verify_race failed",
       details: err?.message || String(err) || "Unknown error occurred",
       step: "verify_race",
+      outcome: { win: "", place: "", show: "" },
+      hits: { winHit: false, placeHit: false, showHit: false },
     });
   }
 }
