@@ -1,4 +1,9 @@
 // pages/api/verify_race.js
+//
+// IMPORTANT: This handler is designed to NEVER return HTTP 500.
+// All errors are caught and returned as HTTP 200 with structured JSON
+// containing error, details, and step fields. This ensures the frontend
+// can always parse the response and display meaningful error messages.
 
 import crypto from "node:crypto";
 import { Redis } from "@upstash/redis";
@@ -606,9 +611,17 @@ export default async function handler(req, res) {
   try {
     if (req.method !== "POST") {
       res.setHeader("Allow", "POST");
-      return res
-        .status(405)
-        .json({ ok: false, error: "Method Not Allowed" });
+      // Return 200 with structured error for consistency (method validation)
+      return res.status(200).json({
+        date: safeDate,
+        track: safeTrack,
+        raceNo: safeRaceNo,
+        error: "Method Not Allowed",
+        details: "Only POST requests are accepted",
+        step: "verify_race_method_validation",
+        outcome: { win: "", place: "", show: "" },
+        hits: { winHit: false, placeHit: false, showHit: false },
+      });
     }
 
     // Be tolerant of either req.body object or JSON string
@@ -802,6 +815,25 @@ export default async function handler(req, res) {
     })();
 
     const summarySafe = summary || "No summary returned.";
+
+    // Log outcome for debugging (minimal logging)
+    const isHRN = top?.link && /horseracingnation\.com/i.test(top.link);
+    if (isHRN) {
+      console.info("[verify_race] Parsed HRN outcome", {
+        track: safeTrack,
+        date: safeDate,
+        raceNo: safeRaceNo,
+        outcome,
+      });
+    } else {
+      console.info("[verify_race] outcome", {
+        track: safeTrack,
+        date: safeDate,
+        raceNo: safeRaceNo,
+        outcome,
+        hits,
+      });
+    }
 
     // Log outcome for debugging (minimal logging)
     const isHRN = top?.link && /horseracingnation\.com/i.test(top.link);
