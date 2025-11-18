@@ -1,4 +1,9 @@
 // pages/api/verify_race.js
+//
+// IMPORTANT: This handler is designed to NEVER return HTTP 500.
+// All errors are caught and returned as HTTP 200 with structured JSON
+// containing error, details, and step fields. This ensures the frontend
+// can always parse the response and display meaningful error messages.
 
 import crypto from "node:crypto";
 import { Redis } from "@upstash/redis";
@@ -606,9 +611,17 @@ export default async function handler(req, res) {
   try {
     if (req.method !== "POST") {
       res.setHeader("Allow", "POST");
-      return res
-        .status(405)
-        .json({ ok: false, error: "Method Not Allowed" });
+      // Return 200 with structured error for consistency (method validation)
+      return res.status(200).json({
+        date: safeDate,
+        track: safeTrack,
+        raceNo: safeRaceNo,
+        error: "Method Not Allowed",
+        details: "Only POST requests are accepted",
+        step: "verify_race_method_validation",
+        outcome: { win: "", place: "", show: "" },
+        hits: { winHit: false, placeHit: false, showHit: false },
+      });
     }
 
     // Be tolerant of either req.body object or JSON string
@@ -686,23 +699,23 @@ export default async function handler(req, res) {
     const searchStep = "verify_race_search";
 
     try {
-    for (const q of queries) {
-      try {
-        const items = await runSearch(req, q);
-        queryUsed = q;
-        results = items;
-        if (items.length) break;
-      } catch (error) {
-        lastError = error;
+      for (const q of queries) {
+        try {
+          const items = await runSearch(req, q);
+          queryUsed = q;
+          results = items;
+          if (items.length) break;
+        } catch (error) {
+          lastError = error;
           console.error("[verify_race] Search query failed", {
             query: q,
             error: error?.message || String(error),
           });
         }
-    }
+      }
 
-    if (!results.length && lastError) {
-      throw lastError;
+      if (!results.length && lastError) {
+        throw lastError;
       }
     } catch (error) {
       console.error("[verify_race] Search failed", {
