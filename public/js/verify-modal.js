@@ -130,42 +130,35 @@
 
     const lines = [];
 
-    // Always show date if present
+    // Always show the date first if available
     if (data.date) {
       lines.push(`Using date: ${data.date}`);
     }
 
-    // If there's an error, show a minimal error block and stop
-    if (data.error) {
-      lines.push(`Error: ${data.error}`);
-      if (data.details && data.details !== data.error) {
-        lines.push(`Details: ${data.details}`);
-      }
-      summaryEl.textContent = lines.join("\n");
-      return;
-    }
-
-    // Success path: only show Outcome (if present)
+    // Outcome: we only care about Win / Place / Show here
     if (data.outcome && typeof data.outcome === "object") {
       const parts = [];
-      if (data.outcome.win) parts.push(`Win ${data.outcome.win}`);
-      if (data.outcome.place) parts.push(`Place ${data.outcome.place}`);
-      if (data.outcome.show) parts.push(`Show ${data.outcome.show}`);
+      if (data.outcome.win) {
+        parts.push(`Win ${data.outcome.win}`);
+      }
+      if (data.outcome.place) {
+        parts.push(`Place ${data.outcome.place}`);
+      }
+      if (data.outcome.show) {
+        parts.push(`Show ${data.outcome.show}`);
+      }
       if (parts.length) {
         lines.push(`Outcome: ${parts.join(" • ")}`);
+      } else {
+        // We had an outcome object, but nothing usable inside
+        lines.push("Outcome: (none)");
       }
+    } else {
+      // No outcome object at all
+      lines.push("Outcome: (none)");
     }
 
-    // If no outcome and no error, but we have some summary text, show that
-    if (
-      !data.error &&
-      (!data.outcome || !lines.some((l) => l.startsWith("Outcome:"))) &&
-      data.summary
-    ) {
-      lines.push(data.summary);
-    }
-
-    // Fallback if absolutely nothing meaningful
+    // Safety fallback: if somehow no lines were added
     if (!lines.length) {
       lines.push("No summary returned.");
     }
