@@ -788,34 +788,58 @@ export default async function handler(req, res) {
 
     const summary = (() => {
       const lines = [];
-      lines.push(`Query: ${queryUsed || baseQuery}`);
-      if (top) {
-        if (top.title) lines.push(`Top Result: ${top.title}`);
-        if (top.link) lines.push(`Link: ${top.link}`);
+      lines.push(`Using date: ${date}`);
+      const parts = [];
+      if (outcome.win) parts.push(`Win ${outcome.win}`);
+      if (outcome.place) parts.push(`Place ${outcome.place}`);
+      if (outcome.show) parts.push(`Show ${outcome.show}`);
+      if (parts.length) {
+        lines.push(`Outcome: ${parts.join(" • ")}`);
       } else {
-        lines.push("No top result returned.");
+        lines.push("Outcome: (none)");
       }
-      const outcomeParts = [
-        outcome.win,
-        outcome.place,
-        outcome.show,
-      ].filter(Boolean);
-      if (outcomeParts.length)
-        lines.push(`Outcome: ${outcomeParts.join(" / ")}`);
-      const hitList = [
-        hits.winHit ? "Win" : null,
-        hits.placeHit ? "Place" : null,
-        hits.showHit ? "Show" : null,
-      ].filter(Boolean);
-      if (hitList.length) lines.push(`Hits: ${hitList.join(", ")}`);
-      return lines.filter(Boolean).join("\n");
+      return lines.join("\n");
     })();
 
-    const summarySafe =
-      summary ||
-      (top?.title
-        ? `Top Result: ${top.title}${top.link ? `\n${top.link}` : ""}`
-        : "No summary returned.");
+    const summarySafe = summary || "No summary returned.";
+
+    // Log outcome for debugging (minimal logging)
+    const isHRN = top?.link && /horseracingnation\.com/i.test(top.link);
+    if (isHRN) {
+      console.info("[verify_race] Parsed HRN outcome", {
+        track: safeTrack,
+        date: safeDate,
+        raceNo: safeRaceNo,
+        outcome,
+      });
+    } else {
+      console.info("[verify_race] outcome", {
+        track: safeTrack,
+        date: safeDate,
+        raceNo: safeRaceNo,
+        outcome,
+        hits,
+      });
+    }
+
+    // Log outcome for debugging (minimal logging)
+    const isHRN = top?.link && /horseracingnation\.com/i.test(top.link);
+    if (isHRN) {
+      console.info("[verify_race] Parsed HRN outcome", {
+        track: safeTrack,
+        date: safeDate,
+        raceNo: safeRaceNo,
+        outcome,
+      });
+    } else {
+      console.info("[verify_race] outcome", {
+        track: safeTrack,
+        date: safeDate,
+        raceNo: safeRaceNo,
+        outcome,
+        hits,
+      });
+    }
 
     // Log outcome for debugging (minimal logging)
     const isHRN = top?.link && /horseracingnation\.com/i.test(top.link);
