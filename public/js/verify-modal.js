@@ -610,9 +610,10 @@
             : {
                 ...baseSummary,
                 ...data,
-                error: data && data.error
-                  ? data.error
-                  : `Request failed (${resp.status})`,
+                error:
+                  data && data.error
+                    ? data.error
+                    : `Request failed (${resp.status})`,
                 details:
                   data && (data.details || data.message)
                     ? data.details || data.message
