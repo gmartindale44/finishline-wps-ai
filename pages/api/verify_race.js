@@ -45,12 +45,110 @@ function normalizeHorseName(name) {
 }
 
 /**
+ * Extract Win/Place/Show directly from HRN Runner (Speed) table
+ * Reads the W/P/S columns to find which horse finished in each position
+ * @param {cheerio.CheerioAPI} $ - Cheerio instance for the full page
+ * @param {cheerio.Cheerio} raceTableRoot - Root element to search within (e.g., $('body') or race section)
+ * @returns {{ win: string | null; place: string | null; show: string | null }}
+ */
+function extractWPSFromHRNRunnerTable($, raceTableRoot) {
+  // 1) Find all tables under raceTableRoot
+  const tables = raceTableRoot.find("table").toArray();
+
+  for (const table of tables) {
+    const $table = $(table);
+
+    // Get header row cells
+    const headerRow = $table.find("tr").first();
+    const headerTexts = headerRow
+      .find("th, td")
+      .toArray()
+      .map((cell) => $(cell).text().trim().toLowerCase());
+
+    if (!headerTexts.length) continue;
+
+    // We want the table that has columns like:
+    //   "runner (speed)" OR "runner" OR "horse"
+    //   AND "win", "place", "show"
+    const hasRunnerCol =
+      headerTexts.some((t) => t.includes("runner") || t.includes("horse"));
+    const winIdx = headerTexts.findIndex((t) => t.includes("win"));
+    const placeIdx = headerTexts.findIndex((t) => t.includes("place"));
+    const showIdx = headerTexts.findIndex((t) => t.includes("show"));
+
+    if (!hasRunnerCol || winIdx === -1 || placeIdx === -1 || showIdx === -1) {
+      continue; // not the W/P/S table
+    }
+
+    // Index of the runner/horse column
+    const runnerIdx = headerTexts.findIndex(
+      (t) => t.includes("runner") || t.includes("horse")
+    );
+
+    if (runnerIdx === -1) continue;
+
+    let winHorse = null;
+    let placeHorse = null;
+    let showHorse = null;
+
+    // 2) Iterate body rows (skip headerRow)
+    $table
+      .find("tr")
+      .slice(1)
+      .each((_, row) => {
+        const cells = $(row).find("td").toArray();
+        if (!cells.length) return;
+
+        const getText = (idx) =>
+          idx >= 0 && idx < cells.length ? $(cells[idx]).text().trim() : "";
+
+        const runnerText = getText(runnerIdx);
+        if (!runnerText) return;
+
+        // Clean up runner name (remove speed figure suffix like "(98*)")
+        const cleanRunnerName = runnerText
+          .replace(/\s*\([^)]*\)\s*$/, "")
+          .trim();
+        const normalizedName = normalizeHorseName(cleanRunnerName);
+        if (!normalizedName) return;
+
+        const winText = getText(winIdx);
+        const placeText = getText(placeIdx);
+        const showText = getText(showIdx);
+
+        // If the cell is not empty and not "-", we treat this row as that position.
+        // We only pick the FIRST row with non-empty value for each slot.
+        if (winText && winText !== "-" && !winHorse) {
+          winHorse = normalizedName;
+        }
+        if (placeText && placeText !== "-" && !placeHorse) {
+          placeHorse = normalizedName;
+        }
+        if (showText && showText !== "-" && !showHorse) {
+          showHorse = normalizedName;
+        }
+      });
+
+    if (winHorse || placeHorse || showHorse) {
+      return {
+        win: winHorse || null,
+        place: placeHorse || null,
+        show: showHorse || null,
+      };
+    }
+  }
+
+  // Fallback if we never found a suitable table
+  return { win: null, place: null, show: null };
+}
+
+/**
  * Parse HRN "Entries & Results" page to get Win / Place / Show outcome
  * Strategy:
  *   1. Build map: program number -> horse name from the Runner (Speed) table
  *   2. Prefer Trifecta finish order (e.g. "2-5-3")
  *   3. Map those finish numbers through the program map to names
- *   4. If anything fails, return nulls instead of duplicating horses
+ *   4. Fallback: Read W/P/S directly from Runner table if Trifecta parsing incomplete
  * @param {cheerio.CheerioAPI} $
  * @param {cheerio.Cheerio} $scope - The race section scope (e.g., race block containing tables)
  * @param {{ track?: string; raceNo?: string | number }} context - Optional context for logging
@@ -181,49 +279,58 @@ function parseHRNRaceOutcome($, $scope, context = {}) {
     if (finishNums) return false; // break outer table loop
   });
 
-  // If we couldn't find a Trifecta finish, bail with nulls (no guessing)
-  if (!finishNums || finishNums.length !== 3) {
-    if (process.env.NODE_ENV !== "production") {
-      console.warn("[verify_race] HRN: no trifecta finish found", {
-        track: context.track,
-        raceNo: context.raceNo,
-      });
-    }
-    return outcome;
+  // ---------------------------------------------------------------------------
+  // 3) Try Trifecta finish order from the Pool table (e.g. "2-5-3")
+  // ---------------------------------------------------------------------------
+  if (finishNums && finishNums.length === 3) {
+    const [winNo, placeNo, showNo] = finishNums;
+
+    // Map program numbers -> horse names via Runner (Speed) table
+    const winName = winNo ? programHorse.get(winNo) || null : null;
+    const placeName = placeNo ? programHorse.get(placeNo) || null : null;
+    const showName = showNo ? programHorse.get(showNo) || null : null;
+
+    outcome.win = winName;
+    outcome.place = placeName;
+    outcome.show = showName;
   }
 
-  const [winNo, placeNo, showNo] = finishNums;
+  // ---------------------------------------------------------------------------
+  // 4) Fallback: Read W/P/S directly from Runner table if Trifecta incomplete
+  // ---------------------------------------------------------------------------
+  const hasAllThree =
+    outcome && outcome.win && outcome.place && outcome.show;
 
-  // ---------------------------------------------------------------------------
-  // 3) Map program numbers -> horse names via Runner (Speed) table
-  // ---------------------------------------------------------------------------
-  const winName = winNo ? programHorse.get(winNo) || null : null;
-  const placeName = placeNo ? programHorse.get(placeNo) || null : null;
-  const showName = showNo ? programHorse.get(showNo) || null : null;
+  if (!hasAllThree) {
+    const fromRunnerTable = extractWPSFromHRNRunnerTable($, $scope);
 
-  outcome.win = winName;
-  outcome.place = placeName;
-  outcome.show = showName;
-
-  // ---------------------------------------------------------------------------
-  // 4) Safety checks: never duplicate one horse into all positions
-  // ---------------------------------------------------------------------------
-  const distinct = new Set(
-    [outcome.win, outcome.place, outcome.show].filter(Boolean)
-  );
-  if (distinct.size === 1) {
-    // We only confidently know the winner; clear the rest to avoid misleading output
-    outcome.place = null;
-    outcome.show = null;
-    if (process.env.NODE_ENV !== "production") {
-      console.warn(
-        "[verify_race] HRN parser only found a single distinct horse; clearing P/S",
-        { outcome, finishNums }
-      );
+    // Only overwrite slots that are missing
+    if (!outcome.win && fromRunnerTable.win) {
+      outcome.win = fromRunnerTable.win;
+    }
+    if (!outcome.place && fromRunnerTable.place) {
+      outcome.place = fromRunnerTable.place;
+    }
+    if (!outcome.show && fromRunnerTable.show) {
+      outcome.show = fromRunnerTable.show;
     }
   }
 
-  return outcome;
+  // ---------------------------------------------------------------------------
+  // 5) Ensure we always return all three fields (never clear valid values)
+  // ---------------------------------------------------------------------------
+  try {
+    // Just ensure the object exists and fields are strings or null
+    outcome = outcome || { win: null, place: null, show: null };
+    return {
+      win: outcome.win || null,
+      place: outcome.place || null,
+      show: outcome.show || null,
+    };
+  } catch (error) {
+    console.error("[verify_race] parseHRNRaceOutcome failed", error);
+    return { win: null, place: null, show: null };
+  }
 }
 
 /**
