@@ -1,4 +1,5 @@
 // pages/api/verify_race.js
+// RESTORED FROM f5a9052 BASELINE - DO NOT EDIT PARSER LOGIC YET
 
 import crypto from "node:crypto";
 import { Redis } from "@upstash/redis";
