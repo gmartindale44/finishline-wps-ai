@@ -264,7 +264,7 @@ function parseOutcomeFromHtml(html, url, raceNo = null) {
 
       // Parse HRN outcome with scope and context
       const hrnOutcome = parseHRNRaceOutcome($, $scope, {
-        track: ctx?.track,
+        track: context?.track,
         raceNo: raceNo,
       });
 
@@ -346,7 +346,9 @@ async function extractOutcomeFromResultPage(url, ctx) {
     }
 
     const html = await res.text();
-    const outcome = parseOutcomeFromHtml(html, url, ctx.raceNo);
+    const outcome = parseOutcomeFromHtml(html, url, ctx.raceNo, {
+      track: ctx.track,
+    });
     return outcome;
   } catch (error) {
     // Best-effort only; swallow errors and return empty so UI still works
