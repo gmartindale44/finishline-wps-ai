@@ -50,6 +50,139 @@ function normalizeHorseName(name) {
 }
 
 /**
+ * Extract Win/Place/Show from a runner table using WPS payout indicators
+ * @param {cheerio.CheerioAPI} $
+ * @param {cheerio.Cheerio<cheerio.Element>} table
+ * @param {{ runnerIdx: number; winIdx: number; placeIdx: number; showIdx: number }} idx
+ * @returns {{ win: string; place: string; show: string }}
+ */
+function extractOutcomeFromRunnerTable($, table, idx) {
+  const { runnerIdx, winIdx, placeIdx, showIdx } = idx;
+
+  const $rows = $(table).find("tr");
+
+  const norm = (s) => (s || "").replace(/\s+/g, " ").trim();
+
+  const runners = [];
+
+  $rows.each((i, tr) => {
+    const $cells = $(tr).find("td");
+
+    if (!$cells.length) return;
+
+    // Get raw texts
+    const runnerText =
+      runnerIdx > -1 ? norm($cells.eq(runnerIdx).text()) : "";
+
+    if (!runnerText) return;
+
+    // Skip header-ish rows that somehow ended up as <td>
+    if (/runner\s*\(speed\)/i.test(runnerText)) return;
+
+    const winText =
+      winIdx > -1 ? norm($cells.eq(winIdx).text()) : "";
+
+    const placeText =
+      placeIdx > -1 ? norm($cells.eq(placeIdx).text()) : "";
+
+    const showText =
+      showIdx > -1 ? norm($cells.eq(showIdx).text()) : "";
+
+    // If the row has no payouts at all, it's not useful for W/P/S.
+    if (!winText && !placeText && !showText) return;
+
+    // Normalize runner name: strip footnote markers like (*) or (114*)
+    let runnerName = runnerText.replace(/\s*\([^)]*\)\s*$/, "").trim();
+    runnerName = normalizeHorseName(runnerName);
+    if (!runnerName) return;
+
+    // Hard filters to avoid junk rows
+    const lowerRunner = runnerName.toLowerCase();
+    const junkPatterns = [
+      "preliminary speed figures",
+      "also rans",
+      "pool",
+      "daily double",
+      "trifecta",
+      "superfecta",
+      "pick 3",
+      "pick 4",
+      "this script inside",
+      "head tags",
+    ];
+    if (
+      lowerRunner.startsWith("*") ||
+      junkPatterns.some((pattern) => lowerRunner.includes(pattern))
+    ) {
+      return; // Skip this row
+    }
+
+    runners.push({
+      name: runnerName,
+      hasWin: !!winText && winText !== "-",
+      hasPlace: !!placeText && placeText !== "-",
+      hasShow: !!showText && showText !== "-",
+    });
+  });
+
+  if (!runners.length) {
+    return { win: "", place: "", show: "" };
+  }
+
+  // 1) WIN: first row that has a Win payout
+  let winHorse =
+    runners.find((r) => r.hasWin)?.name || "";
+
+  // 2) PLACE:
+  // Prefer a horse that has PLACE but not WIN, and is not the WIN horse
+  let placeHorse =
+    runners.find(
+      (r) =>
+        r.hasPlace &&
+        r.name !== winHorse &&
+        !r.hasWin
+    )?.name ||
+    runners.find(
+      (r) =>
+        r.hasPlace &&
+        r.name !== winHorse
+    )?.name ||
+    "";
+
+  // 3) SHOW:
+  // Prefer a horse that has SHOW only (no WIN/PLACE) and isn't WIN/PLACE
+  let showHorse =
+    runners.find(
+      (r) =>
+        r.hasShow &&
+        r.name !== winHorse &&
+        r.name !== placeHorse &&
+        !r.hasWin &&
+        !r.hasPlace
+    )?.name ||
+    runners.find(
+      (r) =>
+        r.hasShow &&
+        r.name !== winHorse &&
+        r.name !== placeHorse &&
+        !r.hasWin
+    )?.name ||
+    runners.find(
+      (r) =>
+        r.hasShow &&
+        r.name !== winHorse &&
+        r.name !== placeHorse
+    )?.name ||
+    "";
+
+  return {
+    win: winHorse,
+    place: placeHorse,
+    show: showHorse,
+  };
+}
+
+/**
  * Parse HRN race-specific outcome from HTML using cheerio
  * Finds the specific race section and parses the Runner (speed) W/P/S table
  * @param {cheerio.CheerioAPI} $
@@ -158,79 +291,25 @@ function parseHRNRaceOutcome($, raceNo) {
     }
 
     const { table: $runnerTable, runnerIdx, winIdx, placeIdx, showIdx } = target;
-    const rows = $runnerTable.find("tr").slice(1); // Skip header
 
-    // Initialize W/P/S names for the chosen table
-    let winName = "";
-    let placeName = "";
-    let showName = "";
-
-    // --- 3) Parse rows to assign Win / Place / Show from payout cells ---
-    rows.each((_, row) => {
-      const $row = $(row);
-      const cells = $row.find("td");
-
-      // Guard: need at least some cells
-      if (!cells || cells.length === 0) return;
-
-      // Get the runner name from runnerIdx
-      if (runnerIdx < 0 || runnerIdx >= cells.length) return;
-      const rawRunner = $(cells[runnerIdx]).text().trim();
-      if (!rawRunner) return;
-
-      // Normalize runner name: strip footnote markers like (*) or (114*)
-      let runnerName = rawRunner.replace(/\s*\([^)]*\)\s*$/, "").trim();
-      runnerName = normalizeHorseName(runnerName);
-      if (!runnerName) return;
-
-      // Hard filters to avoid junk rows
-      const lowerRunner = runnerName.toLowerCase();
-      const junkPatterns = [
-        "preliminary speed figures",
-        "also rans",
-        "pool",
-        "daily double",
-        "trifecta",
-        "superfecta",
-        "pick 3",
-        "pick 4",
-        "this script inside",
-        "head tags",
-      ];
-      if (
-        lowerRunner.startsWith("*") ||
-        junkPatterns.some((pattern) => lowerRunner.includes(pattern))
-      ) {
-        return; // Skip this row
-      }
-
-      // For the actual W/P/S mapping: only assign each position once (first non-empty row wins)
-      if (winIdx !== -1 && !winName && cells[winIdx]) {
-        const winText = $(cells[winIdx]).text().trim();
-        if (winText && winText !== "-") {
-          winName = runnerName;
-        }
-      }
-
-      if (placeIdx !== -1 && !placeName && cells[placeIdx]) {
-        const placeText = $(cells[placeIdx]).text().trim();
-        if (placeText && placeText !== "-") {
-          placeName = runnerName;
-        }
-      }
-
-      if (showIdx !== -1 && !showName && cells[showIdx]) {
-        const showText = $(cells[showIdx]).text().trim();
-        if (showText && showText !== "-") {
-          showName = runnerName;
-        }
-      }
+    // --- Extract win/place/show from the chosen runner table using WPS payouts ---
+    const extracted = extractOutcomeFromRunnerTable($, $runnerTable, {
+      runnerIdx,
+      winIdx,
+      placeIdx,
+      showIdx,
     });
 
-    // Build outcome strictly from these three vars
-    outcome.win = winName || "";
-    outcome.place = placeName || "";
-    outcome.show = showName || "";
+    // Fallback: if we somehow failed to find anything, keep existing behavior (if any)
+    // but do NOT re-use the same horse for all three slots.
+    if (!extracted.win && !extracted.place && !extracted.show) {
+      console.warn("[verify_race][hrn] extractOutcomeFromRunnerTable returned empty outcome");
+      // Leave outcome as empty object - don't fall back to old logic that might reuse winner
+    } else {
+      outcome.win = extracted.win || "";
+      outcome.place = extracted.place || "";
+      outcome.show = extracted.show || "";
+    }
 
     // Debug log for HRN parse success
     console.log("[verify_race] HRN WPS outcome", {
