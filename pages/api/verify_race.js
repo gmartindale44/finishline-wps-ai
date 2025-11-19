@@ -155,56 +155,77 @@ function parseHRNRaceOutcome($, raceNo) {
     const { table: $runnerTable, runnerIdx, winIdx, placeIdx, showIdx } = target;
     const rows = $runnerTable.find("tr").slice(1); // Skip header
 
+    // Track distinct horses for each position
+    let winHorse = null;
+    let placeHorse = null;
+    let showHorse = null;
+
     // --- 3) Parse rows to assign Win / Place / Show from payout cells ---
     rows.each((_, row) => {
-      const cells = $(row).find("td, th").toArray();
-      const maxIdx = Math.max(runnerIdx, winIdx, placeIdx, showIdx);
-      if (cells.length <= maxIdx) return;
+      const $row = $(row);
+      const cells = $row.find("td, th");
 
-      // Extract runner name from the Runner column and strip speed figures "(112*)"
-      let runnerName = $(cells[runnerIdx]).text().trim();
-      runnerName = runnerName.replace(/\s*\([^)]*\)\s*$/, "").trim();
+      // Guard: need at least a runner cell plus some payout cells
+      if (!cells || cells.length < 2) return;
+
+      // Use the runner column index determined above
+      const runnerCell = $(cells.get(runnerIdx));
+      let runnerName = runnerCell.text() || "";
+      runnerName = runnerName.replace(/\s*\([^)]*\)\s*$/, "").trim(); // strip "(98*)" etc.
       runnerName = normalizeHorseName(runnerName);
 
       if (!runnerName) return;
 
-      // Pull the three payout cells directly from Win / Place / Show columns
-      const winText =
-        winIdx >= 0 && cells[winIdx] ? $(cells[winIdx]).text().trim() : "";
-      const placeText =
-        placeIdx >= 0 && cells[placeIdx]
-          ? $(cells[placeIdx]).text().trim()
-          : "";
-      const showText =
-        showIdx >= 0 && cells[showIdx] ? $(cells[showIdx]).text().trim() : "";
+      // Helper: extract a "marker" from a W/P/S column.
+      // Any non-empty, non-dash value counts (digit, payout, icon alt text, etc.).
+      const getMarker = (colIdx) => {
+        if (colIdx == null || colIdx < 0 || colIdx >= cells.length) return "";
+        const cell = $(cells.get(colIdx));
+        // Prefer text
+        let val = (cell.text() || "").trim();
+        // If text is empty, try alt/aria-label for icon-only indicators
+        if (!val) {
+          const imgAlt = (cell.find("img[alt]").attr("alt") || "").trim();
+          const aria = (cell.attr("aria-label") || "").trim();
+          val = imgAlt || aria;
+        }
+        if (!val || val === "-") return "";
+        return val;
+      };
 
-      const hasWin = !!winText && winText !== "-" && winText.length > 0;
-      const hasPlace = !!placeText && placeText !== "-" && placeText.length > 0;
-      const hasShow = !!showText && showText !== "-" && showText.length > 0;
+      const winMarker = getMarker(winIdx);
+      const placeMarker = getMarker(placeIdx);
+      const showMarker = getMarker(showIdx);
 
       if (process.env.VERIFY_DEBUG === "true") {
         console.log("[verify_race] HRN row", {
           runnerName,
-          winText,
-          placeText,
-          showText,
-          hasWin,
-          hasPlace,
-          hasShow,
+          winMarker,
+          placeMarker,
+          showMarker,
         });
       }
 
-      // Assign each bucket once, in order
-      if (hasWin && !outcome.win) {
-        outcome.win = runnerName;
+      // Each row can only claim ONE slot.
+      // Each slot (win/place/show) can only be assigned once.
+      if (!winHorse && winMarker) {
+        winHorse = runnerName;
+        return; // do not let this same row also be place/show
       }
-      if (hasPlace && !outcome.place) {
-        outcome.place = runnerName;
+      if (!placeHorse && placeMarker) {
+        placeHorse = runnerName;
+        return;
       }
-      if (hasShow && !outcome.show) {
-        outcome.show = runnerName;
+      if (!showHorse && showMarker) {
+        showHorse = runnerName;
+        return;
       }
     });
+
+    // Assign to outcome object
+    if (winHorse) outcome.win = winHorse;
+    if (placeHorse) outcome.place = placeHorse;
+    if (showHorse) outcome.show = showHorse;
 
     // NOTE: we keep the existing fallback logic (Pool/Finish/$2 Payout table)
     // that comes AFTER this function in the file. If you already have a
