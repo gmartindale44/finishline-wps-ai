@@ -539,55 +539,159 @@ export default async function handler(req, res) {
     const date = safeDate;
     const dateISO = date; // Use ISO format (YYYY-MM-DD)
 
-    // Equibase-only flow: fetch chart directly
-    console.log("[verify_race] using Equibase-only flow", {
-      track,
-      dateISO,
-      raceNo: raceNumber,
-    });
+    // Build search queries
+    const racePart = raceNumber ? ` Race ${raceNumber}` : "";
+    const baseQuery = `${track}${racePart} ${dateISO} results Win Place Show order`;
+    const altQuery = `${track}${racePart} ${dateISO} result chart official`;
+    const siteBias =
+      "(site:equibase.com OR site:horseracingnation.com OR site:entries.horseracingnation.com)";
 
-    let outcome = { win: "", place: "", show: "" };
-    let queryUsed = null;
-    let top = null;
+    const queries = [
+      `${baseQuery} ${siteBias}`.trim(),
+      `${altQuery} ${siteBias}`.trim(),
+      baseQuery,
+      altQuery,
+    ];
+
+    let results = [];
+    let queryUsed = queries[0];
+    let lastError = null;
+    const searchStep = "verify_race_search";
 
     try {
-      const html = await fetchEquibaseChartHtml({
-        track,
-        dateISO,
-        raceNo: String(raceNumber || ""),
-      });
+      for (const q of queries) {
+        try {
+          const items = await runSearch(req, q);
+          queryUsed = q;
+          results = items;
+          if (items.length) break;
+        } catch (error) {
+          lastError = error;
+          console.error("[verify_race] Search query failed", {
+            query: q,
+            error: error?.message || String(error),
+          });
+        }
+      }
 
-      outcome = parseEquibaseOutcome(html);
-
-      console.log("[verify_race] equibaseOutcome", outcome);
-
-      // Build a mock "top" result for compatibility with existing summary logic
-      const code = getEquibaseTrackCode(track);
-      const raceDate = dateISO.replace(/-/g, "/");
-      top = {
-        title: `${track} Race ${raceNumber} - ${dateISO}`,
-        link: `https://www.equibase.com/premium/chartEmb.cfm?track=${code}&raceDate=${raceDate}&raceNo=${raceNumber}&cy=USA`,
-      };
-      queryUsed = `Equibase chart: ${track} Race ${raceNumber} ${dateISO}`;
+      if (!results.length && lastError) {
+        throw lastError;
+      }
     } catch (error) {
-      console.error("[verify_race] Equibase fetch/parse failed", {
-        track,
-        dateISO,
-        raceNo: raceNumber,
+      console.error("[verify_race] Search failed", {
         error: error?.message || String(error),
         stack: error?.stack,
       });
-
       return res.status(200).json({
         date: safeDate,
         track: safeTrack,
         raceNo: safeRaceNo,
-        error: "Equibase parse failed",
-        details: error?.message || String(error),
-        step: "equibase",
-        query: queryUsed || null,
+        error: "Search failed",
+        details:
+          lastError?.message ||
+          error?.message ||
+          "Unable to fetch race results from search providers",
+        step: searchStep,
+        query: queryUsed || queries[0] || null,
         outcome: { win: "", place: "", show: "" },
         hits: { winHit: false, placeHit: false, showHit: false },
+      });
+    }
+
+    // Pick best result: prefer HRN entries/results pages, then Equibase
+    function pickBestResult(results) {
+      if (!Array.isArray(results) || results.length === 0) return null;
+
+      // 1) Prefer HorseracingNation entries/results pages (where we already have a working parser)
+      const hrnPreferred = results.find((r) => {
+        const url = (r.link || "").toLowerCase();
+        return (
+          url.includes("horseracingnation.com") &&
+          (url.includes("/entries-results/") ||
+            url.includes("/entries/") ||
+            url.includes("/entries-results-"))
+        );
+      });
+      if (hrnPreferred) return hrnPreferred;
+
+      // 2) Fall back to Equibase chart pages
+      const equibaseChart = results.find((r) => {
+        const url = (r.link || "").toLowerCase();
+        return url.includes("equibase.com") && url.includes("chart");
+      });
+      if (equibaseChart) return equibaseChart;
+
+      // 3) Finally, just use the first result
+      return results[0];
+    }
+
+    const top = pickBestResult(results);
+
+    if (!top) {
+      return res.status(200).json({
+        date: safeDate,
+        track: safeTrack,
+        raceNo: safeRaceNo,
+        outcome: { win: "", place: "", show: "" },
+        hits: { winHit: false, placeHit: false, showHit: false },
+        error: "No search results",
+        step: "verify_race_search",
+        query: queryUsed,
+        summary: "No results from Google CSE",
+      });
+    }
+
+    // Route the top result into the correct parser
+    let outcome = { win: "", place: "", show: "" };
+
+    const link = (top.link || "").toLowerCase();
+
+    try {
+      if (link.includes("horseracingnation.com")) {
+        // Use the existing HRN parser: it already knows how to handle multiple races
+        // on the same page and pull out W/P/S for the given raceNo.
+        const parsed = await extractOutcomeFromResultPage(top.link, {
+          track: safeTrack || "",
+          date: safeDate || "",
+          raceNo: raceNumber,
+        });
+
+        if (parsed && (parsed.win || parsed.place || parsed.show)) {
+          outcome = {
+            win: parsed.win || "",
+            place: parsed.place || "",
+            show: parsed.show || "",
+          };
+        }
+      } else if (link.includes("equibase.com")) {
+        // Try Equibase parser if available
+        try {
+          const html = await fetchEquibaseChartHtml({
+            track,
+            dateISO,
+            raceNo: String(raceNumber || ""),
+          });
+          const equibaseOutcome = parseEquibaseOutcome(html);
+          if (equibaseOutcome && (equibaseOutcome.win || equibaseOutcome.place || equibaseOutcome.show)) {
+            outcome = {
+              win: equibaseOutcome.win || "",
+              place: equibaseOutcome.place || "",
+              show: equibaseOutcome.show || "",
+            };
+          }
+        } catch (equibaseError) {
+          console.error("[verify_race] Equibase parse failed", {
+            link: top.link,
+            error: equibaseError?.message,
+          });
+        }
+      }
+    } catch (err) {
+      console.error("[verify_race] parser error", {
+        link: top.link,
+        host: link,
+        message: err?.message,
+        stack: err?.stack,
       });
     }
 
@@ -623,8 +727,16 @@ export default async function handler(req, res) {
       const lines = [];
       lines.push(`Query: ${queryUsed || baseQuery}`);
       if (top) {
-        if (top.title) lines.push(`Top Result: ${top.title}`);
-        if (top.link) lines.push(`Link: ${top.link}`);
+        if (top.title) lines.push(`Top: ${top.title} -> ${top.link}`);
+        if (top.link) {
+          try {
+            const hostname = new URL(top.link).hostname;
+            lines.push(`Host: ${hostname}`);
+          } catch {
+            // Skip if URL parsing fails
+          }
+        }
+        lines.push(`Using chart: ${top.title}`);
       } else {
         lines.push("No top result returned.");
       }
