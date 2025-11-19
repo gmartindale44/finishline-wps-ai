@@ -150,30 +150,21 @@ function extractOutcomeFromRunnerTable($, table, idx) {
     "";
 
   // 3) SHOW:
-  // Prefer a horse that has SHOW only (no WIN/PLACE) and isn't WIN/PLACE
-  let showHorse =
-    runners.find(
-      (r) =>
-        r.hasShow &&
-        r.name !== winHorse &&
-        r.name !== placeHorse &&
-        !r.hasWin &&
-        !r.hasPlace
-    )?.name ||
-    runners.find(
-      (r) =>
-        r.hasShow &&
-        r.name !== winHorse &&
-        r.name !== placeHorse &&
-        !r.hasWin
-    )?.name ||
-    runners.find(
+  // Find the first horse that has a Show payout and is not already assigned to Win or Place
+  // This is the third-place finisher
+  let showHorse = "";
+  if (showIdx >= 0) {
+    // Find the first runner with a Show payout that isn't already Win or Place
+    const showRunner = runners.find(
       (r) =>
         r.hasShow &&
         r.name !== winHorse &&
         r.name !== placeHorse
-    )?.name ||
-    "";
+    );
+    if (showRunner) {
+      showHorse = showRunner.name;
+    }
+  }
 
   return {
     win: winHorse,
