@@ -4,6 +4,11 @@ import crypto from "node:crypto";
 import { Redis } from "@upstash/redis";
 import * as cheerio from "cheerio";
 import { fetchAndParseResults } from "../../lib/results.js";
+import {
+  fetchEquibaseChartHtml,
+  parseEquibaseOutcome,
+  getEquibaseTrackCode,
+} from "../../lib/equibase.js";
 
 const GOOGLE_API_KEY = (process.env.GOOGLE_API_KEY ?? "").trim();
 const GOOGLE_CSE_ID = (process.env.GOOGLE_CSE_ID ?? "").trim();
@@ -534,187 +539,56 @@ export default async function handler(req, res) {
     const date = safeDate;
     const dateISO = date; // Use ISO format (YYYY-MM-DD)
 
-    // Build three specific queries in order
-    const racePart = raceNumber ? ` Race ${raceNumber}` : "";
-    const queries = [
-      // 1) Primary HRN search
-      `${track}${racePart} ${dateISO} "Win" "Place" "Show" site:horseracingnation.com`,
-      // 2) Secondary Equibase
-      `${track}${racePart} ${dateISO} Entries Results site:equibase.com`,
-      // 3) Fallback general HRN
-      `${track} Entries & Results ${dateISO} site:horseracingnation.com`,
-    ];
+    // Equibase-only flow: fetch chart directly
+    console.log("[verify_race] using Equibase-only flow", {
+      track,
+      dateISO,
+      raceNo: raceNumber,
+    });
 
-    let results = [];
-    let queryUsed = queries[0];
-    let lastError = null;
-    const searchStep = "verify_race_search";
+    let outcome = { win: "", place: "", show: "" };
+    let queryUsed = null;
+    let top = null;
 
     try {
-      for (const q of queries) {
-        console.log("[verify_race] using_query", q);
-        try {
-          const items = await runSearch(req, q);
-          queryUsed = q;
+      const html = await fetchEquibaseChartHtml({
+        track,
+        dateISO,
+        raceNo: String(raceNumber || ""),
+      });
 
-          // Filter results to only accept horseracingnation.com or equibase.com
-          const validItems = items.filter((item) => {
-            if (!item.link) return false;
-            try {
-              const url = new URL(item.link);
-              const hostname = url.hostname.toLowerCase();
-              return (
-                hostname.includes("horseracingnation.com") ||
-                hostname.includes("equibase.com")
-              );
-            } catch {
-              return false;
-            }
-          });
+      outcome = parseEquibaseOutcome(html);
 
-          if (validItems.length) {
-            results = validItems;
-            break;
-          }
-        } catch (error) {
-          lastError = error;
-          console.error("[verify_race] Search query failed", {
-            query: q,
-            error: error?.message || String(error),
-          });
-        }
-      }
+      console.log("[verify_race] equibaseOutcome", outcome);
 
-      if (!results.length && lastError) {
-        throw lastError;
-      }
+      // Build a mock "top" result for compatibility with existing summary logic
+      const code = getEquibaseTrackCode(track);
+      const raceDate = dateISO.replace(/-/g, "/");
+      top = {
+        title: `${track} Race ${raceNumber} - ${dateISO}`,
+        link: `https://www.equibase.com/premium/chartEmb.cfm?track=${code}&raceDate=${raceDate}&raceNo=${raceNumber}&cy=USA`,
+      };
+      queryUsed = `Equibase chart: ${track} Race ${raceNumber} ${dateISO}`;
     } catch (error) {
-      console.error("[verify_race] Search failed", {
+      console.error("[verify_race] Equibase fetch/parse failed", {
+        track,
+        dateISO,
+        raceNo: raceNumber,
         error: error?.message || String(error),
         stack: error?.stack,
       });
+
       return res.status(200).json({
         date: safeDate,
         track: safeTrack,
         raceNo: safeRaceNo,
-        error: "Search failed",
-        details:
-          lastError?.message ||
-          error?.message ||
-          "Unable to fetch race results from search providers",
-        step: searchStep,
-        query: queryUsed || queries[0] || null,
+        error: "Equibase parse failed",
+        details: error?.message || String(error),
+        step: "equibase",
+        query: queryUsed || null,
         outcome: { win: "", place: "", show: "" },
         hits: { winHit: false, placeHit: false, showHit: false },
       });
-    }
-
-    // Pick best result (prefer HRN, then Equibase)
-    const topPreferred = pickBest(results);
-    const top = topPreferred || results[0] || null;
-
-    // Validate the selected page before parsing
-    if (top?.link) {
-      console.log("[verify_race] candidate_url", top.link);
-      
-      // Verify domain is valid
-      try {
-        const url = new URL(top.link);
-        const hostname = url.hostname.toLowerCase();
-        const isValidDomain =
-          hostname.includes("horseracingnation.com") ||
-          hostname.includes("equibase.com");
-
-        if (!isValidDomain) {
-          console.warn("[verify_race] Invalid domain, skipping", hostname);
-          // Try next result
-          const nextTop = results[1] || null;
-          if (nextTop?.link) {
-            const nextUrl = new URL(nextTop.link);
-            const nextHostname = nextUrl.hostname.toLowerCase();
-            if (
-              nextHostname.includes("horseracingnation.com") ||
-              nextHostname.includes("equibase.com")
-            ) {
-              // Use next result
-              top.link = nextTop.link;
-              top.title = nextTop.title;
-            } else {
-              // No valid results
-              return res.status(200).json({
-                date: safeDate,
-                track: safeTrack,
-                raceNo: safeRaceNo,
-                error: "No valid result pages found",
-                details:
-                  "Search returned results but none from horseracingnation.com or equibase.com",
-                step: "verify_race_validation",
-                query: queryUsed,
-                outcome: { win: "", place: "", show: "" },
-                hits: { winHit: false, placeHit: false, showHit: false },
-              });
-            }
-          } else {
-            return res.status(200).json({
-              date: safeDate,
-              track: safeTrack,
-              raceNo: safeRaceNo,
-              error: "No valid result pages found",
-              details:
-                "Search returned results but none from horseracingnation.com or equibase.com",
-              step: "verify_race_validation",
-              query: queryUsed,
-              outcome: { win: "", place: "", show: "" },
-              hits: { winHit: false, placeHit: false, showHit: false },
-            });
-          }
-        }
-      } catch (urlError) {
-        console.error("[verify_race] Invalid URL", top.link, urlError);
-        return res.status(200).json({
-          date: safeDate,
-          track: safeTrack,
-          raceNo: safeRaceNo,
-          error: "Invalid result URL",
-          details: "The search result URL is malformed",
-          step: "verify_race_validation",
-          query: queryUsed,
-          outcome: { win: "", place: "", show: "" },
-          hits: { winHit: false, placeHit: false, showHit: false },
-        });
-      }
-    }
-
-    let outcome = { win: "", place: "", show: "" };
-    if (top?.link) {
-      try {
-        // Try cheerio-based parser first
-        const cheerioOutcome = await extractOutcomeFromResultPage(top.link, {
-          track: safeTrack || "",
-          date: safeDate || "",
-          raceNo: raceNumber,
-        });
-
-        // If cheerio found results, use them; otherwise fall back to regex parser
-        if (cheerioOutcome.win || cheerioOutcome.place || cheerioOutcome.show) {
-          outcome = {
-            win: cheerioOutcome.win || "",
-            place: cheerioOutcome.place || "",
-            show: cheerioOutcome.show || "",
-          };
-        } else {
-          // Fallback to existing regex-based parser
-          outcome = await fetchAndParseResults(top.link, {
-            raceNo: raceNumber,
-          });
-        }
-      } catch (error) {
-        console.error("[verify_race] Parse results failed", {
-          url: top.link,
-          error: error?.message || String(error),
-        });
-        // Continue with empty outcome - not a fatal error
-      }
     }
 
     const normalizeName = (value = "") =>
@@ -776,24 +650,14 @@ export default async function handler(req, res) {
         ? `Top Result: ${top.title}${top.link ? `\n${top.link}` : ""}`
         : "No summary returned.");
 
-    // Log outcome for debugging (minimal logging)
-    const isHRN = top?.link && /horseracingnation\.com/i.test(top.link);
-    if (isHRN) {
-      console.info("[verify_race] Parsed HRN outcome", {
-        track: safeTrack,
-        date: safeDate,
-        raceNo: safeRaceNo,
-        outcome,
-      });
-    } else {
-      console.info("[verify_race] outcome", {
-        track: safeTrack,
-        date: safeDate,
-        raceNo: safeRaceNo,
-        outcome,
-        hits,
-      });
-    }
+    // Log outcome for debugging
+    console.info("[verify_race] outcome", {
+      track: safeTrack,
+      date: safeDate,
+      raceNo: safeRaceNo,
+      outcome,
+      hits,
+    });
 
     const tsIso = new Date().toISOString();
     const redis = getRedis();
@@ -817,9 +681,9 @@ export default async function handler(req, res) {
             surface,
             strategy,
             ai_picks,
-            query: queryUsed,
-            count: results.length,
-            results: results.slice(0, 10),
+            query: queryUsed || null,
+            count: 0,
+            results: [],
             predicted: predictedSafe,
             outcome,
             hits,
@@ -903,9 +767,9 @@ export default async function handler(req, res) {
       track,
       raceNo: raceNumber ?? null,
       query: queryUsed,
-      count: results.length,
+      count: 0,
       top,
-      results: results.slice(0, 5),
+      results: [],
       outcome,
       predicted: predictedSafe,
       hits,
