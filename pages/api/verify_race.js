@@ -642,7 +642,8 @@ export default async function handler(req, res) {
     }
 
     // Route the top result into the correct parser
-    let outcome = { win: "", place: "", show: "" };
+    // IMPORTANT: outcome is ONLY populated from parsed chart data, NEVER from search snippets
+    let parsedOutcome = { win: "", place: "", show: "" };
 
     const link = (top.link || "").toLowerCase();
 
@@ -657,7 +658,7 @@ export default async function handler(req, res) {
         });
 
         if (parsed && (parsed.win || parsed.place || parsed.show)) {
-          outcome = {
+          parsedOutcome = {
             win: parsed.win || "",
             place: parsed.place || "",
             show: parsed.show || "",
@@ -673,7 +674,7 @@ export default async function handler(req, res) {
           });
           const equibaseOutcome = parseEquibaseOutcome(html);
           if (equibaseOutcome && (equibaseOutcome.win || equibaseOutcome.place || equibaseOutcome.show)) {
-            outcome = {
+            parsedOutcome = {
               win: equibaseOutcome.win || "",
               place: equibaseOutcome.place || "",
               show: equibaseOutcome.show || "",
@@ -694,6 +695,15 @@ export default async function handler(req, res) {
         stack: err?.stack,
       });
     }
+
+    // Build clean outcome: only use parsed data, never snippets
+    // If parsing failed or returned empty, outcome stays empty
+    const cleanOutcome =
+      parsedOutcome && (parsedOutcome.win || parsedOutcome.place || parsedOutcome.show)
+        ? parsedOutcome
+        : { win: "", place: "", show: "" };
+
+    const outcome = cleanOutcome;
 
     const normalizeName = (value = "") =>
       (value || "").toLowerCase().replace(/\s+/g, " ").trim();
