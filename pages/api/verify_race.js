@@ -155,77 +155,84 @@ function parseHRNRaceOutcome($, raceNo) {
     const { table: $runnerTable, runnerIdx, winIdx, placeIdx, showIdx } = target;
     const rows = $runnerTable.find("tr").slice(1); // Skip header
 
-    // Track distinct horses for each position
-    let winHorse = null;
-    let placeHorse = null;
-    let showHorse = null;
+    // Initialize W/P/S names for the chosen table
+    let winName = "";
+    let placeName = "";
+    let showName = "";
 
     // --- 3) Parse rows to assign Win / Place / Show from payout cells ---
     rows.each((_, row) => {
       const $row = $(row);
-      const cells = $row.find("td, th");
+      const cells = $row.find("td");
 
-      // Guard: need at least a runner cell plus some payout cells
-      if (!cells || cells.length < 2) return;
+      // Guard: need at least some cells
+      if (!cells || cells.length === 0) return;
 
-      // Use the runner column index determined above
-      const runnerCell = $(cells.get(runnerIdx));
-      let runnerName = runnerCell.text() || "";
-      runnerName = runnerName.replace(/\s*\([^)]*\)\s*$/, "").trim(); // strip "(98*)" etc.
+      // Get the runner name from runnerIdx
+      if (runnerIdx < 0 || runnerIdx >= cells.length) return;
+      const rawRunner = $(cells[runnerIdx]).text().trim();
+      if (!rawRunner) return;
+
+      // Normalize runner name: strip footnote markers like (*) or (114*)
+      let runnerName = rawRunner.replace(/\s*\([^)]*\)\s*$/, "").trim();
       runnerName = normalizeHorseName(runnerName);
-
       if (!runnerName) return;
 
-      // Helper: extract a "marker" from a W/P/S column.
-      // Any non-empty, non-dash value counts (digit, payout, icon alt text, etc.).
-      const getMarker = (colIdx) => {
-        if (colIdx == null || colIdx < 0 || colIdx >= cells.length) return "";
-        const cell = $(cells.get(colIdx));
-        // Prefer text
-        let val = (cell.text() || "").trim();
-        // If text is empty, try alt/aria-label for icon-only indicators
-        if (!val) {
-          const imgAlt = (cell.find("img[alt]").attr("alt") || "").trim();
-          const aria = (cell.attr("aria-label") || "").trim();
-          val = imgAlt || aria;
+      // Hard filters to avoid junk rows
+      const lowerRunner = runnerName.toLowerCase();
+      const junkPatterns = [
+        "preliminary speed figures",
+        "also rans",
+        "pool",
+        "daily double",
+        "trifecta",
+        "superfecta",
+        "pick 3",
+        "pick 4",
+        "this script inside",
+        "head tags",
+      ];
+      if (
+        lowerRunner.startsWith("*") ||
+        junkPatterns.some((pattern) => lowerRunner.includes(pattern))
+      ) {
+        return; // Skip this row
+      }
+
+      // For the actual W/P/S mapping: only assign each position once (first non-empty row wins)
+      if (winIdx !== -1 && !winName && cells[winIdx]) {
+        const winText = $(cells[winIdx]).text().trim();
+        if (winText && winText !== "-") {
+          winName = runnerName;
         }
-        if (!val || val === "-") return "";
-        return val;
-      };
-
-      const winMarker = getMarker(winIdx);
-      const placeMarker = getMarker(placeIdx);
-      const showMarker = getMarker(showIdx);
-
-      if (process.env.VERIFY_DEBUG === "true") {
-        console.log("[verify_race] HRN row", {
-          runnerName,
-          winMarker,
-          placeMarker,
-          showMarker,
-        });
       }
 
-      // Each row can only claim ONE slot.
-      // Each slot (win/place/show) can only be assigned once.
-      if (!winHorse && winMarker) {
-        winHorse = runnerName;
-        return; // do not let this same row also be place/show
+      if (placeIdx !== -1 && !placeName && cells[placeIdx]) {
+        const placeText = $(cells[placeIdx]).text().trim();
+        if (placeText && placeText !== "-") {
+          placeName = runnerName;
+        }
       }
-      if (!placeHorse && placeMarker) {
-        placeHorse = runnerName;
-        return;
-      }
-      if (!showHorse && showMarker) {
-        showHorse = runnerName;
-        return;
+
+      if (showIdx !== -1 && !showName && cells[showIdx]) {
+        const showText = $(cells[showIdx]).text().trim();
+        if (showText && showText !== "-") {
+          showName = runnerName;
+        }
       }
     });
 
-    // Assign to outcome object
-    if (winHorse) outcome.win = winHorse;
-    if (placeHorse) outcome.place = placeHorse;
-    if (showHorse) outcome.show = showHorse;
+    // Build outcome strictly from these three vars
+    outcome.win = winName || "";
+    outcome.place = placeName || "";
+    outcome.show = showName || "";
+
+    // Debug log for HRN parse success
+    console.log("[verify_race] HRN WPS outcome", {
+      requestedRaceNo,
+      outcome,
+      columnIdx: { runnerIdx, winIdx, placeIdx, showIdx },
+    });
 
     // NOTE: we keep the existing fallback logic (Pool/Finish/$2 Payout table)
     // that comes AFTER this function in the file. If you already have a
@@ -470,9 +477,8 @@ export default async function handler(req, res) {
     } = body || {};
 
     const raceNumber = raceNo ?? race_no;
-    safeDate =
-      (inputDate && String(inputDate).trim()) ||
-      new Date().toISOString().slice(0, 10);
+    // Always use the requested date from the request body, never default to "today"
+    safeDate = (inputDate && String(inputDate).trim()) || "";
     safeTrack = track || null;
     safeRaceNo = raceNumber ?? null;
 
@@ -495,6 +501,7 @@ export default async function handler(req, res) {
       });
     }
 
+    // Use the requested date throughout - never override with "today"
     const date = safeDate;
 
     const dWords = date.replace(/-/g, " ");
