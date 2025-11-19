@@ -1,99 +1,69 @@
 // scripts/debug_verify_race.js
-import handler from "../pages/api/verify_race.js";
+console.log("[debug_verify_race] Starting debug script...");
 
-async function runDebug() {
-  const mockReq = {
-    method: "POST",
-    body: {
-      track: "Finger Lakes",
-      date: "2025-11-18",
-      raceNo: 3,
-      predicted: { win: "", place: "", show: "" },
-    },
-    headers: {},
-  };
+let handler;
 
-  const mockRes = {
-    statusCode: null,
-    jsonData: null,
-    status: function (statusCode) {
-      this.statusCode = statusCode;
-      return this;
-    },
-    json: function (data) {
-      this.jsonData = data;
-      return this;
-    },
-    setHeader: function (name, value) {
-      this.headers = { ...this.headers, [name]: value };
-    },
-  };
-
-  console.log("Calling /api/verify_race with mock data...");
-  try {
-    await handler(mockReq, mockRes);
-
-    console.log("\n--- Mock Response ---");
-    console.log("Status Code:", mockRes.statusCode);
-    console.log("\nJSON Keys:", Object.keys(mockRes.jsonData || {}));
-    
-    if (mockRes.jsonData) {
-      console.log("\nDate:", mockRes.jsonData.date);
-      console.log("Track:", mockRes.jsonData.track);
-      console.log("Race No:", mockRes.jsonData.raceNo);
-      console.log("\nOutcome:", mockRes.jsonData.outcome);
-      console.log("\nSummary:");
-      console.log(mockRes.jsonData.summary || "(no summary)");
-      
-      if (mockRes.jsonData.error) {
-        console.error("\nError:", mockRes.jsonData.error);
-        if (mockRes.jsonData.details) console.error("Details:", mockRes.jsonData.details);
-        if (mockRes.jsonData.step) console.error("Step:", mockRes.jsonData.step);
-      }
-    }
-
-    // Verify status is 200
-    if (mockRes.statusCode !== 200) {
-      console.error(`\n❌ FAILED: Expected status 200, got ${mockRes.statusCode}`);
-      process.exit(1);
-    } else {
-      console.log("\n✅ Status code is 200");
-    }
-
-    // Verify response structure
-    if (mockRes.jsonData) {
-      const hasRequiredFields = 
-        "date" in mockRes.jsonData &&
-        "track" in mockRes.jsonData &&
-        "raceNo" in mockRes.jsonData;
-      
-      if (hasRequiredFields) {
-        console.log("✅ Response has required fields (date, track, raceNo)");
-      }
-      
-      if (mockRes.jsonData.error) {
-        const hasErrorFields =
-          "error" in mockRes.jsonData &&
-          "details" in mockRes.jsonData &&
-          "step" in mockRes.jsonData &&
-          "outcome" in mockRes.jsonData &&
-          "hits" in mockRes.jsonData;
-        
-        if (hasErrorFields) {
-          console.log("✅ Error response has all required fields (error, details, step, outcome, hits)");
-        } else {
-          console.warn("⚠️  Error response missing some required fields");
-        }
-      }
-    }
-  } catch (error) {
-    console.error("\n❌ Handler threw an error:", error);
-    console.error("Stack:", error.stack);
-    process.exit(1);
-  }
+try {
+  console.log("[debug_verify_race] Attempting to import handler...");
+  handler = (await import("../pages/api/verify_race.js")).default;
+  console.log("[debug_verify_race] Handler imported successfully");
+} catch (err) {
+  console.error("[debug_verify_race] ERROR importing handler:", err);
+  console.error("[debug_verify_race] Error message:", err?.message || String(err));
+  console.error("[debug_verify_race] Error stack:", err?.stack);
+  process.exit(1);
 }
 
-runDebug().catch((error) => {
-  console.error("Debug script failed:", error);
-  process.exit(1);
-});
+const mockReq = {
+  method: "POST",
+  headers: {
+    host: "localhost:3000",
+    "x-forwarded-proto": "http",
+  },
+  body: {
+    track: "Finger Lakes",
+    date: "2025-11-18",
+    raceNo: "3",
+    predicted: { win: "", place: "", show: "" },
+  },
+};
+
+const mockRes = {
+  statusCode: 200,
+  jsonData: null,
+  headers: {},
+  status(code) {
+    this.statusCode = code;
+    return this;
+  },
+  setHeader(name, value) {
+    this.headers[name] = value;
+  },
+  json(data) {
+    this.jsonData = data;
+    console.log(">>> RESPONSE STATUS:", this.statusCode);
+    console.log(">>> RESPONSE JSON:", JSON.stringify(data, null, 2));
+    return this;
+  },
+};
+
+(async () => {
+  try {
+    console.log("[debug_verify_race] Invoking handler...");
+    await handler(mockReq, mockRes);
+    console.log("[debug_verify_race] Handler completed without throwing.");
+    console.log("[debug_verify_race] Final status code:", mockRes.statusCode);
+    if (mockRes.jsonData) {
+      console.log("[debug_verify_race] Response has data:", Object.keys(mockRes.jsonData));
+    }
+  } catch (err) {
+    console.error("[debug_verify_race] RUNTIME ERROR from handler:", err);
+    console.error("[debug_verify_race] Error message:", err?.message || String(err));
+    console.error("[debug_verify_race] Error stack:", err?.stack);
+    if (err?.cause) {
+      console.error("[debug_verify_race] Error cause:", err.cause);
+    }
+  } finally {
+    process.exit(0);
+  }
+})();

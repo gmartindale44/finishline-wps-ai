@@ -24,6 +24,7 @@
     "audit:server": "node scripts/fetch-audit.js",
     "sanitize:placeholders": "node scripts/sanitize-placeholders.js",
     "smoke:verify_race": "node scripts/smoke_verify_race_baseline.js",
+    "debug:verify-race": "node scripts/debug_verify_race.js",
     "build": "echo \"no build step\""
   },
   "dependencies": {
