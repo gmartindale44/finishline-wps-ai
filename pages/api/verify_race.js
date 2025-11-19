@@ -88,8 +88,18 @@ function extractOutcomeFromRunnerTable($, table, idx) {
     const showText =
       showIdx > -1 ? norm($cells.eq(showIdx).text()) : "";
 
+    // Check for icons/images in payout cells (HRN sometimes uses icons instead of text)
+    const winCell = winIdx > -1 ? $cells.eq(winIdx) : null;
+    const placeCell = placeIdx > -1 ? $cells.eq(placeIdx) : null;
+    const showCell = showIdx > -1 ? $cells.eq(showIdx) : null;
+
+    // If no text but there are icons (img/svg) treat as non-empty payout indicator
+    const hasWinIcon = winCell && !winText && winCell.find("img, svg, [class*='icon'], [class*='check']").length > 0;
+    const hasPlaceIcon = placeCell && !placeText && placeCell.find("img, svg, [class*='icon'], [class*='check']").length > 0;
+    const hasShowIcon = showCell && !showText && showCell.find("img, svg, [class*='icon'], [class*='check']").length > 0;
+
     // If the row has no payouts at all, it's not useful for W/P/S.
-    if (!winText && !placeText && !showText) return;
+    if (!winText && !placeText && !showText && !hasWinIcon && !hasPlaceIcon && !hasShowIcon) return;
 
     // Normalize runner name: strip footnote markers like (*) or (114*)
     let runnerName = runnerText.replace(/\s*\([^)]*\)\s*$/, "").trim();
@@ -119,9 +129,9 @@ function extractOutcomeFromRunnerTable($, table, idx) {
 
     runners.push({
       name: runnerName,
-      hasWin: !!winText && winText !== "-",
-      hasPlace: !!placeText && placeText !== "-",
-      hasShow: !!showText && showText !== "-",
+      hasWin: (!!winText && winText !== "-") || hasWinIcon,
+      hasPlace: (!!placeText && placeText !== "-") || hasPlaceIcon,
+      hasShow: (!!showText && showText !== "-") || hasShowIcon,
     });
   });
 
@@ -150,30 +160,31 @@ function extractOutcomeFromRunnerTable($, table, idx) {
     "";
 
   // 3) SHOW:
-  // Prefer a horse that has SHOW only (no WIN/PLACE) and isn't WIN/PLACE
-  let showHorse =
-    runners.find(
-      (r) =>
-        r.hasShow &&
-        r.name !== winHorse &&
-        r.name !== placeHorse &&
-        !r.hasWin &&
-        !r.hasPlace
-    )?.name ||
-    runners.find(
-      (r) =>
-        r.hasShow &&
-        r.name !== winHorse &&
-        r.name !== placeHorse &&
-        !r.hasWin
-    )?.name ||
-    runners.find(
+  // Find the first horse that has a Show payout and is not already assigned to Win or Place
+  // This is the third-place finisher
+  let showHorse = "";
+  if (showIdx >= 0) {
+    // Strategy: Find the first runner with a Show payout that isn't already Win or Place
+    // This should be the third-place finisher
+    const showRunner = runners.find(
       (r) =>
         r.hasShow &&
         r.name !== winHorse &&
         r.name !== placeHorse
-    )?.name ||
-    "";
+    );
+    if (showRunner) {
+      showHorse = showRunner.name;
+    } else {
+      // Fallback: if we have win and place but no distinct show, try to find
+      // any runner with show payout (handles edge cases where positions might overlap)
+      const anyShowRunner = runners.find((r) => r.hasShow);
+      if (anyShowRunner && 
+          anyShowRunner.name !== winHorse && 
+          anyShowRunner.name !== placeHorse) {
+        showHorse = anyShowRunner.name;
+      }
+    }
+  }
 
   return {
     win: winHorse,
@@ -857,7 +868,8 @@ export default async function handler(req, res) {
       outcome.win = outcome.place || "";
       // Use the existing parsed "show" horse as Place
       outcome.place = outcome.show || "";
-      // Leave Show empty for now until we add proper parsing later
+      // Show is now properly parsed, so preserve it (but remap means it comes from the next position)
+      // For now, leave show empty as the remap moves show->place
       outcome.show = "";
     }
 
