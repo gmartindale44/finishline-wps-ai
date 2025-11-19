@@ -848,7 +848,8 @@ export default async function handler(req, res) {
       outcome.win = outcome.place || "";
       // Use the existing parsed "show" horse as Place
       outcome.place = outcome.show || "";
-      // Leave Show empty for now until we add proper parsing later
+      // Show is now properly parsed, so preserve it (but remap means it comes from the next position)
+      // For now, leave show empty as the remap moves show->place
       outcome.show = "";
     }
 
