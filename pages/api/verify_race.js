@@ -191,97 +191,109 @@ function parseHRNRaceOutcome($, raceNo) {
         return; // Not the right table, continue
       }
 
-    // Parse rows to find Win/Place/Show horses
-    // The Runner (speed) table encodes finishing positions by payouts:
-    // - Winner row: has Win payout, usually also Place + Show payouts
-    // - Place horse row: has Place (and usually Show) payout
-    // - Show horse row: has Show payout
-    const rows = $table.find("tr").slice(1); // Skip header
+      // Parse rows to find Win/Place/Show horses
+      // The Runner (speed) table has columns: Runner (speed), Win, Place, Show
+      // Each row represents one horse, and the Win/Place/Show columns contain payout amounts
+      // We need to find the distinct horses that have payouts in each column
+      const rows = $table.find("tr").slice(1); // Skip header
 
-    let winHorse = null;
-    let placeHorse = null;
-    let showHorse = null;
+      // Helper to check if a payout value is valid (non-empty, not "-", not just a speed figure)
+      const isNonEmptyPayout = (val) => {
+        if (!val) return false;
+        const trimmed = val.trim();
+        if (!trimmed || trimmed === "-") return false;
+        // Treat pure speed figures or isolated numbers with optional * as NOT payouts
+        if (/^\d+\s*\*?\s*$/.test(trimmed)) return false;
+        return true;
+      };
 
-    const isNonEmptyPayout = (val) => {
-      if (!val) return false;
-      const trimmed = val.trim();
-      if (!trimmed || trimmed === "-") return false;
-      // Reject pure speed-figure style numbers like "98*"
-      if (/^\d+\s*\*?\s*$/.test(trimmed)) return false;
-      return true;
-    };
+      // Track distinct horses for each position
+      let winHorse = null;
+      let placeHorse = null;
+      let showHorse = null;
 
-    rows.each((_, row) => {
-      const cells = $(row).find("td, th").toArray();
-      if (cells.length < 2) return; // Need at least runner name + some cells
+      rows.each((_, row) => {
+        const cells = $(row).find("td, th").toArray();
+        
+        // Ensure we have enough cells to read all indices
+        if (cells.length <= Math.max(runnerIdx, winIdx, placeIdx, showIdx)) {
+          return; // Not enough cells
+        }
 
-      // Runner is in the first cell of this table
-      let runnerName = $(cells[0]).text().trim();
-      // Strip speed figure suffix like "(112*)" → "Marilyn's Ny Pride"
-      runnerName = runnerName.replace(/\s*\([^)]*\)\s*$/, "").trim();
-      runnerName = normalizeHorseName(runnerName);
-      if (!runnerName) return;
+        // Extract runner name from the runner column (strip speed figure suffix like "(98*)")
+        let runnerName = $(cells[runnerIdx]).text().trim();
+        // Remove speed figure in parentheses: "Full Time Strutin (98*)" -> "Full Time Strutin"
+        runnerName = runnerName.replace(/\s*\([^)]*\)\s*$/, "").trim();
+        runnerName = normalizeHorseName(runnerName);
 
-      // Identify payout cells by "$"
-      const payoutCells = cells
-        .map((cell, idx) => ({ cell: $(cell), idx }))
-        .filter(({ cell }) => cell.text().includes("$"));
+        if (!runnerName) return;
 
-      if (!payoutCells.length) return;
+        // Extract raw texts from Win/Place/Show columns
+        const winCell = $(cells[winIdx]);
+        const placeCell = $(cells[placeIdx]);
+        const showCell = $(cells[showIdx]);
 
-      const winText = payoutCells[0]?.cell.text().trim() || "";
-      const placeText = payoutCells[1]?.cell.text().trim() || "";
-      const showText = payoutCells[2]?.cell.text().trim() || "";
+        let winVal = winCell.text().trim();
+        let placeVal = placeCell.text().trim();
+        let showVal = showCell.text().trim();
 
-      const hasWin = isNonEmptyPayout(winText);
-      const hasPlace = isNonEmptyPayout(placeText);
-      const hasShow = isNonEmptyPayout(showText);
+        // If no text but there are icons (img/svg) treat as non-empty payout indicator
+        if (!winVal && winCell.find("img, svg, [class*='icon'], [class*='check']").length > 0) {
+          winVal = "X";
+        }
+        if (!placeVal && placeCell.find("img, svg, [class*='icon'], [class*='check']").length > 0) {
+          placeVal = "X";
+        }
+        if (!showVal && showCell.find("img, svg, [class*='icon'], [class*='check']").length > 0) {
+          showVal = "X";
+        }
 
-      if (process.env.VERIFY_DEBUG === "true") {
-        console.log("[verify_race] HRN payout row", {
-          runnerName,
-          winText,
-          placeText,
-          showText,
-          hasWin,
-          hasPlace,
-          hasShow,
-        });
-      }
+        // Debug logging (server-side only)
+        if (process.env.VERIFY_DEBUG === "true") {
+          console.log("[verify_race] HRN Runner row", {
+            runnerName,
+            winVal,
+            placeVal,
+            showVal,
+            winIdx,
+            placeIdx,
+            showIdx,
+            cellsLength: cells.length,
+          });
+        }
 
-      // Only assign each bucket once, and never reuse the same runner
-      if (hasWin && !winHorse) {
-        winHorse = runnerName;
-      }
-      if (hasPlace && !placeHorse && runnerName !== winHorse) {
-        placeHorse = runnerName;
-      }
-      if (
-        hasShow &&
-        !showHorse &&
-        runnerName !== winHorse &&
-        runnerName !== placeHorse
-      ) {
-        showHorse = runnerName;
-      }
-    });
+        // Assign positions: only assign once per position, and ensure distinct horses
+        if (!winHorse && isNonEmptyPayout(winVal)) {
+          winHorse = runnerName;
+        }
+        if (!placeHorse && isNonEmptyPayout(placeVal) && runnerName !== winHorse) {
+          placeHorse = runnerName;
+        }
+        if (!showHorse && isNonEmptyPayout(showVal) && runnerName !== winHorse && runnerName !== placeHorse) {
+          showHorse = runnerName;
+        }
+      });
 
-    // Store what we found from the Runner (speed) table
-    if (winHorse || placeHorse || showHorse) {
+      // Assign to outcome object
       if (winHorse) outcome.win = winHorse;
       if (placeHorse) outcome.place = placeHorse;
       if (showHorse) outcome.show = showHorse;
 
-      if (process.env.VERIFY_DEBUG === "true") {
-        console.log("[verify_race] HRN Runner table result", {
-          outcome: { ...outcome },
-        });
+      // If we found at least one position from the Runner (speed) table, we're done with this table
+      // The outcome object was populated directly in the loop above
+      if (outcome.win || outcome.place || outcome.show) {
+        // Debug logging for HRN parsing (server-side only)
+        if (process.env.VERIFY_DEBUG === "true") {
+          console.log("[verify_race] HRN Runner table result", {
+            outcome: { ...outcome },
+          });
+        }
+
+        // Break after processing the Runner (speed) table
+        // We'll use fallback only if positions are missing
+        return false; // Found Runner table, break the each loop
       }
-
-      // We successfully parsed from Runner (speed) table; only use fallback
-      // if some positions are still missing
-    }
-
+    });
 
     // Fallback: If we didn't get all three positions from Runner (speed) table,
     // try the Pool / Finish / $2 Payout table
@@ -605,9 +617,16 @@ export default async function handler(req, res) {
   try {
     if (req.method !== "POST") {
       res.setHeader("Allow", "POST");
-      return res
-        .status(405)
-        .json({ ok: false, error: "Method Not Allowed" });
+      return res.status(200).json({
+        date: safeDate,
+        track: safeTrack,
+        raceNo: safeRaceNo,
+        error: "Method Not Allowed",
+        details: "Only POST requests are accepted",
+        step: "verify_race_method_validation",
+        outcome: { win: "", place: "", show: "" },
+        hits: { winHit: false, placeHit: false, showHit: false },
+      });
     }
 
     // Be tolerant of either req.body object or JSON string
@@ -660,6 +679,8 @@ export default async function handler(req, res) {
         error: "Missing required field: track",
         details: "Track is required to verify a race",
         step: "verify_race_validation",
+        outcome: { win: "", place: "", show: "" },
+        hits: { winHit: false, placeHit: false, showHit: false },
       });
     }
 
@@ -719,6 +740,8 @@ export default async function handler(req, res) {
           "Unable to fetch race results from search providers",
         step: searchStep,
         query: queryUsed || queries[0] || null,
+        outcome: { win: "", place: "", show: "" },
+        hits: { winHit: false, placeHit: false, showHit: false },
       });
     }
 
