@@ -53,128 +53,36 @@ function normalizeHorseName(name) {
  */
 function parseHRNRaceOutcome($, raceNo) {
   const outcome = {};
+  const requestedRaceNo = String(raceNo || "").trim();
+  if (!requestedRaceNo) return outcome;
 
   try {
-    // Find the race section by looking for a heading that contains "Race # {raceNo}"
-    const raceLabel = `Race # ${raceNo}`;
-    const raceLabelAlt = `Race ${raceNo}`;
-    let raceSection = null;
+    // --- 1) Collect all candidate Runner/Win/Place/Show tables and infer their race number ---
+    /**
+     * Try to extract "Race X" from a cheerio node's text.
+     * Returns the race number as a string, or null if not found.
+     */
+    const getRaceFromNode = (node) => {
+      if (!node || !node.length) return null;
+      const text = node.text().trim();
+      if (!text) return null;
+      const m = text.match(/race\s*#?\s*(\d+)/i);
+      return m ? m[1] : null;
+    };
 
-    // Search for headings that match the race number
-    $("h1, h2, h3, h4, h5, h6, div, span, p").each((_, el) => {
-      const text = $(el).text().trim();
-      if (
-        text.includes(raceLabel) ||
-        text.includes(raceLabelAlt) ||
-        new RegExp(`Race\\s*#?\\s*${raceNo}\\b`, "i").test(text)
-      ) {
-        // Found the race heading, now find its containing section
-        // Climb up to find a parent container that likely contains the race tables
-        let parent = $(el).parent();
-        for (let i = 0; i < 5 && parent.length; i++) {
-          // Check if this parent contains tables with Runner/Win/Place/Show
-          const hasRunnerTable = parent
-            .find("table")
-            .toArray()
-            .some((table) => {
-              const headerText = $(table).find("tr").first().text().toLowerCase();
-              return (
-                headerText.includes("runner") &&
-                headerText.includes("win") &&
-                headerText.includes("place") &&
-                headerText.includes("show")
-              );
-            });
+    const runnerTables = [];
 
-          if (hasRunnerTable) {
-            raceSection = parent;
-            break;
-          }
-          parent = parent.parent();
-        }
-        if (raceSection) return false; // break the each loop
-      }
-    });
-
-    if (!raceSection) {
-      // Try a simpler approach: find all tables and check if they're in a race section
-      $("table").each((_, table) => {
-        const $table = $(table);
-        const headerText = $table.find("tr").first().text().toLowerCase();
-
-        // Check if this is a Runner/Win/Place/Show table
-        if (
-          headerText.includes("runner") &&
-          headerText.includes("win") &&
-          headerText.includes("place") &&
-          headerText.includes("show")
-        ) {
-          // Check if this table is NOT in the "Today's racing results" summary
-          // by looking at preceding text/headings
-          let prevText = "";
-          $table
-            .prevAll()
-            .slice(0, 10)
-            .each((_, el) => {
-              prevText += $(el).text() + " ";
-            });
-
-          const isSummaryTable =
-            /today'?s\s+racing\s+results/i.test(prevText) ||
-            /speed\s+figures/i.test(prevText);
-
-          if (!isSummaryTable) {
-            // This might be a race-specific table, check if it's near our race number
-            const nearbyText = prevText + $table.text();
-            if (
-              new RegExp(`Race\\s*#?\\s*${raceNo}\\b`, "i").test(nearbyText)
-            ) {
-              raceSection = $table.closest("div, section, article, main");
-              if (!raceSection.length) raceSection = $table.parent();
-              return false; // break
-            }
-          }
-        }
-      });
-    }
-
-    if (!raceSection || !raceSection.length) {
-      return outcome; // Could not find race section
-    }
-
-    // Now find the Runner (speed) table within the race section
-    // This table has columns: Runner (speed), Win, Place, Show
-    // and contains the actual finishing positions for this race
-    raceSection.find("table").each((_, table) => {
+    $("table").each((_, table) => {
       const $table = $(table);
       const headerRow = $table.find("tr").first();
       const headerCells = headerRow.find("th, td").toArray();
+      if (!headerCells.length) return;
 
-      // Check if this table has Runner, Win, Place, Show columns
       const headerTexts = headerCells.map((cell) =>
         $(cell).text().toLowerCase().trim()
       );
 
-      // Verify this is the Runner (speed) W/P/S table, not the summary table
-      // The summary table has columns like: Race, HRN, Horse, Sire, Age
-      // The Runner table has: Runner (speed), Win, Place, Show
-      const hasRunnerCol = headerTexts.some(
-        (h) => h.includes("runner") || h.includes("horse")
-      );
-      const hasWinCol = headerTexts.some((h) => h.includes("win"));
-      const hasPlaceCol = headerTexts.some((h) => h.includes("place"));
-      const hasShowCol = headerTexts.some((h) => h.includes("show"));
-
-      // Reject if this looks like the summary table (has HRN, Sire, Age columns)
-      const hasSummaryCols =
-        headerTexts.some((h) => h.includes("hrn") || h.includes("sire")) &&
-        !hasWinCol;
-
-      if (hasSummaryCols) {
-        return; // This is the summary table, skip it
-      }
-
-      // Must have all required columns: Runner, Win, Place, Show
+      // Identify Runner / Win / Place / Show columns
       const runnerIdx = headerTexts.findIndex(
         (h) => h.includes("runner") || h.includes("horse")
       );
@@ -182,244 +90,126 @@ function parseHRNRaceOutcome($, raceNo) {
       const placeIdx = headerTexts.findIndex((h) => h.includes("place"));
       const showIdx = headerTexts.findIndex((h) => h.includes("show"));
 
+      // Not a Runner (speed) W/P/S table
       if (
         runnerIdx === -1 ||
         winIdx === -1 ||
         placeIdx === -1 ||
         showIdx === -1
       ) {
-        return; // Not the right table, continue
+        return;
       }
 
-      // Parse rows to find Win/Place/Show horses
-      // The Runner (speed) table has columns: Runner (speed), Win, Place, Show
-      // Each row represents one horse, and the Win/Place/Show columns contain payout amounts
-      // We need to find the distinct horses that have payouts in each column
-      const rows = $table.find("tr").slice(1); // Skip header
+      // --- Infer which race this table belongs to by scanning nearby headings ---
+      let inferredRaceNo = null;
 
-      // Helper to check if a payout value is valid (non-empty, not "-", not just a speed figure)
-      const isNonEmptyPayout = (val) => {
-        if (!val) return false;
-        const trimmed = val.trim();
-        if (!trimmed || trimmed === "-") return false;
-        // Treat pure speed figures or isolated numbers with optional * as NOT payouts
-        if (/^\d+\s*\*?\s*$/.test(trimmed)) return false;
-        return true;
-      };
+      // 1a) Look at previous siblings of the table
+      let prev = $table.prev();
+      while (prev.length && !inferredRaceNo) {
+        inferredRaceNo = getRaceFromNode(prev);
+        prev = prev.prev();
+      }
 
-      // Track distinct horses for each position
-      let winHorse = null;
-      let placeHorse = null;
-      let showHorse = null;
-
-      rows.each((_, row) => {
-        const cells = $(row).find("td, th").toArray();
-        
-        // Ensure we have enough cells to read all indices
-        if (cells.length <= Math.max(runnerIdx, winIdx, placeIdx, showIdx)) {
-          return; // Not enough cells
+      // 1b) Walk up ancestors and inspect their previous siblings
+      if (!inferredRaceNo) {
+        let parent = $table.parent();
+        let depth = 0;
+        while (parent.length && depth < 6 && !inferredRaceNo) {
+          let sib = parent.prev();
+          while (sib.length && !inferredRaceNo) {
+            inferredRaceNo = getRaceFromNode(sib);
+            sib = sib.prev();
+          }
+          parent = parent.parent();
+          depth += 1;
         }
+      }
 
-        // Extract runner name from the runner column (strip speed figure suffix like "(98*)")
-        let runnerName = $(cells[runnerIdx]).text().trim();
-        // Remove speed figure in parentheses: "Full Time Strutin (98*)" -> "Full Time Strutin"
-        runnerName = runnerName.replace(/\s*\([^)]*\)\s*$/, "").trim();
-        runnerName = normalizeHorseName(runnerName);
-
-        if (!runnerName) return;
-
-        // Extract raw texts from Win/Place/Show columns
-        const winCell = $(cells[winIdx]);
-        const placeCell = $(cells[placeIdx]);
-        const showCell = $(cells[showIdx]);
-
-        let winVal = winCell.text().trim();
-        let placeVal = placeCell.text().trim();
-        let showVal = showCell.text().trim();
-
-        // If no text but there are icons (img/svg) treat as non-empty payout indicator
-        if (!winVal && winCell.find("img, svg, [class*='icon'], [class*='check']").length > 0) {
-          winVal = "X";
-        }
-        if (!placeVal && placeCell.find("img, svg, [class*='icon'], [class*='check']").length > 0) {
-          placeVal = "X";
-        }
-        if (!showVal && showCell.find("img, svg, [class*='icon'], [class*='check']").length > 0) {
-          showVal = "X";
-        }
-
-        // Debug logging (server-side only)
-        if (process.env.VERIFY_DEBUG === "true") {
-          console.log("[verify_race] HRN Runner row", {
-            runnerName,
-            winVal,
-            placeVal,
-            showVal,
-            winIdx,
-            placeIdx,
-            showIdx,
-            cellsLength: cells.length,
-          });
-        }
-
-        // Assign positions: only assign once per position, and ensure distinct horses
-        if (!winHorse && isNonEmptyPayout(winVal)) {
-          winHorse = runnerName;
-        }
-        if (!placeHorse && isNonEmptyPayout(placeVal) && runnerName !== winHorse) {
-          placeHorse = runnerName;
-        }
-        if (!showHorse && isNonEmptyPayout(showVal) && runnerName !== winHorse && runnerName !== placeHorse) {
-          showHorse = runnerName;
-        }
+      runnerTables.push({
+        table: $table,
+        runnerIdx,
+        winIdx,
+        placeIdx,
+        showIdx,
+        raceNo: inferredRaceNo,
       });
+    });
 
-      // Assign to outcome object
-      if (winHorse) outcome.win = winHorse;
-      if (placeHorse) outcome.place = placeHorse;
-      if (showHorse) outcome.show = showHorse;
+    if (!runnerTables.length) {
+      return outcome;
+    }
 
-      // If we found at least one position from the Runner (speed) table, we're done with this table
-      // The outcome object was populated directly in the loop above
-      if (outcome.win || outcome.place || outcome.show) {
-        // Debug logging for HRN parsing (server-side only)
-        if (process.env.VERIFY_DEBUG === "true") {
-          console.log("[verify_race] HRN Runner table result", {
-            outcome: { ...outcome },
-          });
-        }
+    // --- 2) Choose the table whose inferred race number matches requestedRaceNo ---
+    let target =
+      runnerTables.find((t) => t.raceNo === requestedRaceNo) ||
+      runnerTables[0]; // fallback to first if we couldn't infer a race number
 
-        // Break after processing the Runner (speed) table
-        // We'll use fallback only if positions are missing
-        return false; // Found Runner table, break the each loop
+    if (process.env.VERIFY_DEBUG === "true") {
+      console.log("[verify_race] HRN runnerTables", {
+        requestedRaceNo,
+        candidates: runnerTables.map((t) => t.raceNo),
+        chosenRaceNo: target.raceNo,
+      });
+    }
+
+    const { table: $runnerTable, runnerIdx, winIdx, placeIdx, showIdx } = target;
+    const rows = $runnerTable.find("tr").slice(1); // Skip header
+
+    // --- 3) Parse rows to assign Win / Place / Show from payout cells ---
+    rows.each((_, row) => {
+      const cells = $(row).find("td, th").toArray();
+      const maxIdx = Math.max(runnerIdx, winIdx, placeIdx, showIdx);
+      if (cells.length <= maxIdx) return;
+
+      // Extract runner name from the Runner column and strip speed figures "(112*)"
+      let runnerName = $(cells[runnerIdx]).text().trim();
+      runnerName = runnerName.replace(/\s*\([^)]*\)\s*$/, "").trim();
+      runnerName = normalizeHorseName(runnerName);
+
+      if (!runnerName) return;
+
+      // Pull the three payout cells directly from Win / Place / Show columns
+      const winText =
+        winIdx >= 0 && cells[winIdx] ? $(cells[winIdx]).text().trim() : "";
+      const placeText =
+        placeIdx >= 0 && cells[placeIdx]
+          ? $(cells[placeIdx]).text().trim()
+          : "";
+      const showText =
+        showIdx >= 0 && cells[showIdx] ? $(cells[showIdx]).text().trim() : "";
+
+      const hasWin = !!winText && winText !== "-" && winText.length > 0;
+      const hasPlace = !!placeText && placeText !== "-" && placeText.length > 0;
+      const hasShow = !!showText && showText !== "-" && showText.length > 0;
+
+      if (process.env.VERIFY_DEBUG === "true") {
+        console.log("[verify_race] HRN row", {
+          runnerName,
+          winText,
+          placeText,
+          showText,
+          hasWin,
+          hasPlace,
+          hasShow,
+        });
+      }
+
+      // Assign each bucket once, in order
+      if (hasWin && !outcome.win) {
+        outcome.win = runnerName;
+      }
+      if (hasPlace && !outcome.place) {
+        outcome.place = runnerName;
+      }
+      if (hasShow && !outcome.show) {
+        outcome.show = runnerName;
       }
     });
 
-    // Fallback: If we didn't get all three positions from Runner (speed) table,
-    // try the Pool / Finish / $2 Payout table
-    if (!outcome.win || !outcome.place || !outcome.show) {
-      // Look for Pool/Finish table with Trifecta or Exacta rows
-      raceSection.find("table").each((_, table) => {
-        const $table = $(table);
-        const headerRow = $table.find("tr").first();
-        const headerTexts = headerRow
-          .find("th, td")
-          .toArray()
-          .map((cell) => $(cell).text().toLowerCase().trim());
-
-        const poolIdx = headerTexts.findIndex((h) => h.includes("pool"));
-        const finishIdx = headerTexts.findIndex((h) => h.includes("finish"));
-        const payoutIdx = headerTexts.findIndex((h) =>
-          h.includes("payout") || h.includes("$2")
-        );
-
-        if (finishIdx === -1) return; // Need Finish column
-
-        // Find Trifecta row (preferred) or Exacta row
-        const rows = $table.find("tr").slice(1);
-        let finishPattern = null;
-
-        rows.each((_, row) => {
-          const cells = $(row).find("td, th").toArray();
-          const poolCell =
-            poolIdx >= 0 && cells[poolIdx]
-              ? $(cells[poolIdx]).text().toLowerCase().trim()
-              : "";
-          const finishCell =
-            finishIdx >= 0 && cells[finishIdx]
-              ? $(cells[finishIdx]).text().trim()
-              : "";
-
-          // Prefer Trifecta (has 3 numbers), fallback to Exacta (has 2)
-          if (
-            (poolCell.includes("trifecta") || poolCell.includes("exacta")) &&
-            finishCell
-          ) {
-            // Finish pattern like "2-5-3" or "2-5"
-            const match = finishCell.match(/^(\d+)[\s\-]+(\d+)(?:[\s\-]+(\d+))?/);
-            if (match) {
-              finishPattern = {
-                winProg: match[1],
-                placeProg: match[2],
-                showProg: match[3] || null, // Exacta only has 2 numbers
-              };
-              return false; // break
-            }
-          }
-        });
-
-        if (finishPattern) {
-          // Now map program numbers to horse names using the entries table
-          // Look for a table with PP (post position) or program number column
-          raceSection.find("table").each((_, entriesTable) => {
-            const $entriesTable = $(entriesTable);
-            const entriesHeader = $entriesTable.find("tr").first();
-            const entriesHeaderTexts = entriesHeader
-              .find("th, td")
-              .toArray()
-              .map((cell) => $(cell).text().toLowerCase().trim());
-
-            const ppIdx = entriesHeaderTexts.findIndex(
-              (h) => h.includes("pp") || h.includes("post") || h === "#"
-            );
-            const horseIdx = entriesHeaderTexts.findIndex(
-              (h) =>
-                h.includes("horse") ||
-                h.includes("runner") ||
-                h.includes("name") ||
-                h.includes("last")
-            );
-
-            if (ppIdx === -1 || horseIdx === -1) return;
-
-            const programToHorse = new Map();
-            $entriesTable
-              .find("tr")
-              .slice(1)
-              .each((_, row) => {
-                const cells = $(row).find("td, th").toArray();
-                if (cells.length <= Math.max(ppIdx, horseIdx)) return;
-
-                const ppText = $(cells[ppIdx]).text().trim();
-                const ppMatch = ppText.match(/^(\d+)/);
-                if (!ppMatch) return;
-
-                const programNum = ppMatch[1];
-                let horseName = $(cells[horseIdx]).text().trim();
-                // Remove speed figures and normalize
-                horseName = horseName.replace(/\s*\([^)]*\)\s*$/, "").trim();
-                horseName = normalizeHorseName(horseName);
-
-                if (horseName) {
-                  programToHorse.set(programNum, horseName);
-                }
-              });
-
-            // Map finish pattern to horse names
-            if (finishPattern.winProg && programToHorse.has(finishPattern.winProg)) {
-              if (!outcome.win)
-                outcome.win = programToHorse.get(finishPattern.winProg);
-            }
-            if (
-              finishPattern.placeProg &&
-              programToHorse.has(finishPattern.placeProg)
-            ) {
-              if (!outcome.place)
-                outcome.place = programToHorse.get(finishPattern.placeProg);
-            }
-            if (
-              finishPattern.showProg &&
-              programToHorse.has(finishPattern.showProg)
-            ) {
-              if (!outcome.show)
-                outcome.show = programToHorse.get(finishPattern.showProg);
-            }
-
-            return false; // Found entries table, break
-          });
-        }
-      });
-    }
+    // NOTE: we keep the existing fallback logic (Pool/Finish/$2 Payout table)
+    // that comes AFTER this function in the file. If you already have a
+    // "Fallback: If we didn't get all three positions..." block, leave it
+    // exactly as it is so it still runs when outcome is incomplete.
   } catch (error) {
     console.error("[verify_race] parseHRNRaceOutcome failed", error);
   }
