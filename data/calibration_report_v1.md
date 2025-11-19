@@ -1,7 +1,7 @@
 # FinishLine Calibration Report
 
 - Version: v1
-- Generated: 2025-11-16T08:13:10.723Z
+- Generated: 2025-11-18T08:15:06.415Z
 
 ## Bin Metrics
 | Bin | Samples | Win Rate | Top-3 Rate | Avg ROI (ATB) | Exotic Hit Rate |
