@@ -339,6 +339,35 @@ async function extractOutcomeFromResultPage(url, ctx) {
     }
 
     const html = await res.text();
+
+    // Verify page contains the correct race number before parsing
+    if (ctx.raceNo) {
+      const raceNoStr = String(ctx.raceNo).trim();
+      const trackLower = (ctx.track || "").toLowerCase();
+      
+      // Check for race number in page text
+      const hasRaceNo = new RegExp(
+        `Race\\s*#?\\s*${raceNoStr}\\b`,
+        "i"
+      ).test(html);
+      
+      // Check for track name in page text
+      const hasTrack = trackLower
+        ? new RegExp(trackLower.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i").test(html)
+        : true;
+
+      if (!hasRaceNo || !hasTrack) {
+        console.warn("[verify_race] Page validation failed", {
+          url,
+          raceNo: ctx.raceNo,
+          track: ctx.track,
+          hasRaceNo,
+          hasTrack,
+        });
+        return {}; // Return empty outcome if validation fails
+      }
+    }
+
     const outcome = parseOutcomeFromHtml(html, url, ctx.raceNo);
     return outcome;
   } catch (error) {
@@ -503,19 +532,17 @@ export default async function handler(req, res) {
 
     // Use the requested date throughout - never override with "today"
     const date = safeDate;
+    const dateISO = date; // Use ISO format (YYYY-MM-DD)
 
-    const dWords = date.replace(/-/g, " ");
+    // Build three specific queries in order
     const racePart = raceNumber ? ` Race ${raceNumber}` : "";
-    const baseQuery = `${track}${racePart} ${date} results Win Place Show order`;
-    const altQuery = `${track}${racePart} ${dWords} result chart official`;
-    const siteBias =
-      "(site:equibase.com OR site:horseracingnation.com OR site:entries.horseracingnation.com)";
-
     const queries = [
-      `${baseQuery} ${siteBias}`.trim(),
-      `${altQuery} ${siteBias}`.trim(),
-      baseQuery,
-      altQuery,
+      // 1) Primary HRN search
+      `${track}${racePart} ${dateISO} "Win" "Place" "Show" site:horseracingnation.com`,
+      // 2) Secondary Equibase
+      `${track}${racePart} ${dateISO} Entries Results site:equibase.com`,
+      // 3) Fallback general HRN
+      `${track} Entries & Results ${dateISO} site:horseracingnation.com`,
     ];
 
     let results = [];
@@ -525,11 +552,30 @@ export default async function handler(req, res) {
 
     try {
       for (const q of queries) {
+        console.log("[verify_race] using_query", q);
         try {
           const items = await runSearch(req, q);
           queryUsed = q;
-          results = items;
-          if (items.length) break;
+
+          // Filter results to only accept horseracingnation.com or equibase.com
+          const validItems = items.filter((item) => {
+            if (!item.link) return false;
+            try {
+              const url = new URL(item.link);
+              const hostname = url.hostname.toLowerCase();
+              return (
+                hostname.includes("horseracingnation.com") ||
+                hostname.includes("equibase.com")
+              );
+            } catch {
+              return false;
+            }
+          });
+
+          if (validItems.length) {
+            results = validItems;
+            break;
+          }
         } catch (error) {
           lastError = error;
           console.error("[verify_race] Search query failed", {
@@ -563,8 +609,81 @@ export default async function handler(req, res) {
       });
     }
 
+    // Pick best result (prefer HRN, then Equibase)
     const topPreferred = pickBest(results);
     const top = topPreferred || results[0] || null;
+
+    // Validate the selected page before parsing
+    if (top?.link) {
+      console.log("[verify_race] candidate_url", top.link);
+      
+      // Verify domain is valid
+      try {
+        const url = new URL(top.link);
+        const hostname = url.hostname.toLowerCase();
+        const isValidDomain =
+          hostname.includes("horseracingnation.com") ||
+          hostname.includes("equibase.com");
+
+        if (!isValidDomain) {
+          console.warn("[verify_race] Invalid domain, skipping", hostname);
+          // Try next result
+          const nextTop = results[1] || null;
+          if (nextTop?.link) {
+            const nextUrl = new URL(nextTop.link);
+            const nextHostname = nextUrl.hostname.toLowerCase();
+            if (
+              nextHostname.includes("horseracingnation.com") ||
+              nextHostname.includes("equibase.com")
+            ) {
+              // Use next result
+              top.link = nextTop.link;
+              top.title = nextTop.title;
+            } else {
+              // No valid results
+              return res.status(200).json({
+                date: safeDate,
+                track: safeTrack,
+                raceNo: safeRaceNo,
+                error: "No valid result pages found",
+                details:
+                  "Search returned results but none from horseracingnation.com or equibase.com",
+                step: "verify_race_validation",
+                query: queryUsed,
+                outcome: { win: "", place: "", show: "" },
+                hits: { winHit: false, placeHit: false, showHit: false },
+              });
+            }
+          } else {
+            return res.status(200).json({
+              date: safeDate,
+              track: safeTrack,
+              raceNo: safeRaceNo,
+              error: "No valid result pages found",
+              details:
+                "Search returned results but none from horseracingnation.com or equibase.com",
+              step: "verify_race_validation",
+              query: queryUsed,
+              outcome: { win: "", place: "", show: "" },
+              hits: { winHit: false, placeHit: false, showHit: false },
+            });
+          }
+        }
+      } catch (urlError) {
+        console.error("[verify_race] Invalid URL", top.link, urlError);
+        return res.status(200).json({
+          date: safeDate,
+          track: safeTrack,
+          raceNo: safeRaceNo,
+          error: "Invalid result URL",
+          details: "The search result URL is malformed",
+          step: "verify_race_validation",
+          query: queryUsed,
+          outcome: { win: "", place: "", show: "" },
+          hits: { winHit: false, placeHit: false, showHit: false },
+        });
+      }
+    }
 
     let outcome = { win: "", place: "", show: "" };
     if (top?.link) {
