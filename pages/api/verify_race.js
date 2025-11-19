@@ -568,154 +568,64 @@ async function cseViaBridge(req, query) {
   }));
 }
 
-        // Extract runner name (strip speed figure suffix like "(98*)")
-        let runnerName = $(cells[runnerIdx]).text().trim();
-        // Extract runner name from the first cell (strip speed figure suffix like "(98*)")
-        let runnerName = $(cells[0]).text().trim();
-        // Remove speed figure in parentheses: "Full Time Strutin (98*)" -> "Full Time Strutin"
-        runnerName = runnerName.replace(/\s*\([^)]*\)\s*$/, "").trim();
-        runnerName = normalizeHorseName(runnerName);
-
-        if (!runnerName) return;
-
-        // Extract Win/Place/Show values - get text content and check for non-empty
-        // CRITICAL: Use the exact column indices we found - do not swap or infer
-        // Also check for images/icons that might indicate a payout (some sites use checkmarks/images)
-        const winCell = $(cells[winIdx]);
-        const placeCell = $(cells[placeIdx]);
-        const showCell = $(cells[showIdx]);
-
-        // Get text content - also check if cell has images or other indicators
-        let winVal = winCell.text().trim();
-        let placeVal = placeCell.text().trim();
-        let showVal = showCell.text().trim();
-
-        // If text is empty but cell has images/icons, treat as non-empty
-        // (some sites use images to indicate payouts)
-        if (!winVal && winCell.find("img, svg, [class*='icon'], [class*='check']").length > 0) {
-          winVal = "X"; // Mark as non-empty
-        }
-        if (!placeVal && placeCell.find("img, svg, [class*='icon'], [class*='check']").length > 0) {
-          placeVal = "X"; // Mark as non-empty
-        }
-        if (!showVal && showCell.find("img, svg, [class*='icon'], [class*='check']").length > 0) {
-          showVal = "X"; // Mark as non-empty
-        // Find payout cells: cells that contain "$" (dollar amounts)
-        // In HRN Runner table, payout cells are the ones with dollar amounts like "$8.20"
-        // Other cells may contain post position numbers, speed figures, icons, etc. - ignore those
-        const payoutCells = cells
-          .map((cell, idx) => ({ cell: $(cell), idx }))
-          .filter(({ cell }) => {
-            const text = cell.text().trim();
-            return text.includes("$");
-          });
+const preferHosts = [
+  "horseracingnation.com",
+  "entries.horseracingnation.com",
+  "equibase.com",
+];
 
 function pickBest(items) {
   if (!Array.isArray(items) || !items.length) return null;
   const scored = items
     .map((item) => {
-    try {
+      try {
         const url = new URL(item.link || "");
         const host = url.hostname || "";
-      const idx = preferHosts.findIndex((h) => host.includes(h));
-      return { item, score: idx === -1 ? 10 : idx };
-    } catch {
-      return { item, score: 10 };
-    }
+        const idx = preferHosts.findIndex((h) => host.includes(h));
+        return { item, score: idx === -1 ? 10 : idx };
+      } catch {
+        return { item, score: 10 };
+      }
     })
     .sort((a, b) => a.score - b.score);
   return scored.length ? scored[0].item : null;
 }
 
-        // Debug: log column indices and values for first few rows (server-side only)
-        // Extract payout text from each payout cell
-        // payoutCells[0] = Win payout, [1] = Place payout, [2] = Show payout
-        const winText =
-          payoutCells[0]?.cell.text().trim() || "";
-        const placeText =
-          payoutCells[1]?.cell.text().trim() || "";
-        const showText =
-          payoutCells[2]?.cell.text().trim() || "";
+async function runSearch(req, query) {
+  return GOOGLE_API_KEY && GOOGLE_CSE_ID
+    ? await cseDirect(query)
+    : await cseViaBridge(req, query);
+}
 
-        // Check if each payout is valid (non-empty and not "-")
-        const hasWin = !!winText && winText !== "-" && winText.length > 0;
-        const hasPlace = !!placeText && placeText !== "-" && placeText.length > 0;
-        const hasShow = !!showText && showText !== "-" && showText.length > 0;
-
-        // Debug logging (server-side only)
-        if (process.env.VERIFY_DEBUG === "true") {
-          console.log("[verify_race] HRN cell values", {
-          console.log("[verify_race] HRN payout cells", {
-            runnerName,
-            runnerIdx,
-            winIdx,
-            placeIdx,
-            showIdx,
-            winVal,
-            placeVal,
-            showVal,
-            winIsValid: isNonEmptyPayout(winVal),
-            placeIsValid: isNonEmptyPayout(placeVal),
-            showIsValid: isNonEmptyPayout(showVal),
-            payoutCellsCount: payoutCells.length,
-            winText,
-            placeText,
-            showText,
-            hasWin,
-            hasPlace,
-            hasShow,
-          });
-        }
-
-        // Assign positions based on which columns have non-empty payout values
-        // Each position should be assigned to the FIRST row that has a non-empty value in that column
-        // and hasn't already been assigned to a higher position
-        if (!winHorse && isNonEmptyPayout(winVal)) {
-          winHorse = runnerName;
-        // Assign positions: only assign once per bucket (first row with valid payout)
-        if (hasWin && !outcome.win) {
-          outcome.win = runnerName;
-        }
-        if (!placeHorse && isNonEmptyPayout(placeVal) && runnerName !== winHorse) {
-          placeHorse = runnerName;
-        if (hasPlace && !outcome.place) {
-          outcome.place = runnerName;
-        }
-        if (
-          !showHorse &&
-          isNonEmptyPayout(showVal) &&
-          runnerName !== winHorse &&
-          runnerName !== placeHorse
-        ) {
-          showHorse = runnerName;
-        if (hasShow && !outcome.show) {
-          outcome.show = runnerName;
-        }
-      });
+export default async function handler(req, res) {
+  // Extract safe values early for error responses
+  let safeDate = null;
+  let safeTrack = null;
+  let safeRaceNo = null;
 
   try {
     if (req.method !== "POST") {
       res.setHeader("Allow", "POST");
-      // Return 200 with structured error for consistency (never 500)
-      return res.status(200).json({
-        date: safeDate,
-        track: safeTrack,
-        raceNo: safeRaceNo,
-        error: "Method Not Allowed",
-        details: "Only POST requests are accepted",
-        step: "verify_race_method_validation",
-        outcome: { win: "", place: "", show: "" },
-        hits: { winHit: false, placeHit: false, showHit: false },
-      });
+      return res
+        .status(405)
+        .json({ ok: false, error: "Method Not Allowed" });
     }
 
-    // Show error info first if present
-    // If there's an error, show a minimal error block and stop
-    if (data.error) {
-      lines.push(`Error: ${data.error}`);
+    // Be tolerant of either req.body object or JSON string
+    let body = req.body;
+    if (typeof body === "string") {
+      try {
+        body = JSON.parse(body);
+      } catch {
+        body = {};
+      }
     }
-    if (data.details && data.details !== data.error) {
-      lines.push(`Details: ${data.details}`);
+    if (!body && typeof req.json === "function") {
+      try {
+        body = await req.json();
+      } catch {
+        body = {};
+      }
     }
 
     const {
@@ -751,8 +661,6 @@ function pickBest(items) {
         error: "Missing required field: track",
         details: "Track is required to verify a race",
         step: "verify_race_validation",
-        outcome: { win: "", place: "", show: "" },
-        hits: { winHit: false, placeHit: false, showHit: false },
       });
     }
 
@@ -778,23 +686,23 @@ function pickBest(items) {
     const searchStep = "verify_race_search";
 
     try {
-    for (const q of queries) {
-      try {
-        const items = await runSearch(req, q);
-        queryUsed = q;
-        results = items;
-        if (items.length) break;
-      } catch (error) {
-        lastError = error;
+      for (const q of queries) {
+        try {
+          const items = await runSearch(req, q);
+          queryUsed = q;
+          results = items;
+          if (items.length) break;
+        } catch (error) {
+          lastError = error;
           console.error("[verify_race] Search query failed", {
             query: q,
             error: error?.message || String(error),
           });
         }
-    }
+      }
 
-    if (!results.length && lastError) {
-      throw lastError;
+      if (!results.length && lastError) {
+        throw lastError;
       }
     } catch (error) {
       console.error("[verify_race] Search failed", {
@@ -812,8 +720,6 @@ function pickBest(items) {
           "Unable to fetch race results from search providers",
         step: searchStep,
         query: queryUsed || queries[0] || null,
-        outcome: { win: "", place: "", show: "" },
-        hits: { winHit: false, placeHit: false, showHit: false },
       });
     }
 
@@ -850,8 +756,6 @@ function pickBest(items) {
         });
         // Continue with empty outcome - not a fatal error
       }
-      summaryEl.textContent = lines.join("\n");
-      return;
     }
 
     const normalizeName = (value = "") =>
@@ -946,21 +850,21 @@ function pickBest(items) {
         await redis.set(
           eventKey,
           JSON.stringify({
-          ts: tsIso,
-          track,
-          date,
-          raceNo: raceNumber ?? null,
-          distance,
-          surface,
-          strategy,
-          ai_picks,
-          query: queryUsed,
-          count: results.length,
-          results: results.slice(0, 10),
-          predicted: predictedSafe,
-          outcome,
-          hits,
-          summary: summarySafe,
+            ts: tsIso,
+            track,
+            date,
+            raceNo: raceNumber ?? null,
+            distance,
+            surface,
+            strategy,
+            ai_picks,
+            query: queryUsed,
+            count: results.length,
+            results: results.slice(0, 10),
+            predicted: predictedSafe,
+            outcome,
+            hits,
+            summary: summarySafe,
           }),
         );
         await redis.expire(eventKey, TTL_SECONDS);
@@ -972,15 +876,32 @@ function pickBest(items) {
       }
     }
 
-    // Show hits if present (with safe checks) - always show
-    if (data.hits && typeof data.hits === "object") {
-      const hitParts = [];
-      if (data.hits.winHit) hitParts.push("Win");
-      if (data.hits.placeHit) hitParts.push("Place");
-      if (data.hits.showHit) hitParts.push("Show");
-      lines.push(
-        hitParts.length ? `Hits: ${hitParts.join(", ")}` : "Hits: (none)"
-      );
+    if (redis) {
+      try {
+        const row = {
+          ts: Date.now(),
+          date,
+          track,
+          raceNo: raceNumber ?? null,
+          query: queryUsed || null,
+          top: top ? { title: top.title, link: top.link } : null,
+          outcome,
+          predicted: predictedSafe,
+          hits,
+          summary: summarySafe,
+        };
+        await redis.rpush(RECON_LIST, JSON.stringify(row));
+        const dayKey = `${RECON_DAY_PREFIX}${date}`;
+        await redis.rpush(dayKey, JSON.stringify(row));
+        await redis.expire(dayKey, 60 * 60 * 24 * 90);
+        await redis.hincrby("cal:v1", "total", 1);
+        if (hits.winHit) await redis.hincrby("cal:v1", "correctWin", 1);
+        if (hits.placeHit) await redis.hincrby("cal:v1", "correctPlace", 1);
+        if (hits.showHit) await redis.hincrby("cal:v1", "correctShow", 1);
+        if (hits.top3Hit) await redis.hincrby("cal:v1", "top3Hit", 1);
+      } catch (error) {
+        console.error("Redis logging failed", error);
+      }
     }
 
     if (!isVercel) {
@@ -996,17 +917,17 @@ function pickBest(items) {
         const exists = fs.existsSync(csvPath);
         const line =
           [
-          Date.now(),
-          date,
-          JSON.stringify(track),
+            Date.now(),
+            date,
+            JSON.stringify(track),
             raceNumber ?? "",
             JSON.stringify(queryUsed || ""),
             JSON.stringify(top?.title || ""),
             JSON.stringify(top?.link || ""),
-          hits.winHit ? 1 : 0,
-          hits.placeHit ? 1 : 0,
-          hits.showHit ? 1 : 0,
-          hits.top3Hit ? 1 : 0,
+            hits.winHit ? 1 : 0,
+            hits.placeHit ? 1 : 0,
+            hits.showHit ? 1 : 0,
+            hits.top3Hit ? 1 : 0,
           ].join(",") + "\n";
         if (!exists) fs.writeFileSync(csvPath, header);
         fs.appendFileSync(csvPath, line);
