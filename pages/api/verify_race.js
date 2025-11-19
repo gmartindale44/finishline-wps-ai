@@ -851,6 +851,16 @@ export default async function handler(req, res) {
         ? `Top Result: ${top.title}${top.link ? `\n${top.link}` : ""}`
         : "No summary returned.");
 
+    // --- TEMPORARY LABEL FIX: remap place->win and show->place without touching parsing ---
+    if (outcome) {
+      // Use the existing parsed "place" horse as Win
+      outcome.win = outcome.place || "";
+      // Use the existing parsed "show" horse as Place
+      outcome.place = outcome.show || "";
+      // Leave Show empty for now until we add proper parsing later
+      outcome.show = "";
+    }
+
     // Log outcome for debugging
     console.info("[verify_race] outcome", {
       track: safeTrack,
