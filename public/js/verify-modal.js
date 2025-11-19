@@ -137,22 +137,24 @@
 
     // Outcome: we only care about Win / Place / Show here
     if (data.outcome && typeof data.outcome === "object") {
-      const parts = [];
-      if (data.outcome.win) {
-        parts.push(`Win ${data.outcome.win}`);
+      const outcome = data.outcome;
+      const labels = [];
+      
+      if (outcome.win && String(outcome.win).trim()) {
+        labels.push(`Win ${outcome.win}`);
       }
-      if (data.outcome.place) {
-        parts.push(`Place ${data.outcome.place}`);
+      if (outcome.place && String(outcome.place).trim()) {
+        labels.push(`Place ${outcome.place}`);
       }
-      if (data.outcome.show) {
-        parts.push(`Show ${data.outcome.show}`);
+      if (outcome.show && String(outcome.show).trim()) {
+        labels.push(`Show ${outcome.show}`);
       }
-      if (parts.length) {
-        lines.push(`Outcome: ${parts.join(" • ")}`);
-      } else {
-        // We had an outcome object, but nothing usable inside
-        lines.push("Outcome: (none)");
-      }
+      
+      const outcomeLine = labels.length > 0
+        ? `Outcome: ${labels.join(" • ")}`
+        : "Outcome: (none)";
+      
+      lines.push(outcomeLine);
     } else {
       // No outcome object at all
       lines.push("Outcome: (none)");
