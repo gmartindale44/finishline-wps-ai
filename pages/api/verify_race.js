@@ -1030,7 +1030,7 @@ export default async function handler(req, res) {
         winHit: pWin && oWin && pWin === oWin,
         placeHit: pPlace && oPlace && pPlace === oPlace,
         showHit: pShow && oShow && pShow === oShow,
-      };
+    };
     })();
 
     const summary = (() => {
