@@ -476,6 +476,7 @@ function parseHRNRaceOutcome($, raceNo) {
       }
       
       runners.push(runnerName);
+<<<<<<< HEAD
     });
 
     // --- STEP 2: Seed win/place/show from first 3 runners (safe fallback) ---
