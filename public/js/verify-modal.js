@@ -137,10 +137,16 @@
 
     // Outcome: use results from chart data (win, place, show)
     // results holds the chart outcome, predicted holds the model's picks
-    const results = data.results || data.outcome || {}; // Fallback to outcome for backward compatibility
-    const win = results.win || "";
-    const place = results.place || "";
-    const show = results.show || "";
+    // Safely handle both new results object and legacy outcome object
+    const results = data.results && typeof data.results === "object" && !Array.isArray(data.results)
+      ? data.results
+      : (data.outcome && typeof data.outcome === "object" && !Array.isArray(data.outcome)
+          ? data.outcome
+          : {});
+    
+    const win = (results.win || "").trim();
+    const place = (results.place || "").trim();
+    const show = (results.show || "").trim();
 
     const parts = [];
     if (win) {
@@ -155,6 +161,9 @@
 
     if (parts.length) {
       lines.push(`Outcome: ${parts.join(" • ")}`);
+    } else if (data.outcome && typeof data.outcome === "string") {
+      // Backward-compat fallback for string outcome
+      lines.push(`Outcome: ${data.outcome}`);
     } else {
       lines.push("Outcome: (none)");
     }
