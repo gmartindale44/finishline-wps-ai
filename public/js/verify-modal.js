@@ -130,15 +130,44 @@
 
     const lines = [];
 
-    // Always show the date first if available
+    // Always show date if present
     if (data.date) {
       lines.push(`Using date: ${data.date}`);
     }
 
+    // Show error info first if present
+    if (data.error) {
+      lines.push(`Error: ${data.error}`);
+    }
+    if (data.details && data.details !== data.error) {
+      lines.push(`Details: ${data.details}`);
+    }
+    if (data.step) {
+      lines.push(`Step: ${data.step}`);
+    }
+
+    // Show query if present
+    if (data.query) {
+      lines.push(`Query: ${data.query}`);
+    }
+
+    // Show top result if present (with safe checks) - BEFORE outcome
+    if (data.top && typeof data.top === "object" && data.top.title) {
+      lines.push(
+        `Top Result: ${data.top.title}${
+          data.top.link ? `\n${data.top.link}` : ""
+        }`
+      );
+    } else if (data.link) {
+      lines.push(`Link: ${data.link}`);
+    }
+
     // Outcome: use results from chart data (win, place, show)
-    // Safely handle both new results object and legacy outcome object
-    const outcome = data.outcome || data.results || {};
-    const { win = "", place = "", show = "" } = outcome;
+    // results holds the chart outcome, predicted holds the model's picks
+    const results = data.results || data.outcome || {}; // Fallback to outcome for backward compatibility
+    const win = results.win || "";
+    const place = results.place || "";
+    const show = results.show || "";
 
     let outcomeText = "(none)";
     const parts = [];
@@ -147,12 +176,28 @@
     if (show) parts.push(`Show ${show}`);
 
     if (parts.length) {
-      outcomeText = parts.join(" • ");
+      lines.push(`Outcome: ${parts.join(" • ")}`);
+    } else {
+      lines.push("Outcome: (none)");
     }
 
-    lines.push(`Outcome: ${outcomeText}`);
+    // Show hits if present (with safe checks) - always show
+    if (data.hits && typeof data.hits === "object") {
+      const hitParts = [];
+      if (data.hits.winHit) hitParts.push("Win");
+      if (data.hits.placeHit) hitParts.push("Place");
+      if (data.hits.showHit) hitParts.push("Show");
+      lines.push(
+        hitParts.length ? `Hits: ${hitParts.join(", ")}` : "Hits: (none)"
+      );
+    }
 
-    // Safety fallback: if somehow no lines were added
+    // Show summary text if present
+    if (data.summary && typeof data.summary === "string") {
+      lines.push(data.summary);
+    }
+
+    // Fallback if absolutely nothing meaningful
     if (!lines.length) {
       lines.push("No summary returned.");
     }
