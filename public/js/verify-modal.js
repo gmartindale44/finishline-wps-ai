@@ -136,37 +136,21 @@
     }
 
     // Outcome: use results from chart data (win, place, show)
-    // results holds the chart outcome, predicted holds the model's picks
     // Safely handle both new results object and legacy outcome object
-    const results = data.results && typeof data.results === "object" && !Array.isArray(data.results)
-      ? data.results
-      : (data.outcome && typeof data.outcome === "object" && !Array.isArray(data.outcome)
-          ? data.outcome
-          : {});
-    
-    const win = (results.win || "").trim();
-    const place = (results.place || "").trim();
-    const show = (results.show || "").trim();
+    const outcome = data.outcome || data.results || {};
+    const { win = "", place = "", show = "" } = outcome;
 
+    let outcomeText = "(none)";
     const parts = [];
-    if (win) {
-      parts.push(`Win ${win}`);
-    }
-    if (place) {
-      parts.push(`Place ${place}`);
-    }
-    if (show) {
-      parts.push(`Show ${show}`);
-    }
+    if (win) parts.push(`Win ${win}`);
+    if (place) parts.push(`Place ${place}`);
+    if (show) parts.push(`Show ${show}`);
 
     if (parts.length) {
-      lines.push(`Outcome: ${parts.join(" • ")}`);
-    } else if (data.outcome && typeof data.outcome === "string") {
-      // Backward-compat fallback for string outcome
-      lines.push(`Outcome: ${data.outcome}`);
-    } else {
-      lines.push("Outcome: (none)");
+      outcomeText = parts.join(" • ");
     }
+
+    lines.push(`Outcome: ${outcomeText}`);
 
     // Safety fallback: if somehow no lines were added
     if (!lines.length) {
