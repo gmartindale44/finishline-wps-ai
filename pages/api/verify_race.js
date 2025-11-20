@@ -56,6 +56,10 @@ function normalizeHorseName(name) {
  * @returns {{ win: string; place: string; show: string }}
  */
 function parseHRNRunnerTable($, $table) {
+  if (!$table || !$table.length) {
+    return { win: "", place: "", show: "" };
+  }
+
   // Identify header cells (th) and determine column indexes
   const headerRow = $table.find("tr").first();
   const headerCells = headerRow.find("th, td").toArray();
@@ -75,8 +79,8 @@ function parseHRNRunnerTable($, $table) {
   const placeIdx = headerTexts.findIndex((h) => h.includes("place"));
   const showIdx = headerTexts.findIndex((h) => h.includes("show"));
 
-  // If any required column cannot be determined, return empty
-  if (runnerIdx === -1 || winIdx === -1 || placeIdx === -1 || showIdx === -1) {
+  // Require runner column, but Win/Place/Show columns are optional (we'll fallback to order)
+  if (runnerIdx === -1) {
     return { win: "", place: "", show: "" };
   }
 
@@ -84,6 +88,7 @@ function parseHRNRunnerTable($, $table) {
   let winHorse = "";
   let placeHorse = "";
   let showHorse = "";
+  const runnerOrder = []; // Track runner names in finishing order
 
   $table.find("tr").slice(1).each((_, tr) => {
     const $cells = $(tr).find("td");
@@ -125,7 +130,10 @@ function parseHRNRunnerTable($, $table) {
       return; // Skip this row
     }
 
-    // Get Win/Place/Show cell texts
+    // Track finishing order by row (HRN lists runners in finishing order)
+    runnerOrder.push(runnerName);
+
+    // Get Win/Place/Show cell texts (if columns exist)
     const winText = winIdx > -1 && $cells.eq(winIdx).length
       ? ($cells.eq(winIdx).text() || "").trim()
       : "";
@@ -151,6 +159,19 @@ function parseHRNRunnerTable($, $table) {
       showHorse = runnerName;
     }
   });
+
+  // Fallback: if some result slots are still empty, use runnerOrder as a strict
+  // finishing-order proxy (1st = win, 2nd = place, 3rd = show)
+  // This handles races like Churchill Downs R2 where payouts are sparse
+  if (!winHorse && runnerOrder.length >= 1) {
+    winHorse = runnerOrder[0];
+  }
+  if (!placeHorse && runnerOrder.length >= 2) {
+    placeHorse = runnerOrder[1];
+  }
+  if (!showHorse && runnerOrder.length >= 3) {
+    showHorse = runnerOrder[2];
+  }
 
   return {
     win: winHorse || "",
@@ -455,7 +476,6 @@ function parseHRNRaceOutcome($, raceNo) {
       }
       
       runners.push(runnerName);
-<<<<<<< HEAD
     });
 
     // --- STEP 2: Seed win/place/show from first 3 runners (safe fallback) ---
@@ -837,7 +857,7 @@ export default async function handler(req, res) {
             query: q,
             error: error?.message || String(error),
           });
-        }
+      }
     }
 
     if (!results.length && lastError) {
