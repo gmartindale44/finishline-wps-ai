@@ -135,26 +135,27 @@
       lines.push(`Using date: ${data.date}`);
     }
 
-    // Outcome: we only care about Win / Place / Show here
-    if (data.outcome && typeof data.outcome === "object") {
-      const parts = [];
-      if (data.outcome.win) {
-        parts.push(`Win ${data.outcome.win}`);
-      }
-      if (data.outcome.place) {
-        parts.push(`Place ${data.outcome.place}`);
-      }
-      if (data.outcome.show) {
-        parts.push(`Show ${data.outcome.show}`);
-      }
-      if (parts.length) {
-        lines.push(`Outcome: ${parts.join(" • ")}`);
-      } else {
-        // We had an outcome object, but nothing usable inside
-        lines.push("Outcome: (none)");
-      }
+    // Outcome: use results from chart data (win, place, show)
+    // results holds the chart outcome, predicted holds the model's picks
+    const results = data.results || data.outcome || {}; // Fallback to outcome for backward compatibility
+    const win = results.win || "";
+    const place = results.place || "";
+    const show = results.show || "";
+
+    const parts = [];
+    if (win) {
+      parts.push(`Win ${win}`);
+    }
+    if (place) {
+      parts.push(`Place ${place}`);
+    }
+    if (show) {
+      parts.push(`Show ${show}`);
+    }
+
+    if (parts.length) {
+      lines.push(`Outcome: ${parts.join(" • ")}`);
     } else {
-      // No outcome object at all
       lines.push("Outcome: (none)");
     }
 
