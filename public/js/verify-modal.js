@@ -135,28 +135,27 @@
       lines.push(`Using date: ${data.date}`);
     }
 
-    // Outcome: we only care about Win / Place / Show here
-    if (data.outcome && typeof data.outcome === "object") {
-      const outcome = data.outcome;
-      const labels = [];
-      
-      if (outcome.win && String(outcome.win).trim()) {
-        labels.push(`Win ${outcome.win}`);
-      }
-      if (outcome.place && String(outcome.place).trim()) {
-        labels.push(`Place ${outcome.place}`);
-      }
-      if (outcome.show && String(outcome.show).trim()) {
-        labels.push(`Show ${outcome.show}`);
-      }
-      
-      const outcomeLine = labels.length > 0
-        ? `Outcome: ${labels.join(" • ")}`
-        : "Outcome: (none)";
-      
-      lines.push(outcomeLine);
+    // Outcome: use results from chart data (win, place, show)
+    // results holds the chart outcome, predicted holds the model's picks
+    const results = data.results || data.outcome || {}; // Fallback to outcome for backward compatibility
+    const win = results.win || "";
+    const place = results.place || "";
+    const show = results.show || "";
+
+    const parts = [];
+    if (win) {
+      parts.push(`Win ${win}`);
+    }
+    if (place) {
+      parts.push(`Place ${place}`);
+    }
+    if (show) {
+      parts.push(`Show ${show}`);
+    }
+
+    if (parts.length) {
+      lines.push(`Outcome: ${parts.join(" • ")}`);
     } else {
-      // No outcome object at all
       lines.push("Outcome: (none)");
     }
 

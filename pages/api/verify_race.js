@@ -50,6 +50,116 @@ function normalizeHorseName(name) {
 }
 
 /**
+ * Parse HRN runner table to extract Win/Place/Show from chart results
+ * @param {cheerio.CheerioAPI} $ - cheerio instance
+ * @param {cheerio.Cheerio<cheerio.Element>} $table - cheerio-wrapped <table> for the runner (speed) grid
+ * @returns {{ win: string; place: string; show: string }}
+ */
+function parseHRNRunnerTable($, $table) {
+  // Identify header cells (th) and determine column indexes
+  const headerRow = $table.find("tr").first();
+  const headerCells = headerRow.find("th, td").toArray();
+  
+  if (!headerCells.length) {
+    return { win: "", place: "", show: "" };
+  }
+
+  const headerTexts = headerCells.map((cell) =>
+    $(cell).text().toLowerCase().trim()
+  );
+
+  const runnerIdx = headerTexts.findIndex(
+    (h) => h.includes("runner") || h.includes("horse")
+  );
+  const winIdx = headerTexts.findIndex((h) => h.includes("win"));
+  const placeIdx = headerTexts.findIndex((h) => h.includes("place"));
+  const showIdx = headerTexts.findIndex((h) => h.includes("show"));
+
+  // If any required column cannot be determined, return empty
+  if (runnerIdx === -1 || winIdx === -1 || placeIdx === -1 || showIdx === -1) {
+    return { win: "", place: "", show: "" };
+  }
+
+  // Loop through tbody tr rows
+  let winHorse = "";
+  let placeHorse = "";
+  let showHorse = "";
+
+  $table.find("tr").slice(1).each((_, tr) => {
+    const $cells = $(tr).find("td");
+    if (!$cells.length) return;
+
+    // Get runner name
+    const runnerText = runnerIdx > -1 
+      ? ($cells.eq(runnerIdx).text() || "").trim() 
+      : "";
+    
+    if (!runnerText) return;
+    
+    // Skip header rows
+    if (/runner\s*\(speed\)/i.test(runnerText)) return;
+    
+    // Normalize runner name: strip footnote markers like (*) or (114*)
+    let runnerName = runnerText.replace(/\s*\([^)]*\)\s*$/, "").trim();
+    runnerName = normalizeHorseName(runnerName);
+    if (!runnerName) return;
+
+    // Hard filters to avoid junk rows
+    const lowerRunner = runnerName.toLowerCase();
+    const junkPatterns = [
+      "preliminary speed figures",
+      "also rans",
+      "pool",
+      "daily double",
+      "trifecta",
+      "superfecta",
+      "pick 3",
+      "pick 4",
+      "this script inside",
+      "head tags",
+    ];
+    if (
+      lowerRunner.startsWith("*") ||
+      junkPatterns.some((pattern) => lowerRunner.includes(pattern))
+    ) {
+      return; // Skip this row
+    }
+
+    // Get Win/Place/Show cell texts
+    const winText = winIdx > -1 && $cells.eq(winIdx).length
+      ? ($cells.eq(winIdx).text() || "").trim()
+      : "";
+    const placeText = placeIdx > -1 && $cells.eq(placeIdx).length
+      ? ($cells.eq(placeIdx).text() || "").trim()
+      : "";
+    const showText = showIdx > -1 && $cells.eq(showIdx).length
+      ? ($cells.eq(showIdx).text() || "").trim()
+      : "";
+
+    // Selection rules: first non-empty Win cell becomes results.win
+    if (winText && !winHorse) {
+      winHorse = runnerName;
+    }
+
+    // First non-empty Place cell becomes results.place
+    if (placeText && !placeHorse) {
+      placeHorse = runnerName;
+    }
+
+    // First non-empty Show cell becomes results.show
+    if (showText && !showHorse) {
+      showHorse = runnerName;
+    }
+  });
+
+  return {
+    win: winHorse || "",
+    place: placeHorse || "",
+    show: showHorse || "",
+  };
+}
+
+/**
  * Extract Win/Place/Show from a runner table using WPS payout indicators
  * @param {cheerio.CheerioAPI} $
  * @param {cheerio.Cheerio<cheerio.Element>} table
@@ -345,6 +455,7 @@ function parseHRNRaceOutcome($, raceNo) {
       }
       
       runners.push(runnerName);
+<<<<<<< HEAD
     });
 
     // --- STEP 2: Seed win/place/show from first 3 runners (safe fallback) ---
@@ -362,23 +473,18 @@ function parseHRNRaceOutcome($, raceNo) {
     }
 
     // --- STEP 3: Extract win/place/show from the chosen runner table using WPS payouts ---
-    const extracted = extractOutcomeFromRunnerTable($, $runnerTable, {
-      runnerIdx,
-      winIdx,
-      placeIdx,
-      showIdx,
-    });
+    const parsed = parseHRNRunnerTable($, $runnerTable);
 
     // --- STEP 4: Overwrite only with non-empty WPS parsing results (defensive) ---
     // Never assign empty strings - only overwrite when we have actual parsed values
-    if (extracted.win) {
-      outcome.win = extracted.win;
+    if (parsed.win) {
+      outcome.win = parsed.win;
     }
-    if (extracted.place) {
-      outcome.place = extracted.place;
+    if (parsed.place) {
+      outcome.place = parsed.place;
     }
-    if (extracted.show) {
-      outcome.show = extracted.show;
+    if (parsed.show) {
+      outcome.show = parsed.show;
     }
 
     // Debug log for HRN parse success
@@ -601,14 +707,14 @@ function pickBest(items) {
   if (!Array.isArray(items) || !items.length) return null;
   const scored = items
     .map((item) => {
-      try {
+    try {
         const url = new URL(item.link || "");
         const host = url.hostname || "";
-        const idx = preferHosts.findIndex((h) => host.includes(h));
-        return { item, score: idx === -1 ? 10 : idx };
-      } catch {
-        return { item, score: 10 };
-      }
+      const idx = preferHosts.findIndex((h) => host.includes(h));
+      return { item, score: idx === -1 ? 10 : idx };
+    } catch {
+      return { item, score: 10 };
+    }
     })
     .sort((a, b) => a.score - b.score);
   return scored.length ? scored[0].item : null;
@@ -719,24 +825,24 @@ export default async function handler(req, res) {
     const searchStep = "verify_race_search";
 
     try {
-      for (const q of queries) {
-        try {
-          const items = await runSearch(req, q);
-          queryUsed = q;
-          results = items;
-          if (items.length) break;
-        } catch (error) {
-          lastError = error;
+    for (const q of queries) {
+      try {
+        const items = await runSearch(req, q);
+        queryUsed = q;
+        results = items;
+        if (items.length) break;
+      } catch (error) {
+        lastError = error;
           console.error("[verify_race] Search query failed", {
             query: q,
             error: error?.message || String(error),
           });
         }
-      }
+    }
 
-      if (!results.length && lastError) {
-        throw lastError;
-      }
+    if (!results.length && lastError) {
+      throw lastError;
+    }
     } catch (error) {
       console.error("[verify_race] Search failed", {
         error: error?.message || String(error),
@@ -863,7 +969,8 @@ export default async function handler(req, res) {
         ? parsedOutcome
         : { win: "", place: "", show: "" };
 
-    const outcome = cleanOutcome;
+    // Store parsedOutcome for results object (will be set later)
+    const parsedOutcomeForResults = cleanOutcome;
 
     const normalizeName = (value = "") =>
       (value || "").toLowerCase().replace(/\s+/g, " ").trim();
@@ -932,22 +1039,24 @@ export default async function handler(req, res) {
         ? `Top Result: ${top.title}${top.link ? `\n${top.link}` : ""}`
         : "No summary returned.");
 
-    // --- TEMPORARY LABEL FIX: remap place->win and show->place without touching parsing ---
-    if (outcome) {
-      // Use the existing parsed "place" horse as Win
-      outcome.win = outcome.place || "";
-      // Use the existing parsed "show" horse as Place
-      outcome.place = outcome.show || "";
-      // Show is now properly parsed, so preserve it (but remap means it comes from the next position)
-      // For now, leave show empty as the remap moves show->place
-      outcome.show = "";
-    }
+    // Build results object from parsed chart data
+    // results holds the chart outcome { win, place, show }
+    // predicted holds the model's picks
+    const results = {
+      win: parsedOutcomeForResults.win || "",
+      place: parsedOutcomeForResults.place || "",
+      show: parsedOutcomeForResults.show || "",
+    };
+
+    // Keep outcome for backward compatibility (same as results)
+    const outcome = results;
 
     // Log outcome for debugging
     console.info("[verify_race] outcome", {
       track: safeTrack,
       date: safeDate,
       raceNo: safeRaceNo,
+      results,
       outcome,
       hits,
     });
@@ -966,21 +1075,21 @@ export default async function handler(req, res) {
         await redis.set(
           eventKey,
           JSON.stringify({
-            ts: tsIso,
-            track,
-            date,
-            raceNo: raceNumber ?? null,
-            distance,
-            surface,
-            strategy,
-            ai_picks,
+          ts: tsIso,
+          track,
+          date,
+          raceNo: raceNumber ?? null,
+          distance,
+          surface,
+          strategy,
+          ai_picks,
             query: queryUsed || null,
             count: 0,
             results: [],
-            predicted: predictedSafe,
-            outcome,
-            hits,
-            summary: summarySafe,
+          predicted: predictedSafe,
+          outcome,
+          hits,
+          summary: summarySafe,
           }),
         );
         await redis.expire(eventKey, TTL_SECONDS);
@@ -1033,17 +1142,17 @@ export default async function handler(req, res) {
         const exists = fs.existsSync(csvPath);
         const line =
           [
-            Date.now(),
-            date,
-            JSON.stringify(track),
+          Date.now(),
+          date,
+          JSON.stringify(track),
             raceNumber ?? "",
             JSON.stringify(queryUsed || ""),
             JSON.stringify(top?.title || ""),
             JSON.stringify(top?.link || ""),
-            hits.winHit ? 1 : 0,
-            hits.placeHit ? 1 : 0,
-            hits.showHit ? 1 : 0,
-            hits.top3Hit ? 1 : 0,
+          hits.winHit ? 1 : 0,
+          hits.placeHit ? 1 : 0,
+          hits.showHit ? 1 : 0,
+          hits.top3Hit ? 1 : 0,
           ].join(",") + "\n";
         if (!exists) fs.writeFileSync(csvPath, header);
         fs.appendFileSync(csvPath, line);
@@ -1062,9 +1171,9 @@ export default async function handler(req, res) {
       query: queryUsed,
       count: 0,
       top,
-      results: [],
-      outcome,
-      predicted: predictedSafe,
+      results, // Chart outcome { win, place, show }
+      outcome, // Backward compatibility (same as results)
+      predicted: predictedSafe, // Model picks
       hits,
       summary: summarySafe,
     });
