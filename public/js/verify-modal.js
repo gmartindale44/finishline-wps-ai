@@ -169,16 +169,11 @@
     const place = results.place || "";
     const show = results.show || "";
 
+    let outcomeText = "(none)";
     const parts = [];
-    if (win) {
-      parts.push(`Win ${win}`);
-    }
-    if (place) {
-      parts.push(`Place ${place}`);
-    }
-    if (show) {
-      parts.push(`Show ${show}`);
-    }
+    if (win) parts.push(`Win ${win}`);
+    if (place) parts.push(`Place ${place}`);
+    if (show) parts.push(`Show ${show}`);
 
     if (parts.length) {
       lines.push(`Outcome: ${parts.join(" • ")}`);

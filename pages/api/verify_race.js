@@ -580,9 +580,9 @@ export default async function handler(req, res) {
         lines.push("No top result returned.");
       }
       const outcomeParts = [
-        outcome.win,
-        outcome.place,
-        outcome.show,
+        safeOutcome.win,
+        safeOutcome.place,
+        safeOutcome.show,
       ].filter(Boolean);
       if (outcomeParts.length)
         lines.push(`Outcome: ${outcomeParts.join(" / ")}`);
