@@ -56,7 +56,8 @@ function normalizeHorseName(name) {
  * @returns {{ win: string; place: string; show: string }}
  */
 function parseHRNRunnerTable($, $table) {
-  if (!$table || !$table.length) {
+  // Defensive guards: never throw, always return a safe default
+  if (!$ || !$table || !$table.length) {
     return { win: "", place: "", show: "" };
   }
 
@@ -476,7 +477,6 @@ function parseHRNRaceOutcome($, raceNo) {
       }
       
       runners.push(runnerName);
-<<<<<<< HEAD
     });
 
     // --- STEP 2: Seed win/place/show from first 3 runners (safe fallback) ---
@@ -763,6 +763,7 @@ export default async function handler(req, res) {
         error: "Method Not Allowed",
         details: "Only POST requests are accepted",
         step: "verify_race_method_validation",
+        results: { win: "", place: "", show: "" }, // Always include results as object
         outcome: { win: "", place: "", show: "" },
         hits: { winHit: false, placeHit: false, showHit: false },
       });
@@ -817,6 +818,7 @@ export default async function handler(req, res) {
         error: "Missing required field: track",
         details: "Track is required to verify a race",
         step: "verify_race_validation",
+        results: { win: "", place: "", show: "" }, // Always include results as object
         outcome: { win: "", place: "", show: "" },
         hits: { winHit: false, placeHit: false, showHit: false },
       });
@@ -880,6 +882,7 @@ export default async function handler(req, res) {
           "Unable to fetch race results from search providers",
         step: searchStep,
         query: queryUsed || queries[0] || null,
+        results: { win: "", place: "", show: "" }, // Always include results as object
         outcome: { win: "", place: "", show: "" },
         hits: { winHit: false, placeHit: false, showHit: false },
       });
@@ -919,6 +922,7 @@ export default async function handler(req, res) {
         date: safeDate,
         track: safeTrack,
         raceNo: safeRaceNo,
+        results: { win: "", place: "", show: "" }, // Always include results as object
         outcome: { win: "", place: "", show: "" },
         hits: { winHit: false, placeHit: false, showHit: false },
         error: "No search results",
@@ -930,10 +934,12 @@ export default async function handler(req, res) {
 
     // Route the top result into the correct parser
     // IMPORTANT: outcome is ONLY populated from parsed chart data, NEVER from search snippets
+    // Initialize with safe defaults - always an object with win/place/show
     let parsedOutcome = { win: "", place: "", show: "" };
 
     const link = (top.link || "").toLowerCase();
 
+    // Wrap entire parsing pipeline in try/catch to prevent 500 errors
     try {
       if (link.includes("horseracingnation.com")) {
         // Use the existing HRN parser: it already knows how to handle multiple races
@@ -944,11 +950,11 @@ export default async function handler(req, res) {
           raceNo: raceNumber,
         });
 
-        if (parsed && (parsed.win || parsed.place || parsed.show)) {
+        if (parsed && typeof parsed === "object") {
           parsedOutcome = {
-            win: parsed.win || "",
-            place: parsed.place || "",
-            show: parsed.show || "",
+            win: (parsed.win || "").trim(),
+            place: (parsed.place || "").trim(),
+            show: (parsed.show || "").trim(),
           };
         }
       } else if (link.includes("equibase.com")) {
@@ -960,11 +966,11 @@ export default async function handler(req, res) {
             raceNo: String(raceNumber || ""),
           });
           const equibaseOutcome = parseEquibaseOutcome(html);
-          if (equibaseOutcome && (equibaseOutcome.win || equibaseOutcome.place || equibaseOutcome.show)) {
+          if (equibaseOutcome && typeof equibaseOutcome === "object") {
             parsedOutcome = {
-              win: equibaseOutcome.win || "",
-              place: equibaseOutcome.place || "",
-              show: equibaseOutcome.show || "",
+              win: (equibaseOutcome.win || "").trim(),
+              place: (equibaseOutcome.place || "").trim(),
+              show: (equibaseOutcome.show || "").trim(),
             };
           }
         } catch (equibaseError) {
@@ -972,23 +978,29 @@ export default async function handler(req, res) {
             link: top.link,
             error: equibaseError?.message,
           });
+          // Keep parsedOutcome as empty strings - don't throw
         }
       }
     } catch (err) {
+      // Log error but don't throw - keep parsedOutcome as safe defaults
       console.error("[verify_race] parser error", {
         link: top.link,
         host: link,
         message: err?.message,
         stack: err?.stack,
       });
+      // parsedOutcome already has safe defaults, so we're good
     }
 
     // Build clean outcome: only use parsed data, never snippets
-    // If parsing failed or returned empty, outcome stays empty
-    const cleanOutcome =
-      parsedOutcome && (parsedOutcome.win || parsedOutcome.place || parsedOutcome.show)
-        ? parsedOutcome
-        : { win: "", place: "", show: "" };
+    // Ensure it's always an object with win/place/show keys
+    const cleanOutcome = parsedOutcome && typeof parsedOutcome === "object"
+      ? {
+          win: (parsedOutcome.win || "").trim(),
+          place: (parsedOutcome.place || "").trim(),
+          show: (parsedOutcome.show || "").trim(),
+        }
+      : { win: "", place: "", show: "" };
 
     // Store parsedOutcome for results object (will be set later)
     const parsedOutcomeForResults = cleanOutcome;
@@ -1018,7 +1030,7 @@ export default async function handler(req, res) {
         winHit: pWin && oWin && pWin === oWin,
         placeHit: pPlace && oPlace && pPlace === oPlace,
         showHit: pShow && oShow && pShow === oShow,
-      };
+    };
     })();
 
     const summary = (() => {
@@ -1063,11 +1075,14 @@ export default async function handler(req, res) {
     // Build results object from parsed chart data
     // results holds the chart outcome { win, place, show }
     // predicted holds the model's picks
-    const results = {
-      win: parsedOutcomeForResults.win || "",
-      place: parsedOutcomeForResults.place || "",
-      show: parsedOutcomeForResults.show || "",
-    };
+    // Always ensure results is an object, never undefined or array
+    const results = parsedOutcomeForResults && typeof parsedOutcomeForResults === "object"
+      ? {
+          win: (parsedOutcomeForResults.win || "").trim(),
+          place: (parsedOutcomeForResults.place || "").trim(),
+          show: (parsedOutcomeForResults.show || "").trim(),
+        }
+      : { win: "", place: "", show: "" };
 
     // Keep outcome for backward compatibility (same as results)
     const outcome = results;
@@ -1215,6 +1230,7 @@ export default async function handler(req, res) {
       error: "verify_race failed",
       details: err?.message || String(err) || "Unknown error occurred",
       step: "verify_race",
+      results: { win: "", place: "", show: "" }, // Always include results as object
       outcome: { win: "", place: "", show: "" },
       hits: { winHit: false, placeHit: false, showHit: false },
     });
