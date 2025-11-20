@@ -50,138 +50,6 @@ function normalizeHorseName(name) {
 }
 
 /**
- * Parse HRN runner table to extract Win/Place/Show from chart results
- * @param {cheerio.CheerioAPI} $ - cheerio instance
- * @param {cheerio.Cheerio<cheerio.Element>} $table - cheerio-wrapped <table> for the runner (speed) grid
- * @returns {{ win: string; place: string; show: string }}
- */
-function parseHRNRunnerTable($, $table) {
-  // Defensive guards: never throw, always return a safe default
-  if (!$ || !$table || !$table.length) {
-    return { win: "", place: "", show: "" };
-  }
-
-  // Identify header cells (th) and determine column indexes
-  const headerRow = $table.find("tr").first();
-  const headerCells = headerRow.find("th, td").toArray();
-  
-  if (!headerCells.length) {
-    return { win: "", place: "", show: "" };
-  }
-
-  const headerTexts = headerCells.map((cell) =>
-    $(cell).text().toLowerCase().trim()
-  );
-
-  const runnerIdx = headerTexts.findIndex(
-    (h) => h.includes("runner") || h.includes("horse")
-  );
-  const winIdx = headerTexts.findIndex((h) => h.includes("win"));
-  const placeIdx = headerTexts.findIndex((h) => h.includes("place"));
-  const showIdx = headerTexts.findIndex((h) => h.includes("show"));
-
-  // Require runner column, but Win/Place/Show columns are optional (we'll fallback to order)
-  if (runnerIdx === -1) {
-    return { win: "", place: "", show: "" };
-  }
-
-  // Loop through tbody tr rows
-  let winHorse = "";
-  let placeHorse = "";
-  let showHorse = "";
-  const runnerOrder = []; // Track runner names in finishing order
-
-  $table.find("tr").slice(1).each((_, tr) => {
-    const $cells = $(tr).find("td");
-    if (!$cells.length) return;
-
-    // Get runner name
-    const runnerText = runnerIdx > -1 
-      ? ($cells.eq(runnerIdx).text() || "").trim() 
-      : "";
-    
-    if (!runnerText) return;
-    
-    // Skip header rows
-    if (/runner\s*\(speed\)/i.test(runnerText)) return;
-    
-    // Normalize runner name: strip footnote markers like (*) or (114*)
-    let runnerName = runnerText.replace(/\s*\([^)]*\)\s*$/, "").trim();
-    runnerName = normalizeHorseName(runnerName);
-    if (!runnerName) return;
-
-    // Hard filters to avoid junk rows
-    const lowerRunner = runnerName.toLowerCase();
-    const junkPatterns = [
-      "preliminary speed figures",
-      "also rans",
-      "pool",
-      "daily double",
-      "trifecta",
-      "superfecta",
-      "pick 3",
-      "pick 4",
-      "this script inside",
-      "head tags",
-    ];
-    if (
-      lowerRunner.startsWith("*") ||
-      junkPatterns.some((pattern) => lowerRunner.includes(pattern))
-    ) {
-      return; // Skip this row
-    }
-
-    // Track finishing order by row (HRN lists runners in finishing order)
-    runnerOrder.push(runnerName);
-
-    // Get Win/Place/Show cell texts (if columns exist)
-    const winText = winIdx > -1 && $cells.eq(winIdx).length
-      ? ($cells.eq(winIdx).text() || "").trim()
-      : "";
-    const placeText = placeIdx > -1 && $cells.eq(placeIdx).length
-      ? ($cells.eq(placeIdx).text() || "").trim()
-      : "";
-    const showText = showIdx > -1 && $cells.eq(showIdx).length
-      ? ($cells.eq(showIdx).text() || "").trim()
-      : "";
-
-    // Selection rules: first non-empty Win cell becomes results.win
-    if (winText && !winHorse) {
-      winHorse = runnerName;
-    }
-
-    // First non-empty Place cell becomes results.place
-    if (placeText && !placeHorse) {
-      placeHorse = runnerName;
-    }
-
-    // First non-empty Show cell becomes results.show
-    if (showText && !showHorse) {
-      showHorse = runnerName;
-    }
-  });
-
-  // Fallback: if some result slots are still empty, use runnerOrder as a strict
-  // finishing-order proxy (1st = win, 2nd = place, 3rd = show)
-  // This handles races like Churchill Downs R2 where payouts are sparse
-  if (!winHorse && runnerOrder.length >= 1) {
-    winHorse = runnerOrder[0];
-  }
-  if (!placeHorse && runnerOrder.length >= 2) {
-    placeHorse = runnerOrder[1];
-  }
-  if (!showHorse && runnerOrder.length >= 3) {
-    showHorse = runnerOrder[2];
-  }
-
-  return {
-    win: winHorse || "",
-    place: placeHorse || "",
-    show: showHorse || "",
-  };
-}
-
-/**
  * Extract Win/Place/Show from a runner table using WPS payout indicators
  * @param {cheerio.CheerioAPI} $
  * @param {cheerio.Cheerio<cheerio.Element>} table
@@ -292,31 +160,30 @@ function extractOutcomeFromRunnerTable($, table, idx) {
     "";
 
   // 3) SHOW:
-  // Find the first horse that has a Show payout and is not already assigned to Win or Place
-  // This is the third-place finisher
-  let showHorse = "";
-  if (showIdx >= 0) {
-    // Strategy: Find the first runner with a Show payout that isn't already Win or Place
-    // This should be the third-place finisher
-    const showRunner = runners.find(
+  // Prefer a horse that has SHOW only (no WIN/PLACE) and isn't WIN/PLACE
+  let showHorse =
+    runners.find(
+      (r) =>
+        r.hasShow &&
+        r.name !== winHorse &&
+        r.name !== placeHorse &&
+        !r.hasWin &&
+        !r.hasPlace
+    )?.name ||
+    runners.find(
+      (r) =>
+        r.hasShow &&
+        r.name !== winHorse &&
+        r.name !== placeHorse &&
+        !r.hasWin
+    )?.name ||
+    runners.find(
       (r) =>
         r.hasShow &&
         r.name !== winHorse &&
         r.name !== placeHorse
-    );
-    if (showRunner) {
-      showHorse = showRunner.name;
-    } else {
-      // Fallback: if we have win and place but no distinct show, try to find
-      // any runner with show payout (handles edge cases where positions might overlap)
-      const anyShowRunner = runners.find((r) => r.hasShow);
-      if (anyShowRunner && 
-          anyShowRunner.name !== winHorse && 
-          anyShowRunner.name !== placeHorse) {
-        showHorse = anyShowRunner.name;
-      }
-    }
-  }
+    )?.name ||
+    "";
 
   return {
     win: winHorse,
@@ -435,85 +302,27 @@ function parseHRNRaceOutcome($, raceNo) {
 
     const { table: $runnerTable, runnerIdx, winIdx, placeIdx, showIdx } = target;
 
-    // --- STEP 1: Extract runner names in table order (fallback seed) ---
-    const runners = [];
-    $runnerTable.find("tr").each((i, tr) => {
-      const $cells = $(tr).find("td");
-      if (!$cells.length) return;
-      
-      const runnerText = runnerIdx > -1 
-        ? ($cells.eq(runnerIdx).text() || "").replace(/\s+/g, " ").trim()
-        : "";
-      
-      if (!runnerText) return;
-      
-      // Skip header rows
-      if (/runner\s*\(speed\)/i.test(runnerText)) return;
-      
-      // Normalize runner name: strip footnote markers like (*) or (114*)
-      let runnerName = runnerText.replace(/\s*\([^)]*\)\s*$/, "").trim();
-      runnerName = normalizeHorseName(runnerName);
-      if (!runnerName) return;
-      
-      // Hard filters to avoid junk rows
-      const lowerRunner = runnerName.toLowerCase();
-      const junkPatterns = [
-        "preliminary speed figures",
-        "also rans",
-        "pool",
-        "daily double",
-        "trifecta",
-        "superfecta",
-        "pick 3",
-        "pick 4",
-        "this script inside",
-        "head tags",
-      ];
-      if (
-        lowerRunner.startsWith("*") ||
-        junkPatterns.some((pattern) => lowerRunner.includes(pattern))
-      ) {
-        return; // Skip this row
-      }
-      
-      runners.push(runnerName);
+    // --- Extract win/place/show from the chosen runner table using WPS payouts ---
+    const extracted = extractOutcomeFromRunnerTable($, $runnerTable, {
+      runnerIdx,
+      winIdx,
+      placeIdx,
+      showIdx,
     });
 
-    // --- STEP 2: Seed win/place/show from first 3 runners (safe fallback) ---
-    // Only set if not already set, so we don't clobber better data from other passes
-    if (Array.isArray(runners) && runners.length > 0) {
-      if (!outcome.win && runners[0]) {
-        outcome.win = runners[0];
-      }
-      if (runners.length > 1 && !outcome.place && runners[1]) {
-        outcome.place = runners[1];
-      }
-      if (runners.length > 2 && !outcome.show && runners[2]) {
-        outcome.show = runners[2];
-      }
-    }
-
-    // --- STEP 3: Extract win/place/show from the chosen runner table using WPS payouts ---
-    const parsed = parseHRNRunnerTable($, $runnerTable);
-
-    // --- STEP 4: Overwrite only with non-empty WPS parsing results (defensive) ---
-    // Never assign empty strings - only overwrite when we have actual parsed values
-    if (parsed.win) {
-      outcome.win = parsed.win;
-    }
-    if (parsed.place) {
-      outcome.place = parsed.place;
-    }
-    if (parsed.show) {
-      outcome.show = parsed.show;
-    }
+    // Use the extracted outcome directly
+    outcome.win = extracted.win || "";
+    outcome.place = extracted.place || "";
+    outcome.show = extracted.show || "";
 
     // Debug log for HRN parse success
-    console.log("[verify_race] HRN WPS outcome", {
-      requestedRaceNo,
-      outcome,
-      columnIdx: { runnerIdx, winIdx, placeIdx, showIdx },
-    });
+    if (process.env.VERIFY_DEBUG === "true") {
+      console.log("[verify_race] HRN WPS outcome", {
+        requestedRaceNo,
+        outcome,
+        columnIdx: { runnerIdx, winIdx, placeIdx, showIdx },
+      });
+    }
 
     // NOTE: we keep the existing fallback logic (Pool/Finish/$2 Payout table)
     // that comes AFTER this function in the file. If you already have a
@@ -1002,8 +811,8 @@ export default async function handler(req, res) {
         }
       : { win: "", place: "", show: "" };
 
-    // Store parsedOutcome for results object (will be set later)
-    const parsedOutcomeForResults = cleanOutcome;
+    // Build simple, stable outcome object
+    const safeOutcome = cleanOutcome || { win: "", place: "", show: "" };
 
     const normalizeName = (value = "") =>
       (value || "").toLowerCase().replace(/\s+/g, " ").trim();
@@ -1015,16 +824,16 @@ export default async function handler(req, res) {
     };
 
     const hits = (() => {
-      if (!predictedSafe || !outcome) {
+      if (!predictedSafe || !safeOutcome) {
         return { winHit: false, placeHit: false, showHit: false };
       }
 
       const pWin = normalizeName(predictedSafe.win);
       const pPlace = normalizeName(predictedSafe.place);
       const pShow = normalizeName(predictedSafe.show);
-      const oWin = normalizeName(outcome.win);
-      const oPlace = normalizeName(outcome.place);
-      const oShow = normalizeName(outcome.show);
+      const oWin = normalizeName(safeOutcome.win);
+      const oPlace = normalizeName(safeOutcome.place);
+      const oShow = normalizeName(safeOutcome.show);
 
       return {
         winHit: pWin && oWin && pWin === oWin,
@@ -1051,9 +860,9 @@ export default async function handler(req, res) {
         lines.push("No top result returned.");
       }
       const outcomeParts = [
-        outcome.win,
-        outcome.place,
-        outcome.show,
+        safeOutcome.win,
+        safeOutcome.place,
+        safeOutcome.show,
       ].filter(Boolean);
       if (outcomeParts.length)
         lines.push(`Outcome: ${outcomeParts.join(" / ")}`);
@@ -1072,20 +881,15 @@ export default async function handler(req, res) {
         ? `Top Result: ${top.title}${top.link ? `\n${top.link}` : ""}`
         : "No summary returned.");
 
-    // Build results object from parsed chart data
-    // results holds the chart outcome { win, place, show }
-    // predicted holds the model's picks
-    // Always ensure results is an object, never undefined or array
-    const results = parsedOutcomeForResults && typeof parsedOutcomeForResults === "object"
-      ? {
-          win: (parsedOutcomeForResults.win || "").trim(),
-          place: (parsedOutcomeForResults.place || "").trim(),
-          show: (parsedOutcomeForResults.show || "").trim(),
-        }
-      : { win: "", place: "", show: "" };
+    // Optional alias for backwards / forwards compatibility
+    const results = {
+      win: safeOutcome.win || "",
+      place: safeOutcome.place || "",
+      show: safeOutcome.show || "",
+    };
 
     // Keep outcome for backward compatibility (same as results)
-    const outcome = results;
+    const outcome = safeOutcome;
 
     // Log outcome for debugging
     console.info("[verify_race] outcome", {
