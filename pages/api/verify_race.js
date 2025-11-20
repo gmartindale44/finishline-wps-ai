@@ -303,7 +303,65 @@ function parseHRNRaceOutcome($, raceNo) {
 
     const { table: $runnerTable, runnerIdx, winIdx, placeIdx, showIdx } = target;
 
-    // --- Extract win/place/show from the chosen runner table using WPS payouts ---
+    // --- STEP 1: Extract runner names in table order (fallback seed) ---
+    const runners = [];
+    $runnerTable.find("tr").each((i, tr) => {
+      const $cells = $(tr).find("td");
+      if (!$cells.length) return;
+      
+      const runnerText = runnerIdx > -1 
+        ? ($cells.eq(runnerIdx).text() || "").replace(/\s+/g, " ").trim()
+        : "";
+      
+      if (!runnerText) return;
+      
+      // Skip header rows
+      if (/runner\s*\(speed\)/i.test(runnerText)) return;
+      
+      // Normalize runner name: strip footnote markers like (*) or (114*)
+      let runnerName = runnerText.replace(/\s*\([^)]*\)\s*$/, "").trim();
+      runnerName = normalizeHorseName(runnerName);
+      if (!runnerName) return;
+      
+      // Hard filters to avoid junk rows
+      const lowerRunner = runnerName.toLowerCase();
+      const junkPatterns = [
+        "preliminary speed figures",
+        "also rans",
+        "pool",
+        "daily double",
+        "trifecta",
+        "superfecta",
+        "pick 3",
+        "pick 4",
+        "this script inside",
+        "head tags",
+      ];
+      if (
+        lowerRunner.startsWith("*") ||
+        junkPatterns.some((pattern) => lowerRunner.includes(pattern))
+      ) {
+        return; // Skip this row
+      }
+      
+      runners.push(runnerName);
+    });
+
+    // --- STEP 2: Seed win/place/show from first 3 runners (safe fallback) ---
+    // Only set if not already set, so we don't clobber better data from other passes
+    if (Array.isArray(runners) && runners.length > 0) {
+      if (!outcome.win && runners[0]) {
+        outcome.win = runners[0];
+      }
+      if (runners.length > 1 && !outcome.place && runners[1]) {
+        outcome.place = runners[1];
+      }
+      if (runners.length > 2 && !outcome.show && runners[2]) {
+        outcome.show = runners[2];
+      }
+    }
+
+    // --- STEP 3: Extract win/place/show from the chosen runner table using WPS payouts ---
     const extracted = extractOutcomeFromRunnerTable($, $runnerTable, {
       runnerIdx,
       winIdx,
@@ -311,15 +369,16 @@ function parseHRNRaceOutcome($, raceNo) {
       showIdx,
     });
 
-    // Fallback: if we somehow failed to find anything, keep existing behavior (if any)
-    // but do NOT re-use the same horse for all three slots.
-    if (!extracted.win && !extracted.place && !extracted.show) {
-      console.warn("[verify_race][hrn] extractOutcomeFromRunnerTable returned empty outcome");
-      // Leave outcome as empty object - don't fall back to old logic that might reuse winner
-    } else {
-      outcome.win = extracted.win || "";
-      outcome.place = extracted.place || "";
-      outcome.show = extracted.show || "";
+    // --- STEP 4: Overwrite only with non-empty WPS parsing results (defensive) ---
+    // Never assign empty strings - only overwrite when we have actual parsed values
+    if (extracted.win) {
+      outcome.win = extracted.win;
+    }
+    if (extracted.place) {
+      outcome.place = extracted.place;
+    }
+    if (extracted.show) {
+      outcome.show = extracted.show;
     }
 
     // Debug log for HRN parse success
@@ -393,6 +452,7 @@ function parseOutcomeFromHtml(html, url, raceNo = null) {
       }
     });
 
+    // Only overwrite if we have non-empty values (defensive)
     if (byPos.get(1)) outcome.win = byPos.get(1);
     if (byPos.get(2)) outcome.place = byPos.get(2);
     if (byPos.get(3)) outcome.show = byPos.get(3);
@@ -404,9 +464,19 @@ function parseOutcomeFromHtml(html, url, raceNo = null) {
       const placeMatch = html.match(/Place[:\s]+([A-Za-z0-9' .\-]+)/i);
       const showMatch = html.match(/Show[:\s]+([A-Za-z0-9' .\-]+)/i);
 
-      if (winMatch) outcome.win = normalizeHorseName(winMatch[1]);
-      if (placeMatch) outcome.place = normalizeHorseName(placeMatch[1]);
-      if (showMatch) outcome.show = normalizeHorseName(showMatch[1]);
+      // Only overwrite if we have non-empty values (defensive)
+      if (winMatch) {
+        const winName = normalizeHorseName(winMatch[1]);
+        if (winName) outcome.win = winName;
+      }
+      if (placeMatch) {
+        const placeName = normalizeHorseName(placeMatch[1]);
+        if (placeName) outcome.place = placeName;
+      }
+      if (showMatch) {
+        const showName = normalizeHorseName(showMatch[1]);
+        if (showName) outcome.show = showName;
+      }
     }
   } catch (error) {
     console.error("[verify_race] parseOutcomeFromHtml failed", error);
