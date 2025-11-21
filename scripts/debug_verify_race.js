@@ -21,9 +21,9 @@ const mockReq = {
     "x-forwarded-proto": "http",
   },
   body: {
-    track: "Finger Lakes",
-    date: "2025-11-18",
-    raceNo: "3",
+    track: "Aqueduct",
+    date: "2025-11-21",
+    raceNo: "1",
     predicted: { win: "", place: "", show: "" },
   },
 };
