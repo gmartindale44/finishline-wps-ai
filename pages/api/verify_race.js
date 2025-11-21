@@ -562,7 +562,7 @@ async function runSearch(req, query) {
     : await cseViaBridge(req, query);
 }
 
-export default async function handler(req, res) {
+async function coreVerifyRaceHandler(req, res) {
   // Extract safe values early for error responses
   let safeDate = null;
   let safeTrack = null;
@@ -579,7 +579,7 @@ export default async function handler(req, res) {
         details: "Only POST requests are accepted",
         step: "verify_race_method_validation",
         outcome: { win: "", place: "", show: "" },
-        hits: { winHit: false, placeHit: false, showHit: false },
+        hits: { winHit: false, placeHit: false, showHit: false, top3Hit: false },
       });
     }
 
@@ -633,7 +633,7 @@ export default async function handler(req, res) {
         details: "Track is required to verify a race",
         step: "verify_race_validation",
         outcome: { win: "", place: "", show: "" },
-        hits: { winHit: false, placeHit: false, showHit: false },
+        hits: { winHit: false, placeHit: false, showHit: false, top3Hit: false },
       });
     }
 
@@ -696,7 +696,7 @@ export default async function handler(req, res) {
         step: searchStep,
         query: queryUsed || queries[0] || null,
         outcome: { win: "", place: "", show: "" },
-        hits: { winHit: false, placeHit: false, showHit: false },
+        hits: { winHit: false, placeHit: false, showHit: false, top3Hit: false },
       });
     }
 
@@ -735,7 +735,7 @@ export default async function handler(req, res) {
         track: safeTrack,
         raceNo: safeRaceNo,
         outcome: { win: "", place: "", show: "" },
-        hits: { winHit: false, placeHit: false, showHit: false },
+        hits: { winHit: false, placeHit: false, showHit: false, top3Hit: false },
         error: "No search results",
         step: "verify_race_search",
         query: queryUsed,
@@ -818,7 +818,7 @@ export default async function handler(req, res) {
 
     const hits = (() => {
       if (!predictedSafe || !outcome) {
-        return { winHit: false, placeHit: false, showHit: false };
+        return { winHit: false, placeHit: false, showHit: false, top3Hit: false };
       }
 
       const pWin = normalizeName(predictedSafe.win);
@@ -828,10 +828,16 @@ export default async function handler(req, res) {
       const oPlace = normalizeName(outcome.place);
       const oShow = normalizeName(outcome.show);
 
+      const winHit = pWin && oWin && pWin === oWin;
+      const placeHit = pPlace && oPlace && pPlace === oPlace;
+      const showHit = pShow && oShow && pShow === oShow;
+      const top3Hit = winHit || placeHit || showHit;
+
       return {
-        winHit: pWin && oWin && pWin === oWin,
-        placeHit: pPlace && oPlace && pPlace === oPlace,
-        showHit: pShow && oShow && pShow === oShow,
+        winHit,
+        placeHit,
+        showHit,
+        top3Hit,
       };
     })();
 
@@ -1027,7 +1033,58 @@ export default async function handler(req, res) {
       details: err?.message || String(err) || "Unknown error occurred",
       step: "verify_race",
       outcome: { win: "", place: "", show: "" },
-      hits: { winHit: false, placeHit: false, showHit: false },
+      hits: { winHit: false, placeHit: false, showHit: false, top3Hit: false },
     });
+  }
+}
+
+export default async function handler(req, res) {
+  try {
+    await coreVerifyRaceHandler(req, res);
+  } catch (err) {
+    console.error("[verify_race] fatal handler error", {
+      error: err?.message || String(err),
+      stack: err?.stack,
+    });
+
+    // Extract safe values from request if available
+    let safeDate = null;
+    let safeTrack = null;
+    let safeRaceNo = null;
+    let predicted = null;
+
+    try {
+      const body = req.body || {};
+      safeDate = (body.date && String(body.date).trim()) || null;
+      safeTrack = body.track || null;
+      safeRaceNo = body.raceNo || body.race_no || null;
+      predicted = body.predicted || null;
+    } catch {
+      // Ignore errors parsing request body
+    }
+
+    // Always return JSON - never throw
+    try {
+      return res.status(200).json({
+        date: safeDate,
+        track: safeTrack,
+        raceNo: safeRaceNo,
+        error: "verify_race fatal handler error",
+        details: err?.message || String(err) || "Unknown fatal error occurred",
+        step: "verify_race",
+        outcome: { win: "", place: "", show: "" },
+        predicted,
+        hits: { winHit: false, placeHit: false, showHit: false, top3Hit: false },
+        ok: false,
+        debug: {
+          error: err?.message || "verify_race fatal handler error",
+        },
+      });
+    } catch (jsonError) {
+      // If even JSON serialization fails, return plain text (should never happen)
+      console.error("[verify_race] JSON serialization failed in error handler", jsonError);
+      res.status(200).setHeader("Content-Type", "application/json");
+      return res.end('{"error":"verify_race fatal handler error","ok":false}');
+    }
   }
 }
