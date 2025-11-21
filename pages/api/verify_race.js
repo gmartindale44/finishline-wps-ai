@@ -10,8 +10,8 @@ import {
   getEquibaseTrackCode,
 } from "../../lib/equibase.js";
 
-const GOOGLE_API_KEY = (process.env.GOOGLE_API_KEY ?? "").trim();
-const GOOGLE_CSE_ID = (process.env.GOOGLE_CSE_ID ?? "").trim();
+const GOOGLE_API_KEY = String(process.env.GOOGLE_API_KEY ?? "").trim();
+const GOOGLE_CSE_ID = String(process.env.GOOGLE_CSE_ID ?? "").trim();
 
 const TTL_SECONDS = 60 * 60 * 24; // 24h
 const isVercel = !!process.env.VERCEL;
@@ -509,9 +509,9 @@ async function cseDirect(query) {
 }
 
 async function cseViaBridge(req, query) {
-  const proto = req.headers["x-forwarded-proto"] || "https";
-  const host = req.headers.host;
-  const basePath = (
+  const proto = (req?.headers?.["x-forwarded-proto"] || "https");
+  const host = req?.headers?.host || "";
+  const basePath = String(
     process.env.NEXT_PUBLIC_BASE_PATH || process.env.NEXT_BASE_PATH || ""
   ).replace(/\/+$/, "");
   const pathPrefix = basePath
@@ -519,6 +519,9 @@ async function cseViaBridge(req, query) {
       ? basePath
       : `/${basePath}`
     : "";
+  if (!host) {
+    throw new Error("Missing host header for CSE bridge");
+  }
   const url = `${proto}://${host}${pathPrefix}/api/cse_resolver?q=${encodeURIComponent(
     query
   )}`;
