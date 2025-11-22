@@ -1,6 +1,6 @@
 // pages/api/verify_race.js
 // Feature-flagged verify_race handler with ultra-safe stub fallback
-// - Default: stub mode (no external APIs, always returns 200)
+// - Default: stub mode (parses Google HTML for Win/Place/Show, always returns 200)
 // - Full mode: CSE + HRN + Equibase parsing (enabled via VERIFY_RACE_MODE=full)
 // - Always falls back to stub on any error
 
@@ -61,62 +61,198 @@ function buildGoogleSearchUrl({ track, date, raceNo }) {
 }
 
 /**
- * Build stub response (ultra-safe fallback)
- * This is the default behavior when VERIFY_RACE_MODE is not set to "full"
+ * Normalize prediction object into a consistent shape
  */
-function buildStubResponse({ track, date, raceNo, predicted = {} }) {
-  const safeTrack = (track || "").trim();
-  const safeDate = (date || "").trim();
-  const safeRaceNo = raceNo ? String(raceNo).trim() : "";
+function normalizePrediction(predicted) {
+  if (!predicted || typeof predicted !== "object") {
+    return { win: "", place: "", show: "" };
+  }
 
-  const { query, url: googleUrl } = buildGoogleSearchUrl({
-    track: safeTrack,
-    date: safeDate,
-    raceNo: safeRaceNo,
-  });
+  const win = typeof predicted.win === "string" ? predicted.win.trim() : "";
+  const place = typeof predicted.place === "string" ? predicted.place.trim() : "";
+  const show = typeof predicted.show === "string" ? predicted.show.trim() : "";
+
+  return { win, place, show };
+}
+
+/**
+ * Decode common HTML entities
+ */
+function decodeHtmlEntities(text) {
+  if (!text || typeof text !== "string") return "";
+
+  return text
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">");
+}
+
+/**
+ * Extract Win/Place/Show from Google HTML using regex
+ * This is a lightweight parser that looks for table structures in Google's AI overview
+ */
+function extractOutcomeFromGoogleHtml(html) {
+  if (!html || typeof html !== "string") {
+    return { win: "", place: "", show: "" };
+  }
+
+  // Collapse whitespace to make regexes easier
+  const clean = html.replace(/\s+/g, " ");
+
+  /**
+   * Try multiple regex patterns and return the first match
+   */
+  function pick(patterns) {
+    for (const re of patterns) {
+      const m = re.exec(clean);
+      if (m && m[1]) {
+        return decodeHtmlEntities(m[1].trim());
+      }
+    }
+    return "";
+  }
+
+  // Primary pattern: table rows like <tr><td>Win</td><td>Doc Sullivan</td>...
+  const win = pick([
+    />\s*Win\s*<\/td>\s*<td[^>]*>([^<]+)/i,
+    />\s*Win\s*<\/th>\s*<td[^>]*>([^<]+)/i,
+    /\bWin\b[^<]{0,40}<td[^>]*>([^<]+)/i,
+  ]);
+
+  const place = pick([
+    />\s*Place\s*<\/td>\s*<td[^>]*>([^<]+)/i,
+    />\s*Place\s*<\/th>\s*<td[^>]*>([^<]+)/i,
+    /\bPlace\b[^<]{0,40}<td[^>]*>([^<]+)/i,
+  ]);
+
+  const show = pick([
+    />\s*Show\s*<\/td>\s*<td[^>]*>([^<]+)/i,
+    />\s*Show\s*<\/th>\s*<td[^>]*>([^<]+)/i,
+    /\bShow\b[^<]{0,40}<td[^>]*>([^<]+)/i,
+  ]);
+
+  // If nothing matched, return empty outcome so caller can treat as "unparsed"
+  if (!win && !place && !show) {
+    return { win: "", place: "", show: "" };
+  }
+
+  return { win, place, show };
+}
+
+/**
+ * Build stub response (ultra-safe fallback with Google HTML parsing)
+ * This is the default behavior when VERIFY_RACE_MODE is not set to "full"
+ * Now enhanced to fetch and parse Google HTML for Win/Place/Show
+ */
+async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
+  const safeDate =
+    typeof date === "string" && date.trim() ? date.trim() : "";
+  const safeTrack =
+    typeof track === "string" && track.trim() ? track.trim() : "";
+  const raceNoStr = String(raceNo ?? "").trim() || "";
+
+  const query = [
+    safeTrack || "Unknown Track",
+    raceNoStr ? `Race ${raceNoStr}` : "",
+    safeDate || "",
+    "results Win Place Show",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const googleUrl =
+    "https://www.google.com/search?q=" + encodeURIComponent(query);
+
+  // Default outcome = empty (original stub behavior)
+  let outcome = { win: "", place: "", show: "" };
+  let step = "verify_race_google_only_stub";
+
+  // Try to fetch Google HTML and parse W/P/S with regex
+  try {
+    const res = await fetch(googleUrl, {
+      method: "GET",
+      headers: {
+        // Keep headers minimal to avoid attracting bot detection; these are just "normal browser-ish" hints
+        "User-Agent":
+          "Mozilla/5.0 (compatible; FinishLineBot/1.0; +https://finishline-wps-ai.vercel.app)",
+        "Accept-Language": "en-US,en;q=0.9",
+      },
+    });
+
+    if (res && res.ok) {
+      const html = await res.text();
+      outcome = extractOutcomeFromGoogleHtml(html);
+
+      // If we managed to parse at least one of the three positions, mark a different step
+      if (outcome && (outcome.win || outcome.place || outcome.show)) {
+        step = "verify_race_google_parsed_stub";
+      }
+    }
+  } catch (err) {
+    // Swallow errors to keep stub ultra-safe
+    console.error("[verify_race stub] Google fetch/parse failed:", err);
+  }
+
+  const predictedNormalized = normalizePrediction(predicted);
+
+  // Hits are left as false for now; we can wire predictions later
+  const hits = {
+    winHit: false,
+    placeHit: false,
+    showHit: false,
+    top3Hit: false,
+  };
 
   const now = new Date();
   const usingDate = safeDate || now.toISOString().slice(0, 10);
 
-  const summaryLines = [
-    `Using date: ${usingDate}`,
-    `Step: verify_race_google_only_stub`,
-    `Query: ${query}`,
-    `Top Result: Google search (see Open Top Result button).`,
-    `Outcome: (none)`,
-    `Hits: (none)`,
-    "",
-    "Ultra-safe stub: no external APIs. This is a placeholder implementation to keep the app stable while the full parser is being repaired.",
-  ];
+  const summaryLines = [];
+  summaryLines.push(`Using date: ${usingDate || "(none)"}`);
+  summaryLines.push(`Step: ${step}`);
+  summaryLines.push(`Query: ${query}`);
+  summaryLines.push(`Top Result: Google search (see Open Top Result button).`);
+
+  if (outcome && (outcome.win || outcome.place || outcome.show)) {
+    const win = outcome.win || "(none)";
+    const place = outcome.place || "(none)";
+    const show = outcome.show || "(none)";
+    summaryLines.push(`Outcome: ${win} / ${place} / ${show}`);
+  } else {
+    summaryLines.push("Outcome: (none)");
+  }
+
+  summaryLines.push("Hits: (none)");
+
+  if (!outcome.win && !outcome.place && !outcome.show) {
+    summaryLines.push("");
+    summaryLines.push(
+      "Parser note: Google page fetched but Win/Place/Show could not be reliably parsed. Read the Google tab if needed."
+    );
+  }
+
+  const summary = summaryLines.join("\n");
 
   return {
     ok: true,
-    step: "verify_race_google_only_stub",
+    step,
     date: usingDate,
     track: safeTrack,
-    raceNo: safeRaceNo,
+    raceNo: raceNoStr,
     query,
     top: {
       title: `Google search: ${query}`,
       link: googleUrl,
     },
     outcome: {
-      win: "",
-      place: "",
-      show: "",
+      win: outcome.win || "",
+      place: outcome.place || "",
+      show: outcome.show || "",
     },
-    predicted: {
-      win: (predicted.win || "").trim(),
-      place: (predicted.place || "").trim(),
-      show: (predicted.show || "").trim(),
-    },
-    hits: {
-      winHit: false,
-      placeHit: false,
-      showHit: false,
-      top3Hit: false,
-    },
-    summary: summaryLines.join("\n"),
+    predicted: predictedNormalized,
+    hits,
+    summary,
     debug: {
       googleUrl,
     },
@@ -127,7 +263,11 @@ export default async function handler(req, res) {
   // We NEVER throw from this handler. All errors are reported in the JSON body.
   try {
     if (req.method !== "POST") {
-      const stub = buildStubResponse({ track: null, date: null, raceNo: null });
+      const stub = await buildStubResponse({
+        track: null,
+        date: null,
+        raceNo: null,
+      });
       return res.status(200).json({
         ...stub,
         ok: false,
@@ -152,7 +292,7 @@ export default async function handler(req, res) {
 
     // If not in full mode, immediately return stub
     if (mode !== "full") {
-      const stub = buildStubResponse(context);
+      const stub = await buildStubResponse(context);
       return res.status(200).json(stub);
     }
 
@@ -217,7 +357,7 @@ export default async function handler(req, res) {
         raceNo,
       });
 
-      const stub = buildStubResponse(context);
+      const stub = await buildStubResponse(context);
       return res.status(200).json({
         ...stub,
         step: "verify_race_full_fallback",
@@ -227,7 +367,7 @@ export default async function handler(req, res) {
   } catch (err) {
     // Absolute last-resort catch; still return 200.
     console.error("[verify_race] UNEXPECTED ERROR", err);
-    const stub = buildStubResponse({
+    const stub = await buildStubResponse({
       track: null,
       date: null,
       raceNo: null,
