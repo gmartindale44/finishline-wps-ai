@@ -23,6 +23,7 @@
     "backfill:calibrate": "node scripts/redis-backfill-to-csv.js",
     "audit:server": "node scripts/fetch-audit.js",
     "sanitize:placeholders": "node scripts/sanitize-placeholders.js",
+    "debug:verify": "node scripts/debug_verify_race.js",
     "build": "echo \"no build step\""
   },
   "dependencies": {

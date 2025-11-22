@@ -713,7 +713,10 @@ async function runSearch(req, query) {
   }
 }
 
-export default async function handler(req, res) {
+/**
+ * Main handler logic - extracted to allow bulletproof wrapper
+ */
+async function handleVerifyRace(req, res) {
   let safeDate = null;
   let safeTrack = null;
   let safeRaceNo = null;
@@ -899,17 +902,45 @@ export default async function handler(req, res) {
 
     return res.status(200).json(response);
   } catch (err) {
-    console.error("[verify_race] outer handler error", err);
+    console.error("[verify_race] handleVerifyRace error", err);
     return res.status(200).json({
       ok: false,
-      step: "verify_race_outer_error",
+      step: "verify_race_inner_error",
       error: String(err?.message || err),
       date: safeDate,
       track: safeTrack,
       raceNo: safeRaceNo,
       outcome: { win: "", place: "", show: "" },
       hits: { winHit: false, placeHit: false, showHit: false, top3Hit: false },
-      summary: "verify_race outer error – see server logs for details.",
+      summary: "verify_race inner error – see server logs for details.",
     });
+  }
+}
+
+/**
+ * Bulletproof handler wrapper - NEVER throws, always returns HTTP 200
+ */
+export default async function handler(req, res) {
+  try {
+    await handleVerifyRace(req, res);
+  } catch (err) {
+    console.error("[verify_race] UNHANDLED ERROR in handler wrapper", err);
+    const message =
+      (err && err.message) || (typeof err === "string" ? err : "Unknown error");
+    
+    // IMPORTANT: always respond 200 so Vercel never treats this as a crash
+    if (!res.headersSent) {
+      res.status(200).json({
+        ok: false,
+        step: "verify_race_unhandled",
+        error: message,
+        date: null,
+        track: null,
+        raceNo: null,
+        outcome: { win: "", place: "", show: "" },
+        hits: { winHit: false, placeHit: false, showHit: false, top3Hit: false },
+        summary: "verify_race unhandled error – see server logs for details.",
+      });
+    }
   }
 }
