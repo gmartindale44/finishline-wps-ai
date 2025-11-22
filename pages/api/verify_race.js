@@ -1,13 +1,12 @@
 // pages/api/verify_race.js
+// FinishLine WPS AI — search-based verify endpoint (stable baseline)
 
 import crypto from "node:crypto";
 import { Redis } from "@upstash/redis";
 import * as cheerio from "cheerio";
-import { fetchAndParseResults } from "../../lib/results.js";
 import {
   fetchEquibaseChartHtml,
   parseEquibaseOutcome,
-  getEquibaseTrackCode,
 } from "../../lib/equibase.js";
 
 const GOOGLE_API_KEY = (process.env.GOOGLE_API_KEY ?? "").trim();
@@ -18,7 +17,8 @@ const isVercel = !!process.env.VERCEL;
 const RECON_LIST = "reconciliations:v1";
 const RECON_DAY_PREFIX = "reconciliations:v1:";
 
-let redisClient = null;
+let redisClient: Redis | null = null;
+
 function getRedis() {
   if (!redisClient) {
     try {
@@ -79,14 +79,9 @@ function extractOutcomeFromRunnerTable($, table, idx) {
     // Skip header-ish rows that somehow ended up as <td>
     if (/runner\s*\(speed\)/i.test(runnerText)) return;
 
-    const winText =
-      winIdx > -1 ? norm($cells.eq(winIdx).text()) : "";
-
-    const placeText =
-      placeIdx > -1 ? norm($cells.eq(placeIdx).text()) : "";
-
-    const showText =
-      showIdx > -1 ? norm($cells.eq(showIdx).text()) : "";
+    const winText = winIdx > -1 ? norm($cells.eq(winIdx).text()) : "";
+    const placeText = placeIdx > -1 ? norm($cells.eq(placeIdx).text()) : "";
+    const showText = showIdx > -1 ? norm($cells.eq(showIdx).text()) : "";
 
     // If the row has no payouts at all, it's not useful for W/P/S.
     if (!winText && !placeText && !showText) return;
@@ -130,48 +125,45 @@ function extractOutcomeFromRunnerTable($, table, idx) {
   }
 
   // 1) WIN: first row that has a Win payout
-  let winHorse =
-    runners.find((r) => r.hasWin)?.name || "";
+  const winHorse = runners.find((r) => r.hasWin)?.name || "";
 
-  // 2) PLACE:
-  // Prefer a horse that has PLACE but not WIN, and is not the WIN horse
-  let placeHorse =
+  // 2) PLACE: prefer horse with PLACE but not WIN and not the WIN horse
+  const placeHorse =
     runners.find(
       (r) =>
         r.hasPlace &&
         r.name !== winHorse &&
-        !r.hasWin
+        !r.hasWin,
     )?.name ||
     runners.find(
       (r) =>
         r.hasPlace &&
-        r.name !== winHorse
+        r.name !== winHorse,
     )?.name ||
     "";
 
-  // 3) SHOW:
-  // Prefer a horse that has SHOW only (no WIN/PLACE) and isn't WIN/PLACE
-  let showHorse =
+  // 3) SHOW: prefer horse with SHOW only (no WIN/PLACE) and not WIN/PLACE
+  const showHorse =
     runners.find(
       (r) =>
         r.hasShow &&
         r.name !== winHorse &&
         r.name !== placeHorse &&
         !r.hasWin &&
-        !r.hasPlace
+        !r.hasPlace,
     )?.name ||
     runners.find(
       (r) =>
         r.hasShow &&
         r.name !== winHorse &&
         r.name !== placeHorse &&
-        !r.hasWin
+        !r.hasWin,
     )?.name ||
     runners.find(
       (r) =>
         r.hasShow &&
         r.name !== winHorse &&
-        r.name !== placeHorse
+        r.name !== placeHorse,
     )?.name ||
     "";
 
@@ -195,7 +187,8 @@ function parseHRNRaceOutcome($, raceNo) {
   if (!requestedRaceNo) return outcome;
 
   try {
-    // --- 1) Collect all candidate Runner/Win/Place/Show tables and infer their race number ---
+    const runnerTables = [];
+
     /**
      * Try to extract "Race X" from a cheerio node's text.
      * Returns the race number as a string, or null if not found.
@@ -208,8 +201,6 @@ function parseHRNRaceOutcome($, raceNo) {
       return m ? m[1] : null;
     };
 
-    const runnerTables = [];
-
     $("table").each((_, table) => {
       const $table = $(table);
       const headerRow = $table.find("tr").first();
@@ -217,18 +208,16 @@ function parseHRNRaceOutcome($, raceNo) {
       if (!headerCells.length) return;
 
       const headerTexts = headerCells.map((cell) =>
-        $(cell).text().toLowerCase().trim()
+        $(cell).text().toLowerCase().trim(),
       );
 
-      // Identify Runner / Win / Place / Show columns
       const runnerIdx = headerTexts.findIndex(
-        (h) => h.includes("runner") || h.includes("horse")
+        (h) => h.includes("runner") || h.includes("horse"),
       );
       const winIdx = headerTexts.findIndex((h) => h.includes("win"));
       const placeIdx = headerTexts.findIndex((h) => h.includes("place"));
       const showIdx = headerTexts.findIndex((h) => h.includes("show"));
 
-      // Not a Runner (speed) W/P/S table
       if (
         runnerIdx === -1 ||
         winIdx === -1 ||
@@ -238,17 +227,17 @@ function parseHRNRaceOutcome($, raceNo) {
         return;
       }
 
-      // --- Infer which race this table belongs to by scanning nearby headings ---
+      // Try to infer race number from nearby headings
       let inferredRaceNo = null;
 
-      // 1a) Look at previous siblings of the table
+      // Look at previous siblings
       let prev = $table.prev();
       while (prev.length && !inferredRaceNo) {
         inferredRaceNo = getRaceFromNode(prev);
         prev = prev.prev();
       }
 
-      // 1b) Walk up ancestors and inspect their previous siblings
+      // Walk up ancestors and inspect their previous siblings
       if (!inferredRaceNo) {
         let parent = $table.parent();
         let depth = 0;
@@ -277,10 +266,9 @@ function parseHRNRaceOutcome($, raceNo) {
       return outcome;
     }
 
-    // --- 2) Choose the table whose inferred race number matches requestedRaceNo ---
     let target =
       runnerTables.find((t) => t.raceNo === requestedRaceNo) ||
-      runnerTables[0]; // fallback to first if we couldn't infer a race number
+      runnerTables[0];
 
     if (process.env.VERIFY_DEBUG === "true") {
       console.log("[verify_race] HRN runnerTables", {
@@ -292,7 +280,6 @@ function parseHRNRaceOutcome($, raceNo) {
 
     const { table: $runnerTable, runnerIdx, winIdx, placeIdx, showIdx } = target;
 
-    // --- Extract win/place/show from the chosen runner table using WPS payouts ---
     const extracted = extractOutcomeFromRunnerTable($, $runnerTable, {
       runnerIdx,
       winIdx,
@@ -300,28 +287,21 @@ function parseHRNRaceOutcome($, raceNo) {
       showIdx,
     });
 
-    // Fallback: if we somehow failed to find anything, keep existing behavior (if any)
-    // but do NOT re-use the same horse for all three slots.
     if (!extracted.win && !extracted.place && !extracted.show) {
-      console.warn("[verify_race][hrn] extractOutcomeFromRunnerTable returned empty outcome");
-      // Leave outcome as empty object - don't fall back to old logic that might reuse winner
+      console.warn(
+        "[verify_race][hrn] extractOutcomeFromRunnerTable returned empty outcome",
+      );
     } else {
       outcome.win = extracted.win || "";
       outcome.place = extracted.place || "";
       outcome.show = extracted.show || "";
     }
 
-    // Debug log for HRN parse success
     console.log("[verify_race] HRN WPS outcome", {
       requestedRaceNo,
       outcome,
       columnIdx: { runnerIdx, winIdx, placeIdx, showIdx },
     });
-
-    // NOTE: we keep the existing fallback logic (Pool/Finish/$2 Payout table)
-    // that comes AFTER this function in the file. If you already have a
-    // "Fallback: If we didn't get all three positions..." block, leave it
-    // exactly as it is so it still runs when outcome is incomplete.
   } catch (error) {
     console.error("[verify_race] parseHRNRaceOutcome failed", error);
   }
@@ -342,13 +322,12 @@ function parseOutcomeFromHtml(html, url, raceNo = null) {
     const $ = cheerio.load(html);
     const isHRN = /horseracingnation\.com/i.test(url);
 
-    // For HRN pages, use race-specific parsing
+    // For HRN pages, use race-specific parsing first
     if (isHRN && raceNo) {
       const hrnOutcome = parseHRNRaceOutcome($, String(raceNo));
       if (hrnOutcome.win || hrnOutcome.place || hrnOutcome.show) {
         return hrnOutcome;
       }
-      // If HRN parsing failed, fall through to generic parsing
     }
 
     // Generic parsing: Try to find a results table with finishing positions
@@ -358,13 +337,11 @@ function parseOutcomeFromHtml(html, url, raceNo = null) {
       if (cells.length < 2) return;
 
       const firstCell = $(cells[0]).text().trim();
-      // Match position: "1", "1st", "2", "2nd", etc.
       const posMatch =
         firstCell.match(/^(\d+)[a-z]{0,2}$/i) || firstCell.match(/^(\d+)$/);
       if (!posMatch) return;
 
       const pos = parseInt(posMatch[1], 10);
-      // Only care about positions 1, 2, 3
       if (pos < 1 || pos > 3) return;
 
       let name = $(cells[1]).text();
@@ -374,7 +351,6 @@ function parseOutcomeFromHtml(html, url, raceNo = null) {
       rows.push({ pos, name });
     });
 
-    // Build outcome from rows
     const byPos = new Map();
     rows.forEach(({ pos, name }) => {
       if (!byPos.has(pos)) {
@@ -388,7 +364,6 @@ function parseOutcomeFromHtml(html, url, raceNo = null) {
 
     // If we didn't find anything in tables, try text-based heuristics
     if (!outcome.win && !outcome.place && !outcome.show) {
-      // Look for "Win: HorseName" patterns
       const winMatch = html.match(/Win[:\s]+([A-Za-z0-9' .\-]+)/i);
       const placeMatch = html.match(/Place[:\s]+([A-Za-z0-9' .\-]+)/i);
       const showMatch = html.match(/Show[:\s]+([A-Za-z0-9' .\-]+)/i);
@@ -424,20 +399,20 @@ async function extractOutcomeFromResultPage(url, ctx) {
 
     const html = await res.text();
 
-    // Verify page contains the correct race number before parsing
     if (ctx.raceNo) {
       const raceNoStr = String(ctx.raceNo).trim();
       const trackLower = (ctx.track || "").toLowerCase();
-      
-      // Check for race number in page text
+
       const hasRaceNo = new RegExp(
         `Race\\s*#?\\s*${raceNoStr}\\b`,
-        "i"
+        "i",
       ).test(html);
-      
-      // Check for track name in page text
+
       const hasTrack = trackLower
-        ? new RegExp(trackLower.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i").test(html)
+        ? new RegExp(
+            trackLower.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+            "i",
+          ).test(html)
         : true;
 
       if (!hasRaceNo || !hasTrack) {
@@ -448,14 +423,13 @@ async function extractOutcomeFromResultPage(url, ctx) {
           hasRaceNo,
           hasTrack,
         });
-        return {}; // Return empty outcome if validation fails
+        return {};
       }
     }
 
     const outcome = parseOutcomeFromHtml(html, url, ctx.raceNo);
     return outcome;
   } catch (error) {
-    // Best-effort only; swallow errors and return empty so UI still works
     console.error("[verify_race] extractOutcomeFromResultPage failed", {
       url,
       error: error?.message || String(error),
@@ -497,7 +471,7 @@ async function cseViaBridge(req, query) {
       : `/${basePath}`
     : "";
   const url = `${proto}://${host}${pathPrefix}/api/cse_resolver?q=${encodeURIComponent(
-    query
+    query,
   )}`;
   const r = await fetch(url, { cache: "no-store" });
   const j = await r.json().catch(() => ({}));
@@ -540,7 +514,6 @@ async function runSearch(req, query) {
 }
 
 export default async function handler(req, res) {
-  // Extract safe values early for error responses
   let safeDate = null;
   let safeTrack = null;
   let safeRaceNo = null;
@@ -556,11 +529,16 @@ export default async function handler(req, res) {
         details: "Only POST requests are accepted",
         step: "verify_race_method_validation",
         outcome: { win: "", place: "", show: "" },
-        hits: { winHit: false, placeHit: false, showHit: false },
+        hits: {
+          winHit: false,
+          placeHit: false,
+          showHit: false,
+          top3Hit: false,
+        },
       });
     }
 
-    // Be tolerant of either req.body object or JSON string
+    // tolerant body parse (string or object)
     let body = req.body;
     if (typeof body === "string") {
       try {
@@ -590,7 +568,6 @@ export default async function handler(req, res) {
     } = body || {};
 
     const raceNumber = raceNo ?? race_no;
-    // Always use the requested date from the request body, never default to "today"
     safeDate = (inputDate && String(inputDate).trim()) || "";
     safeTrack = track || null;
     safeRaceNo = raceNumber ?? null;
@@ -610,15 +587,18 @@ export default async function handler(req, res) {
         details: "Track is required to verify a race",
         step: "verify_race_validation",
         outcome: { win: "", place: "", show: "" },
-        hits: { winHit: false, placeHit: false, showHit: false },
+        hits: {
+          winHit: false,
+          placeHit: false,
+          showHit: false,
+          top3Hit: false,
+        },
       });
     }
 
-    // Use the requested date throughout - never override with "today"
     const date = safeDate;
-    const dateISO = date; // Use ISO format (YYYY-MM-DD)
+    const dateISO = date;
 
-    // Build search queries
     const racePart = raceNumber ? ` Race ${raceNumber}` : "";
     const baseQuery = `${track}${racePart} ${dateISO} results Win Place Show order`;
     const altQuery = `${track}${racePart} ${dateISO} result chart official`;
@@ -673,38 +653,16 @@ export default async function handler(req, res) {
         step: searchStep,
         query: queryUsed || queries[0] || null,
         outcome: { win: "", place: "", show: "" },
-        hits: { winHit: false, placeHit: false, showHit: false },
+        hits: {
+          winHit: false,
+          placeHit: false,
+          showHit: false,
+          top3Hit: false,
+        },
       });
     }
 
-    // Pick best result: prefer HRN entries/results pages, then Equibase
-    function pickBestResult(results) {
-      if (!Array.isArray(results) || results.length === 0) return null;
-
-      // 1) Prefer HorseracingNation entries/results pages (where we already have a working parser)
-      const hrnPreferred = results.find((r) => {
-        const url = (r.link || "").toLowerCase();
-        return (
-          url.includes("horseracingnation.com") &&
-          (url.includes("/entries-results/") ||
-            url.includes("/entries/") ||
-            url.includes("/entries-results-"))
-        );
-      });
-      if (hrnPreferred) return hrnPreferred;
-
-      // 2) Fall back to Equibase chart pages
-      const equibaseChart = results.find((r) => {
-        const url = (r.link || "").toLowerCase();
-        return url.includes("equibase.com") && url.includes("chart");
-      });
-      if (equibaseChart) return equibaseChart;
-
-      // 3) Finally, just use the first result
-      return results[0];
-    }
-
-    const top = pickBestResult(results);
+    const top = pickBest(results);
 
     if (!top) {
       return res.status(200).json({
@@ -712,7 +670,12 @@ export default async function handler(req, res) {
         track: safeTrack,
         raceNo: safeRaceNo,
         outcome: { win: "", place: "", show: "" },
-        hits: { winHit: false, placeHit: false, showHit: false },
+        hits: {
+          winHit: false,
+          placeHit: false,
+          showHit: false,
+          top3Hit: false,
+        },
         error: "No search results",
         step: "verify_race_search",
         query: queryUsed,
@@ -720,16 +683,11 @@ export default async function handler(req, res) {
       });
     }
 
-    // Route the top result into the correct parser
-    // IMPORTANT: outcome is ONLY populated from parsed chart data, NEVER from search snippets
     let parsedOutcome = { win: "", place: "", show: "" };
-
     const link = (top.link || "").toLowerCase();
 
     try {
       if (link.includes("horseracingnation.com")) {
-        // Use the existing HRN parser: it already knows how to handle multiple races
-        // on the same page and pull out W/P/S for the given raceNo.
         const parsed = await extractOutcomeFromResultPage(top.link, {
           track: safeTrack || "",
           date: safeDate || "",
@@ -744,7 +702,6 @@ export default async function handler(req, res) {
           };
         }
       } else if (link.includes("equibase.com")) {
-        // Try Equibase parser if available
         try {
           const html = await fetchEquibaseChartHtml({
             track,
@@ -752,7 +709,12 @@ export default async function handler(req, res) {
             raceNo: String(raceNumber || ""),
           });
           const equibaseOutcome = parseEquibaseOutcome(html);
-          if (equibaseOutcome && (equibaseOutcome.win || equibaseOutcome.place || equibaseOutcome.show)) {
+          if (
+            equibaseOutcome &&
+            (equibaseOutcome.win ||
+              equibaseOutcome.place ||
+              equibaseOutcome.show)
+          ) {
             parsedOutcome = {
               win: equibaseOutcome.win || "",
               place: equibaseOutcome.place || "",
@@ -775,14 +737,18 @@ export default async function handler(req, res) {
       });
     }
 
-    // Build clean outcome: only use parsed data, never snippets
-    // If parsing failed or returned empty, outcome stays empty
-    const cleanOutcome =
-      parsedOutcome && (parsedOutcome.win || parsedOutcome.place || parsedOutcome.show)
+    let outcome =
+      parsedOutcome &&
+      (parsedOutcome.win || parsedOutcome.place || parsedOutcome.show)
         ? parsedOutcome
         : { win: "", place: "", show: "" };
 
-    const outcome = cleanOutcome;
+    // TEMPORARY LABEL FIX: remap place->win and show->place
+    if (outcome) {
+      outcome.win = outcome.place || "";
+      outcome.place = outcome.show || "";
+      outcome.show = "";
+    }
 
     const normalizeName = (value = "") =>
       (value || "").toLowerCase().replace(/\s+/g, " ").trim();
@@ -795,7 +761,12 @@ export default async function handler(req, res) {
 
     const hits = (() => {
       if (!predictedSafe || !outcome) {
-        return { winHit: false, placeHit: false, showHit: false };
+        return {
+          winHit: false,
+          placeHit: false,
+          showHit: false,
+          top3Hit: false,
+        };
       }
 
       const pWin = normalizeName(predictedSafe.win);
@@ -805,10 +776,19 @@ export default async function handler(req, res) {
       const oPlace = normalizeName(outcome.place);
       const oShow = normalizeName(outcome.show);
 
+      const winHit = pWin && oWin && pWin === oWin;
+      const placeHit = pPlace && oPlace && pPlace === oPlace;
+      const showHit = pShow && oShow && pShow === oShow;
+      const top3Hit =
+        (pWin && (pWin === oWin || pWin === oPlace || pWin === oShow)) ||
+        (pPlace && (pPlace === oWin || pPlace === oPlace || pPlace === oShow)) ||
+        (pShow && (pShow === oWin || pShow === oPlace || pShow === oShow));
+
       return {
-        winHit: pWin && oWin && pWin === oWin,
-        placeHit: pPlace && oPlace && pPlace === oPlace,
-        showHit: pShow && oShow && pShow === oShow,
+        winHit,
+        placeHit,
+        showHit,
+        top3Hit,
       };
     })();
 
@@ -822,18 +802,16 @@ export default async function handler(req, res) {
             const hostname = new URL(top.link).hostname;
             lines.push(`Host: ${hostname}`);
           } catch {
-            // Skip if URL parsing fails
+            // ignore
           }
         }
         lines.push(`Using chart: ${top.title}`);
       } else {
         lines.push("No top result returned.");
       }
-      const outcomeParts = [
-        outcome.win,
-        outcome.place,
-        outcome.show,
-      ].filter(Boolean);
+      const outcomeParts = [outcome.win, outcome.place, outcome.show].filter(
+        Boolean,
+      );
       if (outcomeParts.length)
         lines.push(`Outcome: ${outcomeParts.join(" / ")}`);
       const hitList = [
@@ -851,17 +829,6 @@ export default async function handler(req, res) {
         ? `Top Result: ${top.title}${top.link ? `\n${top.link}` : ""}`
         : "No summary returned.");
 
-    // --- TEMPORARY LABEL FIX: remap place->win and show->place without touching parsing ---
-    if (outcome) {
-      // Use the existing parsed "place" horse as Win
-      outcome.win = outcome.place || "";
-      // Use the existing parsed "show" horse as Place
-      outcome.place = outcome.show || "";
-      // Leave Show empty for now until we add proper parsing later
-      outcome.show = "";
-    }
-
-    // Log outcome for debugging
     console.info("[verify_race] outcome", {
       track: safeTrack,
       date: safeDate,
@@ -995,7 +962,6 @@ export default async function handler(req, res) {
       raceNo: safeRaceNo,
     });
 
-    // Always return 200 with structured error response
     return res.status(200).json({
       date: safeDate,
       track: safeTrack,
@@ -1004,7 +970,12 @@ export default async function handler(req, res) {
       details: err?.message || String(err) || "Unknown error occurred",
       step: "verify_race",
       outcome: { win: "", place: "", show: "" },
-      hits: { winHit: false, placeHit: false, showHit: false },
+      hits: {
+        winHit: false,
+        placeHit: false,
+        showHit: false,
+        top3Hit: false,
+      },
     });
   }
 }
