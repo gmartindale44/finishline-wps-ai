@@ -7,11 +7,16 @@
 // - Falls back to Google search URL if parsing fails
 
 import * as cheerio from "cheerio";
-import {
-  fetchEquibaseChartHtml,
-  parseEquibaseOutcome,
-  getEquibaseTrackCode,
-} from "../../lib/equibase.js";
+// Temporarily disabled Equibase imports to stabilize parser
+// import {
+//   fetchEquibaseChartHtml,
+//   parseEquibaseOutcome,
+//   getEquibaseTrackCode,
+// } from "../../lib/equibase.js";
+
+// Equibase stubs (temporarily disabled)
+const fetchEquibaseChartHtml = async () => null;
+const parseEquibaseOutcome = () => ({ win: "", place: "", show: "" });
 
 export const config = {
   runtime: "nodejs",
@@ -43,129 +48,134 @@ function normalizeHorseName(name) {
  * @returns {{ win: string; place: string; show: string }}
  */
 function extractOutcomeFromRunnerTable($, table, idx) {
-  const { runnerIdx, winIdx, placeIdx, showIdx } = idx;
+  try {
+    const { runnerIdx, winIdx, placeIdx, showIdx } = idx;
 
-  const $rows = $(table).find("tr");
+    const $rows = $(table).find("tr");
 
-  const norm = (s) => (s || "").replace(/\s+/g, " ").trim();
+    const norm = (s) => (s || "").replace(/\s+/g, " ").trim();
 
-  const runners = [];
+    const runners = [];
 
-  $rows.each((i, tr) => {
-    const $cells = $(tr).find("td");
+    $rows.each((i, tr) => {
+      const $cells = $(tr).find("td");
 
-    if (!$cells.length) return;
+      if (!$cells.length) return;
 
-    // Get raw texts
-    const runnerText =
-      runnerIdx > -1 ? norm($cells.eq(runnerIdx).text()) : "";
+      // Get raw texts
+      const runnerText =
+        runnerIdx > -1 ? norm($cells.eq(runnerIdx).text()) : "";
 
-    if (!runnerText) return;
+      if (!runnerText) return;
 
-    // Skip header-ish rows that somehow ended up as <td>
-    if (/runner\s*\(speed\)/i.test(runnerText)) return;
+      // Skip header-ish rows that somehow ended up as <td>
+      if (/runner\s*\(speed\)/i.test(runnerText)) return;
 
-    const winText =
-      winIdx > -1 ? norm($cells.eq(winIdx).text()) : "";
+      const winText =
+        winIdx > -1 ? norm($cells.eq(winIdx).text()) : "";
 
-    const placeText =
-      placeIdx > -1 ? norm($cells.eq(placeIdx).text()) : "";
+      const placeText =
+        placeIdx > -1 ? norm($cells.eq(placeIdx).text()) : "";
 
-    const showText =
-      showIdx > -1 ? norm($cells.eq(showIdx).text()) : "";
+      const showText =
+        showIdx > -1 ? norm($cells.eq(showIdx).text()) : "";
 
-    // If the row has no payouts at all, it's not useful for W/P/S.
-    if (!winText && !placeText && !showText) return;
+      // If the row has no payouts at all, it's not useful for W/P/S.
+      if (!winText && !placeText && !showText) return;
 
-    // Normalize runner name: strip footnote markers like (*) or (114*)
-    let runnerName = runnerText.replace(/\s*\([^)]*\)\s*$/, "").trim();
-    runnerName = normalizeHorseName(runnerName);
-    if (!runnerName) return;
+      // Normalize runner name: strip footnote markers like (*) or (114*)
+      let runnerName = runnerText.replace(/\s*\([^)]*\)\s*$/, "").trim();
+      runnerName = normalizeHorseName(runnerName);
+      if (!runnerName) return;
 
-    // Hard filters to avoid junk rows
-    const lowerRunner = runnerName.toLowerCase();
-    const junkPatterns = [
-      "preliminary speed figures",
-      "also rans",
-      "pool",
-      "daily double",
-      "trifecta",
-      "superfecta",
-      "pick 3",
-      "pick 4",
-      "this script inside",
-      "head tags",
-    ];
-    if (
-      lowerRunner.startsWith("*") ||
-      junkPatterns.some((pattern) => lowerRunner.includes(pattern))
-    ) {
-      return; // Skip this row
+      // Hard filters to avoid junk rows
+      const lowerRunner = runnerName.toLowerCase();
+      const junkPatterns = [
+        "preliminary speed figures",
+        "also rans",
+        "pool",
+        "daily double",
+        "trifecta",
+        "superfecta",
+        "pick 3",
+        "pick 4",
+        "this script inside",
+        "head tags",
+      ];
+      if (
+        lowerRunner.startsWith("*") ||
+        junkPatterns.some((pattern) => lowerRunner.includes(pattern))
+      ) {
+        return; // Skip this row
+      }
+
+      runners.push({
+        name: runnerName,
+        hasWin: !!winText && winText !== "-",
+        hasPlace: !!placeText && placeText !== "-",
+        hasShow: !!showText && showText !== "-",
+      });
+    });
+
+    if (!runners.length) {
+      return { win: "", place: "", show: "" };
     }
 
-    runners.push({
-      name: runnerName,
-      hasWin: !!winText && winText !== "-",
-      hasPlace: !!placeText && placeText !== "-",
-      hasShow: !!showText && showText !== "-",
-    });
-  });
+    // 1) WIN: first row that has a Win payout
+    let winHorse =
+      runners.find((r) => r.hasWin)?.name || "";
 
-  if (!runners.length) {
+    // 2) PLACE:
+    // Prefer a horse that has PLACE but not WIN, and is not the WIN horse
+    let placeHorse =
+      runners.find(
+        (r) =>
+          r.hasPlace &&
+          r.name !== winHorse &&
+          !r.hasWin
+      )?.name ||
+      runners.find(
+        (r) =>
+          r.hasPlace &&
+          r.name !== winHorse
+      )?.name ||
+      "";
+
+    // 3) SHOW:
+    // Prefer a horse that has SHOW only (no WIN/PLACE) and isn't WIN/PLACE
+    let showHorse =
+      runners.find(
+        (r) =>
+          r.hasShow &&
+          r.name !== winHorse &&
+          r.name !== placeHorse &&
+          !r.hasWin &&
+          !r.hasPlace
+      )?.name ||
+      runners.find(
+        (r) =>
+          r.hasShow &&
+          r.name !== winHorse &&
+          r.name !== placeHorse &&
+          !r.hasWin
+      )?.name ||
+      runners.find(
+        (r) =>
+          r.hasShow &&
+          r.name !== winHorse &&
+          r.name !== placeHorse
+      )?.name ||
+      "";
+
+    return {
+      win: winHorse,
+      place: placeHorse,
+      show: showHorse,
+    };
+  } catch (err) {
+    console.error("[verify_race] extractOutcomeFromRunnerTable parser error", err);
     return { win: "", place: "", show: "" };
   }
-
-  // 1) WIN: first row that has a Win payout
-  let winHorse =
-    runners.find((r) => r.hasWin)?.name || "";
-
-  // 2) PLACE:
-  // Prefer a horse that has PLACE but not WIN, and is not the WIN horse
-  let placeHorse =
-    runners.find(
-      (r) =>
-        r.hasPlace &&
-        r.name !== winHorse &&
-        !r.hasWin
-    )?.name ||
-    runners.find(
-      (r) =>
-        r.hasPlace &&
-        r.name !== winHorse
-    )?.name ||
-    "";
-
-  // 3) SHOW:
-  // Prefer a horse that has SHOW only (no WIN/PLACE) and isn't WIN/PLACE
-  let showHorse =
-    runners.find(
-      (r) =>
-        r.hasShow &&
-        r.name !== winHorse &&
-        r.name !== placeHorse &&
-        !r.hasWin &&
-        !r.hasPlace
-    )?.name ||
-    runners.find(
-      (r) =>
-        r.hasShow &&
-        r.name !== winHorse &&
-        r.name !== placeHorse &&
-        !r.hasWin
-    )?.name ||
-    runners.find(
-      (r) =>
-        r.hasShow &&
-        r.name !== winHorse &&
-        r.name !== placeHorse
-    )?.name ||
-    "";
-
-  return {
-    win: winHorse,
-    place: placeHorse,
-    show: showHorse,
-  };
 }
 
 /**
@@ -286,7 +296,7 @@ function parseHRNRaceOutcome($, raceNo) {
       outcome.show = extracted.show || "";
     }
   } catch (error) {
-    console.error("[verify_race] parseHRNRaceOutcome failed", error);
+    console.error("[verify_race] parseHRNRaceOutcome parser error", error);
   }
 
   return outcome;
@@ -361,7 +371,7 @@ function parseOutcomeFromHtml(html, url, raceNo = null) {
       if (showMatch) outcome.show = normalizeHorseName(showMatch[1]);
     }
   } catch (error) {
-    console.error("[verify_race] parseOutcomeFromHtml failed", error);
+    console.error("[verify_race] parseOutcomeFromHtml parser error", error);
   }
 
   return outcome;
@@ -381,32 +391,33 @@ async function extractOutcomeFromResultPage(url, ctx) {
 
     const link = url.toLowerCase();
     const isHRN = link.includes("horseracingnation.com");
-    const isEquibase = link.includes("equibase.com");
+    // Temporarily skip Equibase parsing to stabilize
+    // const isEquibase = link.includes("equibase.com");
 
-    // For Equibase, use the dedicated parser
-    if (isEquibase && ctx.track && ctx.date) {
-      try {
-        const html = await fetchEquibaseChartHtml({
-          track: ctx.track,
-          dateISO: ctx.date,
-          raceNo: String(ctx.raceNo || ""),
-        });
-        const equibaseOutcome = parseEquibaseOutcome(html);
-        if (equibaseOutcome && (equibaseOutcome.win || equibaseOutcome.place || equibaseOutcome.show)) {
-          return {
-            win: equibaseOutcome.win || "",
-            place: equibaseOutcome.place || "",
-            show: equibaseOutcome.show || "",
-          };
-        }
-      } catch (equibaseError) {
-        console.error("[verify_race] Equibase parse failed", {
-          url,
-          error: equibaseError?.message,
-        });
-        // Fall through to generic parsing
-      }
-    }
+    // Equibase parsing temporarily disabled
+    // if (isEquibase && ctx.track && ctx.date) {
+    //   try {
+    //     const html = await fetchEquibaseChartHtml({
+    //       track: ctx.track,
+    //       dateISO: ctx.date,
+    //       raceNo: String(ctx.raceNo || ""),
+    //     });
+    //     const equibaseOutcome = parseEquibaseOutcome(html);
+    //     if (equibaseOutcome && (equibaseOutcome.win || equibaseOutcome.place || equibaseOutcome.show)) {
+    //       return {
+    //         win: equibaseOutcome.win || "",
+    //         place: equibaseOutcome.place || "",
+    //         show: equibaseOutcome.show || "",
+    //       };
+    //     }
+    //   } catch (equibaseError) {
+    //     console.error("[verify_race] Equibase parse failed", {
+    //       url,
+    //       error: equibaseError?.message,
+    //     });
+    //     // Fall through to generic parsing
+    //   }
+    // }
 
     // For HRN or generic pages, fetch and parse HTML
     const res = await fetch(url, {
@@ -460,9 +471,22 @@ async function extractOutcomeFromResultPage(url, ctx) {
     }
 
     const outcome = parseOutcomeFromHtml(html, url, ctx.raceNo);
-    return outcome || {};
+    
+    // Validate outcome shape - must have win/place/show properties
+    if (!outcome || typeof outcome !== "object") {
+      return {};
+    }
+    
+    // Ensure outcome has correct shape
+    const validatedOutcome = {
+      win: outcome.win || "",
+      place: outcome.place || "",
+      show: outcome.show || "",
+    };
+    
+    return validatedOutcome;
   } catch (error) {
-    console.error("[verify_race] extractOutcomeFromResultPage failed", {
+    console.error("[verify_race] extractOutcomeFromResultPage parser error", {
       url,
       error: error?.message || String(error),
     });
@@ -782,8 +806,8 @@ export default async function handler(req, res) {
       }
     }
 
-    // If we still have no outcome, fall back to the existing Google HTML fallback implementation
-    if (!outcome || (!outcome.win && !outcome.place && !outcome.show)) {
+    // Validate outcome - force Google fallback if incomplete or wrong shape
+    if (!outcome || typeof outcome !== "object" || (!outcome.win && !outcome.place && !outcome.show)) {
       step = "verify_race_google_fallback";
       const fb = await googleHtmlFallback(safeTrack, safeDate, safeRaceNo);
       // fb should include: query, top, outcome, hits, summary
@@ -841,9 +865,9 @@ export default async function handler(req, res) {
     const summaryLines = [];
     summaryLines.push(`Using date: ${safeDate || "(none)"}`);
     summaryLines.push(`Step: ${step}`);
-    summaryLines.push(`Query: ${queryUsed}`);
+    summaryLines.push(`Query: ${queryUsed || "(none)"}`);
     if (top?.title) summaryLines.push(`Top: ${top.title} -> ${top.link || "(no link)"}`);
-    if (outcome.win || outcome.place || outcome.show) {
+    if (outcome && (outcome.win || outcome.place || outcome.show)) {
       const parts = [outcome.win, outcome.place, outcome.show].filter(Boolean);
       summaryLines.push(`Outcome: ${parts.join(" / ")}`);
     }
@@ -854,7 +878,10 @@ export default async function handler(req, res) {
     if (hits.top3Hit) hitLabels.push("Top3");
     if (hitLabels.length) summaryLines.push(`Hits: ${hitLabels.join(", ")}`);
 
-    const summary = summaryLines.join("\n");
+    // Ensure summary is never empty
+    const summary = summaryLines.length > 0 
+      ? summaryLines.join("\n")
+      : `Step: ${step}\nQuery: ${queryUsed || "(none)"}\nNo outcome parsed.`;
 
     const response = {
       ok: true,
