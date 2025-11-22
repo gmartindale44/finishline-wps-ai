@@ -624,6 +624,9 @@ function buildGoogleFallbackResponse(track, date, raceNo, query, predicted) {
     predicted,
     hits,
     summary: summaryLines.join("\n"),
+    debug: {
+      googleUrl: googleUrl,
+    },
   };
 }
 
@@ -647,6 +650,9 @@ async function verifyRace(req, res) {
       hits: { winHit: false, placeHit: false, showHit: false, top3Hit: false },
       summary:
         "Step: verify_race_invalid_method\nError: Only POST is supported for verify_race.",
+      debug: {
+        googleUrl: null,
+      },
     });
   }
 
@@ -657,6 +663,9 @@ async function verifyRace(req, res) {
   const predicted = normalizePredicted(body.predicted);
 
   if (!track || !date) {
+    const query = buildQuery({ track, date, raceNo });
+    const googleUrl = buildGoogleSearchUrl(query);
+
     return res.status(200).json({
       ok: false,
       step: "verify_race_validation",
@@ -665,12 +674,15 @@ async function verifyRace(req, res) {
       date,
       track,
       raceNo,
-      query: "",
+      query,
       top: null,
       outcome: { win: "", place: "", show: "" },
       predicted,
       hits: { winHit: false, placeHit: false, showHit: false, top3Hit: false },
       summary: "Track and date are required for verify_race.",
+      debug: {
+        googleUrl,
+      },
     });
   }
 
@@ -833,18 +845,25 @@ async function verifyRace(req, res) {
 
         const summary = summaryLines.filter(Boolean).join("\n");
 
+        // Build Google search URL for debug button
+        const googleQuery = buildQuery({ track, date, raceNo });
+        const googleUrl = buildGoogleSearchUrl(googleQuery);
+
         return res.status(200).json({
           ok: true,
           step: "verify_race",
           date,
           track,
           raceNo,
-          query: queryUsed || null,
+          query: queryUsed || googleQuery,
           top: top ? { title: top.title || "", link: top.link || "" } : null,
           outcome: parsedOutcome,
           predicted,
           hits,
           summary,
+          debug: {
+            googleUrl,
+          },
         });
       }
     }
@@ -885,6 +904,9 @@ export default async function handler(req, res) {
       hits: { winHit: false, placeHit: false, showHit: false, top3Hit: false },
       summary:
         "[verify_race] Unhandled error in handler wrapper. See server logs for details.",
+      debug: {
+        googleUrl: null,
+      },
     });
   }
 }
