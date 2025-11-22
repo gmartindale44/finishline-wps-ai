@@ -91,52 +91,52 @@ function decodeHtmlEntities(text) {
 
 /**
  * Extract Win/Place/Show from Google HTML using regex
- * This is a lightweight parser that looks for table structures in Google's AI overview
+ * This is a lightweight parser that matches Google AI Overview format:
+ * "Win: Doc Sullivan", "Place: Dr. Kraft", "Show: Bank Frenzy"
  */
 function extractOutcomeFromGoogleHtml(html) {
   if (!html || typeof html !== "string") {
     return { win: "", place: "", show: "" };
   }
 
-  // Collapse whitespace to make regexes easier
-  const clean = html.replace(/\s+/g, " ");
+  // Universal regex patterns that match "Win:", "Place:", "Show:" followed by horse name
+  const winRegex = /Win:\s*([^<\n]+)/i;
+  const placeRegex = /Place:\s*([^<\n]+)/i;
+  const showRegex = /Show:\s*([^<\n]+)/i;
 
-  /**
-   * Try multiple regex patterns and return the first match
-   */
-  function pick(patterns) {
-    for (const re of patterns) {
-      const m = re.exec(clean);
-      if (m && m[1]) {
-        return decodeHtmlEntities(m[1].trim());
-      }
+  // Apply regex patterns
+  const winMatch = html.match(winRegex);
+  const placeMatch = html.match(placeRegex);
+  const showMatch = html.match(showRegex);
+
+  // Normalize each match, decode HTML entities, and trim
+  // Filter out matches that look like JavaScript code or are too long
+  function cleanMatch(match) {
+    if (!match?.[1]) return "";
+    let cleaned = decodeHtmlEntities(match[1].trim());
+    
+    // Stop at common delimiters that indicate end of horse name
+    cleaned = cleaned.split(/[<;\n}]/)[0].trim();
+    
+    // Filter out matches that look like JavaScript code or are invalid
+    if (
+      !cleaned ||
+      cleaned.length > 60 ||
+      cleaned.includes("function") ||
+      cleaned.includes("prototype") ||
+      cleaned.includes("call:") ||
+      /[{}()=]/.test(cleaned) ||
+      /^\d+$/.test(cleaned) // Pure numbers are not horse names
+    ) {
+      return "";
     }
-    return "";
+    
+    return cleaned;
   }
 
-  // Primary pattern: table rows like <tr><td>Win</td><td>Doc Sullivan</td>...
-  const win = pick([
-    />\s*Win\s*<\/td>\s*<td[^>]*>([^<]+)/i,
-    />\s*Win\s*<\/th>\s*<td[^>]*>([^<]+)/i,
-    /\bWin\b[^<]{0,40}<td[^>]*>([^<]+)/i,
-  ]);
-
-  const place = pick([
-    />\s*Place\s*<\/td>\s*<td[^>]*>([^<]+)/i,
-    />\s*Place\s*<\/th>\s*<td[^>]*>([^<]+)/i,
-    /\bPlace\b[^<]{0,40}<td[^>]*>([^<]+)/i,
-  ]);
-
-  const show = pick([
-    />\s*Show\s*<\/td>\s*<td[^>]*>([^<]+)/i,
-    />\s*Show\s*<\/th>\s*<td[^>]*>([^<]+)/i,
-    /\bShow\b[^<]{0,40}<td[^>]*>([^<]+)/i,
-  ]);
-
-  // If nothing matched, return empty outcome so caller can treat as "unparsed"
-  if (!win && !place && !show) {
-    return { win: "", place: "", show: "" };
-  }
+  const win = cleanMatch(winMatch);
+  const place = cleanMatch(placeMatch);
+  const show = cleanMatch(showMatch);
 
   return { win, place, show };
 }
@@ -185,8 +185,8 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
       const html = await res.text();
       outcome = extractOutcomeFromGoogleHtml(html);
 
-      // If we managed to parse at least one of the three positions, mark a different step
-      if (outcome && (outcome.win || outcome.place || outcome.show)) {
+      // Only mark as parsed if all three positions were found
+      if (outcome && outcome.win && outcome.place && outcome.show) {
         step = "verify_race_google_parsed_stub";
       }
     }
