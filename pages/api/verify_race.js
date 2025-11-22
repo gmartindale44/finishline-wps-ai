@@ -22,8 +22,9 @@ export const config = {
   runtime: "nodejs",
 };
 
-const GOOGLE_API_KEY = (process.env.GOOGLE_API_KEY ?? "").trim();
-const GOOGLE_CSE_ID = (process.env.GOOGLE_CSE_ID ?? "").trim();
+// NO top-level executable code - all env var access moved inside functions
+// const GOOGLE_API_KEY = (process.env.GOOGLE_API_KEY ?? "").trim(); // MOVED INSIDE cseDirect()
+// const GOOGLE_CSE_ID = (process.env.GOOGLE_CSE_ID ?? "").trim(); // MOVED INSIDE cseDirect()
 
 const preferHosts = [
   "horseracingnation.com",
@@ -583,6 +584,10 @@ async function googleHtmlFallback(track, date, raceNo) {
  */
 async function cseDirect(query) {
   try {
+    // Read env vars inside function, not at top level
+    const GOOGLE_API_KEY = (process.env.GOOGLE_API_KEY ?? "").trim();
+    const GOOGLE_CSE_ID = (process.env.GOOGLE_CSE_ID ?? "").trim();
+    
     if (!GOOGLE_API_KEY || !GOOGLE_CSE_ID) {
       console.warn("[verify_race] Google CSE credentials missing");
       return [];
@@ -703,6 +708,10 @@ function pickBestResult(items) {
  */
 async function runSearch(req, query) {
   try {
+    // Read env vars inside function, not at top level
+    const GOOGLE_API_KEY = (process.env.GOOGLE_API_KEY ?? "").trim();
+    const GOOGLE_CSE_ID = (process.env.GOOGLE_CSE_ID ?? "").trim();
+    
     const items = await (GOOGLE_API_KEY && GOOGLE_CSE_ID
       ? cseDirect(query)
       : cseViaBridge(req, query));
