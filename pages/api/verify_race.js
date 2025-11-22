@@ -1,37 +1,22 @@
 // pages/api/verify_race.js
-// Core W/P/S verification endpoint with safe error handling
+// Simple, safe HRN-based Verify Race handler with best-effort Redis logging.
 
 import { fetchAndParseResults } from "../../lib/results.js";
 import { hset } from "../../lib/redis.js";
 import { slugRaceId } from "../../lib/normalize.js";
 
 /**
- * Normalize horse name for comparison
- * @param {string} value
- * @returns {string}
- */
-function normalizeName(value = "") {
-  return (value || "")
-    .toString()
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-/**
- * Resolve outcome (Win/Place/Show) from an HRN entries/results URL.
- *
- * Delegates to fetchAndParseResults, which encapsulates all HTML parsing
- * (including the HRN Runner (Speed) W/P/S table logic).
+ * Resolve outcome from the HRN entries/results URL.
+ * Uses the shared fetchAndParseResults helper.
  *
  * @param {Object} params
- * @param {string} params.normalizedTrack - normalized track slug
- * @param {string} params.usingDate - YYYY-MM-DD date string
- * @param {string|number|null} params.raceNo - race number
- * @param {Object} params.predicted - predicted picks { win, place, show }
- * @param {string} params.targetUrl - HRN target URL
- * @param {Function} params.addDebug - function to push debug notes
- * @returns {Promise<{ win: string, place: string, show: string }>}
+ * @param {string} params.normalizedTrack
+ * @param {string} params.usingDate
+ * @param {string|number|null} params.raceNo
+ * @param {Object} params.predicted
+ * @param {string} params.targetUrl
+ * @param {Function} params.addDebug
+ * @returns {Promise<{ win: string; place: string; show: string }>}
  */
 async function resolveOutcomeFromTargetUrl({
   normalizedTrack,
@@ -44,12 +29,7 @@ async function resolveOutcomeFromTargetUrl({
   let outcome = { win: "", place: "", show: "" };
 
   try {
-    const parsed = await fetchAndParseResults(targetUrl, {
-      raceNo,
-      predicted,
-      normalizedTrack,
-      usingDate,
-    });
+    const parsed = await fetchAndParseResults(targetUrl, { raceNo });
 
     if (parsed && (parsed.win || parsed.place || parsed.show)) {
       outcome = {
@@ -57,12 +37,8 @@ async function resolveOutcomeFromTargetUrl({
         place: parsed.place ?? "",
         show: parsed.show ?? "",
       };
-
       if (addDebug) {
-        addDebug({
-          where: "parsed_outcome",
-          parsed,
-        });
+        addDebug({ where: "parsed_outcome", parsed });
       }
     } else if (addDebug) {
       addDebug({
@@ -77,51 +53,59 @@ async function resolveOutcomeFromTargetUrl({
         error: String(err?.message || err),
       });
     }
-    // Keep outcome as the default empty object
   }
 
   return outcome;
 }
 
+const normalizeName = (value = "") =>
+  (value || "").toLowerCase().replace(/\s+/g, " ").trim();
+
 export default async function handler(req, res) {
   const debugNotes = [];
   const addDebug = (note) => {
-    if (!note || typeof note !== "object") return;
-    debugNotes.push(note);
-  };
-
-  // We keep these in outer scope so we can echo them in any error response
-  let usingDate = "";
-  let normalizedTrack = "";
-  let targetUrl = "";
-  let safe = {
-    track: "",
-    date: "",
-    raceNo: "",
-    predicted: {},
+    if (note && typeof note === "object") debugNotes.push(note);
   };
 
   try {
+    // --- Stage 1: minimal ping to confirm URL wiring ---
+    if (req.method === "POST" && req.query?.stage === "stage1") {
+      const { track, date, raceNo, race_no, predicted } = req.body || {};
+      const safe = {
+        track: track || "",
+        date: date || "",
+        raceNo: raceNo || race_no || "",
+        predicted: predicted || {},
+      };
+      const normTrack = (x) =>
+        (x || "").trim().toLowerCase().replace(/\s+/g, "-");
+      const normalizedTrack = normTrack(safe.track);
+      const targetUrl = `https://entries.horseracingnation.com/entries-results/${normalizedTrack}/${safe.date}`;
+
+      return res.status(200).json({
+        ok: true,
+        step: "stage1",
+        received: safe,
+        normalizedTrack,
+        targetUrl,
+      });
+    }
+
+    // --- Method guard (always return 200 with structured error) ---
     if (req.method !== "POST") {
       res.setHeader("Allow", "POST");
       return res.status(200).json({
-        step: "verify_race_method_validation",
         ok: false,
+        step: "verify_race",
         error: "Method Not Allowed",
         details: "Only POST requests are accepted",
-        usingDate,
         outcome: { win: "", place: "", show: "" },
-        hits: {
-          winHit: false,
-          placeHit: false,
-          showHit: false,
-          top3Hit: false,
-        },
+        hits: { winHit: false, placeHit: false, showHit: false, top3Hit: false },
         debugNotes,
       });
     }
 
-    // Be tolerant of either object body or JSON string
+    // --- Body & safe values ---
     let body = req.body;
     if (typeof body === "string") {
       try {
@@ -139,98 +123,34 @@ export default async function handler(req, res) {
       predicted = {},
     } = body || {};
 
-    safe = {
+    const safe = {
       track: track || "",
       date: date || "",
       raceNo: raceNo || race_no || "",
-      predicted: predicted || {},
+      predicted,
     };
 
-    // Minimal stage 1 ping: don't hit external services, just echo what we’d use.
-    if (req.query?.stage === "stage1") {
-      const norm = (x) =>
-        (x || "")
-          .toString()
-          .trim()
-          .toLowerCase()
-          .replace(/\s+/g, "-");
+    const normTrack = (x) =>
+      (x || "").trim().toLowerCase().replace(/\s+/g, "-");
+    const normalizedTrack = normTrack(safe.track);
+    const usingDate = safe.date || "";
+    const targetUrl = `https://entries.horseracingnation.com/entries-results/${normalizedTrack}/${usingDate}`;
 
-      normalizedTrack = norm(safe.track);
-      usingDate = safe.date || "";
-      targetUrl = `https://entries.horseracingnation.com/entries-results/${normalizedTrack}/${usingDate}`;
+    // --- Core: resolve official outcome from HRN ---
+    const outcome = await resolveOutcomeFromTargetUrl({
+      normalizedTrack,
+      usingDate,
+      raceNo: safe.raceNo,
+      predicted: safe.predicted,
+      targetUrl,
+      addDebug,
+    });
 
-      return res.status(200).json({
-        step: "verify_race",
-        stage: "stage1",
-        ok: true,
-        received: safe,
-        normalizedTrack,
-        usingDate,
-        targetUrl,
-        debugNotes,
-      });
-    }
-
-    // Main path: full verification
-    if (!safe.track || !safe.date) {
-      return res.status(200).json({
-        step: "verify_race_validation",
-        ok: false,
-        error: "Missing required fields",
-        details: "Both track and date are required to verify a race",
-        usingDate: safe.date,
-        outcome: { win: "", place: "", show: "" },
-        hits: {
-          winHit: false,
-          placeHit: false,
-          showHit: false,
-          top3Hit: false,
-        },
-        debugNotes,
-      });
-    }
-
-    const norm = (x) =>
-      (x || "")
-        .toString()
-        .trim()
-        .toLowerCase()
-        .replace(/\s+/g, "-");
-
-    normalizedTrack = norm(safe.track);
-    usingDate = safe.date || "";
-    targetUrl = `https://entries.horseracingnation.com/entries-results/${normalizedTrack}/${usingDate}`;
-
-    let outcome = { win: "", place: "", show: "" };
-    let ok = true;
-    let error = null;
-
-    try {
-      outcome = await resolveOutcomeFromTargetUrl({
-        normalizedTrack,
-        usingDate,
-        raceNo: safe.raceNo,
-        predicted: safe.predicted,
-        targetUrl,
-        addDebug,
-      });
-    } catch (err) {
-      ok = false;
-      error = String(err?.message || err);
-      addDebug({
-        where: "resolveOutcomeFromTargetUrl",
-        error,
-      });
-      console.error("[verify_race] resolveOutcomeFromTargetUrl failed", err);
-      outcome = { win: "", place: "", show: "" };
-    }
-
-    // Normalize predicted & outcome names and compute hit flags
+    // --- Predicted + hit logic ---
     const predictedSafe = {
-      win: safe.predicted && safe.predicted.win ? String(safe.predicted.win) : "",
-      place:
-        safe.predicted && safe.predicted.place ? String(safe.predicted.place) : "",
-      show: safe.predicted && safe.predicted.show ? String(safe.predicted.show) : "",
+      win: predicted?.win ? String(predicted.win) : "",
+      place: predicted?.place ? String(predicted.place) : "",
+      show: predicted?.show ? String(predicted.show) : "",
     };
 
     const pWin = normalizeName(predictedSafe.win);
@@ -245,19 +165,26 @@ export default async function handler(req, res) {
       placeHit: !!(pPlace && oPlace && pPlace === oPlace),
       showHit: !!(pShow && oShow && pShow === oShow),
       top3Hit:
-        (!!pWin &&
-          (pWin === oWin || pWin === oPlace || pWin === oShow)) ||
-        (!!pPlace &&
-          (pPlace === oWin || pPlace === oPlace || pPlace === oShow)) ||
-        (!!pShow &&
-          (pShow === oWin || pShow === oPlace || pShow === oShow)),
+        (pWin && (pWin === oWin || pWin === oPlace || pWin === oShow)) ||
+        (pPlace && (pPlace === oWin || pPlace === oPlace || pPlace === oShow)) ||
+        (pShow && (pShow === oWin || pShow === oPlace || pShow === oShow)),
     };
 
-    // Best-effort Redis logging – never affects the response
+    // --- Human-friendly summary for the UI ---
+    const outcomeParts = [];
+    if (outcome.win) outcomeParts.push(`Win ${outcome.win}`);
+    if (outcome.place) outcomeParts.push(`Place ${outcome.place}`);
+    if (outcome.show) outcomeParts.push(`Show ${outcome.show}`);
+    const summary =
+      outcomeParts.length > 0
+        ? outcomeParts.join(" • ")
+        : "(no official W/P/S results found yet)";
+
+    // --- Optional Redis logging (best effort, non-fatal) ---
     try {
       const race_id = slugRaceId({
         track: safe.track,
-        date: usingDate,
+        date: safe.date,
         raceNo: safe.raceNo,
       });
 
@@ -269,7 +196,7 @@ export default async function handler(req, res) {
           outcome_win: outcome.win || "",
           outcome_place: outcome.place || "",
           outcome_show: outcome.show || "",
-          verify_source: "verify_race_api",
+          verify_source: "verify_race_api_hrn",
         });
       }
     } catch (redisErr) {
@@ -277,44 +204,42 @@ export default async function handler(req, res) {
         where: "redis_logging",
         error: String(redisErr?.message || redisErr),
       });
-      console.error("[verify_race] Redis logging failed (non-fatal)", redisErr);
+      // Do NOT throw – Redis is optional
     }
 
+    // --- Normal success response ---
     return res.status(200).json({
+      ok: true,
       step: "verify_race",
-      ok,
       usingDate,
+      track: safe.track,
+      raceNo: safe.raceNo,
       outcome,
       hits,
-      error,
-      debugNotes,
+      summary,
       normalizedTrack,
       targetUrl,
+      debugNotes,
     });
   } catch (err) {
-    console.error("[verify_race] outer handler error", err);
+    // --- Last-resort catch: never leak a 500 to the UI ---
+    addDebug({
+      where: "outer_handler",
+      error: String(err?.message || err),
+    });
+    console.error("[verify_race] fatal error", err);
 
     return res.status(200).json({
-      step: "verify_race",
       ok: false,
-      usingDate,
+      step: "verify_race",
+      usingDate: null,
+      track: null,
+      raceNo: null,
+      error: "verify_race failed",
+      details: String(err?.message || err),
       outcome: { win: "", place: "", show: "" },
-      hits: {
-        winHit: false,
-        placeHit: false,
-        showHit: false,
-        top3Hit: false,
-      },
-      error: String(err?.message || err),
-      debugNotes: [
-        {
-          where: "outer_handler",
-          error: String(err?.message || err),
-        },
-        ...debugNotes,
-      ],
-      normalizedTrack,
-      targetUrl,
+      hits: { winHit: false, placeHit: false, showHit: false, top3Hit: false },
+      debugNotes,
     });
   }
 }
