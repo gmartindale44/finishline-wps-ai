@@ -1,17 +1,9 @@
 // pages/api/verify_race.js
-// Real implementation with CSE search + HRN/Equibase parsing
-// NO Redis/Upstash dependencies - pure search + parse only
-
-// Force Node runtime (not edge)
-export const config = { runtime: "nodejs" };
+// Baseline implementation: CSE search + basic parsing only
+// NO Redis, NO Equibase, NO HRN parsing - simple search + generic parsing
 
 import * as cheerio from "cheerio";
-import {
-  fetchEquibaseChartHtml,
-  parseEquibaseOutcome,
-} from "../../lib/equibase.js";
 
-// Safe env var access - never throw if missing
 const GOOGLE_API_KEY = (process.env.GOOGLE_API_KEY ?? "").trim();
 const GOOGLE_CSE_ID = (process.env.GOOGLE_CSE_ID ?? "").trim();
 
@@ -46,251 +38,15 @@ function safeParseBody(req) {
 }
 
 /**
- * Extract Win/Place/Show from a runner table using WPS payout indicators
- * @param {cheerio.CheerioAPI} $
- * @param {cheerio.Cheerio<cheerio.Element>} table
- * @param {{ runnerIdx: number; winIdx: number; placeIdx: number; showIdx: number }} idx
- * @returns {{ win: string; place: string; show: string }}
- */
-function extractOutcomeFromRunnerTable($, table, idx) {
-  const { runnerIdx, winIdx, placeIdx, showIdx } = idx;
-  const $rows = $(table).find("tr");
-  const norm = (s) => (s || "").replace(/\s+/g, " ").trim();
-  const runners = [];
-
-  $rows.each((i, tr) => {
-    const $cells = $(tr).find("td");
-    if (!$cells.length) return;
-
-    const runnerText = runnerIdx > -1 ? norm($cells.eq(runnerIdx).text()) : "";
-    if (!runnerText) return;
-
-    // Skip header-ish rows
-    if (/runner\s*\(speed\)/i.test(runnerText)) return;
-
-    const winText = winIdx > -1 ? norm($cells.eq(winIdx).text()) : "";
-    const placeText = placeIdx > -1 ? norm($cells.eq(placeIdx).text()) : "";
-    const showText = showIdx > -1 ? norm($cells.eq(showIdx).text()) : "";
-
-    // If no payouts at all, ignore the row
-    if (!winText && !placeText && !showText) return;
-
-    // Normalize runner name: strip footnote markers
-    let runnerName = runnerText.replace(/\s*\([^)]*\)\s*$/, "").trim();
-    runnerName = normalizeHorseName(runnerName);
-    if (!runnerName) return;
-
-    // Hard filters to avoid junk rows
-    const lowerRunner = runnerName.toLowerCase();
-    const junkPatterns = [
-      "preliminary speed figures",
-      "also rans",
-      "pool",
-      "daily double",
-      "trifecta",
-      "superfecta",
-      "pick 3",
-      "pick 4",
-      "this script inside",
-      "head tags",
-    ];
-    if (
-      lowerRunner.startsWith("*") ||
-      junkPatterns.some((pattern) => lowerRunner.includes(pattern))
-    ) {
-      return;
-    }
-
-    runners.push({
-      name: runnerName,
-      hasWin: !!winText && winText !== "-",
-      hasPlace: !!placeText && placeText !== "-",
-      hasShow: !!showText && showText !== "-",
-    });
-  });
-
-  if (!runners.length) {
-    return { win: "", place: "", show: "" };
-  }
-
-  // 1) WIN: first row that has a Win payout
-  const winHorse = runners.find((r) => r.hasWin)?.name || "";
-
-  // 2) PLACE: Prefer a horse that has PLACE but not WIN, and is not the WIN horse
-  const placeHorse =
-    runners.find(
-      (r) => r.hasPlace && r.name !== winHorse && !r.hasWin
-    )?.name ||
-    runners.find((r) => r.hasPlace && r.name !== winHorse)?.name ||
-    "";
-
-  // 3) SHOW: Prefer a horse that has SHOW only (no WIN/PLACE) and isn't WIN/PLACE
-  const showHorse =
-    runners.find(
-      (r) =>
-        r.hasShow &&
-        r.name !== winHorse &&
-        r.name !== placeHorse &&
-        !r.hasWin &&
-        !r.hasPlace
-    )?.name ||
-    runners.find(
-      (r) =>
-        r.hasShow &&
-        r.name !== winHorse &&
-        r.name !== placeHorse &&
-        !r.hasWin
-    )?.name ||
-    runners.find(
-      (r) => r.hasShow && r.name !== winHorse && r.name !== placeHorse
-    )?.name ||
-    "";
-
-  return {
-    win: winHorse,
-    place: placeHorse,
-    show: showHorse,
-  };
-}
-
-/**
- * Parse HRN race-specific outcome from HTML using cheerio
- * Finds the specific race section and parses the Runner (speed) W/P/S table
- * @param {cheerio.CheerioAPI} $
- * @param {string} raceNo
- * @returns {{ win?: string; place?: string; show?: string }}
- */
-function parseHRNRaceOutcome($, raceNo) {
-  const outcome = {};
-  const requestedRaceNo = String(raceNo || "").trim();
-  if (!requestedRaceNo) return outcome;
-
-  try {
-    // Extract "Race X" from a cheerio node's text
-    const getRaceFromNode = (node) => {
-      if (!node || !node.length) return null;
-      const text = node.text().trim();
-      if (!text) return null;
-      const m = text.match(/race\s*#?\s*(\d+)/i);
-      return m ? m[1] : null;
-    };
-
-    const runnerTables = [];
-
-    $("table").each((_, table) => {
-      const $table = $(table);
-      const headerRow = $table.find("tr").first();
-      const headerCells = headerRow.find("th, td").toArray();
-      if (!headerCells.length) return;
-
-      const headerTexts = headerCells.map((cell) =>
-        $(cell).text().toLowerCase().trim()
-      );
-
-      const runnerIdx = headerTexts.findIndex(
-        (h) => h.includes("runner") || h.includes("horse")
-      );
-      const winIdx = headerTexts.findIndex((h) => h.includes("win"));
-      const placeIdx = headerTexts.findIndex((h) => h.includes("place"));
-      const showIdx = headerTexts.findIndex((h) => h.includes("show"));
-
-      if (
-        runnerIdx === -1 ||
-        winIdx === -1 ||
-        placeIdx === -1 ||
-        showIdx === -1
-      ) {
-        return;
-      }
-
-      // Infer which race this table belongs to
-      let inferredRaceNo = null;
-
-      // Look at previous siblings
-      let prev = $table.prev();
-      while (prev.length && !inferredRaceNo) {
-        inferredRaceNo = getRaceFromNode(prev);
-        prev = prev.prev();
-      }
-
-      // Walk up ancestors
-      if (!inferredRaceNo) {
-        let parent = $table.parent();
-        let depth = 0;
-        while (parent.length && depth < 6 && !inferredRaceNo) {
-          let sib = parent.prev();
-          while (sib.length && !inferredRaceNo) {
-            inferredRaceNo = getRaceFromNode(sib);
-            sib = sib.prev();
-          }
-          parent = parent.parent();
-          depth += 1;
-        }
-      }
-
-      runnerTables.push({
-        table: $table,
-        runnerIdx,
-        winIdx,
-        placeIdx,
-        showIdx,
-        raceNo: inferredRaceNo,
-      });
-    });
-
-    if (!runnerTables.length) {
-      return outcome;
-    }
-
-    // Choose the table whose inferred race number matches requestedRaceNo
-    const target =
-      runnerTables.find((t) => t.raceNo === requestedRaceNo) ||
-      runnerTables[0]; // fallback to first
-
-    const { table: $runnerTable, runnerIdx, winIdx, placeIdx, showIdx } =
-      target;
-
-    const extracted = extractOutcomeFromRunnerTable($, $runnerTable, {
-      runnerIdx,
-      winIdx,
-      placeIdx,
-      showIdx,
-    });
-
-    if (!extracted.win && !extracted.place && !extracted.show) {
-      return outcome;
-    }
-
-    outcome.win = extracted.win || "";
-    outcome.place = extracted.place || "";
-    outcome.show = extracted.show || "";
-  } catch (error) {
-    console.error("[verify_race] parseHRNRaceOutcome failed", error);
-  }
-
-  return outcome;
-}
-
-/**
- * Parse outcome from HTML using cheerio
+ * Parse outcome from HTML using cheerio (generic parser only)
  * @param {string} html
  * @param {string} url
- * @param {string | number | null} raceNo
  * @returns {{ win?: string; place?: string; show?: string }}
  */
-function parseOutcomeFromHtml(html, url, raceNo = null) {
+function parseOutcomeFromHtml(html, url) {
   const outcome = {};
   try {
     const $ = cheerio.load(html);
-    const isHRN = /horseracingnation\.com/i.test(url);
-
-    // For HRN pages, use race-specific parsing
-    if (isHRN && raceNo) {
-      const hrnOutcome = parseHRNRaceOutcome($, String(raceNo));
-      if (hrnOutcome.win || hrnOutcome.place || hrnOutcome.show) {
-        return hrnOutcome;
-      }
-    }
 
     // Generic parsing: Try to find a results table with finishing positions
     const rows = [];
@@ -299,11 +55,13 @@ function parseOutcomeFromHtml(html, url, raceNo = null) {
       if (cells.length < 2) return;
 
       const firstCell = $(cells[0]).text().trim();
+      // Match position: "1", "1st", "2", "2nd", etc.
       const posMatch =
         firstCell.match(/^(\d+)[a-z]{0,2}$/i) || firstCell.match(/^(\d+)$/);
       if (!posMatch) return;
 
       const pos = parseInt(posMatch[1], 10);
+      // Only care about positions 1, 2, 3
       if (pos < 1 || pos > 3) return;
 
       let name = $(cells[1]).text();
@@ -313,6 +71,7 @@ function parseOutcomeFromHtml(html, url, raceNo = null) {
       rows.push({ pos, name });
     });
 
+    // Build outcome from rows
     const byPos = new Map();
     rows.forEach(({ pos, name }) => {
       if (!byPos.has(pos)) {
@@ -324,8 +83,9 @@ function parseOutcomeFromHtml(html, url, raceNo = null) {
     if (byPos.get(2)) outcome.place = byPos.get(2);
     if (byPos.get(3)) outcome.show = byPos.get(3);
 
-    // Text-based heuristics fallback
+    // If we didn't find anything in tables, try text-based heuristics
     if (!outcome.win && !outcome.place && !outcome.show) {
+      // Look for "Win: HorseName" patterns
       const winMatch = html.match(/Win[:\s]+([A-Za-z0-9' .\-]+)/i);
       const placeMatch = html.match(/Place[:\s]+([A-Za-z0-9' .\-]+)/i);
       const showMatch = html.match(/Show[:\s]+([A-Za-z0-9' .\-]+)/i);
@@ -342,7 +102,7 @@ function parseOutcomeFromHtml(html, url, raceNo = null) {
 }
 
 /**
- * Extract outcome from result page using cheerio
+ * Extract outcome from result page
  * @param {string} url
  * @param {{ track: string; date: string; raceNo?: string | null }} ctx
  * @returns {Promise<{ win?: string; place?: string; show?: string }>}
@@ -358,7 +118,7 @@ async function extractOutcomeFromResultPage(url, ctx) {
         "User-Agent": "Mozilla/5.0 (FinishLineVerifyBot)",
       },
     }).catch((err) => {
-      console.error("[verify_race] fetch failed in extractOutcomeFromResultPage", {
+      console.error("[verify_race] fetch failed", {
         url,
         error: err?.message || String(err),
       });
@@ -404,7 +164,7 @@ async function extractOutcomeFromResultPage(url, ctx) {
       }
     }
 
-    const outcome = parseOutcomeFromHtml(html, url, ctx?.raceNo);
+    const outcome = parseOutcomeFromHtml(html, url);
     return outcome || {};
   } catch (error) {
     console.error("[verify_race] extractOutcomeFromResultPage failed", {
@@ -415,176 +175,85 @@ async function extractOutcomeFromResultPage(url, ctx) {
   }
 }
 
-/**
- * Direct Google CSE API call
- */
 async function cseDirect(query) {
-  try {
-    if (!GOOGLE_API_KEY || !GOOGLE_CSE_ID) {
-      throw new Error("Google CSE credentials missing");
-    }
-
-    if (!query || typeof query !== "string") {
-      throw new Error("Invalid query");
-    }
-
-    const u = new URL("https://www.googleapis.com/customsearch/v1");
-    u.searchParams.set("key", GOOGLE_API_KEY);
-    u.searchParams.set("cx", GOOGLE_CSE_ID);
-    u.searchParams.set("q", query);
-    
-    const r = await fetch(u.toString()).catch((err) => {
-      throw new Error(`Google CSE fetch failed: ${err?.message || String(err)}`);
-    });
-
-    if (!r.ok) {
-      const text = await r.text().catch(() => "");
-      throw new Error(`Google CSE ${r.status}: ${text.slice(0, 200)}`);
-    }
-
-    const j = await r.json().catch((err) => {
-      throw new Error(`Google CSE JSON parse failed: ${err?.message || String(err)}`);
-    });
-
-    const items = Array.isArray(j.items) ? j.items : [];
-    return items.map((i) => ({
-      title: i?.title || "",
-      link: i?.link || "",
-      snippet: i?.snippet || "",
-    }));
-  } catch (error) {
-    console.error("[verify_race] cseDirect failed", {
-      query,
-      error: error?.message || String(error),
-    });
-    throw error; // Re-throw to be caught by runSearch
+  if (!GOOGLE_API_KEY || !GOOGLE_CSE_ID) {
+    throw new Error("Google CSE credentials missing");
   }
+  const u = new URL("https://www.googleapis.com/customsearch/v1");
+  u.searchParams.set("key", GOOGLE_API_KEY);
+  u.searchParams.set("cx", GOOGLE_CSE_ID);
+  u.searchParams.set("q", query);
+  const r = await fetch(u.toString());
+  if (!r.ok) {
+    const text = await r.text().catch(() => "");
+    throw new Error(`Google CSE ${r.status}: ${text.slice(0, 200)}`);
+  }
+  const j = await r.json();
+  const items = Array.isArray(j.items) ? j.items : [];
+  return items.map((i) => ({
+    title: i?.title || "",
+    link: i?.link || "",
+    snippet: i?.snippet || "",
+  }));
 }
 
-/**
- * CSE via bridge endpoint
- */
 async function cseViaBridge(req, query) {
-  try {
-    if (!query || typeof query !== "string") {
-      throw new Error("Invalid query");
-    }
-
-    const proto = req?.headers?.["x-forwarded-proto"] || "https";
-    const host = req?.headers?.host || "localhost:3000";
-    const basePath = (
-      process.env.NEXT_PUBLIC_BASE_PATH || process.env.NEXT_BASE_PATH || ""
-    ).replace(/\/+$/, "");
-    const pathPrefix = basePath
-      ? basePath.startsWith("/")
-        ? basePath
-        : `/${basePath}`
-      : "";
-    const url = `${proto}://${host}${pathPrefix}/api/cse_resolver?q=${encodeURIComponent(
-      query
-    )}`;
-    
-    const r = await fetch(url, { cache: "no-store" }).catch((err) => {
-      throw new Error(`CSE bridge fetch failed: ${err?.message || String(err)}`);
-    });
-
-    const j = await r.json().catch(() => ({}));
-    
-    if (!r.ok) {
-      throw new Error(j?.error || `CSE bridge ${r.status}`);
-    }
-
-    const arr = Array.isArray(j.results) ? j.results : [];
-    return arr.map((i) => ({
-      title: i?.title || "",
-      link: i?.link || "",
-      snippet: i?.snippet || "",
-    }));
-  } catch (error) {
-    console.error("[verify_race] cseViaBridge failed", {
-      query,
-      error: error?.message || String(error),
-    });
-    throw error; // Re-throw to be caught by runSearch
+  const proto = req?.headers?.["x-forwarded-proto"] || "https";
+  const host = req?.headers?.host || "localhost:3000";
+  const basePath = (
+    process.env.NEXT_PUBLIC_BASE_PATH || process.env.NEXT_BASE_PATH || ""
+  ).replace(/\/+$/, "");
+  const pathPrefix = basePath
+    ? basePath.startsWith("/")
+      ? basePath
+      : `/${basePath}`
+    : "";
+  const url = `${proto}://${host}${pathPrefix}/api/cse_resolver?q=${encodeURIComponent(
+    query
+  )}`;
+  const r = await fetch(url, { cache: "no-store" });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    throw new Error(j?.error || `CSE bridge ${r.status}`);
   }
+  const arr = Array.isArray(j.results) ? j.results : [];
+  return arr.map((i) => ({
+    title: i?.title || "",
+    link: i?.link || "",
+    snippet: i?.snippet || "",
+  }));
 }
 
-/**
- * Pick best result: prefer HRN entries/results pages, then Equibase
- */
 function pickBestResult(results) {
-  try {
-    if (!Array.isArray(results) || results.length === 0) {
-      return null;
-    }
+  if (!Array.isArray(results) || results.length === 0) return null;
 
-    // 1) Prefer HorseracingNation entries/results pages
-    const hrnPreferred = results.find((r) => {
-      const url = (r?.link || "").toLowerCase();
-      return (
-        url.includes("horseracingnation.com") &&
-        (url.includes("/entries-results/") ||
-          url.includes("/entries/") ||
-          url.includes("/entries-results-"))
-      );
-    });
-    if (hrnPreferred) {
-      return {
-        title: hrnPreferred.title || "",
-        link: hrnPreferred.link || "",
-        snippet: hrnPreferred.snippet || "",
-      };
-    }
+  // 1) Prefer HorseracingNation entries/results pages
+  const hrnPreferred = results.find((r) => {
+    const url = (r?.link || "").toLowerCase();
+    return (
+      url.includes("horseracingnation.com") &&
+      (url.includes("/entries-results/") ||
+        url.includes("/entries/") ||
+        url.includes("/entries-results-"))
+    );
+  });
+  if (hrnPreferred) return hrnPreferred;
 
-    // 2) Fall back to Equibase chart pages
-    const equibaseChart = results.find((r) => {
-      const url = (r?.link || "").toLowerCase();
-      return url.includes("equibase.com") && url.includes("chart");
-    });
-    if (equibaseChart) {
-      return {
-        title: equibaseChart.title || "",
-        link: equibaseChart.link || "",
-        snippet: equibaseChart.snippet || "",
-      };
-    }
+  // 2) Fall back to Equibase chart pages
+  const equibaseChart = results.find((r) => {
+    const url = (r?.link || "").toLowerCase();
+    return url.includes("equibase.com") && url.includes("chart");
+  });
+  if (equibaseChart) return equibaseChart;
 
-    // 3) Finally, just use the first result
-    const first = results[0];
-    return first
-      ? {
-          title: first.title || "",
-          link: first.link || "",
-          snippet: first.snippet || "",
-        }
-      : null;
-  } catch (error) {
-    console.error("[verify_race] pickBestResult failed", {
-      error: error?.message || String(error),
-    });
-    return null;
-  }
+  // 3) Finally, just use the first result
+  return results[0];
 }
 
-/**
- * Run search (direct or via bridge)
- */
 async function runSearch(req, query) {
-  try {
-    if (!query || typeof query !== "string") {
-      throw new Error("Invalid query parameter");
-    }
-
-    return GOOGLE_API_KEY && GOOGLE_CSE_ID
-      ? await cseDirect(query)
-      : await cseViaBridge(req, query);
-  } catch (error) {
-    console.error("[verify_race] runSearch failed", {
-      query,
-      error: error?.message || String(error),
-    });
-    throw error; // Re-throw to be caught by handler
-  }
+  return GOOGLE_API_KEY && GOOGLE_CSE_ID
+    ? await cseDirect(query)
+    : await cseViaBridge(req, query);
 }
 
 export default async function handler(req, res) {
@@ -700,7 +369,7 @@ export default async function handler(req, res) {
     let outcome = { win: "", place: "", show: "" };
 
     if (top && top.link) {
-      // Route into HRN / Equibase parser using your helpers
+      // Use generic parser only (no HRN/Equibase specific parsing)
       const parsed = await extractOutcomeFromResultPage(top.link, {
         track: safeTrack || "",
         date: safeDate || "",
@@ -713,50 +382,6 @@ export default async function handler(req, res) {
           place: parsed.place || "",
           show: parsed.show || "",
         };
-      }
-    }
-
-    // Try Equibase parsing if applicable
-    if (
-      top &&
-      top.link &&
-      top.link.toLowerCase().includes("equibase.com") &&
-      safeDate &&
-      raceNumber
-    ) {
-      try {
-        const html = await fetchEquibaseChartHtml({
-          track: safeTrack || "",
-          dateISO: safeDate,
-          raceNo: String(raceNumber || ""),
-        }).catch((err) => {
-          console.error("[verify_race] fetchEquibaseChartHtml failed", {
-            error: err?.message || String(err),
-          });
-          return null;
-        });
-
-        if (html) {
-          const equibaseOutcome = parseEquibaseOutcome(html);
-          if (
-            equibaseOutcome &&
-            (equibaseOutcome.win ||
-              equibaseOutcome.place ||
-              equibaseOutcome.show)
-          ) {
-            outcome = {
-              win: equibaseOutcome.win || "",
-              place: equibaseOutcome.place || "",
-              show: equibaseOutcome.show || "",
-            };
-          }
-        }
-      } catch (equibaseError) {
-        console.error("[verify_race] Equibase parse failed", {
-          link: top?.link,
-          error: equibaseError?.message || String(equibaseError),
-        });
-        // Continue with existing outcome
       }
     }
 
