@@ -344,16 +344,44 @@ export default async function handler(req, res) {
         throw new Error("Invalid full verify response structure");
       }
 
+      // Check if outcome is valid - if not, fall back to stub
+      const outcome = fullResult.outcome || { win: "", place: "", show: "" };
+      const hasValidOutcome = outcome && (
+        (outcome.win && outcome.win.trim()) ||
+        (outcome.place && outcome.place.trim()) ||
+        (outcome.show && outcome.show.trim())
+      );
+
+      // If outcome is empty or step indicates failure, fall back to stub
+      if (!hasValidOutcome || 
+          fullResult.step === "verify_race_full_search_failed" ||
+          fullResult.step === "verify_race_full_no_results") {
+        console.warn("[verify_race] Full parser returned invalid outcome, falling back to stub", {
+          step: fullResult.step,
+          outcome,
+        });
+        const stub = await buildStubResponse(context);
+        return res.status(200).json({
+          ...stub,
+          step: "verify_race_full_fallback",
+          summary: `Parser note: Full Equibase/HRN parse failed or looked unreliable. Fell back to google-only stub.`,
+          debug: {
+            ...stub.debug,
+            fullError: `Full parser step: ${fullResult.step}`,
+          },
+        });
+      }
+
       // Ensure all required fields are present
       const validatedResult = {
-        ok: fullResult.ok !== undefined ? fullResult.ok : false,
+        ok: fullResult.ok !== undefined ? fullResult.ok : true,
         step: fullResult.step || "verify_race",
         date: fullResult.date || date || "",
         track: fullResult.track || track || "",
         raceNo: fullResult.raceNo || raceNo || "",
         query: fullResult.query || "",
         top: fullResult.top || null,
-        outcome: fullResult.outcome || { win: "", place: "", show: "" },
+        outcome,
         predicted: fullResult.predicted || {
           win: (predicted.win || "").trim(),
           place: (predicted.place || "").trim(),
@@ -367,6 +395,7 @@ export default async function handler(req, res) {
         },
         summary: fullResult.summary || "Full verify race completed.",
         debug: {
+          ...fullResult.debug,
           googleUrl:
             fullResult.debug?.googleUrl ||
             buildGoogleSearchUrl({ track, date, raceNo }).url,
