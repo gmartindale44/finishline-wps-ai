@@ -63,6 +63,12 @@ async function main() {
       if (payload.debug?.googleUrl) {
         console.log("GOOGLE URL:", payload.debug.googleUrl);
       }
+      if (payload.debug?.source) {
+        console.log("SOURCE:", payload.debug.source);
+      }
+      if (payload.debug?.equibaseUrl) {
+        console.log("EQUIBASE URL:", payload.debug.equibaseUrl);
+      }
       if (payload.outcome?.win || payload.outcome?.place || payload.outcome?.show) {
         console.log("OUTCOME:", {
           win: payload.outcome.win,
