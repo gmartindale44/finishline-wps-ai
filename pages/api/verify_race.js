@@ -341,20 +341,26 @@ export default async function handler(req, res) {
     const body = await safeParseBody(req);
     const track = (body.track || body.trackName || "").trim();
     
-    // Extract canonical race date from request body
-    // If body.date is a non-empty string, use that exact value
-    // Only fall back to null if date is undefined or empty string
-    const raceDateRaw = typeof body.date === "string" && body.date.trim()
+    // Extract and normalize race date from request body
+    // Single source of truth: request date if provided, otherwise today
+    const { getCanonicalRaceDate } = await import("../../lib/verify_race_full.js");
+    
+    // Extract raw date from request
+    const rawDate = typeof body.date === "string" && body.date.trim()
       ? body.date.trim()
       : (typeof body.raceDate === "string" && body.raceDate.trim()
           ? body.raceDate.trim()
           : null);
     
+    // Normalize to canonical ISO format (YYYY-MM-DD)
+    // Only falls back to today if rawDate is null/undefined/empty
+    const effectiveDateIso = getCanonicalRaceDate(rawDate);
+    
     const raceNo = (body.raceNo || body.race || "").toString().trim() || "";
     const predicted = body.predicted || {};
 
-    // Build context - pass raceDateRaw (will be normalized to canonical format in pipeline)
-    const context = { track, date: raceDateRaw, raceNo, predicted };
+    // Build context with canonical date - this is the single source of truth
+    const context = { track, date: effectiveDateIso, raceNo, predicted };
 
     // Read feature flag INSIDE the handler (not at top level)
     const mode = (process.env.VERIFY_RACE_MODE || "stub").toLowerCase().trim();
@@ -391,11 +397,11 @@ export default async function handler(req, res) {
       
       // If step is "verify_race", return success directly (Equibase or HRN succeeded)
       if (fullResult.step === "verify_race") {
-        // Ensure all required fields are present
+        // Ensure all required fields are present - use canonical date from context
         const validatedResult = {
           ok: fullResult.ok !== undefined ? fullResult.ok : true,
           step: "verify_race",
-          date: fullResult.date || date || "",
+          date: fullResult.date || effectiveDateIso, // Use canonical date
           track: fullResult.track || track || "",
           raceNo: fullResult.raceNo || raceNo || "",
           query: fullResult.query || "",
@@ -417,35 +423,27 @@ export default async function handler(req, res) {
             ...fullResult.debug,
             googleUrl:
               fullResult.debug?.googleUrl ||
-              buildGoogleSearchUrl({ track, date, raceNo }).url,
+              buildGoogleSearchUrl({ track, date: effectiveDateIso, raceNo }).url,
           },
         };
 
         return res.status(200).json(validatedResult);
       }
 
-      // If step is "verify_race_full_fallback", call stub builder
+      // If step is "verify_race_full_fallback", use full result but ensure date is canonical
       if (fullResult.step === "verify_race_full_fallback") {
-        console.warn("[verify_race] Full parser returned fallback, using stub", {
+        console.warn("[verify_race] Full parser returned fallback", {
           step: fullResult.step,
           query: fullResult.query,
         });
-        const stub = await buildStubResponse(context);
+        // Use full result but ensure date field is canonical
         return res.status(200).json({
-          ...stub,
-          step: "verify_race_full_fallback",
-          query: fullResult.query || stub.query,
-          top: fullResult.top || stub.top,
-          summary: fullResult.summary || stub.summary,
-          debug: {
-            ...stub.debug,
-            ...fullResult.debug,
-            fullError: `Full parser step: ${fullResult.step}`,
-          },
+          ...fullResult,
+          date: fullResult.date || effectiveDateIso, // Ensure canonical date
         });
       }
 
-      // Any other step (error cases) - fall back to stub
+      // Any other step (error cases) - fall back to stub with canonical date
       console.warn("[verify_race] Full parser returned unexpected step, falling back to stub", {
         step: fullResult.step,
       });
@@ -453,6 +451,7 @@ export default async function handler(req, res) {
       return res.status(200).json({
         ...stub,
         step: "verify_race_full_fallback",
+        date: effectiveDateIso, // Ensure canonical date
         summary: `Full parser attempted but failed: step=${fullResult.step}. Using stub fallback (Google search only).\n${stub.summary}`,
         debug: {
           ...stub.debug,
@@ -465,7 +464,7 @@ export default async function handler(req, res) {
         error: fullError?.message || String(fullError),
         stack: fullError?.stack,
         track,
-        date,
+        date: effectiveDateIso,
         raceNo,
       });
 
@@ -474,6 +473,7 @@ export default async function handler(req, res) {
       return res.status(200).json({
         ...stub,
         step: "verify_race_full_fallback",
+        date: effectiveDateIso, // Ensure canonical date
         summary: `Full parser attempted but failed: ${errorMsg}. Using stub fallback (Google search only).\n${stub.summary}`,
         debug: {
           ...stub.debug,
@@ -485,9 +485,12 @@ export default async function handler(req, res) {
   } catch (err) {
     // Absolute last-resort catch; still return 200.
     console.error("[verify_race] UNEXPECTED ERROR", err);
+    // Use canonical date even in error case if available
+    const { getCanonicalRaceDate } = await import("../../lib/verify_race_full.js");
+    const errorDateIso = getCanonicalRaceDate(null); // Falls back to today
     const stub = await buildStubResponse({
       track: null,
-      date: null,
+      date: errorDateIso,
       raceNo: null,
     });
     return res.status(200).json({
