@@ -590,45 +590,45 @@
           (raceInputEl && raceInputEl.value
             ? raceInputEl.value.trim()
             : "") || null;
-        // Normalize UI date to ISO format (pure string operations, no Date objects)
-        function normalizeUIDate(raw) {
-          if (!raw) return null;
-          const s = String(raw).trim();
-          // Already ISO 'YYYY-MM-DD'
-          if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-          // US 'MM/DD/YYYY'
-          const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-          if (m) {
-            const [, mm, dd, yyyy] = m;
-            const mm2 = mm.padStart(2, "0");
-            const dd2 = dd.padStart(2, "0");
-            return `${yyyy}-${mm2}-${dd2}`;
+        // Tiny, pure string helper for date normalization
+        function normalizeVerifyUIDate(raw) {
+          if (!raw) return "";
+          const trimmed = String(raw).trim();
+          
+          // Already ISO (YYYY-MM-DD) -> keep as-is
+          if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+            return trimmed;
           }
-          return s; // last-resort, don't mutate
+          
+          // MM/DD/YYYY -> convert to ISO
+          const mmdd = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(trimmed);
+          if (mmdd) {
+            let [, m, d, y] = mmdd;
+            if (m.length === 1) m = "0" + m;
+            if (d.length === 1) d = "0" + d;
+            return `${y}-${m}-${d}`;
+          }
+          
+          // Unknown format -> return trimmed as-is and let backend decide
+          return trimmed;
         }
         
-        // Read date input value - <input type="date"> returns YYYY-MM-DD
-        const dateInputValue = dateInputEl && dateInputEl.value ? dateInputEl.value.trim() : null;
+        // Read date directly from verify modal input (not from global race state)
+        const rawDate = dateInputEl && dateInputEl.value ? dateInputEl.value.trim() : null;
+        const isoDate = normalizeVerifyUIDate(rawDate);
         
-        // Normalize to ISO format (if not already)
-        const normalizedDate = normalizeUIDate(dateInputValue);
-        
-        // Only use fallback if date is truly empty
-        const date = normalizedDate || todayISO();
-
-        // DEBUG: Log outgoing payload
+        // Build payload - date is the ONLY date field we send
         const payload = {
           track,
-          date,
           raceNo: raceNo || undefined,
+          date: isoDate,  // <--- this is the ONLY date we send
           predicted: readUIPredictions(),
         };
         
-        console.log("[VERIFY_UI] outgoing verify payload", {
-          dateInputValue,
-          payloadDate: payload.date,
-          payloadRaceDate: payload.raceDate,
-        });
+        // Debug log
+        if (window.__flVerifyDebug) {
+          console.log("[VERIFY_UI] outgoing verify payload", payload);
+        }
 
         if (warnTrackEl) warnTrackEl.style.display = track ? "none" : "";
         if (!track) {

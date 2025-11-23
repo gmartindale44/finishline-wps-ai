@@ -345,69 +345,71 @@ export default async function handler(req, res) {
     const body = await safeParseBody(req);
     const track = (body.track || body.trackName || "").trim();
     
-    // STEP 1: Diagnostic logging - what did we receive?
-    console.log("[verify_race][incoming]", {
-      rawBody: body,
-      date: body?.date,
-      raceDate: body?.raceDate,
-      track: body?.track,
-      raceNo: body?.raceNo,
-    });
-    
-    // LOCK IN USER DATE - Pure string normalization, no Date objects
+    // Pure string helper for date normalization (no Date objects for user dates)
     function normalizeUserDate(raw) {
-      if (!raw) return null;
+      if (!raw) return "";
+      
       const s = String(raw).trim();
-      // ISO: YYYY-MM-DD
-      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-        return s;
+      
+      // ISO YYYY-MM-DD
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+      
+      // MM/DD/YYYY
+      const mmdd = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s);
+      if (mmdd) {
+        let [, m, d, y] = mmdd;
+        if (m.length === 1) m = "0" + m;
+        if (d.length === 1) d = "0" + d;
+        return `${y}-${m}-${d}`;
       }
-      // US: MM/DD/YYYY
-      const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-      if (m) {
-        const [, mm, dd, yyyy] = m;
-        const mm2 = mm.padStart(2, "0");
-        const dd2 = dd.padStart(2, "0");
-        return `${yyyy}-${mm2}-${dd2}`;
-      }
-      // Unknown format: just return original string
+      
+      // Unknown format -> return trimmed as-is (we'll still log it)
       return s;
     }
     
-    // Extract raw date from request
-    const userDateRaw =
-      (body && (body.date || body.raceDate || (body.meta && body.meta.raceDate))) || "";
+    function todayISO() {
+      const now = new Date();
+      const y = now.getFullYear();
+      let m = String(now.getMonth() + 1);
+      let d = String(now.getDate());
+      if (m.length === 1) m = "0" + m;
+      if (d.length === 1) d = "0" + d;
+      return `${y}-${m}-${d}`;
+    }
     
-    // Normalize to canonical ISO format (pure string operations)
-    const canonicalDate = normalizeUserDate(userDateRaw);
+    // Choose ONE canonical date from request body
+    const rawDateFromBody =
+      (body && (body.date || body.raceDate || body.race_date || "")) || "";
     
-    // Only fall back to "today" if no date was provided at all
-    const todayIso = new Date().toISOString().slice(0, 10);
-    const effectiveDateIso = canonicalDate || todayIso;
+    const canonicalDate = normalizeUserDate(rawDateFromBody);
+    const effectiveDate = canonicalDate || todayISO();
     
-    // Diagnostic log
-    console.log("[VERIFY_DATES] incoming:", {
-      userDateRaw,
-      canonicalDate,
-      effectiveDateIso,
-    });
+    // Debug log (only in non-production to avoid noisy logs)
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[VERIFY_DATES] incoming", {
+        rawDateFromBody,
+        canonicalDate,
+        effectiveDate,
+      });
+    }
     
     const raceNo = (body.raceNo || body.race || "").toString().trim() || "";
     const predicted = body.predicted || {};
 
-    // Build context with canonical date - this is the single source of truth
-    // PATCH: effectiveDateIso is already locked in - use it exactly
-    const context = { track, date: effectiveDateIso, raceNo, predicted };
-    
-    // Diagnostic log
-    console.log("[VERIFY_DATES] Context:", context.date);
+    // Build context - effectiveDate is the single source of truth
+    const ctx = {
+      track: body.track || "",
+      raceNo: body.raceNo || body.race || "",
+      date: effectiveDate,
+      predicted: body.predicted || {},
+    };
 
     // Read feature flag INSIDE the handler (not at top level)
     const mode = (process.env.VERIFY_RACE_MODE || "stub").toLowerCase().trim();
 
     // If not in full mode, immediately return stub
     if (mode !== "full") {
-      const stub = await buildStubResponse(context);
+      const stub = await buildStubResponse(ctx);
       return res.status(200).json(stub);
     }
 
@@ -419,7 +421,7 @@ export default async function handler(req, res) {
       const { runFullVerifyRace } = await import("../../lib/verify_race_full.js");
 
       const fullResult = await runFullVerifyRace({
-        ...context,
+        ...ctx,
         req, // Pass req for CSE bridge
       });
 
@@ -441,7 +443,7 @@ export default async function handler(req, res) {
         const validatedResult = {
           ok: fullResult.ok !== undefined ? fullResult.ok : true,
           step: "verify_race",
-          date: fullResult.date || effectiveDateIso, // Use canonical date
+          date: fullResult.date || effectiveDate, // Use effectiveDate from handler
           track: fullResult.track || track || "",
           raceNo: fullResult.raceNo || raceNo || "",
           query: fullResult.query || "",
@@ -463,7 +465,7 @@ export default async function handler(req, res) {
             ...fullResult.debug,
             googleUrl:
               fullResult.debug?.googleUrl ||
-              buildGoogleSearchUrl({ track, date: effectiveDateIso, raceNo }).url,
+              buildGoogleSearchUrl({ track, date: effectiveDate, raceNo }).url,
           },
         };
 
@@ -487,7 +489,7 @@ export default async function handler(req, res) {
       console.warn("[verify_race] Full parser returned unexpected step, falling back to stub", {
         step: fullResult.step,
       });
-      const stub = await buildStubResponse(context);
+      const stub = await buildStubResponse(ctx);
       return res.status(200).json({
         ...stub,
         step: "verify_race_full_fallback",
@@ -508,7 +510,7 @@ export default async function handler(req, res) {
         raceNo,
       });
 
-      const stub = await buildStubResponse(context);
+      const stub = await buildStubResponse(ctx);
       const errorMsg = fullError?.message || String(fullError);
       return res.status(200).json({
         ...stub,
