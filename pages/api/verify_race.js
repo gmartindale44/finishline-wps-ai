@@ -99,34 +99,55 @@ function extractOutcomeFromGoogleHtml(html) {
     return { win: "", place: "", show: "" };
   }
 
-  // Universal regex patterns that match "Win:", "Place:", "Show:" followed by horse name
-  const winRegex = /Win:\s*([^<\n]+)/i;
-  const placeRegex = /Place:\s*([^<\n]+)/i;
-  const showRegex = /Show:\s*([^<\n]+)/i;
+  // Three separate regex patterns, one per line
+  // Pattern matches "Win:", "Place:", "Show:" followed by optional whitespace and horse name
+  // [A-Za-z0-9 .,'’-]+ matches letters, numbers, spaces, and common punctuation
+  const winRegex = /Win:\s*([A-Za-z0-9 .,'’-]+)/i;
+  const placeRegex = /Place:\s*([A-Za-z0-9 .,'’-]+)/i;
+  const showRegex = /Show:\s*([A-Za-z0-9 .,'’-]+)/i;
 
   // Apply regex patterns
   const winMatch = html.match(winRegex);
   const placeMatch = html.match(placeRegex);
   const showMatch = html.match(showRegex);
 
-  // Normalize each match, decode HTML entities, and trim
-  // Filter out matches that look like JavaScript code or are too long
+  /**
+   * Clean and validate a horse name match
+   * @param {RegExpMatchArray|null} match - The regex match result
+   * @returns {string} - Cleaned horse name or empty string if invalid
+   */
   function cleanMatch(match) {
     if (!match?.[1]) return "";
-    let cleaned = decodeHtmlEntities(match[1].trim());
     
-    // Stop at common delimiters that indicate end of horse name
-    cleaned = cleaned.split(/[<;\n}]/)[0].trim();
+    // Get the captured group and trim
+    let cleaned = match[1].trim();
     
-    // Filter out matches that look like JavaScript code or are invalid
+    // Decode HTML entities
+    cleaned = decodeHtmlEntities(cleaned);
+    
+    // Strip trailing characters after common delimiters: <, ", ', {, }, ;
+    cleaned = cleaned.split(/[<"'{};]/)[0].trim();
+    
+    // Validation rules: horse name is valid only if:
+    // 1. Length ≤ 40 chars
+    // 2. Contains at least 1 letter
+    // 3. Does NOT contain JS code patterns
     if (
       !cleaned ||
-      cleaned.length > 60 ||
+      cleaned.length === 0 ||
+      cleaned.length > 40 ||
+      !/[A-Za-z]/.test(cleaned) || // Must contain at least one letter
       cleaned.includes("function") ||
+      cleaned.includes("=>") ||
       cleaned.includes("prototype") ||
       cleaned.includes("call:") ||
-      /[{}()=]/.test(cleaned) ||
-      /^\d+$/.test(cleaned) // Pure numbers are not horse names
+      cleaned.includes("splice") ||
+      cleaned.includes("push") ||
+      cleaned.includes("pop") ||
+      cleaned.includes("<script") ||
+      /[{}()=>]/.test(cleaned) || // No JS code patterns
+      /^\d+$/.test(cleaned) || // Pure numbers are not horse names
+      /^[A-Z],/.test(cleaned) // Patterns like "P,splice" are JS code
     ) {
       return "";
     }
@@ -214,12 +235,18 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
   summaryLines.push(`Query: ${query}`);
   summaryLines.push(`Top Result: Google search (see Open Top Result button).`);
 
-  if (outcome && (outcome.win || outcome.place || outcome.show)) {
+  // Display outcome in format: "Outcome: <win> / <place> / <show>"
+  if (outcome && outcome.win && outcome.place && outcome.show) {
+    // All three extracted successfully
+    summaryLines.push(`Outcome: ${outcome.win} / ${outcome.place} / ${outcome.show}`);
+  } else if (outcome && (outcome.win || outcome.place || outcome.show)) {
+    // Partial extraction - show what we have
     const win = outcome.win || "(none)";
     const place = outcome.place || "(none)";
     const show = outcome.show || "(none)";
     summaryLines.push(`Outcome: ${win} / ${place} / ${show}`);
   } else {
+    // No extraction
     summaryLines.push("Outcome: (none)");
   }
 
