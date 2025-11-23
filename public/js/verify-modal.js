@@ -632,6 +632,18 @@
           const rawDate = dateInputEl && dateInputEl.value ? dateInputEl.value.trim() : null;
           const normalizedDate = normalizeUIDate(rawDate);
           
+          // Validate date is required
+          if (!normalizedDate) {
+            if (summaryEl) {
+              summaryEl.textContent = "Error: race date is required";
+            }
+            if (statusNode) {
+              statusNode.textContent = "Error";
+              statusNode.style.color = "#f87171";
+            }
+            return;
+          }
+          
           // Build payload - date is the ONLY date field we send
           const payload = {
             track,
@@ -640,7 +652,7 @@
             predicted: readUIPredictions(),
           };
           
-          console.info("[VERIFY_UI] outgoing verify payload", payload);
+          console.log("[VERIFY_UI] outgoing payload", payload);
           
           // Update UI state
           if (statusNode) {

@@ -168,15 +168,32 @@ function extractOutcomeFromGoogleHtml(html) {
  * Now enhanced to fetch and parse Google HTML for Win/Place/Show
  */
 async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
-  // Import canonical date helper
-  const { getCanonicalRaceDate } = await import("../../lib/verify_race_full.js");
-  
   // CRITICAL: date should already be canonical ISO from handler
-  // Only normalize if it's not already in ISO format (defensive check)
-  // This preserves the user's exact date selection
-  const usingDate = (date && /^\d{4}-\d{2}-\d{2}$/.test(date.trim()))
-    ? date.trim()  // Already ISO - use as-is (no modification)
-    : getCanonicalRaceDate(date);  // Only normalize if not ISO format
+  // Use it as-is - no fallback to today, no re-normalization
+  // If date is missing, that's an upstream bug - log warning but use empty string
+  let usingDate = "";
+  if (date && typeof date === "string") {
+    const trimmed = date.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      usingDate = trimmed;  // Already ISO - use as-is (no modification)
+    } else {
+      // Try to normalize MM/DD/YYYY format (defensive check only)
+      const mdy = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (mdy) {
+        const [, mm, dd, yyyy] = mdy;
+        usingDate = `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
+      } else {
+        console.warn("[buildStubResponse] Non-ISO date format, using as-is:", trimmed);
+        usingDate = trimmed;
+      }
+    }
+  } else if (date) {
+    console.warn("[buildStubResponse] Date is not a string:", typeof date, date);
+    usingDate = String(date).trim();
+  } else {
+    console.warn("[buildStubResponse] Date is missing - this should not happen if handler validated correctly");
+    usingDate = "";  // Do NOT fall back to today
+  }
   const safeTrack =
     typeof track === "string" && track.trim() ? track.trim() : "";
   const raceNoStr = String(raceNo ?? "").trim() || "";
@@ -367,40 +384,39 @@ export default async function handler(req, res) {
       return s;
     }
     
-    function todayISO() {
-      const now = new Date();
-      const y = now.getFullYear();
-      let m = String(now.getMonth() + 1);
-      let d = String(now.getDate());
-      if (m.length === 1) m = "0" + m;
-      if (d.length === 1) d = "0" + d;
-      return `${y}-${m}-${d}`;
-    }
-    
     // Choose ONE canonical date from request body
     const rawDateFromBody =
       (body && (body.date || body.raceDate || body.race_date || "")) || "";
     
     const canonicalDate = normalizeUserDate(rawDateFromBody);
-    const effectiveDate = canonicalDate || todayISO();
+    
+    // If canonicalDate is empty, return error - do NOT use today
+    if (!canonicalDate) {
+      return res.status(200).json({
+        ok: false,
+        step: "verify_race_error",
+        error: "race date is required",
+        summary: "Error: race date is required. Please select a race date and try again.",
+        date: "",
+      });
+    }
     
     // Debug log (only in non-production to avoid noisy logs)
     if (process.env.NODE_ENV !== "production") {
       console.log("[VERIFY_DATES] incoming", {
         rawDateFromBody,
         canonicalDate,
-        effectiveDate,
       });
     }
     
     const raceNo = (body.raceNo || body.race || "").toString().trim() || "";
     const predicted = body.predicted || {};
 
-    // Build context - effectiveDate is the single source of truth
+    // Build context - canonicalDate is the single source of truth
     const ctx = {
       track: body.track || "",
       raceNo: body.raceNo || body.race || "",
-      date: effectiveDate,
+      date: canonicalDate,
       predicted: body.predicted || {},
     };
 
@@ -443,7 +459,7 @@ export default async function handler(req, res) {
         const validatedResult = {
           ok: fullResult.ok !== undefined ? fullResult.ok : true,
           step: "verify_race",
-          date: fullResult.date || effectiveDate, // Use effectiveDate from handler
+          date: fullResult.date || canonicalDate, // Use canonicalDate from handler
           track: fullResult.track || track || "",
           raceNo: fullResult.raceNo || raceNo || "",
           query: fullResult.query || "",
@@ -481,7 +497,7 @@ export default async function handler(req, res) {
         // Use full result but ensure date field is canonical
         return res.status(200).json({
           ...fullResult,
-          date: fullResult.date || effectiveDateIso, // Ensure canonical date
+          date: fullResult.date || canonicalDate, // Ensure canonical date
         });
       }
 
@@ -493,7 +509,7 @@ export default async function handler(req, res) {
       return res.status(200).json({
         ...stub,
         step: "verify_race_full_fallback",
-        date: effectiveDateIso, // Ensure canonical date
+        date: canonicalDate, // Ensure canonical date
         summary: `Full parser attempted but failed: step=${fullResult.step}. Using stub fallback (Google search only).\n${stub.summary}`,
         debug: {
           ...stub.debug,
@@ -506,7 +522,7 @@ export default async function handler(req, res) {
         error: fullError?.message || String(fullError),
         stack: fullError?.stack,
         track,
-        date: effectiveDateIso,
+        date: canonicalDate,
         raceNo,
       });
 
@@ -515,7 +531,7 @@ export default async function handler(req, res) {
       return res.status(200).json({
         ...stub,
         step: "verify_race_full_fallback",
-        date: effectiveDateIso, // Ensure canonical date
+        date: canonicalDate, // Ensure canonical date
         summary: `Full parser attempted but failed: ${errorMsg}. Using stub fallback (Google search only).\n${stub.summary}`,
         debug: {
           ...stub.debug,
@@ -527,9 +543,10 @@ export default async function handler(req, res) {
   } catch (err) {
     // Absolute last-resort catch; still return 200.
     console.error("[verify_race] UNEXPECTED ERROR", err);
-    // Use canonical date even in error case if available
-    const { getCanonicalRaceDate } = await import("../../lib/verify_race_full.js");
-    const errorDateIso = getCanonicalRaceDate(null); // Falls back to today
+    // Try to extract date from body if available, otherwise use empty string (no today fallback)
+    const body = await safeParseBody(req).catch(() => ({}));
+    const rawDateFromBody = (body && (body.date || body.raceDate || body.race_date || "")) || "";
+    const errorDateIso = normalizeUserDate(rawDateFromBody) || "";  // No fallback to today
     const stub = await buildStubResponse({
       track: null,
       date: errorDateIso,
@@ -541,6 +558,7 @@ export default async function handler(req, res) {
       step: "verify_race_stub_unexpected_error",
       error: String(err && err.message ? err.message : err),
       summary: "Verify Race stub encountered an unexpected error, but the handler still returned 200.",
+      date: errorDateIso,
     });
   }
 }
