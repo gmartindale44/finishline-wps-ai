@@ -1,69 +1,101 @@
 // scripts/debug_verify_race.js
-console.log("[debug_verify_race] Starting debug script...");
+// Debug harness for verify_race API
+// Supports both stub and full modes via VERIFY_RACE_MODE environment variable
+// Usage:
+//   VERIFY_RACE_MODE=stub npm run debug:verify
+//   VERIFY_RACE_MODE=full npm run debug:verify
 
-let handler;
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 
-try {
-  console.log("[debug_verify_race] Attempting to import handler...");
-  handler = (await import("../pages/api/verify_race.js")).default;
-  console.log("[debug_verify_race] Handler imported successfully");
-} catch (err) {
-  console.error("[debug_verify_race] ERROR importing handler:", err);
-  console.error("[debug_verify_race] Error message:", err?.message || String(err));
-  console.error("[debug_verify_race] Error stack:", err?.stack);
-  process.exit(1);
-}
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
-const mockReq = {
-  method: "POST",
-  headers: {
-    host: "localhost:3000",
-    "x-forwarded-proto": "http",
-  },
-  body: {
-    track: "Aqueduct",
-    date: "2025-11-21",
-    raceNo: "1",
-    predicted: { win: "", place: "", show: "" },
-  },
-};
+async function main() {
+  // Read mode from environment (default to stub for safety)
+  const mode = (process.env.VERIFY_RACE_MODE || "stub").toLowerCase().trim();
+  console.log(`[debug_verify_race] Running in ${mode} mode`);
 
-const mockRes = {
-  statusCode: 200,
-  jsonData: null,
-  headers: {},
-  status(code) {
-    this.statusCode = code;
-    return this;
-  },
-  setHeader(name, value) {
-    this.headers[name] = value;
-  },
-  json(data) {
-    this.jsonData = data;
-    console.log(">>> RESPONSE STATUS:", this.statusCode);
-    console.log(">>> RESPONSE JSON:", JSON.stringify(data, null, 2));
-    return this;
-  },
-};
+  // Import the handler like Vercel would (ES module)
+  // Use relative path from scripts/ to pages/api/verify_race.js
+  const handlerModule = await import("../pages/api/verify_race.js");
+  const handler = handlerModule.default || handlerModule;
 
-(async () => {
+  // Fake req/res objects
+  const req = {
+    method: "POST",
+    body: {
+      track: "Del Mar",
+      date: "2025-11-23",
+      raceNo: "1",
+      predicted: {
+        win: "",
+        place: "",
+        show: "",
+      },
+    },
+    headers: {
+      host: "localhost:3000",
+      "x-forwarded-proto": "http",
+    },
+    on: () => {}, // Stub for stream interface (not used when body is already parsed)
+  };
+
+  const res = {
+    statusCode: 200,
+    headersSent: false,
+    status(code) {
+      this.statusCode = code;
+      return this;
+    },
+    json(payload) {
+      this.headersSent = true;
+      console.log("\n=== RESPONSE ===");
+      console.log("STATUS:", this.statusCode);
+      console.log("STEP:", payload.step);
+      console.log("OK:", payload.ok);
+      if (payload.error) {
+        console.log("ERROR:", payload.error);
+      }
+      if (payload.top?.link) {
+        console.log("TOP LINK:", payload.top.link);
+      }
+      if (payload.debug?.googleUrl) {
+        console.log("GOOGLE URL:", payload.debug.googleUrl);
+      }
+      if (payload.debug?.source) {
+        console.log("SOURCE:", payload.debug.source);
+      }
+      if (payload.debug?.equibaseUrl) {
+        console.log("EQUIBASE URL:", payload.debug.equibaseUrl);
+      }
+      if (payload.outcome?.win || payload.outcome?.place || payload.outcome?.show) {
+        console.log("OUTCOME:", {
+          win: payload.outcome.win,
+          place: payload.outcome.place,
+          show: payload.outcome.show,
+        });
+      }
+      if (payload.hits) {
+        console.log("HITS:", payload.hits);
+      }
+      console.log("\n=== FULL PAYLOAD ===");
+      console.log(JSON.stringify(payload, null, 2));
+    },
+  };
+
   try {
-    console.log("[debug_verify_race] Invoking handler...");
-    await handler(mockReq, mockRes);
-    console.log("[debug_verify_race] Handler completed without throwing.");
-    console.log("[debug_verify_race] Final status code:", mockRes.statusCode);
-    if (mockRes.jsonData) {
-      console.log("[debug_verify_race] Response has data:", Object.keys(mockRes.jsonData));
+    await handler(req, res);
+    if (!res.headersSent) {
+      console.warn("[debug_verify_race] handler returned without sending a response");
     }
   } catch (err) {
-    console.error("[debug_verify_race] RUNTIME ERROR from handler:", err);
-    console.error("[debug_verify_race] Error message:", err?.message || String(err));
-    console.error("[debug_verify_race] Error stack:", err?.stack);
-    if (err?.cause) {
-      console.error("[debug_verify_race] Error cause:", err.cause);
-    }
-  } finally {
-    process.exit(0);
+    console.error("[debug_verify_race] TOP-LEVEL THROW", err);
+    process.exitCode = 1;
   }
-})();
+}
+
+main().catch((err) => {
+  console.error("[debug_verify_race] Unhandled error", err);
+  process.exitCode = 1;
+});
