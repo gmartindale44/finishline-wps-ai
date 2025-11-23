@@ -340,13 +340,21 @@ export default async function handler(req, res) {
 
     const body = await safeParseBody(req);
     const track = (body.track || body.trackName || "").trim();
-    // Get date from request - will be normalized to canonical format in pipeline
-    const date = (body.date || body.raceDate || "").trim();
+    
+    // Extract canonical race date from request body
+    // If body.date is a non-empty string, use that exact value
+    // Only fall back to null if date is undefined or empty string
+    const raceDateRaw = typeof body.date === "string" && body.date.trim()
+      ? body.date.trim()
+      : (typeof body.raceDate === "string" && body.raceDate.trim()
+          ? body.raceDate.trim()
+          : null);
+    
     const raceNo = (body.raceNo || body.race || "").toString().trim() || "";
     const predicted = body.predicted || {};
 
-    // Build context for full parser or stub - date will be normalized to canonical format
-    const context = { track, date, raceNo, predicted };
+    // Build context - pass raceDateRaw (will be normalized to canonical format in pipeline)
+    const context = { track, date: raceDateRaw, raceNo, predicted };
 
     // Read feature flag INSIDE the handler (not at top level)
     const mode = (process.env.VERIFY_RACE_MODE || "stub").toLowerCase().trim();

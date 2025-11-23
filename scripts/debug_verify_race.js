@@ -77,6 +77,7 @@ async function main() {
   const mode = (process.env.VERIFY_RACE_MODE || "stub").toLowerCase().trim();
   console.log(`[debug_verify_race] Running in ${mode} mode`);
   console.log(`[debug_verify_race] Test case: ${args.track} - ${args.date} - Race ${args.raceNo}`);
+  console.log(`[debug_verify_race] Received date: "${args.date}" (will be normalized to canonical format)`);
   if (args.predicted.win || args.predicted.place || args.predicted.show) {
     console.log(`[debug_verify_race] Predicted: Win=${args.predicted.win || "(none)"}, Place=${args.predicted.place || "(none)"}, Show=${args.predicted.show || "(none)"}`);
   }
@@ -115,6 +116,10 @@ async function main() {
       console.log("STATUS:", this.statusCode);
       console.log("STEP:", payload.step);
       console.log("OK:", payload.ok);
+      console.log("DATE (response):", payload.date);
+      if (payload.query) {
+        console.log("QUERY:", payload.query);
+      }
       if (payload.error) {
         console.log("ERROR:", payload.error);
       }
@@ -146,6 +151,16 @@ async function main() {
       if (payload.summary) {
         console.log("\n=== SUMMARY ===");
         console.log(payload.summary);
+        // Extract and log "Using date:" line for verification
+        const usingDateMatch = payload.summary.match(/Using date:\s*([^\n]+)/);
+        if (usingDateMatch) {
+          console.log(`\n[VERIFICATION] Using date: "${usingDateMatch[1]}"`);
+          if (usingDateMatch[1] !== args.date && usingDateMatch[1] !== args.date.replace(/\//g, "-")) {
+            console.warn(`[WARNING] Date mismatch! Input: "${args.date}", Summary: "${usingDateMatch[1]}"`);
+          } else {
+            console.log(`[VERIFICATION] ✓ Date matches input: "${args.date}"`);
+          }
+        }
       }
       console.log("\n=== FULL PAYLOAD ===");
       console.log(JSON.stringify(payload, null, 2));
