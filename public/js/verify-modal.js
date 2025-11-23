@@ -590,24 +590,45 @@
           (raceInputEl && raceInputEl.value
             ? raceInputEl.value.trim()
             : "") || null;
-        // CRITICAL: Read date input value directly - no Date object conversion
-        // <input type="date"> always returns YYYY-MM-DD format (timezone-agnostic)
-        const rawDate =
-          dateInputEl && dateInputEl.value ? dateInputEl.value.trim() : null;
-        
-        // Only use fallback if date is truly empty - preserve user's selection exactly
-        const date = rawDate || todayISO();
-
-        // DEBUG: Log date values before sending to API
-        console.log('[VERIFY_UI] raw date input value:', rawDate);
-        console.log('[VERIFY_UI] date sent to API:', date);
-        console.log('[VERIFY_UI] dateInputEl.value:', dateInputEl?.value);
-        console.log('[VERIFY_UI] dateInputEl.type:', dateInputEl?.type);
-        
-        // Safety check: warn if date looks shifted (shouldn't happen with type="date")
-        if (rawDate && !/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
-          console.warn('[VERIFY_UI] Date input value is not in ISO format:', rawDate);
+        // Normalize UI date to ISO format (pure string operations, no Date objects)
+        function normalizeUIDate(raw) {
+          if (!raw) return null;
+          const s = String(raw).trim();
+          // Already ISO 'YYYY-MM-DD'
+          if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+          // US 'MM/DD/YYYY'
+          const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+          if (m) {
+            const [, mm, dd, yyyy] = m;
+            const mm2 = mm.padStart(2, "0");
+            const dd2 = dd.padStart(2, "0");
+            return `${yyyy}-${mm2}-${dd2}`;
+          }
+          return s; // last-resort, don't mutate
         }
+        
+        // Read date input value - <input type="date"> returns YYYY-MM-DD
+        const dateInputValue = dateInputEl && dateInputEl.value ? dateInputEl.value.trim() : null;
+        
+        // Normalize to ISO format (if not already)
+        const normalizedDate = normalizeUIDate(dateInputValue);
+        
+        // Only use fallback if date is truly empty
+        const date = normalizedDate || todayISO();
+
+        // DEBUG: Log outgoing payload
+        const payload = {
+          track,
+          date,
+          raceNo: raceNo || undefined,
+          predicted: readUIPredictions(),
+        };
+        
+        console.log("[VERIFY_UI] outgoing verify payload", {
+          dateInputValue,
+          payloadDate: payload.date,
+          payloadRaceDate: payload.raceDate,
+        });
 
         if (warnTrackEl) warnTrackEl.style.display = track ? "none" : "";
         if (!track) {
@@ -634,14 +655,6 @@
         pushSnapshot(track, raceNo, readUIPredictions());
 
         try {
-          const predicted = readUIPredictions();
-          const payload = {
-            track,
-            date,
-            raceNo: raceNo || undefined,
-            predicted,
-          };
-          console.log('[VERIFY_UI] Full payload being sent:', JSON.stringify(payload, null, 2));
           const resp = await fetch("/api/verify_race", {
             method: "POST",
             headers: { "Content-Type": "application/json" },

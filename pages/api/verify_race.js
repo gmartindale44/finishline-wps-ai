@@ -354,39 +354,43 @@ export default async function handler(req, res) {
       raceNo: body?.raceNo,
     });
     
-    // PATCH: LOCK IN USER DATE IMMEDIATELY - NO TRANSFORMATION
-    // Extract raw date from request - preserve exactly what user sent
-    const userDateRaw = typeof body.date === "string" && body.date.trim()
-      ? body.date.trim()
-      : (typeof body.raceDate === "string" && body.raceDate.trim()
-          ? body.raceDate.trim()
-          : null);
-    
-    // CRITICAL: If user date is already ISO format (YYYY-MM-DD), use it AS-IS
-    // DO NOT transform, do not convert, do not reformat, do not normalize
-    let canonicalDate;
-    if (userDateRaw && /^\d{4}-\d{2}-\d{2}$/.test(userDateRaw)) {
-      // Already ISO format - LOCK IT IN with NO changes
-      canonicalDate = userDateRaw;
-      console.log("[VERIFY_DATES] User date is ISO format - using AS-IS:", canonicalDate);
-    } else if (userDateRaw) {
-      // Only normalize if NOT already ISO (e.g., MM/DD/YYYY -> YYYY-MM-DD)
-      // But ONLY for format conversion, NEVER for date shifting
-      const { getCanonicalRaceDate } = await import("../../lib/verify_race_full.js");
-      canonicalDate = getCanonicalRaceDate(userDateRaw);
-      console.log("[VERIFY_DATES] User date normalized (format only):", userDateRaw, "->", canonicalDate);
-    } else {
-      // Only fall back to today if user date is truly empty
-      const { getCanonicalRaceDate } = await import("../../lib/verify_race_full.js");
-      canonicalDate = getCanonicalRaceDate(null);
-      console.log("[VERIFY_DATES] No user date provided - falling back to today:", canonicalDate);
+    // LOCK IN USER DATE - Pure string normalization, no Date objects
+    function normalizeUserDate(raw) {
+      if (!raw) return null;
+      const s = String(raw).trim();
+      // ISO: YYYY-MM-DD
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+        return s;
+      }
+      // US: MM/DD/YYYY
+      const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (m) {
+        const [, mm, dd, yyyy] = m;
+        const mm2 = mm.padStart(2, "0");
+        const dd2 = dd.padStart(2, "0");
+        return `${yyyy}-${mm2}-${dd2}`;
+      }
+      // Unknown format: just return original string
+      return s;
     }
     
-    // Diagnostic log
-    console.log("[VERIFY_DATES] UI:", userDateRaw, "Handler:", canonicalDate);
+    // Extract raw date from request
+    const userDateRaw =
+      (body && (body.date || body.raceDate || (body.meta && body.meta.raceDate))) || "";
     
-    // This is the LOCKED canonical date - use it everywhere
-    const effectiveDateIso = canonicalDate;
+    // Normalize to canonical ISO format (pure string operations)
+    const canonicalDate = normalizeUserDate(userDateRaw);
+    
+    // Only fall back to "today" if no date was provided at all
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const effectiveDateIso = canonicalDate || todayIso;
+    
+    // Diagnostic log
+    console.log("[VERIFY_DATES] incoming:", {
+      userDateRaw,
+      canonicalDate,
+      effectiveDateIso,
+    });
     
     const raceNo = (body.raceNo || body.race || "").toString().trim() || "";
     const predicted = body.predicted || {};
