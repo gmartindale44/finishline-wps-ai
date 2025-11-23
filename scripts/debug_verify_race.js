@@ -25,8 +25,8 @@ async function main() {
   const req = {
     method: "POST",
     body: {
-      track: "Aqueduct",
-      date: "2025-11-22",
+      track: "Del Mar",
+      date: "2025-11-23",
       raceNo: "1",
       predicted: {
         win: "",

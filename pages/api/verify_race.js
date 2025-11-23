@@ -388,7 +388,12 @@ export default async function handler(req, res) {
       return res.status(200).json({
         ...stub,
         step: "verify_race_full_fallback",
-        summary: `Full parser attempted but failed: ${fullError?.message || String(fullError)}. Falling back to stub.`,
+        summary: `Full parser attempted but failed; using stub fallback. See debug.fullError for details.`,
+        debug: {
+          ...stub.debug,
+          fullError: fullError?.message || String(fullError),
+          fullErrorStack: fullError?.stack || undefined,
+        },
       });
     }
   } catch (err) {

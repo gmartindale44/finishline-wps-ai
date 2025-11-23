@@ -28,6 +28,7 @@
   },
   "dependencies": {
     "@upstash/redis": "^1.28.2",
+    "cheerio": "^1.0.0-rc.12",
     "formidable": "^3.5.3",
     "openai": "^4.0.0"
   }
