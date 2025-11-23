@@ -390,67 +390,76 @@ export default async function handler(req, res) {
       // Import validation helper
       const { isValidOutcome } = await import("../../lib/verify_race_full.js");
       
-      // Check if outcome is valid - if not, fall back to stub
-      const outcome = fullResult.outcome || { win: "", place: "", show: "" };
-      const hasValidOutcome = isValidOutcome(outcome);
+      // If step is "verify_race", return success directly (Equibase or HRN succeeded)
+      if (fullResult.step === "verify_race") {
+        // Ensure all required fields are present
+        const validatedResult = {
+          ok: fullResult.ok !== undefined ? fullResult.ok : true,
+          step: "verify_race",
+          date: fullResult.date || date || "",
+          track: fullResult.track || track || "",
+          raceNo: fullResult.raceNo || raceNo || "",
+          query: fullResult.query || "",
+          top: fullResult.top || null,
+          outcome: fullResult.outcome || { win: "", place: "", show: "" },
+          predicted: fullResult.predicted || {
+            win: (predicted.win || "").trim(),
+            place: (predicted.place || "").trim(),
+            show: (predicted.show || "").trim(),
+          },
+          hits: fullResult.hits || {
+            winHit: false,
+            placeHit: false,
+            showHit: false,
+            top3Hit: false,
+          },
+          summary: fullResult.summary || "Full verify race completed.",
+          debug: {
+            ...fullResult.debug,
+            googleUrl:
+              fullResult.debug?.googleUrl ||
+              buildGoogleSearchUrl({ track, date, raceNo }).url,
+          },
+        };
 
-      // If outcome is invalid or step indicates failure, fall back to stub
-      if (!hasValidOutcome || 
-          fullResult.step === "verify_race_full_search_failed" ||
-          fullResult.step === "verify_race_full_no_results" ||
-          fullResult.step === "verify_race_full_error" ||
-          fullResult.step === "verify_race_full_unhandled_error") {
-        console.warn("[verify_race] Full parser returned invalid outcome, falling back to stub", {
+        return res.status(200).json(validatedResult);
+      }
+
+      // If step is "verify_race_full_fallback", call stub builder
+      if (fullResult.step === "verify_race_full_fallback") {
+        console.warn("[verify_race] Full parser returned fallback, using stub", {
           step: fullResult.step,
-          outcome,
-          isValid: hasValidOutcome,
+          query: fullResult.query,
         });
         const stub = await buildStubResponse(context);
-        const fallbackReason = !hasValidOutcome 
-          ? "Parsed outcome was invalid or empty"
-          : `Full parser step: ${fullResult.step}`;
         return res.status(200).json({
           ...stub,
           step: "verify_race_full_fallback",
-          summary: `Full parser attempted but failed: ${fallbackReason}. Using stub fallback (Google search only).\n${stub.summary}`,
+          query: fullResult.query || stub.query,
+          top: fullResult.top || stub.top,
+          summary: fullResult.summary || stub.summary,
           debug: {
             ...stub.debug,
-            fullError: `Full parser step: ${fullResult.step}, outcome invalid: ${!hasValidOutcome}`,
+            ...fullResult.debug,
+            fullError: `Full parser step: ${fullResult.step}`,
           },
         });
       }
 
-      // Ensure all required fields are present
-      const validatedResult = {
-        ok: fullResult.ok !== undefined ? fullResult.ok : true,
-        step: fullResult.step || "verify_race",
-        date: fullResult.date || date || "",
-        track: fullResult.track || track || "",
-        raceNo: fullResult.raceNo || raceNo || "",
-        query: fullResult.query || "",
-        top: fullResult.top || null,
-        outcome,
-        predicted: fullResult.predicted || {
-          win: (predicted.win || "").trim(),
-          place: (predicted.place || "").trim(),
-          show: (predicted.show || "").trim(),
-        },
-        hits: fullResult.hits || {
-          winHit: false,
-          placeHit: false,
-          showHit: false,
-          top3Hit: false,
-        },
-        summary: fullResult.summary || "Full verify race completed.",
+      // Any other step (error cases) - fall back to stub
+      console.warn("[verify_race] Full parser returned unexpected step, falling back to stub", {
+        step: fullResult.step,
+      });
+      const stub = await buildStubResponse(context);
+      return res.status(200).json({
+        ...stub,
+        step: "verify_race_full_fallback",
+        summary: `Full parser attempted but failed: step=${fullResult.step}. Using stub fallback (Google search only).\n${stub.summary}`,
         debug: {
-          ...fullResult.debug,
-          googleUrl:
-            fullResult.debug?.googleUrl ||
-            buildGoogleSearchUrl({ track, date, raceNo }).url,
+          ...stub.debug,
+          fullError: `Full parser step: ${fullResult.step}`,
         },
-      };
-
-      return res.status(200).json(validatedResult);
+      });
     } catch (fullError) {
       // Log error and fall back to stub
       console.error("[verify_race] Full parser failed, falling back to stub", {
