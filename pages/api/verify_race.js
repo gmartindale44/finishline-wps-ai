@@ -168,18 +168,14 @@ function extractOutcomeFromGoogleHtml(html) {
  * Now enhanced to fetch and parse Google HTML for Win/Place/Show
  */
 async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
-  // Use exact date from request - no fallback to today unless truly missing
-  const safeDate =
-    typeof date === "string" && date.trim() ? date.trim() : "";
+  // Import canonical date helper
+  const { getCanonicalRaceDate } = await import("../../lib/verify_race_full.js");
+  
+  // Use canonical date (normalized from user input, no timezone shifts)
+  const usingDate = getCanonicalRaceDate(date);
   const safeTrack =
     typeof track === "string" && track.trim() ? track.trim() : "";
   const raceNoStr = String(raceNo ?? "").trim() || "";
-
-  // Only fall back to today if date is completely missing (not just empty string from user)
-  const usingDate = safeDate || (() => {
-    const now = new Date();
-    return now.toISOString().slice(0, 10);
-  })();
 
   const query = [
     safeTrack || "Unknown Track",
@@ -344,17 +340,12 @@ export default async function handler(req, res) {
 
     const body = await safeParseBody(req);
     const track = (body.track || body.trackName || "").trim();
-    // Use exact date from request - validate ISO format (YYYY-MM-DD) but don't shift it
-    let date = (body.date || body.raceDate || "").trim();
-    // Basic validation: if date is provided, ensure it's in ISO format
-    if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      console.warn("[verify_race] Invalid date format, using as-is:", date);
-      // Don't reject it, but log a warning - let the parser handle it
-    }
+    // Get date from request - will be normalized to canonical format in pipeline
+    const date = (body.date || body.raceDate || "").trim();
     const raceNo = (body.raceNo || body.race || "").toString().trim() || "";
     const predicted = body.predicted || {};
 
-    // Build context for full parser or stub - use exact date from request
+    // Build context for full parser or stub - date will be normalized to canonical format
     const context = { track, date, raceNo, predicted };
 
     // Read feature flag INSIDE the handler (not at top level)
