@@ -590,8 +590,12 @@
           (raceInputEl && raceInputEl.value
             ? raceInputEl.value.trim()
             : "") || null;
+        // CRITICAL: Read date input value directly - no Date object conversion
+        // <input type="date"> always returns YYYY-MM-DD format (timezone-agnostic)
         const rawDate =
-          dateInputEl && dateInputEl.value ? dateInputEl.value : null;
+          dateInputEl && dateInputEl.value ? dateInputEl.value.trim() : null;
+        
+        // Only use fallback if date is truly empty - preserve user's selection exactly
         const date = rawDate || todayISO();
 
         // DEBUG: Log date values before sending to API
@@ -599,6 +603,11 @@
         console.log('[VERIFY_UI] date sent to API:', date);
         console.log('[VERIFY_UI] dateInputEl.value:', dateInputEl?.value);
         console.log('[VERIFY_UI] dateInputEl.type:', dateInputEl?.type);
+        
+        // Safety check: warn if date looks shifted (shouldn't happen with type="date")
+        if (rawDate && !/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
+          console.warn('[VERIFY_UI] Date input value is not in ISO format:', rawDate);
+        }
 
         if (warnTrackEl) warnTrackEl.style.display = track ? "none" : "";
         if (!track) {

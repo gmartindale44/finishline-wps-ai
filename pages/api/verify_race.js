@@ -171,8 +171,12 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
   // Import canonical date helper
   const { getCanonicalRaceDate } = await import("../../lib/verify_race_full.js");
   
-  // Use canonical date (normalized from user input, no timezone shifts)
-  const usingDate = getCanonicalRaceDate(date);
+  // CRITICAL: date should already be canonical ISO from handler
+  // Only normalize if it's not already in ISO format (defensive check)
+  // This preserves the user's exact date selection
+  const usingDate = (date && /^\d{4}-\d{2}-\d{2}$/.test(date.trim()))
+    ? date.trim()  // Already ISO - use as-is (no modification)
+    : getCanonicalRaceDate(date);  // Only normalize if not ISO format
   const safeTrack =
     typeof track === "string" && track.trim() ? track.trim() : "";
   const raceNoStr = String(raceNo ?? "").trim() || "";
@@ -341,28 +345,38 @@ export default async function handler(req, res) {
     const body = await safeParseBody(req);
     const track = (body.track || body.trackName || "").trim();
     
+    // STEP 1: Diagnostic logging - what did we receive?
+    console.log("[verify_race][incoming]", {
+      rawBody: body,
+      date: body?.date,
+      raceDate: body?.raceDate,
+      track: body?.track,
+      raceNo: body?.raceNo,
+    });
+    
     // Extract and normalize race date from request body
-    // Single source of truth: request date if provided, otherwise today
+    // CRITICAL: Preserve user's date exactly - no timezone shifts, no day changes
     const { getCanonicalRaceDate } = await import("../../lib/verify_race_full.js");
     
-    // Extract raw date from request
+    // Extract raw date from request - preserve exactly what user sent
     const rawDate = typeof body.date === "string" && body.date.trim()
       ? body.date.trim()
       : (typeof body.raceDate === "string" && body.raceDate.trim()
           ? body.raceDate.trim()
           : null);
     
-    // DEBUG: Log date values at handler entry
-    console.log('[VERIFY_API] rawDate from body:', rawDate);
-    console.log('[VERIFY_API] body.date:', body.date);
-    console.log('[VERIFY_API] body.raceDate:', body.raceDate);
-    
-    // Normalize to canonical ISO format (YYYY-MM-DD)
-    // Only falls back to today if rawDate is null/undefined/empty
+    // Normalize to canonical ISO format (YYYY-MM-DD) using pure string operations
+    // CRITICAL: Only falls back to today if rawDate is null/undefined/empty
+    // If rawDate is provided, it must be preserved exactly (no day shifting)
+    // This function uses pure string parsing - no Date objects for user-provided dates
     const effectiveDateIso = getCanonicalRaceDate(rawDate);
     
-    // DEBUG: Log normalized date
-    console.log('[VERIFY_API] effectiveDateIso after canonicalization:', effectiveDateIso);
+    // DEBUG: Log date transformation to catch any shifting
+    if (rawDate && rawDate !== effectiveDateIso && !rawDate.includes('/')) {
+      // Only warn if date changed and it wasn't a format conversion (MM/DD/YYYY -> YYYY-MM-DD)
+      console.warn('[VERIFY_API] Date format changed:', rawDate, '->', effectiveDateIso);
+    }
+    console.log('[VERIFY_API] Date transformation:', { rawDate, effectiveDateIso });
     
     const raceNo = (body.raceNo || body.race || "").toString().trim() || "";
     const predicted = body.predicted || {};
