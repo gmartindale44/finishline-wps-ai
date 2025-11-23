@@ -2,8 +2,9 @@
 // Debug harness for verify_race API
 // Supports both stub and full modes via VERIFY_RACE_MODE environment variable
 // Usage:
-//   VERIFY_RACE_MODE=stub npm run debug:verify
-//   VERIFY_RACE_MODE=full npm run debug:verify
+//   VERIFY_RACE_MODE=stub node scripts/debug_verify_race.js --track "Del Mar" --date "2025-11-22" --race 1
+//   VERIFY_RACE_MODE=full node scripts/debug_verify_race.js --track "Del Mar" --date "2025-11-22" --race 1
+//   VERIFY_RACE_MODE=full node scripts/debug_verify_race.js --track "Aqueduct" --date "2025-11-22" --race 1
 
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
@@ -11,10 +12,74 @@ import { dirname, join } from "path";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+/**
+ * Parse command-line arguments
+ */
+function parseArgs() {
+  const args = process.argv.slice(2);
+  const result = {
+    track: "Del Mar",
+    date: "2025-11-22",
+    raceNo: "1",
+    predicted: {
+      win: "",
+      place: "",
+      show: "",
+    },
+  };
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === "--track" && i + 1 < args.length) {
+      result.track = args[++i];
+    } else if (arg === "--date" && i + 1 < args.length) {
+      result.date = args[++i];
+    } else if ((arg === "--race" || arg === "--raceNo") && i + 1 < args.length) {
+      result.raceNo = args[++i];
+    } else if (arg === "--predicted-win" && i + 1 < args.length) {
+      result.predicted.win = args[++i];
+    } else if (arg === "--predicted-place" && i + 1 < args.length) {
+      result.predicted.place = args[++i];
+    } else if (arg === "--predicted-show" && i + 1 < args.length) {
+      result.predicted.show = args[++i];
+    } else if (arg === "--help" || arg === "-h") {
+      console.log(`
+Usage: node scripts/debug_verify_race.js [options]
+
+Options:
+  --track <name>              Track name (default: "Del Mar")
+  --date <YYYY-MM-DD>         Race date in ISO format (default: "2025-11-22")
+  --race <number>              Race number (default: "1")
+  --predicted-win <name>       Predicted win horse
+  --predicted-place <name>     Predicted place horse
+  --predicted-show <name>      Predicted show horse
+  --help, -h                   Show this help message
+
+Environment:
+  VERIFY_RACE_MODE            Set to "full" for full parser, "stub" for stub mode (default: "stub")
+
+Examples:
+  VERIFY_RACE_MODE=full node scripts/debug_verify_race.js --track "Del Mar" --date "2025-11-22" --race 1
+  VERIFY_RACE_MODE=full node scripts/debug_verify_race.js --track "Aqueduct" --date "2025-11-22" --race 1 --predicted-win "Doc Sullivan"
+      `);
+      process.exit(0);
+    }
+  }
+
+  return result;
+}
+
 async function main() {
+  // Parse command-line arguments
+  const args = parseArgs();
+
   // Read mode from environment (default to stub for safety)
   const mode = (process.env.VERIFY_RACE_MODE || "stub").toLowerCase().trim();
   console.log(`[debug_verify_race] Running in ${mode} mode`);
+  console.log(`[debug_verify_race] Test case: ${args.track} - ${args.date} - Race ${args.raceNo}`);
+  if (args.predicted.win || args.predicted.place || args.predicted.show) {
+    console.log(`[debug_verify_race] Predicted: Win=${args.predicted.win || "(none)"}, Place=${args.predicted.place || "(none)"}, Show=${args.predicted.show || "(none)"}`);
+  }
 
   // Import the handler like Vercel would (ES module)
   // Use relative path from scripts/ to pages/api/verify_race.js
@@ -25,14 +90,10 @@ async function main() {
   const req = {
     method: "POST",
     body: {
-      track: "Del Mar",
-      date: "2025-11-23",
-      raceNo: "1",
-      predicted: {
-        win: "",
-        place: "",
-        show: "",
-      },
+      track: args.track,
+      date: args.date,
+      raceNo: args.raceNo,
+      predicted: args.predicted,
     },
     headers: {
       host: "localhost:3000",
@@ -78,6 +139,13 @@ async function main() {
       }
       if (payload.hits) {
         console.log("HITS:", payload.hits);
+      }
+      if (payload.predicted) {
+        console.log("PREDICTED:", payload.predicted);
+      }
+      if (payload.summary) {
+        console.log("\n=== SUMMARY ===");
+        console.log(payload.summary);
       }
       console.log("\n=== FULL PAYLOAD ===");
       console.log(JSON.stringify(payload, null, 2));

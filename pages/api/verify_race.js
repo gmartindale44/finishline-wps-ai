@@ -168,16 +168,23 @@ function extractOutcomeFromGoogleHtml(html) {
  * Now enhanced to fetch and parse Google HTML for Win/Place/Show
  */
 async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
+  // Use exact date from request - no fallback to today unless truly missing
   const safeDate =
     typeof date === "string" && date.trim() ? date.trim() : "";
   const safeTrack =
     typeof track === "string" && track.trim() ? track.trim() : "";
   const raceNoStr = String(raceNo ?? "").trim() || "";
 
+  // Only fall back to today if date is completely missing (not just empty string from user)
+  const usingDate = safeDate || (() => {
+    const now = new Date();
+    return now.toISOString().slice(0, 10);
+  })();
+
   const query = [
     safeTrack || "Unknown Track",
     raceNoStr ? `Race ${raceNoStr}` : "",
-    safeDate || "",
+    usingDate || "",
     "results Win Place Show",
   ]
     .filter(Boolean)
@@ -218,16 +225,32 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
 
   const predictedNormalized = normalizePrediction(predicted);
 
-  // Hits are left as false for now; we can wire predictions later
-  const hits = {
-    winHit: false,
-    placeHit: false,
-    showHit: false,
-    top3Hit: false,
-  };
+  // Compute hits using normalized horse names
+  const normalizeHorseName = (name) => (name || "").toLowerCase().replace(/\s+/g, " ").trim();
+  const norm = normalizeHorseName;
+  const pWin = norm(predictedNormalized.win);
+  const pPlace = norm(predictedNormalized.place);
+  const pShow = norm(predictedNormalized.show);
+  const oWin = norm(outcome.win);
+  const oPlace = norm(outcome.place);
+  const oShow = norm(outcome.show);
 
-  const now = new Date();
-  const usingDate = safeDate || now.toISOString().slice(0, 10);
+  const winHit = !!pWin && !!oWin && pWin === oWin;
+  const placeHit = !!pPlace && !!oPlace && pPlace === oPlace;
+  const showHit = !!pShow && !!oShow && pShow === oShow;
+  
+  // Top3Hit: any predicted horse is in the top 3 outcome positions
+  const top3Set = new Set([oWin, oPlace, oShow].filter(Boolean));
+  const top3Hit = [pWin, pPlace, pShow]
+    .filter(Boolean)
+    .some(name => top3Set.has(name));
+
+  const hits = {
+    winHit,
+    placeHit,
+    showHit,
+    top3Hit,
+  };
 
   const summaryLines = [];
   summaryLines.push(`Using date: ${usingDate || "(none)"}`);
@@ -250,7 +273,21 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
     summaryLines.push("Outcome: (none)");
   }
 
-  summaryLines.push("Hits: (none)");
+  // Show predicted values
+  const predictedParts = [predictedNormalized.win, predictedNormalized.place, predictedNormalized.show].filter(Boolean);
+  if (predictedParts.length) {
+    summaryLines.push(`Predicted: ${predictedParts.join(" / ")}`);
+  } else {
+    summaryLines.push("Predicted: (none)");
+  }
+
+  // Show hits
+  const hitParts = [];
+  if (hits.winHit) hitParts.push("winHit");
+  if (hits.placeHit) hitParts.push("placeHit");
+  if (hits.showHit) hitParts.push("showHit");
+  if (hits.top3Hit) hitParts.push("top3Hit");
+  summaryLines.push(`Hits: ${hitParts.length ? hitParts.join(", ") : "(none)"}`);
 
   if (!outcome.win && !outcome.place && !outcome.show) {
     summaryLines.push("");
@@ -307,11 +344,17 @@ export default async function handler(req, res) {
 
     const body = await safeParseBody(req);
     const track = (body.track || body.trackName || "").trim();
-    const date = (body.date || body.raceDate || "").trim();
+    // Use exact date from request - validate ISO format (YYYY-MM-DD) but don't shift it
+    let date = (body.date || body.raceDate || "").trim();
+    // Basic validation: if date is provided, ensure it's in ISO format
+    if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      console.warn("[verify_race] Invalid date format, using as-is:", date);
+      // Don't reject it, but log a warning - let the parser handle it
+    }
     const raceNo = (body.raceNo || body.race || "").toString().trim() || "";
     const predicted = body.predicted || {};
 
-    // Build context for full parser or stub
+    // Build context for full parser or stub - use exact date from request
     const context = { track, date, raceNo, predicted };
 
     // Read feature flag INSIDE the handler (not at top level)
@@ -363,10 +406,13 @@ export default async function handler(req, res) {
           isValid: hasValidOutcome,
         });
         const stub = await buildStubResponse(context);
+        const fallbackReason = !hasValidOutcome 
+          ? "Parsed outcome was invalid or empty"
+          : `Full parser step: ${fullResult.step}`;
         return res.status(200).json({
           ...stub,
           step: "verify_race_full_fallback",
-          summary: `Parser note: Full Equibase/HRN parse failed or looked unreliable. Fell back to google-only stub.\nFull parser step: ${fullResult.step}`,
+          summary: `Full parser attempted but failed: ${fallbackReason}. Using stub fallback (Google search only).\n${stub.summary}`,
           debug: {
             ...stub.debug,
             fullError: `Full parser step: ${fullResult.step}, outcome invalid: ${!hasValidOutcome}`,
@@ -416,13 +462,14 @@ export default async function handler(req, res) {
       });
 
       const stub = await buildStubResponse(context);
+      const errorMsg = fullError?.message || String(fullError);
       return res.status(200).json({
         ...stub,
         step: "verify_race_full_fallback",
-        summary: `Full parser attempted but failed; using stub fallback. See debug.fullError for details.`,
+        summary: `Full parser attempted but failed: ${errorMsg}. Using stub fallback (Google search only).\n${stub.summary}`,
         debug: {
           ...stub.debug,
-          fullError: fullError?.message || String(fullError),
+          fullError: errorMsg,
           fullErrorStack: fullError?.stack || undefined,
         },
       });
