@@ -352,9 +352,17 @@ export default async function handler(req, res) {
           ? body.raceDate.trim()
           : null);
     
+    // DEBUG: Log date values at handler entry
+    console.log('[VERIFY_API] rawDate from body:', rawDate);
+    console.log('[VERIFY_API] body.date:', body.date);
+    console.log('[VERIFY_API] body.raceDate:', body.raceDate);
+    
     // Normalize to canonical ISO format (YYYY-MM-DD)
     // Only falls back to today if rawDate is null/undefined/empty
     const effectiveDateIso = getCanonicalRaceDate(rawDate);
+    
+    // DEBUG: Log normalized date
+    console.log('[VERIFY_API] effectiveDateIso after canonicalization:', effectiveDateIso);
     
     const raceNo = (body.raceNo || body.race || "").toString().trim() || "";
     const predicted = body.predicted || {};

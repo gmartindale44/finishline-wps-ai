@@ -593,6 +593,12 @@
           dateInputEl && dateInputEl.value ? dateInputEl.value : null;
         const date = rawDate || todayISO();
 
+        // DEBUG: Log date values before sending to API
+        console.log('[VERIFY_UI] raw date input value:', rawDate);
+        console.log('[VERIFY_UI] date sent to API:', date);
+        console.log('[VERIFY_UI] dateInputEl.value:', dateInputEl?.value);
+        console.log('[VERIFY_UI] dateInputEl.type:', dateInputEl?.type);
+
         if (warnTrackEl) warnTrackEl.style.display = track ? "none" : "";
         if (!track) {
           try {
@@ -619,15 +625,17 @@
 
         try {
           const predicted = readUIPredictions();
+          const payload = {
+            track,
+            date,
+            raceNo: raceNo || undefined,
+            predicted,
+          };
+          console.log('[VERIFY_UI] Full payload being sent:', JSON.stringify(payload, null, 2));
           const resp = await fetch("/api/verify_race", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              track,
-              date,
-              raceNo: raceNo || undefined,
-              predicted,
-            }),
+            body: JSON.stringify(payload),
           });
           const data = await resp.json().catch(() => ({}));
 
