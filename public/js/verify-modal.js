@@ -584,90 +584,91 @@
 
     if (runBtnEl) {
       const defaultLabel = runBtnEl.textContent || "Verify Now";
-      runBtnEl.addEventListener("click", async () => {
-        const track = (trackInputEl?.value || "").trim();
-        const raceNo =
-          (raceInputEl && raceInputEl.value
-            ? raceInputEl.value.trim()
-            : "") || null;
-        // Tiny, pure string helper for date normalization
-        function normalizeVerifyUIDate(raw) {
-          if (!raw) return "";
-          const trimmed = String(raw).trim();
-          
-          // Already ISO (YYYY-MM-DD) -> keep as-is
-          if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-            return trimmed;
-          }
-          
-          // MM/DD/YYYY -> convert to ISO
-          const mmdd = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(trimmed);
-          if (mmdd) {
-            let [, m, d, y] = mmdd;
-            if (m.length === 1) m = "0" + m;
-            if (d.length === 1) d = "0" + d;
-            return `${y}-${m}-${d}`;
-          }
-          
-          // Unknown format -> return trimmed as-is and let backend decide
-          return trimmed;
+      
+      // Pure string helper for date normalization (no Date objects)
+      function normalizeUIDate(raw) {
+        if (!raw) return ""; // let the backend fall back if truly empty
+        
+        // Already ISO (YYYY-MM-DD) → use as-is
+        if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+        
+        // MM/DD/YYYY → convert to YYYY-MM-DD
+        const mdy = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(raw);
+        if (mdy) {
+          const m = mdy[1].padStart(2, "0");
+          const d = mdy[2].padStart(2, "0");
+          const y = mdy[3];
+          return `${y}-${m}-${d}`;
         }
         
-        // Read date directly from verify modal input (not from global race state)
-        const rawDate = dateInputEl && dateInputEl.value ? dateInputEl.value.trim() : null;
-        const isoDate = normalizeVerifyUIDate(rawDate);
+        // Fallback: return as-is; backend can log/warn
+        return raw;
+      }
+      
+      runBtnEl.addEventListener("click", async (evt) => {
+        evt.preventDefault();
+        evt.stopPropagation();
         
-        // Build payload - date is the ONLY date field we send
-        const payload = {
-          track,
-          raceNo: raceNo || undefined,
-          date: isoDate,  // <--- this is the ONLY date we send
-          predicted: readUIPredictions(),
-        };
-        
-        // Debug log
-        if (window.__flVerifyDebug) {
-          console.log("[VERIFY_UI] outgoing verify payload", payload);
-        }
-
-        if (warnTrackEl) warnTrackEl.style.display = track ? "none" : "";
-        if (!track) {
-          try {
-            trackInputEl?.focus();
-          } catch {
-            /* ignore */
-          }
-          return;
-        }
-        if (warnRaceEl) warnRaceEl.style.display = "none";
-
-        const requestInfo = { track, raceNo: raceNo || null, date };
-
-        if (statusNode) {
-          statusNode.textContent = "Running…";
-          statusNode.style.color = "#cbd5f5";
-        }
-        if (summaryEl) summaryEl.textContent = "Working…";
-        runBtnEl.disabled = true;
-        runBtnEl.textContent = "Running…";
-        host.__flvLast = { top: null, query: "" };
-
-        pushSnapshot(track, raceNo, readUIPredictions());
-
         try {
+          const track = (trackInputEl?.value || "").trim();
+          const raceNo =
+            (raceInputEl && raceInputEl.value
+              ? raceInputEl.value.trim()
+              : "") || null;
+          
+          // Validate track is required
+          if (warnTrackEl) warnTrackEl.style.display = track ? "none" : "";
+          if (!track) {
+            try {
+              trackInputEl?.focus();
+            } catch {
+              /* ignore */
+            }
+            return;
+          }
+          if (warnRaceEl) warnRaceEl.style.display = "none";
+          
+          // Read date from input and normalize
+          const rawDate = dateInputEl && dateInputEl.value ? dateInputEl.value.trim() : null;
+          const normalizedDate = normalizeUIDate(rawDate);
+          
+          // Build payload - date is the ONLY date field we send
+          const payload = {
+            track,
+            raceNo: raceNo || undefined,
+            date: normalizedDate,
+            predicted: readUIPredictions(),
+          };
+          
+          console.info("[VERIFY_UI] outgoing verify payload", payload);
+          
+          // Update UI state
+          if (statusNode) {
+            statusNode.textContent = "Running…";
+            statusNode.style.color = "#cbd5f5";
+          }
+          if (summaryEl) summaryEl.textContent = "Working…";
+          runBtnEl.disabled = true;
+          runBtnEl.textContent = "Running…";
+          host.__flvLast = { top: null, query: "" };
+          
+          pushSnapshot(track, raceNo, readUIPredictions());
+          
+          // Always send the fetch request
           const resp = await fetch("/api/verify_race", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
           });
+          
           const data = await resp.json().catch(() => ({}));
-
+          
           // Build summary payload with date and error info
           const baseSummary = {};
-          if (date) {
-            baseSummary.date = date;
+          if (normalizedDate) {
+            baseSummary.date = normalizedDate;
           }
-
+          
           const summaryPayload = resp.ok
             ? { ...baseSummary, ...data }
             : {
@@ -683,49 +684,52 @@
                     : null,
                 step: data && data.step ? data.step : "verify_race",
               };
-
+          
           if (statusNode) {
             statusNode.textContent = resp.ok
               ? "OK"
               : `Error ${resp.status}`;
             statusNode.style.color = resp.ok ? "#cbd5f5" : "#f87171";
           }
-
+          
           host.__flvLast = {
             top: data?.top || null,
             query: data?.query || "",
           };
-
+          
           renderSummary(summaryEl, summaryPayload);
-
+          
           const debugEl = qs("#flv-gz-json", host);
           if (debugEl) {
             try {
               const existing = JSON.parse(debugEl.textContent || "[]");
               const arr = Array.isArray(existing) ? existing : [];
-              arr.unshift({ request: requestInfo, response: data });
+              arr.unshift({ request: { track, raceNo, date: normalizedDate }, response: data });
               debugEl.textContent = JSON.stringify(arr.slice(0, 5), null, 2);
             } catch {
               debugEl.textContent = JSON.stringify(
-                [{ request: requestInfo, response: data }],
+                [{ request: { track, raceNo, date: normalizedDate }, response: data }],
                 null,
                 2
               );
             }
           }
         } catch (error) {
+          console.error("[VERIFY_UI] error during verify", error);
           if (statusNode) {
             statusNode.textContent = "Error";
             statusNode.style.color = "#f87171";
           }
+          // Always show error in summary
+          const errorMessage = error && (error.message || String(error));
           renderSummary(summaryEl, {
-            date,
-            error: "Request failed",
-            details: error && (error.message || String(error)),
+            error: "Verify failed in UI",
+            details: errorMessage,
             step: "verify_race_fetch",
           });
-          if (window.__flVerifyDebug) {
-            console.error("[Verify Modal] request failed", error);
+          // Ensure summary is never empty
+          if (summaryEl && !summaryEl.textContent) {
+            summaryEl.textContent = "Error: Verify failed in UI. See console for details.";
           }
         } finally {
           runBtnEl.disabled = false;
