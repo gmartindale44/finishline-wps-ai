@@ -344,21 +344,23 @@ export default async function handler(req, res) {
         throw new Error("Invalid full verify response structure");
       }
 
+      // Import validation helper
+      const { isValidOutcome } = await import("../../lib/verify_race_full.js");
+      
       // Check if outcome is valid - if not, fall back to stub
       const outcome = fullResult.outcome || { win: "", place: "", show: "" };
-      const hasValidOutcome = outcome && (
-        (outcome.win && outcome.win.trim()) ||
-        (outcome.place && outcome.place.trim()) ||
-        (outcome.show && outcome.show.trim())
-      );
+      const hasValidOutcome = isValidOutcome(outcome);
 
-      // If outcome is empty or step indicates failure, fall back to stub
+      // If outcome is invalid or step indicates failure, fall back to stub
       if (!hasValidOutcome || 
           fullResult.step === "verify_race_full_search_failed" ||
-          fullResult.step === "verify_race_full_no_results") {
+          fullResult.step === "verify_race_full_no_results" ||
+          fullResult.step === "verify_race_full_error" ||
+          fullResult.step === "verify_race_full_unhandled_error") {
         console.warn("[verify_race] Full parser returned invalid outcome, falling back to stub", {
           step: fullResult.step,
           outcome,
+          isValid: hasValidOutcome,
         });
         const stub = await buildStubResponse(context);
         return res.status(200).json({
@@ -367,7 +369,7 @@ export default async function handler(req, res) {
           summary: `Parser note: Full Equibase/HRN parse failed or looked unreliable. Fell back to google-only stub.\nFull parser step: ${fullResult.step}`,
           debug: {
             ...stub.debug,
-            fullError: `Full parser step: ${fullResult.step}`,
+            fullError: `Full parser step: ${fullResult.step}, outcome invalid: ${!hasValidOutcome}`,
           },
         });
       }
