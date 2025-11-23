@@ -364,7 +364,7 @@ export default async function handler(req, res) {
         return res.status(200).json({
           ...stub,
           step: "verify_race_full_fallback",
-          summary: `Parser note: Full Equibase/HRN parse failed or looked unreliable. Fell back to google-only stub.`,
+          summary: `Parser note: Full Equibase/HRN parse failed or looked unreliable. Fell back to google-only stub.\nFull parser step: ${fullResult.step}`,
           debug: {
             ...stub.debug,
             fullError: `Full parser step: ${fullResult.step}`,
