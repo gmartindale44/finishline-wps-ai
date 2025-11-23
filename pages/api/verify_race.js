@@ -354,35 +354,49 @@ export default async function handler(req, res) {
       raceNo: body?.raceNo,
     });
     
-    // Extract and normalize race date from request body
-    // CRITICAL: Preserve user's date exactly - no timezone shifts, no day changes
-    const { getCanonicalRaceDate } = await import("../../lib/verify_race_full.js");
-    
+    // PATCH: LOCK IN USER DATE IMMEDIATELY - NO TRANSFORMATION
     // Extract raw date from request - preserve exactly what user sent
-    const rawDate = typeof body.date === "string" && body.date.trim()
+    const userDateRaw = typeof body.date === "string" && body.date.trim()
       ? body.date.trim()
       : (typeof body.raceDate === "string" && body.raceDate.trim()
           ? body.raceDate.trim()
           : null);
     
-    // Normalize to canonical ISO format (YYYY-MM-DD) using pure string operations
-    // CRITICAL: Only falls back to today if rawDate is null/undefined/empty
-    // If rawDate is provided, it must be preserved exactly (no day shifting)
-    // This function uses pure string parsing - no Date objects for user-provided dates
-    const effectiveDateIso = getCanonicalRaceDate(rawDate);
-    
-    // DEBUG: Log date transformation to catch any shifting
-    if (rawDate && rawDate !== effectiveDateIso && !rawDate.includes('/')) {
-      // Only warn if date changed and it wasn't a format conversion (MM/DD/YYYY -> YYYY-MM-DD)
-      console.warn('[VERIFY_API] Date format changed:', rawDate, '->', effectiveDateIso);
+    // CRITICAL: If user date is already ISO format (YYYY-MM-DD), use it AS-IS
+    // DO NOT transform, do not convert, do not reformat, do not normalize
+    let canonicalDate;
+    if (userDateRaw && /^\d{4}-\d{2}-\d{2}$/.test(userDateRaw)) {
+      // Already ISO format - LOCK IT IN with NO changes
+      canonicalDate = userDateRaw;
+      console.log("[VERIFY_DATES] User date is ISO format - using AS-IS:", canonicalDate);
+    } else if (userDateRaw) {
+      // Only normalize if NOT already ISO (e.g., MM/DD/YYYY -> YYYY-MM-DD)
+      // But ONLY for format conversion, NEVER for date shifting
+      const { getCanonicalRaceDate } = await import("../../lib/verify_race_full.js");
+      canonicalDate = getCanonicalRaceDate(userDateRaw);
+      console.log("[VERIFY_DATES] User date normalized (format only):", userDateRaw, "->", canonicalDate);
+    } else {
+      // Only fall back to today if user date is truly empty
+      const { getCanonicalRaceDate } = await import("../../lib/verify_race_full.js");
+      canonicalDate = getCanonicalRaceDate(null);
+      console.log("[VERIFY_DATES] No user date provided - falling back to today:", canonicalDate);
     }
-    console.log('[VERIFY_API] Date transformation:', { rawDate, effectiveDateIso });
+    
+    // Diagnostic log
+    console.log("[VERIFY_DATES] UI:", userDateRaw, "Handler:", canonicalDate);
+    
+    // This is the LOCKED canonical date - use it everywhere
+    const effectiveDateIso = canonicalDate;
     
     const raceNo = (body.raceNo || body.race || "").toString().trim() || "";
     const predicted = body.predicted || {};
 
     // Build context with canonical date - this is the single source of truth
+    // PATCH: effectiveDateIso is already locked in - use it exactly
     const context = { track, date: effectiveDateIso, raceNo, predicted };
+    
+    // Diagnostic log
+    console.log("[VERIFY_DATES] Context:", context.date);
 
     // Read feature flag INSIDE the handler (not at top level)
     const mode = (process.env.VERIFY_RACE_MODE || "stub").toLowerCase().trim();
