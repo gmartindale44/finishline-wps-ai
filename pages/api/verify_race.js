@@ -401,7 +401,7 @@ export default async function handler(req, res) {
     // Debug log (only in non-production to avoid noisy logs)
     if (process.env.NODE_ENV !== "production") {
       console.log("[VERIFY_DATES] incoming", {
-        rawDateFromBody,
+        uiDateRaw,
         canonicalDate,
       });
     }
