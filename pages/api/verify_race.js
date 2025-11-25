@@ -364,39 +364,36 @@ export default async function handler(req, res) {
     
     // Pure string helper for date normalization (no Date objects for user dates)
     function normalizeUserDate(raw) {
-      if (!raw) return "";
-      
-      const s = String(raw).trim();
-      
-      // ISO YYYY-MM-DD
-      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-      
-      // MM/DD/YYYY
-      const mmdd = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s);
-      if (mmdd) {
-        let [, m, d, y] = mmdd;
-        if (m.length === 1) m = "0" + m;
-        if (d.length === 1) d = "0" + d;
-        return `${y}-${m}-${d}`;
+      if (!raw || typeof raw !== "string") return null;
+
+      const trimmed = raw.trim();
+
+      // Already ISO: YYYY-MM-DD
+      if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+        return trimmed;
       }
-      
-      // Unknown format -> return trimmed as-is (we'll still log it)
-      return s;
+
+      // US-style: MM/DD/YYYY
+      const mdyMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (mdyMatch) {
+        const [, m, d, y] = mdyMatch;
+        return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+      }
+
+      // Anything else is considered invalid
+      return null;
     }
     
     // Choose ONE canonical date from request body
-    const rawDateFromBody =
-      (body && (body.date || body.raceDate || body.race_date || "")) || "";
+    const uiDateRaw = body && (body.date || body.raceDate || body.canonicalDate || "");
+    const canonicalDate = normalizeUserDate(uiDateRaw);
     
-    const canonicalDate = normalizeUserDate(rawDateFromBody);
-    
-    // If canonicalDate is empty, return error - do NOT use today
+    // If canonicalDate is invalid, return error - do NOT use today
     if (!canonicalDate) {
-      return res.status(200).json({
+      return res.status(400).json({
         ok: false,
-        step: "verify_race_error",
-        error: "race date is required",
-        summary: "Error: race date is required. Please select a race date and try again.",
+        error: "Invalid or missing race date",
+        summary: "Error: Invalid or missing race date. Please select a valid race date and try again.",
         date: "",
       });
     }
@@ -416,7 +413,8 @@ export default async function handler(req, res) {
     const ctx = {
       track: body.track || "",
       raceNo: body.raceNo || body.race || "",
-      date: canonicalDate,
+      date: canonicalDate, // canonical YYYY-MM-DD
+      raceDate: canonicalDate,
       predicted: body.predicted || {},
     };
 
