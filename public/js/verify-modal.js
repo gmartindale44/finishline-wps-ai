@@ -631,15 +631,43 @@
           }
           if (warnRaceEl) warnRaceEl.style.display = "none";
           
-          // Read date from input - use the raw value directly from the date input
-          // HTML5 date inputs return YYYY-MM-DD format, which is exactly what we need
-          const uiDate = dateInputEl && dateInputEl.value ? dateInputEl.value.trim() : null;
-          const canonicalDate = formatUiDateForApi(uiDate);
+          // 1) Grab the Race Date input element from the main page
+          // This is the date the user selected on the Race Information page
+          const mainPageDateInput = document.querySelector('#fl-race-date, input[name="race_date"], input[data-role="race-date"]');
           
-          // Validate date is required
+          // Read date from the main page input - use the raw value directly
+          // HTML5 date inputs return YYYY-MM-DD format, which is exactly what we need
+          let uiDateRaw = null;
+          if (mainPageDateInput) {
+            uiDateRaw = (mainPageDateInput.value || "").trim();
+          }
+          
+          // If there is no date at all, show error and block the request
+          if (!uiDateRaw) {
+            if (summaryEl) {
+              summaryEl.textContent = "Error: Please enter a Race Date before verifying.";
+            }
+            if (statusNode) {
+              statusNode.textContent = "Error";
+              statusNode.style.color = "#f87171";
+            }
+            // Optional: show alert for better UX
+            try {
+              alert("Please enter a Race Date before verifying.");
+            } catch {
+              /* ignore if alert blocked */
+            }
+            return;
+          }
+          
+          // IMPORTANT: No todayISO(), no new Date(), no timezone logic.
+          // Just validate/normalize formats.
+          const canonicalDate = formatUiDateForApi(uiDateRaw);
+          
+          // Validate date format is acceptable
           if (!canonicalDate) {
             if (summaryEl) {
-              summaryEl.textContent = "Error: race date is required";
+              summaryEl.textContent = "Error: Invalid race date format";
             }
             if (statusNode) {
               statusNode.textContent = "Error";
@@ -648,12 +676,12 @@
             return;
           }
           
-          // Build payload - date is the ONLY date field we send
-          // Use the canonical date exactly as formatted (no Date objects, no timezone conversion)
+          // Build payload - use the canonical date exactly as formatted (no Date objects, no timezone conversion)
           const payload = {
             track,
             raceNo: raceNo || undefined,
             date: canonicalDate,
+            dateRaw: uiDateRaw,  // extra debug so we can see exactly what UI sent
             predicted: readUIPredictions(),
           };
           
@@ -684,6 +712,7 @@
           const baseSummary = {};
           if (canonicalDate) {
             baseSummary.date = canonicalDate;
+            baseSummary.dateRaw = uiDateRaw;
           }
           
           const summaryPayload = resp.ok
@@ -721,11 +750,11 @@
             try {
               const existing = JSON.parse(debugEl.textContent || "[]");
               const arr = Array.isArray(existing) ? existing : [];
-              arr.unshift({ request: { track, raceNo, date: canonicalDate }, response: data });
+              arr.unshift({ request: { track, raceNo, date: canonicalDate, dateRaw: uiDateRaw }, response: data });
               debugEl.textContent = JSON.stringify(arr.slice(0, 5), null, 2);
             } catch {
               debugEl.textContent = JSON.stringify(
-                [{ request: { track, raceNo, date: canonicalDate }, response: data }],
+                [{ request: { track, raceNo, date: canonicalDate, dateRaw: uiDateRaw }, response: data }],
                 null,
                 2
               );
