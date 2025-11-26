@@ -585,24 +585,27 @@
     if (runBtnEl) {
       const defaultLabel = runBtnEl.textContent || "Verify Now";
       
-      // Pure string helper for date normalization (no Date objects)
-      function normalizeUIDate(raw) {
-        if (!raw) return ""; // let the backend fall back if truly empty
-        
-        // Already ISO (YYYY-MM-DD) → use as-is
-        if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
-        
-        // MM/DD/YYYY → convert to YYYY-MM-DD
-        const mdy = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(raw);
-        if (mdy) {
-          const m = mdy[1].padStart(2, "0");
-          const d = mdy[2].padStart(2, "0");
-          const y = mdy[3];
-          return `${y}-${m}-${d}`;
+      // Pure string helper for date normalization (no Date objects, no timezone math)
+      function formatUiDateForApi(uiDate) {
+        if (!uiDate) return null;
+        const s = String(uiDate).trim();
+
+        // Already ISO (YYYY-MM-DD)
+        if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+          return s;
         }
-        
-        // Fallback: return as-is; backend can log/warn
-        return raw;
+
+        // MM/DD/YYYY -> YYYY-MM-DD
+        const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+        if (m) {
+          const mm = m[1].padStart(2, "0");
+          const dd = m[2].padStart(2, "0");
+          const yyyy = m[3];
+          return `${yyyy}-${mm}-${dd}`;
+        }
+
+        // As a last resort, just return the trimmed string (no Date math)
+        return s;
       }
       
       runBtnEl.addEventListener("click", async (evt) => {
@@ -628,12 +631,13 @@
           }
           if (warnRaceEl) warnRaceEl.style.display = "none";
           
-          // Read date from input and normalize
-          const rawDate = dateInputEl && dateInputEl.value ? dateInputEl.value.trim() : null;
-          const normalizedDate = normalizeUIDate(rawDate);
+          // Read date from input - use the raw value directly from the date input
+          // HTML5 date inputs return YYYY-MM-DD format, which is exactly what we need
+          const uiDate = dateInputEl && dateInputEl.value ? dateInputEl.value.trim() : null;
+          const canonicalDate = formatUiDateForApi(uiDate);
           
           // Validate date is required
-          if (!normalizedDate) {
+          if (!canonicalDate) {
             if (summaryEl) {
               summaryEl.textContent = "Error: race date is required";
             }
@@ -645,10 +649,11 @@
           }
           
           // Build payload - date is the ONLY date field we send
+          // Use the canonical date exactly as formatted (no Date objects, no timezone conversion)
           const payload = {
             track,
             raceNo: raceNo || undefined,
-            date: normalizedDate,
+            date: canonicalDate,
             predicted: readUIPredictions(),
           };
           
@@ -677,8 +682,8 @@
           
           // Build summary payload with date and error info
           const baseSummary = {};
-          if (normalizedDate) {
-            baseSummary.date = normalizedDate;
+          if (canonicalDate) {
+            baseSummary.date = canonicalDate;
           }
           
           const summaryPayload = resp.ok
@@ -716,11 +721,11 @@
             try {
               const existing = JSON.parse(debugEl.textContent || "[]");
               const arr = Array.isArray(existing) ? existing : [];
-              arr.unshift({ request: { track, raceNo, date: normalizedDate }, response: data });
+              arr.unshift({ request: { track, raceNo, date: canonicalDate }, response: data });
               debugEl.textContent = JSON.stringify(arr.slice(0, 5), null, 2);
             } catch {
               debugEl.textContent = JSON.stringify(
-                [{ request: { track, raceNo, date: normalizedDate }, response: data }],
+                [{ request: { track, raceNo, date: canonicalDate }, response: data }],
                 null,
                 2
               );
