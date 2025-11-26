@@ -384,8 +384,8 @@ export default async function handler(req, res) {
       return null;
     }
     
-    // Choose ONE canonical date from request body
-    const uiDateRaw = body && (body.date || body.raceDate || body.canonicalDate || "");
+    // Choose ONE canonical date from request body or query
+    const uiDateRaw = body?.date ?? query?.date ?? body?.raceDate ?? body?.canonicalDate ?? null;
     const canonicalDate = normalizeUserDate(uiDateRaw);
     
     // If canonicalDate is invalid, return error - do NOT use today
