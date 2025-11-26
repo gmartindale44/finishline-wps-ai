@@ -363,58 +363,60 @@ export default async function handler(req, res) {
     const track = (body.track || body.trackName || "").trim();
     
     // Pure string helper for date normalization (no Date objects for user dates)
-    function normalizeUserDate(raw) {
-      if (!raw || typeof raw !== "string") return null;
+    function canonicalizeDateFromClient(raw) {
+      if (!raw) return null;
+      const s = String(raw).trim();
 
-      const trimmed = raw.trim();
-
-      // Already ISO: YYYY-MM-DD
-      if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-        return trimmed;
+      // Already ISO (YYYY-MM-DD)
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+        return s;
       }
 
-      // US-style: MM/DD/YYYY
-      const mdyMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-      if (mdyMatch) {
-        const [, m, d, y] = mdyMatch;
-        return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+      // MM/DD/YYYY -> YYYY-MM-DD
+      const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (m) {
+        const mm = m[1].padStart(2, "0");
+        const dd = m[2].padStart(2, "0");
+        const yyyy = m[3];
+        return `${yyyy}-${mm}-${dd}`;
       }
 
-      // Anything else is considered invalid
-      return null;
+      // Fallback: just return trimmed string (NO Date parsing)
+      return s;
     }
     
-    // Choose ONE canonical date from request body or query
-    const uiDateRaw = body?.date ?? query?.date ?? body?.raceDate ?? body?.canonicalDate ?? null;
-    const canonicalDate = normalizeUserDate(uiDateRaw);
-    
-    // If canonicalDate is invalid, return error - do NOT use today
-    if (!canonicalDate) {
-      return res.status(400).json({
-        ok: false,
-        error: "Invalid or missing race date",
-        summary: "Error: Invalid or missing race date. Please select a valid race date and try again.",
-        date: "",
-      });
+    // Extract the raw date from body or query
+    const uiDateRaw =
+      (body && (body.date || body.raceDate || body.canonicalDate)) ||
+      (query && (query.date || query.raceDate || query.canonicalDate)) ||
+      null;
+
+    const canonicalDateIso = canonicalizeDateFromClient(uiDateRaw);
+
+    if (!canonicalDateIso) {
+      // If no valid date, respond with 400 instead of guessing "today"
+      return res.status(400).json({ ok: false, error: "Missing or invalid date" });
     }
     
     // Debug log (only in non-production to avoid noisy logs)
     if (process.env.NODE_ENV !== "production") {
       console.log("[VERIFY_DATES] incoming", {
         uiDateRaw,
-        canonicalDate,
+        canonicalDateIso,
       });
     }
     
     const raceNo = (body.raceNo || body.race || "").toString().trim() || "";
     const predicted = body.predicted || {};
 
-    // Build context - canonicalDate is the single source of truth
+    // Build context - include all date fields for maximum compatibility
     const ctx = {
       track: body.track || "",
       raceNo: body.raceNo || body.race || "",
-      date: canonicalDate, // canonical YYYY-MM-DD
-      raceDate: canonicalDate,
+      date: canonicalDateIso,
+      raceDate: canonicalDateIso,
+      canonicalDateIso: canonicalDateIso,
+      dateRaw: uiDateRaw,        // for debugging
       predicted: body.predicted || {},
     };
 
