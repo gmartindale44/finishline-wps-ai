@@ -29,11 +29,12 @@
 
   const qs = (selector, root = document) => root.querySelector(selector);
 
+  // Use UTC methods to match server-side behavior and avoid timezone shifts
   const todayISO = () => {
     const d = new Date();
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const dd = String(d.getUTCDate()).padStart(2, "0");
     return `${y}-${m}-${dd}`;
   };
 
@@ -583,60 +584,137 @@
 
     if (runBtnEl) {
       const defaultLabel = runBtnEl.textContent || "Verify Now";
-      runBtnEl.addEventListener("click", async () => {
-        const track = (trackInputEl?.value || "").trim();
-        const raceNo =
-          (raceInputEl && raceInputEl.value
-            ? raceInputEl.value.trim()
-            : "") || null;
-        const rawDate =
-          dateInputEl && dateInputEl.value ? dateInputEl.value : null;
-        const date = rawDate || todayISO();
+      
+      // Pure string helper for date normalization (no Date objects, no timezone math)
+      function formatUiDateForApi(uiDate) {
+        if (!uiDate) return null;
+        const s = String(uiDate).trim();
 
-        if (warnTrackEl) warnTrackEl.style.display = track ? "none" : "";
-        if (!track) {
-          try {
-            trackInputEl?.focus();
-          } catch {
-            /* ignore */
-          }
-          return;
+        // Already ISO (YYYY-MM-DD)
+        if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+          return s;
         }
-        if (warnRaceEl) warnRaceEl.style.display = "none";
 
-        const requestInfo = { track, raceNo: raceNo || null, date };
-
-        if (statusNode) {
-          statusNode.textContent = "Running…";
-          statusNode.style.color = "#cbd5f5";
+        // MM/DD/YYYY -> YYYY-MM-DD
+        const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+        if (m) {
+          const mm = m[1].padStart(2, "0");
+          const dd = m[2].padStart(2, "0");
+          const yyyy = m[3];
+          return `${yyyy}-${mm}-${dd}`;
         }
-        if (summaryEl) summaryEl.textContent = "Working…";
-        runBtnEl.disabled = true;
-        runBtnEl.textContent = "Running…";
-        host.__flvLast = { top: null, query: "" };
 
-        pushSnapshot(track, raceNo, readUIPredictions());
-
+        // As a last resort, just return the trimmed string (no Date math)
+        return s;
+      }
+      
+      runBtnEl.addEventListener("click", async (evt) => {
+        evt.preventDefault();
+        evt.stopPropagation();
+        
         try {
-          const predicted = readUIPredictions();
+          const track = (trackInputEl?.value || "").trim();
+          const raceNo =
+            (raceInputEl && raceInputEl.value
+              ? raceInputEl.value.trim()
+              : "") || null;
+          
+          // Validate track is required
+          if (warnTrackEl) warnTrackEl.style.display = track ? "none" : "";
+          if (!track) {
+            try {
+              trackInputEl?.focus();
+            } catch {
+              /* ignore */
+            }
+            return;
+          }
+          if (warnRaceEl) warnRaceEl.style.display = "none";
+          
+          // 1) Grab the Race Date input element from the main page
+          // This is the date the user selected on the Race Information page
+          const mainPageDateInput = document.querySelector('#fl-race-date, input[name="race_date"], input[data-role="race-date"]');
+          
+          // Read date from the main page input - use the raw value directly
+          // HTML5 date inputs return YYYY-MM-DD format, which is exactly what we need
+          let uiDateRaw = null;
+          if (mainPageDateInput) {
+            uiDateRaw = (mainPageDateInput.value || "").trim();
+          }
+          
+          // If there is no date at all, show error and block the request
+          if (!uiDateRaw) {
+            if (summaryEl) {
+              summaryEl.textContent = "Error: Please enter a Race Date before verifying.";
+            }
+            if (statusNode) {
+              statusNode.textContent = "Error";
+              statusNode.style.color = "#f87171";
+            }
+            // Optional: show alert for better UX
+            try {
+              alert("Please enter a Race Date before verifying.");
+            } catch {
+              /* ignore if alert blocked */
+            }
+            return;
+          }
+          
+          // IMPORTANT: No todayISO(), no new Date(), no timezone logic.
+          // Just validate/normalize formats.
+          const canonicalDate = formatUiDateForApi(uiDateRaw);
+          
+          // Validate date format is acceptable
+          if (!canonicalDate) {
+            if (summaryEl) {
+              summaryEl.textContent = "Error: Invalid race date format";
+            }
+            if (statusNode) {
+              statusNode.textContent = "Error";
+              statusNode.style.color = "#f87171";
+            }
+            return;
+          }
+          
+          // Build payload - use the canonical date exactly as formatted (no Date objects, no timezone conversion)
+          const payload = {
+            track,
+            raceNo: raceNo || undefined,
+            date: canonicalDate,
+            dateRaw: uiDateRaw,  // extra debug so we can see exactly what UI sent
+            predicted: readUIPredictions(),
+          };
+          
+          console.log("[VERIFY_UI] outgoing payload", payload);
+          
+          // Update UI state
+          if (statusNode) {
+            statusNode.textContent = "Running…";
+            statusNode.style.color = "#cbd5f5";
+          }
+          if (summaryEl) summaryEl.textContent = "Working…";
+          runBtnEl.disabled = true;
+          runBtnEl.textContent = "Running…";
+          host.__flvLast = { top: null, query: "" };
+          
+          pushSnapshot(track, raceNo, readUIPredictions());
+          
+          // Always send the fetch request
           const resp = await fetch("/api/verify_race", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              track,
-              date,
-              raceNo: raceNo || undefined,
-              predicted,
-            }),
+            body: JSON.stringify(payload),
           });
+          
           const data = await resp.json().catch(() => ({}));
-
+          
           // Build summary payload with date and error info
           const baseSummary = {};
-          if (date) {
-            baseSummary.date = date;
+          if (canonicalDate) {
+            baseSummary.date = canonicalDate;
+            baseSummary.dateRaw = uiDateRaw;
           }
-
+          
           const summaryPayload = resp.ok
             ? { ...baseSummary, ...data }
             : {
@@ -652,49 +730,52 @@
                     : null,
                 step: data && data.step ? data.step : "verify_race",
               };
-
+          
           if (statusNode) {
             statusNode.textContent = resp.ok
               ? "OK"
               : `Error ${resp.status}`;
             statusNode.style.color = resp.ok ? "#cbd5f5" : "#f87171";
           }
-
+          
           host.__flvLast = {
             top: data?.top || null,
             query: data?.query || "",
           };
-
+          
           renderSummary(summaryEl, summaryPayload);
-
+          
           const debugEl = qs("#flv-gz-json", host);
           if (debugEl) {
             try {
               const existing = JSON.parse(debugEl.textContent || "[]");
               const arr = Array.isArray(existing) ? existing : [];
-              arr.unshift({ request: requestInfo, response: data });
+              arr.unshift({ request: { track, raceNo, date: canonicalDate, dateRaw: uiDateRaw }, response: data });
               debugEl.textContent = JSON.stringify(arr.slice(0, 5), null, 2);
             } catch {
               debugEl.textContent = JSON.stringify(
-                [{ request: requestInfo, response: data }],
+                [{ request: { track, raceNo, date: canonicalDate, dateRaw: uiDateRaw }, response: data }],
                 null,
                 2
               );
             }
           }
         } catch (error) {
+          console.error("[VERIFY_UI] error during verify", error);
           if (statusNode) {
             statusNode.textContent = "Error";
             statusNode.style.color = "#f87171";
           }
+          // Always show error in summary
+          const errorMessage = error && (error.message || String(error));
           renderSummary(summaryEl, {
-            date,
-            error: "Request failed",
-            details: error && (error.message || String(error)),
+            error: "Verify failed in UI",
+            details: errorMessage,
             step: "verify_race_fetch",
           });
-          if (window.__flVerifyDebug) {
-            console.error("[Verify Modal] request failed", error);
+          // Ensure summary is never empty
+          if (summaryEl && !summaryEl.textContent) {
+            summaryEl.textContent = "Error: Verify failed in UI. See console for details.";
           }
         } finally {
           runBtnEl.disabled = false;
