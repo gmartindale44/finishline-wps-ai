@@ -1,0 +1,40 @@
+{
+  "strategyName": "v1_shadow_only",
+  "version": 1,
+  "generatedAt": "2025-11-29T20:58:18.557Z",
+  "rows": {
+    "total": 70
+  },
+  "legs": {
+    "win": {
+      "rows": 70,
+      "shadow_yes": 56,
+      "hits_shadow": 26,
+      "hits_overall": 26,
+      "hit_rate_shadow": 0.464,
+      "hit_rate_overall": 0.371,
+      "roi_shadow": 34.411,
+      "roi_overall": 27.529
+    },
+    "place": {
+      "rows": 70,
+      "shadow_yes": 56,
+      "hits_shadow": 41,
+      "hits_overall": 41,
+      "hit_rate_shadow": 0.732,
+      "hit_rate_overall": 0.586,
+      "roi_shadow": 34.411,
+      "roi_overall": 27.529
+    },
+    "show": {
+      "rows": 70,
+      "shadow_yes": 60,
+      "hits_shadow": 43,
+      "hits_overall": 43,
+      "hit_rate_shadow": 0.717,
+      "hit_rate_overall": 0.614,
+      "roi_shadow": 32.117,
+      "roi_overall": 27.529
+    }
+  }
+}

@@ -8,6 +8,11 @@ const OUTPUT_PATH = path.join(
   "data",
   "shadow_calibration_report_v1.md"
 );
+const JSON_OUTPUT_PATH = path.join(
+  process.cwd(),
+  "data",
+  "shadow_snapshot_v1.json"
+);
 
 const LEGACY_HEADERS = [
   "Test_ID",
@@ -233,12 +238,59 @@ function formatAvg(values) {
 }
 
 /**
+ * Calculate average ROI from array
+ */
+function calculateAvgROI(values) {
+  if (values.length === 0) return null;
+  const sum = values.reduce((a, b) => a + b, 0);
+  return Number((sum / values.length).toFixed(3));
+}
+
+/**
+ * Generate interpretation notes for a leg
+ */
+function generateNotes(stats, legName) {
+  const notes = [];
+  
+  // Sample size assessment
+  if (stats.shadowYes < 30) {
+    notes.push("Sample size small, treat with caution");
+  } else if (stats.shadowYes < 50) {
+    notes.push("Sample size moderate");
+  } else {
+    notes.push("Sample size looks adequate");
+  }
+  
+  // Hit rate improvement assessment
+  const hitRateShadow = stats.shadowYes > 0 
+    ? (stats.shadowYesHits / stats.shadowYes) * 100 
+    : 0;
+  const hitRateOverall = stats.totalRows > 0 
+    ? (stats.totalHits / stats.totalRows) * 100 
+    : 0;
+  const delta = hitRateShadow - hitRateOverall;
+  
+  if (delta > 5) {
+    notes.push(`Shadow YES improves hit-rate vs overall by ${delta.toFixed(1)}%`);
+  } else if (delta < -5) {
+    notes.push(`Shadow YES underperforms overall by ${Math.abs(delta).toFixed(1)}%`);
+  } else {
+    notes.push(`Shadow YES hit-rate similar to overall (${delta > 0 ? '+' : ''}${delta.toFixed(1)}%)`);
+  }
+  
+  return notes.join(". ");
+}
+
+/**
  * Generate markdown report
  */
 function generateReport(thresholds, winStats, placeStats, showStats) {
   const timestamp = new Date().toISOString();
   const strategy = thresholds.strategyName || "v1_shadow_only";
   const version = thresholds.version || 1;
+  
+  // Calculate total rows (use max across legs as they should be similar)
+  const totalRows = Math.max(winStats.totalRows, placeStats.totalRows, showStats.totalRows);
 
   let report = `# Shadow Calibration Report (v1)
 
@@ -252,12 +304,17 @@ Generated: ${timestamp}
 - Place: minConf ${thresholds.place.minConfidence}, maxFieldSize ${thresholds.place.maxFieldSize}
 - Show: minConf ${thresholds.show.minConfidence}, maxFieldSize ${thresholds.show.maxFieldSize}
 
+## Global summary
+
+- Total rows with outcome: ${totalRows}
+- Legs: Win / Place / Show
+
 ## Win leg
 
 - Total rows with outcome: ${winStats.totalRows}
-- Shadow YES: ${winStats.shadowYes}
-- Hit rate (shadow YES): ${formatPercent(winStats.shadowYesHits, winStats.shadowYes)}
-- Hit rate (overall): ${formatPercent(winStats.totalHits, winStats.totalRows)}
+- Shadow YES rows: ${winStats.shadowYes}
+- Hit rate (shadow YES): ${formatPercent(winStats.shadowYesHits, winStats.shadowYes)} (${winStats.shadowYesHits} / ${winStats.shadowYes})
+- Hit rate (overall): ${formatPercent(winStats.totalHits, winStats.totalRows)} (${winStats.totalHits} / ${winStats.totalRows})
 `;
 
   if (winStats.shadowYesROI.length > 0) {
@@ -268,14 +325,15 @@ Generated: ${timestamp}
     report += `- Avg ROI: Not available in dataset
 `;
   }
+  
+  report += `- Notes: ${generateNotes(winStats, "win")}
 
-  report += `
 ## Place leg
 
 - Total rows with outcome: ${placeStats.totalRows}
-- Shadow YES: ${placeStats.shadowYes}
-- Hit rate (shadow YES): ${formatPercent(placeStats.shadowYesHits, placeStats.shadowYes)}
-- Hit rate (overall): ${formatPercent(placeStats.totalHits, placeStats.totalRows)}
+- Shadow YES rows: ${placeStats.shadowYes}
+- Hit rate (shadow YES): ${formatPercent(placeStats.shadowYesHits, placeStats.shadowYes)} (${placeStats.shadowYesHits} / ${placeStats.shadowYes})
+- Hit rate (overall): ${formatPercent(placeStats.totalHits, placeStats.totalRows)} (${placeStats.totalHits} / ${placeStats.totalRows})
 `;
 
   if (placeStats.shadowYesROI.length > 0) {
@@ -286,14 +344,15 @@ Generated: ${timestamp}
     report += `- Avg ROI: Not available in dataset
 `;
   }
+  
+  report += `- Notes: ${generateNotes(placeStats, "place")}
 
-  report += `
 ## Show leg
 
 - Total rows with outcome: ${showStats.totalRows}
-- Shadow YES: ${showStats.shadowYes}
-- Hit rate (shadow YES): ${formatPercent(showStats.shadowYesHits, showStats.shadowYes)}
-- Hit rate (overall): ${formatPercent(showStats.totalHits, showStats.totalRows)}
+- Shadow YES rows: ${showStats.shadowYes}
+- Hit rate (shadow YES): ${formatPercent(showStats.shadowYesHits, showStats.shadowYes)} (${showStats.shadowYesHits} / ${showStats.shadowYes})
+- Hit rate (overall): ${formatPercent(showStats.totalHits, showStats.totalRows)} (${showStats.totalHits} / ${showStats.totalRows})
 `;
 
   if (showStats.shadowYesROI.length > 0) {
@@ -304,8 +363,77 @@ Generated: ${timestamp}
     report += `- Avg ROI: Not available in dataset
 `;
   }
+  
+  report += `- Notes: ${generateNotes(showStats, "show")}
+`;
 
   return report;
+}
+
+/**
+ * Generate JSON snapshot
+ */
+function generateJsonSnapshot(thresholds, winStats, placeStats, showStats) {
+  const timestamp = new Date().toISOString();
+  const strategy = thresholds.strategyName || "v1_shadow_only";
+  const version = thresholds.version || 1;
+  
+  const totalRows = Math.max(winStats.totalRows, placeStats.totalRows, showStats.totalRows);
+  
+  const snapshot = {
+    strategyName: strategy,
+    version: version,
+    generatedAt: timestamp,
+    rows: {
+      total: totalRows
+    },
+    legs: {
+      win: {
+        rows: winStats.totalRows,
+        shadow_yes: winStats.shadowYes,
+        hits_shadow: winStats.shadowYesHits,
+        hits_overall: winStats.totalHits,
+        hit_rate_shadow: winStats.shadowYes > 0 
+          ? Number(((winStats.shadowYesHits / winStats.shadowYes) * 100 / 100).toFixed(3))
+          : 0,
+        hit_rate_overall: winStats.totalRows > 0
+          ? Number(((winStats.totalHits / winStats.totalRows) * 100 / 100).toFixed(3))
+          : 0,
+        roi_shadow: calculateAvgROI(winStats.shadowYesROI),
+        roi_overall: calculateAvgROI(winStats.totalROI)
+      },
+      place: {
+        rows: placeStats.totalRows,
+        shadow_yes: placeStats.shadowYes,
+        hits_shadow: placeStats.shadowYesHits,
+        hits_overall: placeStats.totalHits,
+        hit_rate_shadow: placeStats.shadowYes > 0
+          ? Number(((placeStats.shadowYesHits / placeStats.shadowYes) * 100 / 100).toFixed(3))
+          : 0,
+        hit_rate_overall: placeStats.totalRows > 0
+          ? Number(((placeStats.totalHits / placeStats.totalRows) * 100 / 100).toFixed(3))
+          : 0,
+        roi_shadow: calculateAvgROI(placeStats.shadowYesROI),
+        roi_overall: calculateAvgROI(placeStats.totalROI)
+      },
+      show: {
+        rows: showStats.totalRows,
+        shadow_yes: showStats.shadowYes,
+        hits_shadow: showStats.shadowYesHits,
+        hits_overall: showStats.totalHits,
+        hit_rate_shadow: showStats.shadowYes > 0
+          ? Number(((showStats.shadowYesHits / showStats.shadowYes) * 100 / 100).toFixed(3))
+          : 0,
+        hit_rate_overall: showStats.totalRows > 0
+          ? Number(((showStats.totalHits / showStats.totalRows) * 100 / 100).toFixed(3))
+          : 0,
+        roi_shadow: calculateAvgROI(showStats.shadowYesROI),
+        roi_overall: calculateAvgROI(showStats.totalROI)
+      }
+    }
+  };
+  
+  return JSON.stringify(snapshot, null, 2);
 }
 
 /**
@@ -331,12 +459,17 @@ function main() {
 
     process.stdout.write("[shadow-calibration] Generating report...\n");
     const report = generateReport(thresholds, winStats, placeStats, showStats);
+    const jsonSnapshot = generateJsonSnapshot(thresholds, winStats, placeStats, showStats);
 
     process.stdout.write(`[shadow-calibration] Writing report to ${OUTPUT_PATH}\n`);
     fs.writeFileSync(OUTPUT_PATH, report, "utf8");
+    
+    process.stdout.write(`[shadow-calibration] Writing JSON snapshot to ${JSON_OUTPUT_PATH}\n`);
+    fs.writeFileSync(JSON_OUTPUT_PATH, jsonSnapshot, "utf8");
 
-    process.stdout.write("[shadow-calibration] ✓ Report generated successfully!\n");
+    process.stdout.write("[shadow-calibration] ✓ Report and snapshot generated successfully!\n");
     process.stdout.write(`[shadow-calibration] Output: ${OUTPUT_PATH}\n`);
+    process.stdout.write(`[shadow-calibration] JSON: ${JSON_OUTPUT_PATH}\n`);
   } catch (err) {
     process.stderr.write(`[shadow-calibration] Fatal error: ${err?.message || err}\n`);
     if (err.stack) {
