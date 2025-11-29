@@ -149,17 +149,16 @@ async function main() {
         console.log("PREDICTED:", payload.predicted);
       }
       if (payload.summary) {
-        console.log("\n=== SUMMARY ===");
+        console.log("\n=== SUMMARY (cosmetic UI text, not used by calibration) ===");
         console.log(payload.summary);
-        // Extract and log "Using date:" line for verification
-        const usingDateMatch = payload.summary.match(/Using date:\s*([^\n]+)/);
-        if (usingDateMatch) {
-          console.log(`\n[VERIFICATION] Using date: "${usingDateMatch[1]}"`);
-          if (usingDateMatch[1] !== args.date && usingDateMatch[1] !== args.date.replace(/\//g, "-")) {
-            console.warn(`[WARNING] Date mismatch! Input: "${args.date}", Summary: "${usingDateMatch[1]}"`);
-          } else {
-            console.log(`[VERIFICATION] ✓ Date matches input: "${args.date}"`);
-          }
+      }
+      // Verify date using structured field, not summary text
+      if (payload.date) {
+        console.log(`\n[VERIFICATION] Using date (from structured field): "${payload.date}"`);
+        if (payload.date !== args.date && payload.date !== args.date.replace(/\//g, "-")) {
+          console.warn(`[WARNING] Date mismatch! Input: "${args.date}", Response: "${payload.date}"`);
+        } else {
+          console.log(`[VERIFICATION] ✓ Date matches input: "${args.date}"`);
         }
       }
       console.log("\n=== FULL PAYLOAD ===");
