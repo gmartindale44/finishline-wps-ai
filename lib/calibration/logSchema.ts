@@ -128,6 +128,8 @@ export function entryFromRedisHash(
       suggested: hash.strategy || undefined,
       stake: 1,
       profit: parsePercent(hash.roi_percent),
+      // NOTE: We use structured outcome fields (win/place/show), NOT the summary text.
+      // The summary field in verify_race responses is cosmetic UI text and should not be parsed.
       winHorse: hash.win || hash.winHorse || undefined,
       placeHorse: hash.place || hash.placeHorse || undefined,
       showHorse: hash.show || hash.showHorse || undefined,

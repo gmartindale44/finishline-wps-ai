@@ -197,6 +197,8 @@ async function main() {
 
   const additions = [];
 
+  // NOTE: This script reads structured outcome fields from Redis (win/place/show),
+  // NOT the summary text. The summary field in verify_race responses is cosmetic UI text.
   for (const key of keys) {
     try {
       const obj = await rhgetall(key);
