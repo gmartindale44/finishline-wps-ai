@@ -5,6 +5,7 @@ export const config = { runtime: 'nodejs' };
 import fs from 'fs';
 import path from 'path';
 import { parseDistance } from '../lib/distance.js';
+import { loadCalibrationThresholds } from '../lib/calibrationThresholds.js';
 const __CALIB_PATH = path.join(process.cwd(), 'data', 'model_params.json');
 function __loadParams(){ try{ return JSON.parse(fs.readFileSync(__CALIB_PATH,'utf8')); }catch{ return {reliability:[],temp_tau:1.0,policy:{}}; } }
 function __calConf(raw, rel){
@@ -17,6 +18,49 @@ function __calConf(raw, rel){
 }
 function __soft(scores, tau=1.0){ const ex=scores.map(s=>Math.exp(s/Math.max(0.05,tau))); const Z=ex.reduce((a,b)=>a+b,0); return ex.map(v=>v/Z); }
 function __tc(s){ return s ? s.replace(/\b\w/g,m=>m.toUpperCase()) : s; }
+
+// Shadow-mode decision helper (read-only; does NOT affect real strategy)
+function buildShadowDecision({ thresholds, predicted, meta }) {
+  // meta can contain: { winConfidence, placeConfidence, showConfidence, fieldSize }
+  const fieldSize = meta?.fieldSize ?? null;
+  const winConf = meta?.winConfidence ?? null;
+  const placeConf = meta?.placeConfidence ?? null;
+  const showConf = meta?.showConfidence ?? null;
+
+  const winAllowed =
+    !!predicted?.win &&
+    winConf != null &&
+    winConf >= thresholds.win.minConfidence &&
+    (fieldSize == null || fieldSize <= thresholds.win.maxFieldSize);
+
+  const placeAllowed =
+    !!predicted?.place &&
+    placeConf != null &&
+    placeConf >= thresholds.place.minConfidence &&
+    (fieldSize == null || fieldSize <= thresholds.place.maxFieldSize);
+
+  const showAllowed =
+    !!predicted?.show &&
+    showConf != null &&
+    showConf >= thresholds.show.minConfidence &&
+    (fieldSize == null || fieldSize <= thresholds.show.maxFieldSize);
+
+  return {
+    strategyName: thresholds.strategyName || 'v1_shadow_only',
+    version: thresholds.version ?? 1,
+    fieldSize,
+    confidences: {
+      win: winConf,
+      place: placeConf,
+      show: showConf,
+    },
+    allow: {
+      win: winAllowed,
+      place: placeAllowed,
+      show: showAllowed,
+    },
+  };
+}
 
 // --- CORS helper (adjust origin if you want to restrict) ---
 function setCORS(res) {
@@ -473,6 +517,25 @@ export default async function handler(req, res) {
       console.warn('[predict_wps] Calibration error (using raw response):', calibErr?.message || calibErr);
       // Fallback to original response if calibration fails
     }
+
+    // Shadow-mode decision (read-only; does not affect picks or strategy)
+    const thresholds = loadCalibrationThresholds();
+    const shadowMeta = {
+      // Currently we only have a single confidence and top3_mass; per-leg confidences are null
+      winConfidence: null,
+      placeConfidence: null,
+      showConfidence: null,
+      fieldSize: Array.isArray(horses) ? horses.length : null,
+    };
+    const shadowDecision = buildShadowDecision({
+      thresholds,
+      predicted: {
+        win: calibratedResponse.picks?.[0]?.name || null,
+        place: calibratedResponse.picks?.[1]?.name || null,
+        show: calibratedResponse.picks?.[2]?.name || null,
+      },
+      meta: shadowMeta,
+    });
     
     // Fire-and-forget Redis logging (non-blocking, no-op if Redis disabled)
     (async () => {
@@ -488,14 +551,27 @@ export default async function handler(req, res) {
           picks: picksStr,
           confidence: calibratedResponse.confidence ?? null,
           top3_mass: calibratedResponse.top3_mass ?? null,
-          strategy: calibratedResponse.strategy?.recommended || null
+          strategy: calibratedResponse.strategy?.recommended || null,
+          shadowDecision: {
+            strategyName: shadowDecision.strategyName,
+            version: shadowDecision.version,
+            allow: shadowDecision.allow,
+            fieldSize: shadowDecision.fieldSize,
+          },
         });
       } catch (_) {
         // Ignore all errors - this is fire-and-forget
       }
     })();
     
-    return res.status(200).json(calibratedResponse);
+    return res.status(200).json({
+      ...calibratedResponse,
+      shadowDecision,
+      calibrationThresholds: {
+        strategyName: thresholds.strategyName,
+        version: thresholds.version,
+      },
+    });
   } catch (err) {
     console.error('[predict_wps] Error:', err);
     return res.status(500).json({ error: 'prediction_error', message: String(err?.message || err) });

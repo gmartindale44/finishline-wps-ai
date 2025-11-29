@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "updatedAt": "2025-11-25T00:00:00.000Z",
+  "strategyName": "v1_shadow_only",
+  "notes": [
+    "Read-only thresholds for shadow-mode decision logging.",
+    "These DO NOT change prediction behavior; they are only used to log what the app *would* have decided.",
+    "Safe to edit gradually once we trust the feedback loop."
+  ],
+  "win": {
+    "minConfidence": 0.62,
+    "maxFieldSize": 12
+  },
+  "place": {
+    "minConfidence": 0.55,
+    "maxFieldSize": 14
+  },
+  "show": {
+    "minConfidence": 0.50,
+    "maxFieldSize": 16
+  },
+  "global": {
+    "minOddsFloor": 1.2,
+    "maxOddsCeiling": 8.0,
+    "enableLongshotFilter": true
+  }
+}
