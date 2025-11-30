@@ -1,9 +1,9 @@
-/* public/js/verify-modal.js – GreenZone Lab v2 (GreenZone v1 wired, hybrid C UI) */
+/* public/js/verify-modal.js — GreenZone Lab v2 (v1 stats, hybrid C UI) */
 
 (function () {
   "use strict";
 
-  // Bail out in non-browser contexts
+  // Bail out in non-browser contexts (SSR safety)
   if (typeof window === "undefined" || typeof document === "undefined") return;
 
   // ------------------------------------
@@ -15,25 +15,37 @@
   }
 
   // ------------------------------------
-  // Global open function (used by loader + fallback button)
+  // Global open stub (used by loader + fallback button)
   // ------------------------------------
 
-  // We declare openImpl later; function declarations are hoisted so this is safe.
+  /**
+   * Public entry point that other scripts call.
+   * Delegates to window.__FL_VERIFY_MODAL_OPEN_IMPL__ once it is registered.
+   */
   function openVerifyModal(ctx) {
-    // delegate to the concrete implementation
-    return openImpl(ctx || {});
+    if (typeof window.__FL_VERIFY_MODAL_OPEN_IMPL__ === "function") {
+      return window.__FL_VERIFY_MODAL_OPEN_IMPL__(ctx || {});
+    }
+
+    console.warn(
+      "[verify-modal] openVerifyModal called before implementation ready",
+      ctx
+    );
   }
 
-  // Expose stub for loader (verify-loader.js)
+  // Loader & other scripts call this
   window.__FL_OPEN_VERIFY_MODAL__ = openVerifyModal;
 
-  // Also expose the older name that verify-button.js expects (belt + suspenders)
+  // Old name some scripts expect (belt + suspenders)
   window.verify_button__on_open_VERIFY_MODAL__ = function (ctx) {
     openVerifyModal(ctx || {});
   };
 
-  // Guard so we don't double-init if script somehow gets loaded twice
-  if (window.__FL_VERIFY_MODAL_INIT__) return;
+  // Guard to prevent double DOM/impl initialization
+  if (window.__FL_VERIFY_MODAL_INIT__) {
+    // Global stub is already registered above; we’re good.
+    return;
+  }
   window.__FL_VERIFY_MODAL_INIT__ = true;
 
   // ------------------------------------
@@ -50,7 +62,7 @@
   };
 
   // ------------------------------------
-  // Rendering helpers – Summary + GreenZone
+  // Rendering helpers — Summary + GreenZone
   // ------------------------------------
 
   function renderSummary(text) {
@@ -59,10 +71,10 @@
   }
 
   function renderGreenZone(host, payload) {
-    const el = state.gzMessageEl || q("#flv-gz-message", host || state.host || document);
+    const el =
+      state.gzMessageEl || q("#flv-gz-message", host || state.host || document);
     if (!el) return;
 
-    // Safety: if we somehow got nothing back
     if (!payload) {
       el.textContent =
         "GreenZone service error.\n\nDebug JSON:\n" +
@@ -70,8 +82,11 @@
       return;
     }
 
-    const status = typeof payload.status === "number" ? payload.status : 0;
-    const suggestions = Array.isArray(payload.suggestions) ? payload.suggestions : [];
+    const status =
+      typeof payload.status === "number" ? payload.status : payload.status || 0;
+    const suggestions = Array.isArray(payload.suggestions)
+      ? payload.suggestions
+      : [];
     const err = payload.error || null;
     const stats = payload.stats || null;
 
@@ -117,7 +132,6 @@
 
     function addLeg(label, leg) {
       if (!leg) return;
-
       lines.push(label.toUpperCase() + " leg");
       lines.push(
         "  Total rows: " +
@@ -125,8 +139,10 @@
       );
       if (typeof leg.shadowYes === "number") {
         lines.push(
-          "  Hit rate (shadow YES): " + pct(leg.shadowYes) +
-          "  |  Hit rate (overall): " + pct(leg.hit_rate_overall)
+          "  Hit rate (shadow YES): " +
+            pct(leg.shadowYes) +
+            "  |  Hit rate (overall): " +
+            pct(leg.hit_rate_overall)
         );
       }
       lines.push("");
@@ -137,7 +153,9 @@
     addLeg("show", legs.show);
 
     if (!suggestions.length) {
-      lines.push("Not enough per-race data yet to highlight specific GreenZone races.");
+      lines.push(
+        "Not enough per-race data yet to highlight specific GreenZone races."
+      );
     } else {
       lines.push("GreenZone suggestions:");
       suggestions.forEach(function (s, idx) {
@@ -170,15 +188,22 @@
   // ------------------------------------
 
   async function refreshGreenZone(host, ctx) {
-    const msgEl = state.gzMessageEl || q("#flv-gz-message", host || state.host || document);
+    const msgEl =
+      state.gzMessageEl || q("#flv-gz-message", host || state.host || document);
     if (msgEl) msgEl.textContent = "Loading...";
 
     let payload;
     try {
       const body = {
         race: {
-          track: (ctx && ctx.track) || (ctx && ctx.race && ctx.race.track) || null,
-          raceNo: (ctx && ctx.raceNo) || (ctx && ctx.race && ctx.race.raceNo) || null,
+          track:
+            (ctx && ctx.track) ||
+            (ctx && ctx.race && ctx.race.track) ||
+            null,
+          raceNo:
+            (ctx && ctx.raceNo) ||
+            (ctx && ctx.race && ctx.race.raceNo) ||
+            null,
           date:
             (ctx && ctx.date) ||
             (ctx && ctx.race && ctx.race.date) ||
@@ -195,10 +220,11 @@
 
       const status = res.status;
       let json = null;
+
       try {
         json = await res.json();
       } catch (_) {
-        // ignore JSON parse failure – we'll still surface status
+        // Ignore JSON parse failure; we'll still expose status + generic error.
       }
 
       if (!res.ok) {
@@ -214,7 +240,7 @@
       console.error("[Verify Modal] GreenZone fetch failed", error);
       payload = {
         status: 0,
-        error: error && (error.message || "Network error"),
+        error: (error && (error.message || String(error))) || "Network error",
         suggestions: [],
       };
     }
@@ -223,7 +249,7 @@
   }
 
   // ------------------------------------
-  // Modal construction
+  // Modal construction (UI only)
   // ------------------------------------
 
   function buildModal() {
@@ -239,12 +265,12 @@
     card.className = "flv-card";
     card.setAttribute("role", "dialog");
     card.setAttribute("aria-modal", "true");
-    card.setAttribute("data-build", "datefix-final3");
+    card.setAttribute("data-build", "datefix-final3+gzv2");
     card.style.cssText =
       "width:min(880px,90vw);max-height:90vh;overflow:auto;border-radius:16px;" +
-      "border:1px solid rgba(255,255,255,.12);" +
-      "background:rgba(23,22,35,.96);backdrop-filter:blur(6px);padding:18px;" +
-      "color:#f9f9ff;font-family:system-ui,-apple-system,BlinkMacSystemFont," +
+      "border:1px solid rgba(255,255,255,.12);background:rgba(23,22,35,.96);" +
+      "backdrop-filter:blur(6px);padding:18px;color:#f9f9ff;" +
+      "font-family:system-ui,-apple-system,BlinkMacSystemFont," +
       '"Segoe UI",sans-serif;font-size:14px;';
 
     // Header
@@ -291,7 +317,7 @@
     gzSection.style.cssText = "margin-top:12px;";
 
     const gzLabel = document.createElement("div");
-    gzLabel.textContent = "GreenZone Data";
+    gzLabel.textContent = "GREENZONE DATA";
     gzLabel.style.cssText = summaryLabel.style.cssText;
 
     const gzPre = document.createElement("pre");
@@ -316,27 +342,39 @@
   }
 
   // ------------------------------------
-  // Open / close implementation
+  // Concrete open/close implementation
   // ------------------------------------
 
   function openImpl(ctx) {
     const host = buildModal();
     host.style.display = "flex";
     state.isOpen = true;
+
     const c = ctx || {};
     state.lastContext = c;
 
-    // 🔑 Be flexible about what the loader sends
-    const summary =
-      c.summaryText ||      // current name we expected
-      c.summary_text ||     // snake_case variant
-      c.summary ||          // generic
-      c.rawSummary ||       // older name we used
-      c.text ||             // fallback if loader just calls it "text"
+    // Flexible summary field detection to match loader output
+    let summary =
+      c.summaryText ||
+      c.summary_text ||
+      c.summary ||
+      c.rawSummary ||
+      c.text ||
       "";
+
+    // As a fallback, try to build something from known fields
+    if (!summary && c.step && c.query) {
+      summary =
+        "Step: " +
+        c.step +
+        "\n\nQuery:\n" +
+        c.query +
+        (c.outcome ? "\n\nOutcome:\n" + c.outcome : "");
+    }
 
     renderSummary(summary);
     refreshGreenZone(host, c);
+
     return host;
   }
 
@@ -346,21 +384,21 @@
     state.isOpen = false;
   }
 
+  // Register concrete implementation so the stub can delegate
+  window.__FL_VERIFY_MODAL_OPEN_IMPL__ = openImpl;
+
   // ------------------------------------
-  // Fallback wiring for a plain <button id="verify">
-  // (Your existing verify-loader.js still calls __FL_OPEN_VERIFY_MODAL__)
+  // Fallback button wiring
   // ------------------------------------
 
   function wireFallbackButton() {
     const btn =
-      q('[data-role="verify-button"]') ||
-      q("#verify") ||
+      q('[data-role="verify-button"]') || q("#verify") ||
       q('button[data-fl-verify]');
 
     if (!btn) return;
 
     btn.addEventListener("click", function (evt) {
-      // If some other script already handled this, don't interfere too much.
       if (evt.defaultPrevented) return;
       evt.preventDefault();
       openVerifyModal({});
