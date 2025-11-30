@@ -288,49 +288,85 @@
     msgEl.innerHTML = `<b>Suggested Bets (Today):</b> ${summaryText}`;
   }
 
-  async function refreshGreenZone(host) {
-    const msgEl = qs("#flv-gz-message", host);
-    if (msgEl) msgEl.textContent = "Loading…";
+ async function refreshGreenZone(host) {
+  const msgEl = q("#fl-verify-gz-message", host);
+  if (!msgEl) return;
+  msgEl.textContent = "Loading...";
 
+  let status = 0;
+  let json = null;
+
+  try {
+    // POST required for the new endpoint
+    const res = await fetch("/api/greenzone_today", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({}),
+    });
+
+    status = res.status;
+
+    // Try to parse JSON even on errors
     try {
-      const res = await fetch("/api/greenzone_today", { method: "GET" });
-      if (!res.ok) {
-        const status = res.status;
-        throw Object.assign(new Error(`HTTP ${status}`), { status });
-      }
-      const json = await res.json().catch(() => ({}));
-      renderGreenZone(host, json);
-    } catch (error) {
-      if (window.__flVerifyDebug) {
-        console.error("[Verify Modal] GreenZone fetch failed", error);
-      }
-      const errPayload = {
-        suggestions: [],
-        error: error?.message || "Request failed",
-      };
-      if (typeof error?.status !== "undefined") {
-        errPayload.status = error.status;
-      }
-      renderGreenZone(host, errPayload);
+      json = await res.json();
+    } catch (_err) {
+      json = null;
     }
+
+    // HARD ERROR: non-200 response
+    if (!res.ok) {
+      const errPayload = {
+        status: json && json.status !== undefined ? json.status : status,
+        error: (json && json.error) || `HTTP ${status}`,
+        suggestions: (json && json.suggestions) || [],
+      };
+
+      if (window.__flVerifyDebug) {
+        console.error("[Verify Modal] GreenZone fetch error", {
+          status,
+          json: json || null,
+        });
+      }
+
+      renderGreenZone(host, errPayload);
+      return;
+    }
+
+    // SOFT: 200 OK but no stats yet
+    if (!json || !json.stats) {
+      const softPayload = {
+        status: json && json.status !== undefined ? json.status : 200,
+        error: null,
+        race: json?.race || { track: null, raceNo: null, date: null },
+        shadowDecision: json?.shadowDecision || null,
+        stats: json?.stats || null,
+        suggestions: json?.suggestions || [],
+      };
+
+      renderGreenZone(host, softPayload);
+      return;
+    }
+
+    // HAPPY PATH
+    renderGreenZone(host, json);
+
+  } catch (error) {
+    if (window.__flVerifyDebug) {
+      console.error("[Verify Modal] GreenZone fetch failed", error);
+    }
+
+    const errPayload = {
+      status: (json && json.status) || status || 0,
+      error: error?.message || "Request failed",
+      suggestions: [],
+    };
+
+    renderGreenZone(host, errPayload);
   }
+}
 
-  function buildModal() {
-    let host = qs("#fl-verify-modal-host");
-    if (host) return host;
-
-    host = document.createElement("div");
-    host.id = "fl-verify-modal-host";
-    host.style.cssText =
-      "position:fixed;inset:0;z-index:2147483646;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.55);";
-
-    const card = document.createElement("div");
-    card.className = "flv-card";
-    card.setAttribute("role", "dialog");
-    card.setAttribute("aria-modal", "true");
-    card.setAttribute("data-build", "datefix-final3");
-    card.style.cssText =
-      "width:min(880px,96vw);max-height:90vh;overflow:auto;border-radius:16px;border:1px solid rgba(255,255,255,.12);background:rgba(23,23,28,.96);backdrop-filter:blur(6px);padding:18px;";
 
     host.appendChild(card);
 
