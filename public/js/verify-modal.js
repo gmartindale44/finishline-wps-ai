@@ -270,7 +270,7 @@
     // Summary section
     const summarySection = document.createElement("section");
     const summaryLabel = document.createElement("div");
-    summaryLabel.textContent = "Summary";
+    summaryLabel.textContent = "SUMMARY";
     summaryLabel.style.cssText =
       "font-weight:500;margin:8px 0 4px;letter-spacing:.02em;text-transform:uppercase;" +
       "font-size:11px;color:#98c3af;";
@@ -292,7 +292,7 @@
 
     const gzLabel = document.createElement("div");
     gzLabel.textContent = "GreenZone Data";
-    gzLabel.style.cssText = summaryPre.style.cssText;
+    gzLabel.style.cssText = summaryLabel.style.cssText;
 
     const gzPre = document.createElement("pre");
     gzPre.id = "flv-gz-message";
@@ -323,17 +323,20 @@
     const host = buildModal();
     host.style.display = "flex";
     state.isOpen = true;
-    state.lastContext = ctx || {};
+    const c = ctx || {};
+    state.lastContext = c;
 
-    if (ctx && ctx.summaryText) {
-      renderSummary(ctx.summaryText);
-    } else if (ctx && ctx.rawSummary) {
-      renderSummary(ctx.rawSummary);
-    } else {
-      renderSummary("");
-    }
+    // 🔑 Be flexible about what the loader sends
+    const summary =
+      c.summaryText ||      // current name we expected
+      c.summary_text ||     // snake_case variant
+      c.summary ||          // generic
+      c.rawSummary ||       // older name we used
+      c.text ||             // fallback if loader just calls it "text"
+      "";
 
-    refreshGreenZone(host, ctx || {});
+    renderSummary(summary);
+    refreshGreenZone(host, c);
     return host;
   }
 
