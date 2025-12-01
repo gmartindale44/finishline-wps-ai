@@ -8,6 +8,112 @@ export const config = {
   runtime: "nodejs",
 };
 
+// Upstash Redis client for verify logging
+import { Redis } from "@upstash/redis";
+
+const VERIFY_PREFIX = "fl:verify:";
+
+let redisClient = null;
+function getRedis() {
+  if (!redisClient) {
+    try {
+      redisClient = Redis.fromEnv();
+    } catch (error) {
+      console.error("[verify_race] Failed to init Redis client", error);
+      redisClient = null;
+    }
+  }
+  return redisClient;
+}
+
+/**
+ * Build a race ID for verify logs (similar to prediction logs but without postTime)
+ * This creates a key that can be used to store/retrieve verify logs
+ * The calibration script joins on track|date|raceNo, so the key format doesn't matter
+ * but we use a consistent slug format for readability
+ */
+function buildVerifyRaceId(track, date, raceNo) {
+  // Normalize track: lowercase, collapse spaces, replace non-alphanum with '-', remove dup '-'
+  const slugTrack = (track || "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+
+  // Normalize date: use YYYY-MM-DD format
+  let slugDate = date || "";
+  if (!slugDate || !/^\d{4}-\d{2}-\d{2}$/.test(slugDate)) {
+    // If date is invalid, use empty string (calibration script will handle it)
+    slugDate = "";
+  }
+
+  // Normalize race number
+  const slugRaceNo = String(raceNo || "").trim() || "0";
+
+  // Build: track-date-unknown-r{raceNo} (using "unknown" for postTime to match prediction pattern)
+  const parts = [slugTrack, slugDate, "unknown", `r${slugRaceNo}`].filter(Boolean);
+  return parts.join("-");
+}
+
+/**
+ * Log verify result to Upstash Redis
+ * This is best-effort and must not break the user flow
+ */
+async function logVerifyResult(result) {
+  // Only log successful verify responses
+  if (!result || result.ok !== true) {
+    return;
+  }
+
+  const redis = getRedis();
+  if (!redis) {
+    // Redis not available - silently skip (non-breaking)
+    return;
+  }
+
+  try {
+    const { track, date, raceNo } = result;
+    
+    // Build raceId for the key
+    const raceId = buildVerifyRaceId(track, date, raceNo);
+    
+    // Build the log payload matching what calibration script expects
+    // The calibration script looks for: track, date (or dateIso or debug.canonicalDateIso), raceNo, outcome
+    const logPayload = {
+      raceId,
+      track: track || "",
+      date: date || "",
+      dateIso: date || "", // Alias for calibration script compatibility
+      raceNo: raceNo || "",
+      query: result.query || "",
+      top: result.top || null,
+      outcome: result.outcome || { win: "", place: "", show: "" },
+      predicted: result.predicted || { win: "", place: "", show: "" },
+      hits: result.hits || {
+        winHit: false,
+        placeHit: false,
+        showHit: false,
+        top3Hit: false,
+      },
+      summary: result.summary || "",
+      debug: {
+        ...(result.debug || {}),
+        canonicalDateIso: date || "", // For calibration script fallback lookup
+      },
+      ts: Date.now(),
+    };
+
+    const logKey = `${VERIFY_PREFIX}${raceId}`;
+    await redis.set(logKey, JSON.stringify(logPayload));
+  } catch (err) {
+    // IMPORTANT: logging failures must NOT break the user flow
+    console.error("[verify-log] Failed to log verify result", err);
+  }
+}
+
 /**
  * Safely parse the request body. Supports JSON or URL-encoded form data.
  */
@@ -385,10 +491,9 @@ export default async function handler(req, res) {
       return s;
     }
     
-    // Extract the raw date from body or query
+    // Extract the raw date from body
     const uiDateRaw =
       (body && (body.date || body.raceDate || body.canonicalDate)) ||
-      (query && (query.date || query.raceDate || query.canonicalDate)) ||
       null;
 
     const canonicalDateIso = canonicalizeDateFromClient(uiDateRaw);
@@ -426,6 +531,7 @@ export default async function handler(req, res) {
     // If not in full mode, immediately return stub
     if (mode !== "full") {
       const stub = await buildStubResponse(ctx);
+      await logVerifyResult(stub);
       return res.status(200).json(stub);
     }
 
@@ -459,7 +565,7 @@ export default async function handler(req, res) {
         const validatedResult = {
           ok: fullResult.ok !== undefined ? fullResult.ok : true,
           step: "verify_race",
-          date: fullResult.date || canonicalDate, // Use canonicalDate from handler
+          date: fullResult.date || canonicalDateIso, // Use canonicalDateIso from handler
           track: fullResult.track || track || "",
           raceNo: fullResult.raceNo || raceNo || "",
           query: fullResult.query || "",
@@ -481,10 +587,11 @@ export default async function handler(req, res) {
             ...fullResult.debug,
             googleUrl:
               fullResult.debug?.googleUrl ||
-              buildGoogleSearchUrl({ track, date: effectiveDate, raceNo }).url,
+              buildGoogleSearchUrl({ track, date: canonicalDateIso, raceNo }).url,
           },
         };
 
+        await logVerifyResult(validatedResult);
         return res.status(200).json(validatedResult);
       }
 
@@ -495,10 +602,12 @@ export default async function handler(req, res) {
           query: fullResult.query,
         });
         // Use full result but ensure date field is canonical
-        return res.status(200).json({
+        const fallbackResult = {
           ...fullResult,
-          date: fullResult.date || canonicalDate, // Ensure canonical date
-        });
+          date: fullResult.date || canonicalDateIso, // Ensure canonical date
+        };
+        await logVerifyResult(fallbackResult);
+        return res.status(200).json(fallbackResult);
       }
 
       // Any other step (error cases) - fall back to stub with canonical date
@@ -506,59 +615,83 @@ export default async function handler(req, res) {
         step: fullResult.step,
       });
       const stub = await buildStubResponse(ctx);
-      return res.status(200).json({
+      const fallbackStub = {
         ...stub,
         step: "verify_race_full_fallback",
-        date: canonicalDate, // Ensure canonical date
+        date: canonicalDateIso, // Ensure canonical date
         summary: `Full parser attempted but failed: step=${fullResult.step}. Using stub fallback (Google search only).\n${stub.summary}`,
         debug: {
           ...stub.debug,
           fullError: `Full parser step: ${fullResult.step}`,
         },
-      });
+      };
+      await logVerifyResult(fallbackStub);
+      return res.status(200).json(fallbackStub);
     } catch (fullError) {
       // Log error and fall back to stub
       console.error("[verify_race] Full parser failed, falling back to stub", {
         error: fullError?.message || String(fullError),
         stack: fullError?.stack,
         track,
-        date: canonicalDate,
+        date: canonicalDateIso,
         raceNo,
       });
 
       const stub = await buildStubResponse(ctx);
       const errorMsg = fullError?.message || String(fullError);
-      return res.status(200).json({
+      const errorStub = {
         ...stub,
         step: "verify_race_full_fallback",
-        date: canonicalDate, // Ensure canonical date
+        date: canonicalDateIso, // Ensure canonical date
         summary: `Full parser attempted but failed: ${errorMsg}. Using stub fallback (Google search only).\n${stub.summary}`,
         debug: {
           ...stub.debug,
           fullError: errorMsg,
           fullErrorStack: fullError?.stack || undefined,
         },
-      });
+      };
+      await logVerifyResult(errorStub);
+      return res.status(200).json(errorStub);
     }
   } catch (err) {
     // Absolute last-resort catch; still return 200.
     console.error("[verify_race] UNEXPECTED ERROR", err);
     // Try to extract date from body if available, otherwise use empty string (no today fallback)
-    const body = await safeParseBody(req).catch(() => ({}));
-    const rawDateFromBody = (body && (body.date || body.raceDate || body.race_date || "")) || "";
-    const errorDateIso = normalizeUserDate(rawDateFromBody) || "";  // No fallback to today
+    const errorBody = await safeParseBody(req).catch(() => ({}));
+    const rawDateFromBody = (errorBody && (errorBody.date || errorBody.raceDate || errorBody.race_date || "")) || "";
+    
+    // Pure string helper for date normalization (reuse the same logic)
+    function canonicalizeDateFromClient(raw) {
+      if (!raw) return null;
+      const s = String(raw).trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+        return s;
+      }
+      const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (m) {
+        const mm = m[1].padStart(2, "0");
+        const dd = m[2].padStart(2, "0");
+        const yyyy = m[3];
+        return `${yyyy}-${mm}-${dd}`;
+      }
+      return s;
+    }
+    
+    const errorDateIso = canonicalizeDateFromClient(rawDateFromBody) || "";  // No fallback to today
     const stub = await buildStubResponse({
       track: null,
       date: errorDateIso,
       raceNo: null,
     });
-    return res.status(200).json({
+    const errorStub = {
       ...stub,
       ok: false,
       step: "verify_race_stub_unexpected_error",
       error: String(err && err.message ? err.message : err),
       summary: "Verify Race stub encountered an unexpected error, but the handler still returned 200.",
       date: errorDateIso,
-    });
+    };
+    // Don't log error cases (ok: false)
+    return res.status(200).json(errorStub);
   }
 }

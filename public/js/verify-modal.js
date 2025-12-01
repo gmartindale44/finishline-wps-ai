@@ -207,181 +207,182 @@
   }
 
   function renderGreenZone(host, payload) {
-  const el = state.gxMessageEl || qs("#flv-gz-message", host || document);
-  if (!el) return;
-
-  const debugMode = !!window.__flVerifyDebug;
-
-  // ---- Safety default: no payload at all ----
-  if (!payload) {
-    let msg =
-      "GreenZone service error.\n\n" +
-      "Debug JSON:\n" +
-      JSON.stringify({ status: 0, error: "No payload" }, null, 2);
-
-    el.textContent = msg;
-    return;
-  }
-
-  const status =
-    typeof payload.status === "number" ? payload.status : 0;
-  const suggestions = Array.isArray(payload.suggestions)
-    ? payload.suggestions
-    : [];
-  const error = payload.error || null;
-  const stats = payload.stats || null;
-
-  // ---- HTTP / API-level error ----
-  if (status !== 200 || error) {
-    let msg =
-      "GreenZone service error.\n\n" +
-      "Reason: " +
-      (error || "Unknown error");
-
-    if (debugMode) {
-      msg +=
-        "\n\nDebug JSON:\n" +
-        JSON.stringify(payload, null, 2);
+    const el = state.gxMessageEl || qs("#flv-gz-message", host || document);
+    if (!el) return;
+  
+    const debugMode = !!window.__flVerifyDebug;
+  
+    // ---- Safety default: no payload at all ----
+    if (!payload) {
+      let msg =
+        "GreenZone service error.\n\n" +
+        "Debug JSON:\n" +
+        JSON.stringify({ status: 0, error: "No payload" }, null, 2);
+  
+      el.textContent = msg;
+      return;
     }
-
-    el.textContent = msg;
-    return;
-  }
-
-  // ---- No stats yet -> early "not enough data" ----
-  if (!stats) {
-    let msg =
-      "Not enough data yet to identify GreenZone races. " +
-      "Capture more verified races to unlock suggestions.";
-
-    if (debugMode) {
-      msg +=
-        "\n\nDebug JSON (latest suggestions):\n" +
-        JSON.stringify(payload, null, 2);
+  
+    const status =
+      typeof payload.status === "number" ? payload.status : 0;
+    const suggestions = Array.isArray(payload.suggestions)
+      ? payload.suggestions
+      : [];
+    const error = payload.error || null;
+    const stats = payload.stats || null;
+  
+    // ---- HTTP / API-level error ----
+    if (status !== 200 || error) {
+      let msg =
+        "GreenZone service error.\n\n" +
+        "Reason: " +
+        (error || "Unknown error");
+  
+      if (debugMode) {
+        msg +=
+          "\n\nDebug JSON:\n" +
+          JSON.stringify(payload, null, 2);
+      }
+  
+      el.textContent = msg;
+      return;
     }
-
-    el.textContent = msg;
-    return;
-  }
-
-  const strategyName = stats.strategyName || "v1_shadow_only";
-  const version =
-    stats.version != null ? stats.version : 1;
-  const generatedAt =
-    stats.generatedAt || stats.generated_at || null;
-  const legs = stats.legs || {};
-  const rowsTotal =
-    stats.rows && typeof stats.rows.total === "number"
-      ? stats.rows.total
-      : null;
-
-  // For progress bar messaging – matches our 120-race target
-  const targetRows = 120;
-  const progressPct =
-    rowsTotal != null && targetRows > 0
-      ? Math.min(100, (rowsTotal / targetRows) * 100)
-      : null;
-  const remaining =
-    rowsTotal != null ? Math.max(0, targetRows - rowsTotal) : null;
-
-  const lines = [];
-
-  // ---- Header / calibration summary ----
-  lines.push("Shadow Calibration (v" + version + ")");
-  lines.push("--------------------------------");
-  lines.push("Strategy: " + strategyName);
-  if (generatedAt) {
-    lines.push("Generated at: " + generatedAt);
-  }
-  if (rowsTotal != null) {
-    lines.push("Samples analysed: " + rowsTotal + " races");
-    if (remaining > 0 && progressPct != null) {
-      lines.push(
-        "Progress: " +
-          rowsTotal +
-          " / " +
-          targetRows +
-          " races (" +
-          progressPct.toFixed(1) +
-          "% toward full GreenZone unlock)"
-      );
+  
+    // ---- No stats yet -> early "not enough data" ----
+    if (!stats) {
+      let msg =
+        "Not enough data yet to identify GreenZone races. " +
+        "Capture more verified races to unlock suggestions.";
+  
+      if (debugMode) {
+        msg +=
+          "\n\nDebug JSON (latest suggestions):\n" +
+          JSON.stringify(payload, null, 2);
+      }
+  
+      el.textContent = msg;
+      return;
     }
-  }
-  lines.push("");
-
-  function pct(v) {
-    if (typeof v !== "number") return "n/a";
-    return (v * 100).toFixed(1) + "%";
-  }
-
-  function addLeg(label, leg) {
-    if (!leg) return;
-    lines.push(label.toUpperCase() + " leg:");
-    if (typeof leg.totalRows === "number") {
-      lines.push("  Total rows: " + leg.totalRows);
+  
+    const strategyName = stats.strategyName || "v1_shadow_only";
+    const version =
+      stats.version != null ? stats.version : 1;
+    const generatedAt =
+      stats.generatedAt || stats.generated_at || null;
+    const legs = stats.legs || {};
+    const rowsTotal =
+      stats.rows && typeof stats.rows.total === "number"
+        ? stats.rows.total
+        : null;
+  
+    // For progress bar messaging – matches our 120-race target
+    const targetRows = 120;
+    const progressPct =
+      rowsTotal != null && targetRows > 0
+        ? Math.min(100, (rowsTotal / targetRows) * 100)
+        : null;
+    const remaining =
+      rowsTotal != null ? Math.max(0, targetRows - rowsTotal) : null;
+  
+    const lines = [];
+  
+    // ---- Header / calibration summary ----
+    lines.push("Shadow Calibration (v" + version + ")");
+    lines.push("--------------------------------");
+    lines.push("Strategy: " + strategyName);
+    if (generatedAt) {
+      lines.push("Generated at: " + generatedAt);
     }
-    if (typeof leg.shadowYes === "number") {
-      lines.push(
-        "  Hit rate (shadow YES): " + pct(leg.shadowYes)
-      );
-    }
-    if (typeof leg.hit_rate_overall === "number") {
-      lines.push(
-        "  Hit rate (overall): " + pct(leg.hit_rate_overall)
-      );
+    if (rowsTotal != null) {
+      lines.push("Samples analysed: " + rowsTotal + " races");
+      if (remaining > 0 && progressPct != null) {
+        lines.push(
+          "Progress: " +
+            rowsTotal +
+            " / " +
+            targetRows +
+            " races (" +
+            progressPct.toFixed(1) +
+            "% toward full GreenZone unlock)"
+        );
+      }
     }
     lines.push("");
-  }
-
-  addLeg("win", legs.win);
-  addLeg("place", legs.place);
-  addLeg("show", legs.show);
-
-  // ---- Suggestions (per-race) ----
-  if (!suggestions.length) {
-    lines.push(
-      "No specific GreenZone races yet — the model is still warming up."
-    );
-    lines.push(
-      "As you verify more races, any that match strong historical patterns will appear here."
-    );
-  } else {
-    lines.push("GreenZone suggestions:");
-    suggestions.forEach(function (s, idx) {
-      const raceTrack =
-        (s.track || s.trackName || "?") + "";
-      const raceNo = s.race || s.raceNo || "?";
-      const horseName = s.horse || s.horseName || "?";
-      const leg = s.leg || s.legName || "?";
-      const score =
-        typeof s.score === "number" ? s.score.toFixed(3) : "?";
-
+  
+    function pct(v) {
+      if (typeof v !== "number") return "n/a";
+      return (v * 100).toFixed(1) + "%";
+    }
+  
+    function addLeg(label, leg) {
+      if (!leg) return;
+      lines.push(label.toUpperCase() + " leg:");
+      if (typeof leg.totalRows === "number") {
+        lines.push("  Total rows: " + leg.totalRows);
+      }
+      if (typeof leg.shadowYes === "number") {
+        lines.push(
+          "  Hit rate (shadow YES): " + pct(leg.shadowYes)
+        );
+      }
+      if (typeof leg.hit_rate_overall === "number") {
+        lines.push(
+          "  Hit rate (overall): " + pct(leg.hit_rate_overall)
+        );
+      }
+      lines.push("");
+    }
+  
+    addLeg("win", legs.win);
+    addLeg("place", legs.place);
+    addLeg("show", legs.show);
+  
+    // ---- Suggestions (per-race) ----
+    if (!suggestions.length) {
       lines.push(
-        "# " +
-          (idx + 1) +
-          ": Track " +
-          raceTrack +
-          ", Race " +
-          raceNo +
-          ", Horse " +
-          horseName +
-          ", Leg " +
-          leg +
-          ", Score " +
-          score
+        "No specific GreenZone races yet — the model is still warming up."
       );
-    });
+      lines.push(
+        "As you verify more races, any that match strong historical patterns will appear here."
+      );
+    } else {
+      lines.push("GreenZone suggestions:");
+      suggestions.forEach(function (s, idx) {
+        const raceTrack =
+          (s.track || s.trackName || "?") + "";
+        const raceNo = s.race || s.raceNo || "?";
+        const horseName = s.horse || s.horseName || "?";
+        const leg = s.leg || s.legName || "?";
+        const score =
+          typeof s.score === "number" ? s.score.toFixed(3) : "?";
+  
+        lines.push(
+          "# " +
+            (idx + 1) +
+            ": Track " +
+            raceTrack +
+            ", Race " +
+            raceNo +
+            ", Horse " +
+            horseName +
+            ", Leg " +
+            leg +
+            ", Score " +
+            score
+        );
+      });
+    }
+  
+    // ---- Optional debug JSON ----
+    if (debugMode) {
+      lines.push("");
+      lines.push("Debug JSON (latest suggestions):");
+      lines.push(JSON.stringify(payload, null, 2));
+    }
+  
+    el.textContent = lines.join("\n");
   }
-
-  // ---- Optional debug JSON ----
-  if (debugMode) {
-    lines.push("");
-    lines.push("Debug JSON (latest suggestions):");
-    lines.push(JSON.stringify(payload, null, 2));
-  }
-
-  el.textContent = lines.join("\n");
-}
+  
 
  // GreenZone fetch (same UI, but POSTs track/race/date to backend)
 async function refreshGreenZone(host, ctx) {

@@ -1,285 +1,302 @@
 #!/usr/bin/env node
 /**
- * Calibration Rebuilder v1
+ * rebuild_calibration_from_logs.mjs
  *
- * Goal:
- *  - Read all prediction + verify logs out of Redis
- *  - Join them into a single race-centric dataset
- *  - Compute hit flags (win/place/show/top3)
- *  - Write CSV to data/finishline_calibration_v1.csv
+ * Calibration Rebuilder (defensive version)
+ * -----------------------------------------
+ * - Reads prediction logs from Redis keys with prefix "fl:pred:"
+ * - Reads verify logs from Redis keys with prefix "fl:verify:"
+ * - Joins them on (track, date, raceNo)
+ * - Computes hit flags (win / place / show / top3)
+ * - Writes CSV to data/calibration_from_logs_v1.csv
  *
- * Assumptions:
- *  - Redis is Upstash, already used by the app
- *  - Logs are stored as JSON blobs under key prefixes:
- *      PREDICTION: "fl:pred:" (one key per race)
- *      VERIFY    : "fl:verify:" (one key per race)
- *
- *  If your actual key prefixes differ, you can override via env:
- *      FL_PRED_PREFIX=some_prefix
- *      FL_VERIFY_PREFIX=some_prefix
+ * This version is intentionally defensive:
+ * - Fetches keys one-by-one (no pipelines)
+ * - Skips keys that have WRONGTYPE or bad/missing JSON
  */
 
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
 import { Redis } from "@upstash/redis";
+import fs from "node:fs/promises";
+import path from "node:path";
 
-// ---------- Config ----------
+// ---- Redis setup ----------------------------------------------------------
 
-const PRED_PREFIX = process.env.FL_PRED_PREFIX || "fl:pred:";
-const VERIFY_PREFIX = process.env.FL_VERIFY_PREFIX || "fl:verify:";
+const url = process.env.UPSTASH_REDIS_REST_URL;
+const token = process.env.UPSTASH_REDIS_REST_TOKEN;
 
-// Uses the same env Upstash expects: UPSTASH_REDIS_REST_URL / TOKEN
-const redis = Redis.fromEnv();
-
-// Target CSV
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const OUT_PATH = path.join(__dirname, "..", "data", "finishline_calibration_v1.csv");
-
-// ---------- Helpers ----------
-
-function normalizeTrack(track) {
-  if (!track) return "";
-  return String(track)
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .replace(/[^a-z0-9 ]/g, "")
-    .trim();
+if (!url || !token) {
+  console.error(
+    "[Calibration] Missing UPSTASH_REDIS_REST_URL or UPSTASH_REDIS_REST_TOKEN."
+  );
+  process.exit(1);
 }
 
-function makeRaceId({ track, raceNo, date }) {
-  return [
-    normalizeTrack(track),
-    String(raceNo || "").trim(),
-    String(date || "").trim(),
-  ].join("::");
-}
+const redis = new Redis({ url, token });
 
-function safeJsonParse(str, fallback = null) {
-  if (typeof str !== "string") return fallback;
-  try {
-    return JSON.parse(str);
-  } catch {
-    return fallback;
-  }
-}
+// Hard-code the prefixes we’ve been using in FinishLine
+const PRED_PREFIX = "fl:pred:";
+const VERIFY_PREFIX = "fl:verify:";
 
-// Hit calculation: compare predicted vs outcome
-function computeHits(predicted, outcome) {
-  const pWin = predicted?.win || "";
-  const pPlace = predicted?.place || "";
-  const pShow = predicted?.show || "";
+// ---- Helpers --------------------------------------------------------------
 
-  const oWin = outcome?.win || "";
-  const oPlace = outcome?.place || "";
-  const oShow = outcome?.show || "";
-
-  const winHit = !!pWin && pWin === oWin;
-  const placeHit = !!pPlace && pPlace === oPlace;
-  const showHit = !!pShow && pShow === oShow;
-
-  // top3 hit = any of (win/place/show) predicted appears in actual top3
-  const actualTop3 = [oWin, oPlace, oShow].filter(Boolean);
-  const anyPredTop3 = [pWin, pPlace, pShow].filter(Boolean);
-
-  const top3Hit = anyPredTop3.some((h) => actualTop3.includes(h));
-
-  return { winHit, placeHit, showHit, top3Hit };
-}
-
-// CSV helper
-function csvEscape(value) {
-  if (value === null || value === undefined) return "";
-  const str = String(value);
-  if (/[",\n]/.test(str)) {
-    return `"${str.replace(/"/g, '""')}"`;
-  }
-  return str;
-}
-
-// ---------- Redis scan helpers ----------
-
-async function scanKeysWithPrefix(prefix) {
-  let cursor = "0";
+async function scanAllKeys(prefix) {
+  console.log(`[Calibration] Scanning keys with prefix "${prefix}"...`);
+  let cursor = 0;
   const keys = [];
 
+  // Upstash scan returns [cursor, keys]
   do {
     const [nextCursor, batch] = await redis.scan(cursor, {
       match: `${prefix}*`,
-      count: 500,
+      count: 100,
     });
-    cursor = nextCursor;
-    keys.push(...batch);
-  } while (cursor !== "0");
+    cursor = Number(nextCursor);
+    if (Array.isArray(batch)) {
+      keys.push(...batch);
+    }
+  } while (cursor !== 0);
 
+  console.log(
+    `[Calibration]   Found ${keys.length} keys for prefix "${prefix}".`
+  );
   return keys;
 }
 
-async function getJsonByKeys(keys) {
-  if (!keys.length) return {};
-  const result = {};
+async function safeGetJson(key) {
+  try {
+    const value = await redis.get(key);
 
-  // Upstash supports mget but we'll keep it simple & robust:
-  for (const key of keys) {
-    const raw = await redis.get(key);
-    const json = safeJsonParse(raw);
-    if (!json) continue;
+    if (value == null) {
+      return null;
+    }
 
-    // Expect logs to include track, raceNo, date
-    const track = json.track || json.request?.track;
-    const raceNo = json.raceNo || json.request?.raceNo;
-    const date = json.date || json.request?.date;
+    if (typeof value === "string") {
+      try {
+        return JSON.parse(value);
+      } catch (err) {
+        console.warn(
+          `[Calibration] Skipping key ${key} – value is not valid JSON.`
+        );
+        return null;
+      }
+    }
 
-    const raceId = makeRaceId({ track, raceNo, date });
-    result[raceId] = json;
+    // Sometimes Upstash returns already-parsed JSON
+    if (typeof value === "object") {
+      return value;
+    }
+
+    console.warn(
+      `[Calibration] Skipping key ${key} – unsupported value type: ${typeof value}.`
+    );
+    return null;
+  } catch (err) {
+    const msg = String(err && err.message ? err.message : err);
+    if (msg.includes("WRONGTYPE")) {
+      console.warn(
+        `[Calibration] Skipping key ${key} – WRONGTYPE (non-string Redis type).`
+      );
+      return null;
+    }
+    console.error(`[Calibration] Error reading key ${key}:`, err);
+    throw err;
   }
-
-  return result;
 }
 
-// ---------- Main ----------
+function normalizeRaceId(track, date, raceNo) {
+  const t = (track || "").trim();
+  const d = (date || "").trim();
+  const r = String(raceNo || "").trim();
+  if (!t || !d || !r) return null;
+  return `${t}|${d}|${r}`;
+}
+
+function csvEscape(value) {
+  if (value == null) return "";
+  const s = String(value);
+  if (s.includes('"') || s.includes(",") || s.includes("\n")) {
+    return `"${s.replace(/"/g, '""')}"`;
+  }
+  return s;
+}
+
+// ---- Main -----------------------------------------------------------------
 
 async function main() {
-  console.log("▶ Calibration Rebuilder starting…");
-  console.log(`  Using PRED_PREFIX=${PRED_PREFIX}`);
-  console.log(`  Using VERIFY_PREFIX=${VERIFY_PREFIX}`);
+  console.log("[Calibration] Rebuilder starting…");
+  console.log(`[Calibration] Using URL: ${url}`);
+  console.log("[Calibration] Using prefixes:", {
+    PRED_PREFIX,
+    VERIFY_PREFIX,
+  });
 
-  // 1) Load prediction logs
-  console.log("▶ Scanning prediction keys…");
-  const predKeys = await scanKeysWithPrefix(PRED_PREFIX);
-  console.log(`  Found ${predKeys.length} prediction keys`);
+  // 1. Collect keys
+  const predKeys = await scanAllKeys(PRED_PREFIX);
+  const verifyKeys = await scanAllKeys(VERIFY_PREFIX);
 
-  const predsByRace = await getJsonByKeys(predKeys);
-  console.log(`  Collapsed to ${Object.keys(predsByRace).length} prediction races`);
+  // 2. Load verify logs into a lookup map
+  const verifyByRaceId = new Map();
 
-  // 2) Load verify logs
-  console.log("▶ Scanning verify keys…");
-  const verifyKeys = await scanKeysWithPrefix(VERIFY_PREFIX);
-  console.log(`  Found ${verifyKeys.length} verify keys`);
+  console.log("[Calibration] Loading verify logs…");
+  for (const key of verifyKeys) {
+    const data = await safeGetJson(key);
+    if (!data) continue;
 
-  const verifyByRace = await getJsonByKeys(verifyKeys);
-  console.log(`  Collapsed to ${Object.keys(verifyByRace).length} verified races`);
+    // Two shapes we might see:
+    //  - { request: {...}, response: {...} }
+    //  - or just a flat object
+    const resp = data.response || data;
 
-  // 3) Join them
-  const allRaceIds = new Set([
-    ...Object.keys(predsByRace),
-    ...Object.keys(verifyByRace),
-  ]);
+    const track = resp.track || resp.uiTrack || resp.trackName;
+    const date =
+      resp.date ||
+      resp.raceDate ||
+      resp.dateIso ||
+      (resp.debug && resp.debug.canonicalDateIso);
+    const raceNo = resp.raceNo || resp.race || resp.race_number;
 
-  console.log(`▶ Joining datasets, total races: ${allRaceIds.size}`);
+    const raceId = normalizeRaceId(track, date, raceNo);
+    if (!raceId) {
+      console.warn(
+        `[Calibration] Verify log from ${key} missing track/date/raceNo – skipping.`
+      );
+      continue;
+    }
 
+    verifyByRaceId.set(raceId, resp);
+  }
+
+  console.log(
+    `[Calibration] Loaded ${verifyByRaceId.size} verify entries with valid race IDs.`
+  );
+
+  // 3. Walk prediction logs and join with verify logs
+  console.log("[Calibration] Loading prediction logs & joining…");
   const rows = [];
 
-  for (const raceId of allRaceIds) {
-    const predLog = predsByRace[raceId] || null;
-    const verLog = verifyByRace[raceId] || null;
+  for (const key of predKeys) {
+    const data = await safeGetJson(key);
+    if (!data) continue;
 
-    // Try to pull canonical fields from either side
-    const track =
-      verLog?.track ||
-      verLog?.request?.track ||
-      predLog?.track ||
-      predLog?.request?.track ||
-      "";
+    // Prediction log shape is a bit flexible; try multiple fields
+    const ctx = data.context || data.request || data;
 
-    const raceNo =
-      verLog?.raceNo ||
-      verLog?.request?.raceNo ||
-      predLog?.raceNo ||
-      predLog?.request?.raceNo ||
-      "";
-
+    const track = ctx.track || ctx.uiTrack || ctx.trackName;
     const date =
-      verLog?.date ||
-      verLog?.request?.date ||
-      predLog?.date ||
-      predLog?.request?.date ||
-      "";
+      ctx.date ||
+      ctx.raceDate ||
+      ctx.dateIso ||
+      (ctx.debug && ctx.debug.canonicalDateIso);
+    const raceNo = ctx.raceNo || ctx.race || ctx.race_number;
 
-    // Outcomes (from verify)
-    const outcome = verLog?.outcome || verLog?.response?.outcome || null;
+    const raceId = normalizeRaceId(track, date, raceNo);
+    if (!raceId) {
+      console.warn(
+        `[Calibration] Prediction log from ${key} missing track/date/raceNo – skipping.`
+      );
+      continue;
+    }
 
-    // Predictions: these field names should match whatever log_prediction pushes
-    // Adjust here if your structure differs
-    const predicted =
-      predLog?.predicted ||
-      predLog?.picks ||
-      predLog?.prediction ||
-      null;
+    const verify = verifyByRaceId.get(raceId);
+    if (!verify) {
+      // No matching verify race yet – skip for now
+      continue;
+    }
 
-    const hits = computeHits(predicted || {}, outcome || {});
+    // Pull predicted horses from prediction log
+    const predBlock = ctx.predicted || ctx.prediction || {};
+    const predWin = predBlock.win || predBlock.WIN || "";
+    const predPlace = predBlock.place || predBlock.PLACE || "";
+    const predShow = predBlock.show || predBlock.SHOW || "";
+
+    // Outcomes from verify
+    const outcome = verify.outcome || {};
+    const outWin = outcome.win || outcome.WIN || "";
+    const outPlace = outcome.place || outcome.PLACE || "";
+    const outShow = outcome.show || outcome.SHOW || "";
+
+    // Compute hit flags
+    const winHit = predWin && outWin && predWin === outWin;
+    const placeHit = predPlace && outPlace && predPlace === outPlace;
+    const showHit = predShow && outShow && predShow === outShow;
+
+    const top3Hit =
+      !!(
+        predWin &&
+        (predWin === outWin ||
+          predWin === outPlace ||
+          predWin === outShow)
+      );
+
+    // Optional strategy/metadata
+    const strategyName =
+      ctx.strategyName || ctx.strategy || verify.strategyName || "";
+    const version = ctx.version || verify.version || "";
 
     rows.push({
       track,
-      raceNo,
       date,
-      predictedWin: predicted?.win || "",
-      predictedPlace: predicted?.place || "",
-      predictedShow: predicted?.show || "",
-      outcomeWin: outcome?.win || "",
-      outcomePlace: outcome?.place || "",
-      outcomeShow: outcome?.show || "",
-      winHit: hits.winHit ? 1 : 0,
-      placeHit: hits.placeHit ? 1 : 0,
-      showHit: hits.showHit ? 1 : 0,
-      top3Hit: hits.top3Hit ? 1 : 0,
-      // raw JSON for later debugging (optional)
-      predJson: predLog ? JSON.stringify(predLog) : "",
-      verifyJson: verLog ? JSON.stringify(verLog) : "",
+      raceNo: String(raceNo || ""),
+      strategyName,
+      version,
+      predWin,
+      predPlace,
+      predShow,
+      outWin,
+      outPlace,
+      outShow,
+      winHit,
+      placeHit,
+      showHit,
+      top3Hit,
     });
   }
 
-  // 4) Write CSV
-  console.log(`▶ Writing CSV with ${rows.length} rows…`);
+  console.log(
+    `[Calibration] Built ${rows.length} joined prediction/verify rows.`
+  );
+
+  // 4. Write CSV
   const headers = [
     "track",
-    "raceNo",
     "date",
-    "predictedWin",
-    "predictedPlace",
-    "predictedShow",
-    "outcomeWin",
-    "outcomePlace",
-    "outcomeShow",
+    "raceNo",
+    "strategyName",
+    "version",
+    "predWin",
+    "predPlace",
+    "predShow",
+    "outWin",
+    "outPlace",
+    "outShow",
     "winHit",
     "placeHit",
     "showHit",
     "top3Hit",
-    "predJson",
-    "verifyJson",
   ];
 
-  const lines = [headers.map(csvEscape).join(",")];
+  const lines = [];
+  lines.push(headers.join(","));
 
-  for (const r of rows) {
-    lines.push(
-      [
-        r.track,
-        r.raceNo,
-        r.date,
-        r.predictedWin,
-        r.predictedPlace,
-        r.predictedShow,
-        r.outcomeWin,
-        r.outcomePlace,
-        r.outcomeShow,
-        r.winHit,
-        r.placeHit,
-        r.showHit,
-        r.top3Hit,
-        r.predJson,
-        r.verifyJson,
-      ].map(csvEscape).join(",")
-    );
+  for (const row of rows) {
+    const line = headers.map((h) => csvEscape(row[h])).join(",");
+    lines.push(line);
   }
 
-  fs.mkdirSync(path.dirname(OUT_PATH), { recursive: true });
-  fs.writeFileSync(OUT_PATH, lines.join("\n"), "utf8");
-  console.log(`✅ Done. Wrote: ${OUT_PATH}`);
+  const outPath = path.join(
+    process.cwd(),
+    "data",
+    "calibration_from_logs_v1.csv"
+  );
+  await fs.mkdir(path.dirname(outPath), { recursive: true });
+  await fs.writeFile(outPath, lines.join("\n"), "utf8");
+
+  console.log(
+    `[Calibration] Wrote ${rows.length} rows to ${outPath}. ✅`
+  );
 }
 
 main().catch((err) => {
-  console.error("❌ Calibration Rebuilder failed:", err);
+  console.error("[Calibration] Rebuilder failed:", err);
   process.exit(1);
 });
