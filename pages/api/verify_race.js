@@ -199,6 +199,159 @@ function decodeHtmlEntities(text) {
 }
 
 /**
+ * Extract HRN entries-results URL from Google HTML
+ * @param {string} html - Google search results HTML
+ * @returns {string|null} - First matching HRN URL or null
+ */
+function extractHrnUrlFromGoogleHtml(html) {
+  if (!html || typeof html !== "string") {
+    return null;
+  }
+
+  // Look for entries.horseracingnation.com entries-results URLs
+  const hrnPattern = /https:\/\/entries\.horseracingnation\.com\/entries-results\/[^"'>\s]+\/\d{4}-\d{2}-\d{2}/i;
+  const match = html.match(hrnPattern);
+  
+  if (match && match[0]) {
+    return match[0];
+  }
+  
+  return null;
+}
+
+/**
+ * Extract Win/Place/Show from HRN entries-results HTML
+ * Parses the finish order table to find horses in positions 1, 2, 3
+ * @param {string} html - HRN page HTML
+ * @returns {{ win: string, place: string, show: string }}
+ */
+function extractOutcomeFromHrnHtml(html) {
+  const outcome = { win: "", place: "", show: "" };
+  
+  if (!html || typeof html !== "string") {
+    return outcome;
+  }
+
+  try {
+    // Helper to decode HTML entities
+    const decodeEntity = (str) => {
+      if (!str) return "";
+      return str
+        .replace(/&amp;/g, "&")
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&nbsp;/g, " ")
+        .replace(/&#160;/g, " ")
+        .trim();
+    };
+    
+    // Helper to validate horse name
+    const isValid = (name) => {
+      if (!name || name.length === 0) return false;
+      if (name.length > 50) return false;
+      if (!/[A-Za-z]/.test(name)) return false;
+      // Reject if it looks like HTML or code
+      if (name.includes("<") || name.includes(">") || name.includes("function")) return false;
+      // Reject common non-horse-name patterns
+      if (/^\d+$/.test(name)) return false; // Just numbers
+      if (name.toLowerCase().includes("finish") || name.toLowerCase().includes("position")) return false;
+      return true;
+    };
+    
+    // Strategy: Look for table rows with finish positions
+    // HRN typically has a results table with Finish column (1, 2, 3) and horse names
+    
+    // Pattern 1: Look for table rows with finish position in a <td> followed by horse name
+    // This handles: <tr><td>1</td><td>Horse Name</td>...</tr>
+    const tableRowPattern = /<tr[^>]*>[\s\S]*?<td[^>]*>\s*(\d+)\s*<\/td>[\s\S]*?<td[^>]*>([^<]+)<\/td>/gi;
+    const finishMap = {};
+    
+    let match;
+    while ((match = tableRowPattern.exec(html)) !== null) {
+      const position = parseInt(match[1], 10);
+      const horseName = decodeEntity(match[2]);
+      
+      if (position >= 1 && position <= 3 && isValid(horseName)) {
+        if (position === 1 && !finishMap[1]) finishMap[1] = horseName;
+        if (position === 2 && !finishMap[2]) finishMap[2] = horseName;
+        if (position === 3 && !finishMap[3]) finishMap[3] = horseName;
+      }
+    }
+    
+    if (finishMap[1]) outcome.win = finishMap[1];
+    if (finishMap[2]) outcome.place = finishMap[2];
+    if (finishMap[3]) outcome.show = finishMap[3];
+    
+    // Pattern 2: Look for "Finish" or "Pos" column headers, then extract rows
+    // This handles tables with explicit Finish/Position columns
+    if (!outcome.win || !outcome.place || !outcome.show) {
+      // Try to find a results table section
+      const tableSectionMatch = html.match(/<table[^>]*>[\s\S]{0,5000}?<\/table>/i);
+      if (tableSectionMatch) {
+        const tableHtml = tableSectionMatch[0];
+        
+        // Look for rows with finish positions 1, 2, 3
+        const finishRowPattern = /<tr[^>]*>[\s\S]*?(?:finish|pos|position)[^>]*>\s*(\d+)\s*[^<]*<[\s\S]*?<td[^>]*>([^<]+)<\/td>/gi;
+        const finishMap2 = {};
+        
+        let match2;
+        while ((match2 = finishRowPattern.exec(tableHtml)) !== null) {
+          const position = parseInt(match2[1], 10);
+          const horseName = decodeEntity(match2[2]);
+          
+          if (position >= 1 && position <= 3 && isValid(horseName)) {
+            if (position === 1 && !finishMap2[1]) finishMap2[1] = horseName;
+            if (position === 2 && !finishMap2[2]) finishMap2[2] = horseName;
+            if (position === 3 && !finishMap2[3]) finishMap2[3] = horseName;
+          }
+        }
+        
+        if (!outcome.win && finishMap2[1]) outcome.win = finishMap2[1];
+        if (!outcome.place && finishMap2[2]) outcome.place = finishMap2[2];
+        if (!outcome.show && finishMap2[3]) outcome.show = finishMap2[3];
+      }
+    }
+    
+    // Pattern 3: Look for "Win:", "Place:", "Show:" text patterns in payout sections
+    if (!outcome.win || !outcome.place || !outcome.show) {
+      // Look for payout table or results summary
+      const payoutSection = html.match(/(?:payout|results|finish)[\s\S]{0,2000}?(?:win|place|show)[\s\S]{0,2000}?/i);
+      if (payoutSection) {
+        const section = payoutSection[0];
+        
+        // Try to find horse names after Win/Place/Show labels
+        const winMatch = section.match(/win[:\s]+([A-Za-z0-9\s'\-\.]+?)(?:\s|$|,|;|<\/)/i);
+        const placeMatch = section.match(/place[:\s]+([A-Za-z0-9\s'\-\.]+?)(?:\s|$|,|;|<\/)/i);
+        const showMatch = section.match(/show[:\s]+([A-Za-z0-9\s'\-\.]+?)(?:\s|$|,|;|<\/)/i);
+        
+        if (winMatch && winMatch[1] && !outcome.win && isValid(winMatch[1].trim())) {
+          outcome.win = decodeEntity(winMatch[1].trim());
+        }
+        if (placeMatch && placeMatch[1] && !outcome.place && isValid(placeMatch[1].trim())) {
+          outcome.place = decodeEntity(placeMatch[1].trim());
+        }
+        if (showMatch && showMatch[1] && !outcome.show && isValid(showMatch[1].trim())) {
+          outcome.show = decodeEntity(showMatch[1].trim());
+        }
+      }
+    }
+    
+    // Final validation
+    if (!isValid(outcome.win)) outcome.win = "";
+    if (!isValid(outcome.place)) outcome.place = "";
+    if (!isValid(outcome.show)) outcome.show = "";
+    
+  } catch (err) {
+    console.error("[extractOutcomeFromHrnHtml] Parse error:", err);
+    // Return empty outcome on error
+  }
+  
+  return outcome;
+}
+
+/**
  * Extract Win/Place/Show from Google HTML using regex
  * This is a lightweight parser that matches Google AI Overview format:
  * "Win: Doc Sullivan", "Place: Dr. Kraft", "Show: Bank Frenzy"
@@ -324,6 +477,11 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
   let step = "verify_race_google_only_stub";
 
   // Try to fetch Google HTML and parse W/P/S with regex
+  let googleHtml = null;
+  let hrnUrl = null;
+  let hrnOutcome = null;
+  let hrnParseError = null;
+  
   try {
     const res = await fetch(googleUrl, {
       method: "GET",
@@ -336,12 +494,47 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
     });
 
     if (res && res.ok) {
-      const html = await res.text();
-      outcome = extractOutcomeFromGoogleHtml(html);
+      googleHtml = await res.text();
+      outcome = extractOutcomeFromGoogleHtml(googleHtml);
 
       // Only mark as parsed if all three positions were found
       if (outcome && outcome.win && outcome.place && outcome.show) {
         step = "verify_race_google_parsed_stub";
+      } else {
+        // Google parsing didn't find all three - try HRN fallback
+        hrnUrl = extractHrnUrlFromGoogleHtml(googleHtml);
+        
+        if (hrnUrl) {
+          try {
+            const hrnRes = await fetch(hrnUrl, {
+              method: "GET",
+              headers: {
+                "User-Agent":
+                  "Mozilla/5.0 (compatible; FinishLineBot/1.0; +https://finishline-wps-ai.vercel.app)",
+                "Accept-Language": "en-US,en;q=0.9",
+              },
+            });
+            
+            if (hrnRes && hrnRes.ok) {
+              const hrnHtml = await hrnRes.text();
+              hrnOutcome = extractOutcomeFromHrnHtml(hrnHtml);
+              
+              // If HRN parsing found at least one result, use it
+              if (hrnOutcome && (hrnOutcome.win || hrnOutcome.place || hrnOutcome.show)) {
+                outcome = hrnOutcome;
+                // Mark as HRN fallback if we got all three, otherwise keep as partial
+                if (hrnOutcome.win && hrnOutcome.place && hrnOutcome.show) {
+                  step = "verify_race_fallback_hrn";
+                } else {
+                  step = "verify_race_fallback_hrn_partial";
+                }
+              }
+            }
+          } catch (hrnErr) {
+            hrnParseError = String(hrnErr.message || hrnErr);
+            console.error("[verify_race stub] HRN fetch/parse failed:", hrnErr);
+          }
+        }
       }
     }
   } catch (err) {
@@ -424,8 +617,24 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
 
   const summary = summaryLines.join("\n");
 
+  // Determine ok status: true if we have at least one outcome field
+  const hasOutcome = !!(outcome.win || outcome.place || outcome.show);
+  const ok = hasOutcome || step === "verify_race_fallback_hrn" || step === "verify_race_fallback_hrn_partial";
+  
+  const debug = {
+    googleUrl,
+  };
+  
+  if (hrnUrl) {
+    debug.hrnUrl = hrnUrl;
+  }
+  
+  if (hrnParseError) {
+    debug.hrnParseError = hrnParseError;
+  }
+  
   return {
-    ok: true,
+    ok,
     step,
     date: usingDate,
     track: safeTrack,
@@ -443,9 +652,7 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
     predicted: predictedNormalized,
     hits,
     summary,
-    debug: {
-      googleUrl,
-    },
+    debug,
   };
 }
 
