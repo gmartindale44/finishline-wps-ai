@@ -198,6 +198,60 @@ function decodeHtmlEntities(text) {
     .replace(/&gt;/gi, ">");
 }
 
+// ACTIVE handler for /api/verify_race is: pages/api/verify_race.js
+const HANDLER_FILE = "pages/api/verify_race.js";
+const BACKEND_VERSION = "verify_v3_hrn_debug";
+
+/**
+ * Try HRN fallback - attempts to fetch and parse HRN entries-results page
+ * @param {string} track - Track name
+ * @param {string} dateIso - ISO date (YYYY-MM-DD)
+ * @param {object} baseDebug - Existing debug object (may contain googleHtml)
+ * @returns {{ outcome: object|null, debugExtras: object }}
+ */
+async function tryHrnFallback(track, dateIso, baseDebug = {}) {
+  const debugExtras = {};
+  try {
+    debugExtras.hrnAttempted = true;
+
+    const hrnUrlFromGoogle = baseDebug.googleHtml ? extractHrnUrlFromGoogleHtml(baseDebug.googleHtml) : null;
+    const hrnUrl = hrnUrlFromGoogle || buildHrnUrl(track, dateIso);
+    debugExtras.hrnUrl = hrnUrl || null;
+
+    if (!hrnUrl) {
+      debugExtras.hrnParseError = "No HRN URL available";
+      return { outcome: null, debugExtras };
+    }
+
+    const res = await fetch(hrnUrl, {
+      method: "GET",
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (compatible; FinishLineBot/1.0; +https://finishline-wps-ai.vercel.app)",
+        "Accept-Language": "en-US,en;q=0.9",
+      },
+    });
+
+    if (!res.ok) {
+      debugExtras.hrnParseError = `HTTP ${res.status}`;
+      return { outcome: null, debugExtras };
+    }
+
+    const html = await res.text();
+    const outcome = extractOutcomeFromHrnHtml(html);
+    
+    if (!outcome || (!outcome.win && !outcome.place && !outcome.show)) {
+      debugExtras.hrnParseError = "No outcome parsed from HRN HTML";
+      return { outcome: null, debugExtras };
+    }
+
+    return { outcome, debugExtras };
+  } catch (err) {
+    debugExtras.hrnParseError = String(err && err.message ? err.message : err);
+    return { outcome: null, debugExtras };
+  }
+}
+
 /**
  * Extract HRN entries-results URL from Google HTML
  * Also tries to decode Google redirect URLs (/url?q=...)
@@ -751,6 +805,8 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
   // Build debug object - preserve all existing fields
   const debug = {
     googleUrl,
+    backendVersion: BACKEND_VERSION,
+    handlerFile: HANDLER_FILE,
   };
   
   // Always include HRN debug info if we attempted it
@@ -785,6 +841,10 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
     hits,
     summary,
     debug,
+    responseMeta: {
+      handlerFile: HANDLER_FILE,
+      backendVersion: BACKEND_VERSION,
+    },
   };
 }
 
@@ -938,6 +998,7 @@ export default async function handler(req, res) {
       }
 
       // If step is "verify_race_full_fallback", use full result but ensure date is canonical
+      // Then try HRN fallback
       if (fullResult.step === "verify_race_full_fallback") {
         console.warn("[verify_race] Full parser returned fallback", {
           step: fullResult.step,
@@ -947,9 +1008,33 @@ export default async function handler(req, res) {
         const fallbackResult = {
           ...fullResult,
           date: fullResult.date || canonicalDateIso, // Ensure canonical date
+          debug: {
+            ...(fullResult.debug || {}),
+            backendVersion: BACKEND_VERSION,
+            handlerFile: HANDLER_FILE,
+          },
         };
+
+        // Try HRN fallback if we have track and date
+        if (track && canonicalDateIso) {
+          const { outcome: hrnOutcome, debugExtras } = await tryHrnFallback(track, canonicalDateIso, fallbackResult.debug);
+          fallbackResult.debug = { ...fallbackResult.debug, ...debugExtras };
+
+          if (hrnOutcome) {
+            fallbackResult.outcome = hrnOutcome;
+            fallbackResult.ok = true;
+            fallbackResult.step = "verify_race_fallback_hrn";
+          }
+        }
+
         await logVerifyResult(fallbackResult);
-        return res.status(200).json(fallbackResult);
+        return res.status(200).json({
+          ...fallbackResult,
+          responseMeta: {
+            handlerFile: HANDLER_FILE,
+            backendVersion: BACKEND_VERSION,
+          },
+        });
       }
 
       // Any other step (error cases) - fall back to stub with canonical date
@@ -965,10 +1050,31 @@ export default async function handler(req, res) {
         debug: {
           ...stub.debug,
           fullError: `Full parser step: ${fullResult.step}`,
+          backendVersion: BACKEND_VERSION,
+          handlerFile: HANDLER_FILE,
         },
       };
+
+      // Try HRN fallback if we have track and date
+      if (track && canonicalDateIso) {
+        const { outcome: hrnOutcome, debugExtras } = await tryHrnFallback(track, canonicalDateIso, fallbackStub.debug);
+        fallbackStub.debug = { ...fallbackStub.debug, ...debugExtras };
+
+        if (hrnOutcome) {
+          fallbackStub.outcome = hrnOutcome;
+          fallbackStub.ok = true;
+          fallbackStub.step = "verify_race_fallback_hrn";
+        }
+      }
+
       await logVerifyResult(fallbackStub);
-      return res.status(200).json(fallbackStub);
+      return res.status(200).json({
+        ...fallbackStub,
+        responseMeta: {
+          handlerFile: HANDLER_FILE,
+          backendVersion: BACKEND_VERSION,
+        },
+      });
     } catch (fullError) {
       // Log error and fall back to stub
       console.error("[verify_race] Full parser failed, falling back to stub", {
