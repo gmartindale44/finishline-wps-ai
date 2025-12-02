@@ -603,10 +603,22 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
       // Only mark as parsed if all three positions were found
       if (outcome && outcome.win && outcome.place && outcome.show) {
         step = "verify_race_google_parsed_stub";
-      } else {
-        // Google parsing didn't find all three - try HRN fallback
-        // First try to extract from Google HTML
-        hrnUrl = extractHrnUrlFromGoogleHtml(googleHtml);
+      }
+    }
+  } catch (err) {
+    // Swallow errors to keep stub ultra-safe
+    console.error("[verify_race stub] Google fetch/parse failed:", err);
+  }
+
+  // ALWAYS try HRN fallback if we have track, date, and Google didn't find all three
+  // This ensures HRN is attempted even if Google fetch fails or doesn't contain results
+  if (!outcome.win || !outcome.place || !outcome.show) {
+    if (safeTrack && usingDate) {
+      try {
+        // First try to extract HRN URL from Google HTML (if we have it)
+        if (googleHtml) {
+          hrnUrl = extractHrnUrlFromGoogleHtml(googleHtml);
+        }
         
         // If not found in Google HTML, construct it directly from track/date
         if (!hrnUrl) {
@@ -637,18 +649,24 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
                 } else {
                   step = "verify_race_fallback_hrn_partial";
                 }
+              } else {
+                hrnParseError = "No outcome parsed from HRN HTML";
               }
+            } else {
+              hrnParseError = `HTTP ${hrnRes ? hrnRes.status : "unknown"}`;
             }
           } catch (hrnErr) {
             hrnParseError = String(hrnErr.message || hrnErr);
             console.error("[verify_race stub] HRN fetch/parse failed:", hrnErr);
           }
+        } else {
+          hrnParseError = "No HRN URL available";
         }
+      } catch (err) {
+        hrnParseError = String(err.message || err);
+        console.error("[verify_race stub] HRN fallback error:", err);
       }
     }
-  } catch (err) {
-    // Swallow errors to keep stub ultra-safe
-    console.error("[verify_race stub] Google fetch/parse failed:", err);
   }
 
   const predictedNormalized = normalizePrediction(predicted);
@@ -730,10 +748,12 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
   const hasOutcome = !!(outcome.win || outcome.place || outcome.show);
   const ok = hasOutcome || step === "verify_race_fallback_hrn" || step === "verify_race_fallback_hrn_partial";
   
+  // Build debug object - preserve all existing fields
   const debug = {
     googleUrl,
   };
   
+  // Always include HRN debug info if we attempted it
   if (hrnUrl) {
     debug.hrnUrl = hrnUrl;
   }
@@ -741,6 +761,9 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
   if (hrnParseError) {
     debug.hrnParseError = hrnParseError;
   }
+  
+  // Store googleHtml in debug for potential future use (but don't send it in response to avoid bloat)
+  // We'll just keep it for internal reference if needed
   
   return {
     ok,
