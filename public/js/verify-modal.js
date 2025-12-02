@@ -40,39 +40,72 @@
 
   function readUIPredictions() {
     try {
+      const picks = { win: "", place: "", show: "" };
+      
+      // Try multiple strategies to find predictions from the UI
+      
+      // Strategy 1: Look for badge elements (results-panel.js format)
+      const badgeWin = document.querySelector('.fl-badge--win .fl-badge__name, [data-badge="win"] .fl-badge__name');
+      const badgePlace = document.querySelector('.fl-badge--place .fl-badge__name, [data-badge="place"] .fl-badge__name');
+      const badgeShow = document.querySelector('.fl-badge--show .fl-badge__name, [data-badge="show"] .fl-badge__name');
+      
+      if (badgeWin) picks.win = (badgeWin.textContent || "").trim();
+      if (badgePlace) picks.place = (badgePlace.textContent || "").trim();
+      if (badgeShow) picks.show = (badgeShow.textContent || "").trim();
+      
+      // If we found all three, return early
+      if (picks.win && picks.place && picks.show) {
+        return picks;
+      }
+      
+      // Strategy 2: Look for prediction cards
       const scope =
         document.querySelector(
           '[data-panel="predictions"], .predictions-panel'
         ) || document;
-      const picks = { win: "", place: "", show: "" };
-
+      
       const cards = Array.from(
         scope.querySelectorAll(".prediction-card, [data-pick]")
       );
       if (cards.length >= 3) {
         const names = cards.slice(0, 3).map((card) => {
           const el = card.querySelector(
-            "[data-name], .title, .name, b, strong"
+            "[data-name], .title, .name, b, strong, .fl-badge__name"
           );
           return ((el && el.textContent) || "").trim();
         });
-        picks.win = names[0] || "";
-        picks.place = names[1] || "";
-        picks.show = names[2] || "";
-        return picks;
+        if (names[0]) picks.win = names[0];
+        if (names[1]) picks.place = names[1];
+        if (names[2]) picks.show = names[2];
+        
+        // If we found all three, return
+        if (picks.win && picks.place && picks.show) {
+          return picks;
+        }
       }
 
+      // Strategy 3: Look for data-pick attributes
       const fetchText = (selector) =>
         (scope.querySelector(selector)?.textContent || "").trim();
-      picks.win = fetchText("[data-pick='win'], .pick-win b, .emoji-win~b");
-      picks.place = fetchText(
-        "[data-pick='place'], .pick-place b, .emoji-place~b"
-      );
-      picks.show = fetchText(
-        "[data-pick='show'], .pick-show b, .emoji-show~b"
-      );
+      
+      if (!picks.win) picks.win = fetchText("[data-pick='win'], .pick-win b, .emoji-win~b, .fl-badge--win .fl-badge__name");
+      if (!picks.place) picks.place = fetchText("[data-pick='place'], .pick-place b, .emoji-place~b, .fl-badge--place .fl-badge__name");
+      if (!picks.show) picks.show = fetchText("[data-pick='show'], .pick-show b, .emoji-show~b, .fl-badge--show .fl-badge__name");
+      
+      // Strategy 4: Look for ID-based elements (legacy format)
+      const winEl = document.getElementById('winName');
+      const placeEl = document.getElementById('placeName');
+      const showEl = document.getElementById('showName');
+      
+      if (!picks.win && winEl) picks.win = (winEl.textContent || "").trim();
+      if (!picks.place && placeEl) picks.place = (placeEl.textContent || "").trim();
+      if (!picks.show && showEl) picks.show = (showEl.textContent || "").trim();
+      
       return picks;
-    } catch {
+    } catch (err) {
+      if (window.__flVerifyDebug) {
+        console.warn("[verify-modal] readUIPredictions error:", err);
+      }
       return { win: "", place: "", show: "" };
     }
   }
@@ -820,12 +853,15 @@ async function refreshGreenZone(host, ctx) {
           }
           
           // Build payload - use the canonical date exactly as formatted (no Date objects, no timezone conversion)
+          const predicted = readUIPredictions();
+          
           const payload = {
             track,
             raceNo: raceNo || undefined,
             date: canonicalDate,
+            dateIso: canonicalDate,  // Include dateIso as alias for API compatibility
             dateRaw: uiDateRaw,  // extra debug so we can see exactly what UI sent
-            predicted: readUIPredictions(),
+            predicted: predicted,
           };
           
           console.log("[VERIFY_UI] outgoing payload", payload);
