@@ -164,7 +164,10 @@
 
     const lines = [];
 
-    // Always show date if present
+    // Always show date info if present
+    if (data.dateRaw) {
+      lines.push(`UI date: ${data.dateRaw}`);
+    }
     if (data.date) {
       lines.push(`Using date: ${data.date}`);
     }
@@ -762,26 +765,46 @@ async function refreshGreenZone(host, ctx) {
       const defaultLabel = runBtnEl.textContent || "Verify Now";
       
       // Pure string helper for date normalization (no Date objects, no timezone math)
+      // CRITICAL: Never use new Date() or Date.parse() - they can cause month/day swaps
       function formatUiDateForApi(uiDate) {
         if (!uiDate) return null;
-        const s = String(uiDate).trim();
+        const trimmed = String(uiDate).trim();
+        if (!trimmed) return null;
 
-        // Already ISO (YYYY-MM-DD)
-        if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-          return s;
+        // Pattern 1: Already ISO format (YYYY-MM-DD)
+        const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (isoMatch) {
+          const [, yyyy, mm, dd] = isoMatch;
+          // Validate: month 01-12, day 01-31
+          const month = parseInt(mm, 10);
+          const day = parseInt(dd, 10);
+          if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+            return trimmed; // Use as-is, no modification
+          }
+          // Invalid ISO format
+          return null;
         }
 
-        // MM/DD/YYYY -> YYYY-MM-DD
-        const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-        if (m) {
-          const mm = m[1].padStart(2, "0");
-          const dd = m[2].padStart(2, "0");
-          const yyyy = m[3];
-          return `${yyyy}-${mm}-${dd}`;
+        // Pattern 2: US-style MM/DD/YYYY
+        const mdyMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+        if (mdyMatch) {
+          const [, mm, dd, yyyy] = mdyMatch;
+          const month = parseInt(mm, 10);
+          const day = parseInt(dd, 10);
+          
+          // Validate: month 1-12, day 1-31
+          if (month < 1 || month > 12 || day < 1 || day > 31) {
+            return null;
+          }
+          
+          // Format: YYYY-MM-DD (preserve the EXACT month and day the user entered)
+          const monthStr = String(month).padStart(2, "0");
+          const dayStr = String(day).padStart(2, "0");
+          return `${yyyy}-${monthStr}-${dayStr}`;
         }
 
-        // As a last resort, just return the trimmed string (no Date math)
-        return s;
+        // Invalid format - return null instead of raw string
+        return null;
       }
       
       runBtnEl.addEventListener("click", async (evt) => {
@@ -843,11 +866,17 @@ async function refreshGreenZone(host, ctx) {
           // Validate date format is acceptable
           if (!canonicalDate) {
             if (summaryEl) {
-              summaryEl.textContent = "Error: Invalid race date format";
+              summaryEl.textContent = `Error: Please enter a valid race date (YYYY-MM-DD or MM/DD/YYYY).\nReceived: "${uiDateRaw}"`;
             }
             if (statusNode) {
               statusNode.textContent = "Error";
               statusNode.style.color = "#f87171";
+            }
+            // Optional: show alert for better UX
+            try {
+              alert(`Please enter a valid race date (YYYY-MM-DD or MM/DD/YYYY).\nReceived: "${uiDateRaw}"`);
+            } catch {
+              /* ignore if alert blocked */
             }
             return;
           }
