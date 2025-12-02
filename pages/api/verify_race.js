@@ -200,6 +200,7 @@ function decodeHtmlEntities(text) {
 
 /**
  * Extract HRN entries-results URL from Google HTML
+ * Also tries to decode Google redirect URLs (/url?q=...)
  * @param {string} html - Google search results HTML
  * @returns {string|null} - First matching HRN URL or null
  */
@@ -208,15 +209,70 @@ function extractHrnUrlFromGoogleHtml(html) {
     return null;
   }
 
-  // Look for entries.horseracingnation.com entries-results URLs
-  const hrnPattern = /https:\/\/entries\.horseracingnation\.com\/entries-results\/[^"'>\s]+\/\d{4}-\d{2}-\d{2}/i;
-  const match = html.match(hrnPattern);
-  
-  if (match && match[0]) {
-    return match[0];
+  // Pattern 1: Direct URLs
+  const directPattern = /https:\/\/entries\.horseracingnation\.com\/entries-results\/[^"'>\s]+\/\d{4}-\d{2}-\d{2}/i;
+  const directMatch = html.match(directPattern);
+  if (directMatch && directMatch[0]) {
+    return directMatch[0];
+  }
+
+  // Pattern 2: Google redirect URLs (/url?q=...)
+  const urlQPattern = /\/url\?q=([^&"'>]+)/gi;
+  let match;
+  while ((match = urlQPattern.exec(html)) !== null) {
+    try {
+      const decoded = decodeURIComponent(match[1]);
+      const hrnMatch = decoded.match(/https:\/\/entries\.horseracingnation\.com\/entries-results\/[^"'>\s]+\/\d{4}-\d{2}-\d{2}/i);
+      if (hrnMatch && hrnMatch[0]) {
+        return hrnMatch[0];
+      }
+    } catch (e) {
+      // Ignore decode errors
+    }
+  }
+
+  // Pattern 3: Percent-encoded in href attributes
+  const hrefPattern = /href=["']([^"']*entries-results[^"']*)["']/gi;
+  while ((match = hrefPattern.exec(html)) !== null) {
+    try {
+      const url = match[1];
+      // Try decoding if needed
+      const decoded = url.includes("%") ? decodeURIComponent(url) : url;
+      const hrnMatch = decoded.match(/https:\/\/entries\.horseracingnation\.com\/entries-results\/[^"'>\s]+\/\d{4}-\d{2}-\d{2}/i);
+      if (hrnMatch && hrnMatch[0]) {
+        return hrnMatch[0];
+      }
+    } catch (e) {
+      // Ignore decode errors
+    }
   }
   
   return null;
+}
+
+/**
+ * Build HRN entries-results URL from track and date
+ * @param {string} track - Track name (e.g. "Laurel Park")
+ * @param {string} date - ISO date (e.g. "2025-11-30")
+ * @returns {string|null} - Constructed HRN URL or null
+ */
+function buildHrnUrl(track, date) {
+  if (!track || !date) return null;
+  
+  // Normalize track to slug: lowercase, replace spaces with hyphens, remove special chars
+  const trackSlug = track
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9-]/g, "")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+  
+  if (!trackSlug || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return null;
+  }
+  
+  return `https://entries.horseracingnation.com/entries-results/${trackSlug}/${date}`;
 }
 
 /**
@@ -260,29 +316,76 @@ function extractOutcomeFromHrnHtml(html) {
       return true;
     };
     
-    // Strategy: Look for table rows with finish positions
-    // HRN typically has a results table with Finish column (1, 2, 3) and horse names
+    // Strategy: Look for HRN payout tables with Win/Place/Show columns
+    // HRN uses table-payouts tables where:
+    // - First row with Win payout ($X.XX, not "-") = WINNER
+    // - Second row = PLACE
+    // - Third row = SHOW
+    // Horse names are in format: "Horse Name (Speed)" in the first <td>
     
-    // Pattern 1: Look for table rows with finish position in a <td> followed by horse name
-    // This handles: <tr><td>1</td><td>Horse Name</td>...</tr>
-    const tableRowPattern = /<tr[^>]*>[\s\S]*?<td[^>]*>\s*(\d+)\s*<\/td>[\s\S]*?<td[^>]*>([^<]+)<\/td>/gi;
-    const finishMap = {};
-    
-    let match;
-    while ((match = tableRowPattern.exec(html)) !== null) {
-      const position = parseInt(match[1], 10);
-      const horseName = decodeEntity(match[2]);
+    // Pattern 1: Look for table-payouts tables and extract first 3 rows
+    const payoutTablePattern = /<table[^>]*table-payouts[^>]*>[\s\S]*?<tbody>([\s\S]*?)<\/tbody>/gi;
+    let tableMatch;
+    while ((tableMatch = payoutTablePattern.exec(html)) !== null) {
+      const tbody = tableMatch[1];
       
-      if (position >= 1 && position <= 3 && isValid(horseName)) {
-        if (position === 1 && !finishMap[1]) finishMap[1] = horseName;
-        if (position === 2 && !finishMap[2]) finishMap[2] = horseName;
-        if (position === 3 && !finishMap[3]) finishMap[3] = horseName;
+      // Extract rows from this table - match: <tr>...<td>Horse Name (Speed)</td>...<td>Win</td>...<td>Place</td>...<td>Show</td>
+      const rowPattern = /<tr[^>]*>[\s\S]*?<td[^>]*>([^<]+(?:\([^)]+\))?)[\s\S]*?<td[^>]*>[\s\S]*?<td[^>]*>([^<]+)[\s\S]*?<td[^>]*>([^<]+)[\s\S]*?<td[^>]*>([^<]+)/gi;
+      const rows = [];
+      let rowMatch;
+      while ((rowMatch = rowPattern.exec(tbody)) !== null && rows.length < 3) {
+        const horseNameRaw = decodeEntity(rowMatch[1]);
+        // Extract horse name (remove speed figure in parentheses)
+        const horseName = horseNameRaw.replace(/\s*\([^)]+\)\s*$/, "").trim();
+        const winPayout = rowMatch[2].trim();
+        const placePayout = rowMatch[3].trim();
+        const showPayout = rowMatch[4].trim();
+        
+        if (isValid(horseName)) {
+          rows.push({ horseName, winPayout, placePayout, showPayout });
+        }
+      }
+      
+      // First row with Win payout (not "-") is the winner
+      // Second row is place, third row is show
+      if (rows.length >= 1 && rows[0].winPayout && rows[0].winPayout !== "-" && !outcome.win) {
+        outcome.win = rows[0].horseName;
+      }
+      if (rows.length >= 2 && !outcome.place) {
+        outcome.place = rows[1].horseName;
+      }
+      if (rows.length >= 3 && !outcome.show) {
+        outcome.show = rows[2].horseName;
+      }
+      
+      // If we found all three, break
+      if (outcome.win && outcome.place && outcome.show) {
+        break;
       }
     }
     
-    if (finishMap[1]) outcome.win = finishMap[1];
-    if (finishMap[2]) outcome.place = finishMap[2];
-    if (finishMap[3]) outcome.show = finishMap[3];
+    // Pattern 2: Look for table rows with finish position in a <td> followed by horse name
+    // This handles: <tr><td>1</td><td>Horse Name</td>...</tr>
+    if (!outcome.win || !outcome.place || !outcome.show) {
+      const tableRowPattern = /<tr[^>]*>[\s\S]*?<td[^>]*>\s*(\d+)\s*<\/td>[\s\S]*?<td[^>]*>([^<]+)<\/td>/gi;
+      const finishMap = {};
+      
+      let match;
+      while ((match = tableRowPattern.exec(html)) !== null) {
+        const position = parseInt(match[1], 10);
+        const horseName = decodeEntity(match[2]).replace(/\s*\([^)]+\)\s*$/, "").trim();
+        
+        if (position >= 1 && position <= 3 && isValid(horseName)) {
+          if (position === 1 && !finishMap[1]) finishMap[1] = horseName;
+          if (position === 2 && !finishMap[2]) finishMap[2] = horseName;
+          if (position === 3 && !finishMap[3]) finishMap[3] = horseName;
+        }
+      }
+      
+      if (!outcome.win && finishMap[1]) outcome.win = finishMap[1];
+      if (!outcome.place && finishMap[2]) outcome.place = finishMap[2];
+      if (!outcome.show && finishMap[3]) outcome.show = finishMap[3];
+    }
     
     // Pattern 2: Look for "Finish" or "Pos" column headers, then extract rows
     // This handles tables with explicit Finish/Position columns
@@ -502,7 +605,13 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
         step = "verify_race_google_parsed_stub";
       } else {
         // Google parsing didn't find all three - try HRN fallback
+        // First try to extract from Google HTML
         hrnUrl = extractHrnUrlFromGoogleHtml(googleHtml);
+        
+        // If not found in Google HTML, construct it directly from track/date
+        if (!hrnUrl) {
+          hrnUrl = buildHrnUrl(safeTrack, usingDate);
+        }
         
         if (hrnUrl) {
           try {
