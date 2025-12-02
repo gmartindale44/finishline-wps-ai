@@ -63,8 +63,9 @@ function buildVerifyRaceId(track, date, raceNo) {
  * This is best-effort and must not break the user flow
  */
 async function logVerifyResult(result) {
-  // Only log successful verify responses
-  if (!result || result.ok !== true) {
+  // Log ALL verify responses (including ok:false), so we can analyze coverage and failures.
+  // Still keep the ok flag in the payload so calibration or analysis can filter later.
+  if (!result) {
     return;
   }
 
@@ -76,10 +77,10 @@ async function logVerifyResult(result) {
 
   try {
     const { track, date, raceNo } = result;
-    
+
     // Build raceId for the key
     const raceId = buildVerifyRaceId(track, date, raceNo);
-    
+
     // Build the log payload matching what calibration script expects
     // The calibration script looks for: track, date (or dateIso or debug.canonicalDateIso), raceNo, outcome
     const logPayload = {
@@ -99,6 +100,8 @@ async function logVerifyResult(result) {
         top3Hit: false,
       },
       summary: result.summary || "",
+      ok: result.ok === true, // normalize to boolean
+      step: result.step || "",
       debug: {
         ...(result.debug || {}),
         canonicalDateIso: date || "", // For calibration script fallback lookup
