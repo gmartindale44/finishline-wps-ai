@@ -807,6 +807,58 @@ async function refreshGreenZone(host, ctx) {
         return null;
       }
       
+      // Helper function to run verify backfill with current race context
+      async function runVerifyBackfill(ctx) {
+        const payload = {
+          track: ctx.track || ctx.trackName || ctx.track_label || null,
+          raceNo: ctx.raceNo || ctx.race || ctx.raceNumber || ctx.raceNum || null,
+          date: ctx.date || ctx.uiDate || ctx.dateRaw || null,
+          dateRaw: ctx.dateRaw || ctx.date || null,
+          dateIso: ctx.dateIso || ctx.date || null,
+          dryRun: false,
+        };
+
+        // Filter out nulls
+        const cleanPayload = Object.fromEntries(
+          Object.entries(payload).filter(([, v]) => v !== null && v !== undefined)
+        );
+
+        try {
+          const res = await fetch("/api/verify_backfill", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(cleanPayload),
+          });
+
+          let json;
+          try {
+            json = await res.json();
+          } catch (e) {
+            console.error("[verify_backfill] Failed to parse JSON response", e);
+            return null;
+          }
+
+          console.log("[verify_backfill] response", json);
+          
+          // Optional: show summary in console or UI
+          if (json.ok && json.count > 0) {
+            console.log(`[verify_backfill] Completed for ${json.count} race(s)`);
+          } else if (!json.ok) {
+            console.warn("[verify_backfill] Failed:", json.message || "Unknown error");
+            if (json.debug) {
+              console.warn("[verify_backfill] Debug:", json.debug);
+            }
+          }
+          
+          return json;
+        } catch (error) {
+          console.error("[verify_backfill] Network error", error);
+          return null;
+        }
+      }
+
       runBtnEl.addEventListener("click", async (evt) => {
         evt.preventDefault();
         evt.stopPropagation();
@@ -894,6 +946,15 @@ async function refreshGreenZone(host, ctx) {
           };
           
           console.log("[VERIFY_UI] outgoing payload", payload);
+          
+          // Capture context for backfill (available in finally block)
+          const backfillCtx = {
+            track,
+            raceNo,
+            date: canonicalDate,
+            dateIso: canonicalDate,
+            dateRaw: uiDateRaw,
+          };
           
           // Update UI state
           if (statusNode) {
@@ -989,8 +1050,14 @@ async function refreshGreenZone(host, ctx) {
           runBtnEl.disabled = false;
           runBtnEl.textContent = defaultLabel;
           refreshGreenZone(host);
+          // Run backfill with the captured race context (if available)
+          // backfillCtx is only set if we successfully built the payload
           try {
-            fetch("/api/verify_backfill", { method: "POST" }).catch(() => {});
+            if (typeof backfillCtx !== "undefined" && backfillCtx.track && backfillCtx.date) {
+              runVerifyBackfill(backfillCtx).catch(() => {
+                // Silently ignore backfill errors - it's a background operation
+              });
+            }
           } catch {
             /* ignore background errors */
           }
