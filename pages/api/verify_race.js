@@ -1077,8 +1077,9 @@ export default async function handler(req, res) {
       });
     } catch (fullError) {
       // Log error and fall back to stub
+      const errorMsg = fullError?.message || String(fullError);
       console.error("[verify_race] Full parser failed, falling back to stub", {
-        error: fullError?.message || String(fullError),
+        error: errorMsg,
         stack: fullError?.stack,
         track,
         date: canonicalDateIso,
@@ -1086,7 +1087,6 @@ export default async function handler(req, res) {
       });
 
       const stub = await buildStubResponse(ctx);
-      const errorMsg = fullError?.message || String(fullError);
       const errorStub = {
         ...stub,
         step: "verify_race_full_fallback",
@@ -1096,10 +1096,31 @@ export default async function handler(req, res) {
           ...stub.debug,
           fullError: errorMsg,
           fullErrorStack: fullError?.stack || undefined,
+          backendVersion: BACKEND_VERSION,
+          handlerFile: HANDLER_FILE,
         },
       };
+
+      // Try HRN fallback if we have track and date
+      if (track && canonicalDateIso) {
+        const { outcome: hrnOutcome, debugExtras } = await tryHrnFallback(track, canonicalDateIso, errorStub.debug);
+        errorStub.debug = { ...errorStub.debug, ...debugExtras };
+
+        if (hrnOutcome) {
+          errorStub.outcome = hrnOutcome;
+          errorStub.ok = true;
+          errorStub.step = "verify_race_fallback_hrn";
+        }
+      }
+
       await logVerifyResult(errorStub);
-      return res.status(200).json(errorStub);
+      return res.status(200).json({
+        ...errorStub,
+        responseMeta: {
+          handlerFile: HANDLER_FILE,
+          backendVersion: BACKEND_VERSION,
+        },
+      });
     }
   } catch (err) {
     // Absolute last-resort catch; still return 200.
