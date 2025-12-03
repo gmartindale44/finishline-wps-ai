@@ -267,6 +267,30 @@ const HANDLER_FILE = "pages/api/verify_race.js";
 const BACKEND_VERSION = "verify_v4_hrn_equibase";
 
 /**
+ * Try Equibase fallback - NO-OP version for stub mode
+ * The full verify pipeline has its own real Equibase fallback;
+ * this version is just to keep the stub path from erroring.
+ * @param {string} track - Track name
+ * @param {string} dateIso - ISO date (YYYY-MM-DD)
+ * @param {string|number} raceNo - Race number
+ * @param {object} baseDebug - Existing debug object
+ * @returns {{ outcome: object|null, debugExtras: object }}
+ */
+async function tryEquibaseFallback(track, dateIso, raceNo, baseDebug = {}) {
+  // Stub / no-op implementation for stub mode.
+  // The full verify pipeline has its own real Equibase fallback;
+  // this version is just to keep the stub path from erroring.
+  return {
+    outcome: null,
+    debugExtras: {
+      equibaseAttempted: false,
+      equibaseUrl: null,
+      equibaseParseError: "Equibase fallback disabled in stub mode",
+    },
+  };
+}
+
+/**
  * Try HRN fallback - attempts to fetch and parse HRN entries-results page
  * @param {string} track - Track name
  * @param {string} dateIso - ISO date (YYYY-MM-DD)
@@ -1076,64 +1100,52 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
               } else {
                 hrnParseError = "No outcome parsed from HRN HTML";
                 
-                // HRN failed, try Equibase fallback
+                // HRN failed, try Equibase fallback (no-op in stub mode, just for debug info)
                 if (safeTrack && usingDate && raceNoStr) {
+                  let equibaseDebug = {};
                   try {
-                    const equibaseUrl = buildEquibaseUrl(safeTrack, usingDate, raceNoStr);
-                    if (equibaseUrl) {
-                      const equibaseRes = await fetch(equibaseUrl, {
-                        method: "GET",
-                        headers: {
-                          "User-Agent":
-                            "Mozilla/5.0 (compatible; FinishLineBot/1.0; +https://finishline-wps-ai.vercel.app)",
-                          "Accept-Language": "en-US,en;q=0.9",
-                        },
-                      });
-                      
-                      if (equibaseRes && equibaseRes.ok) {
-                        const equibaseHtml = await equibaseRes.text();
-                        const equibaseOutcome = extractOutcomeFromEquibaseHtml(equibaseHtml);
-                        
-                        if (equibaseOutcome && (equibaseOutcome.win || equibaseOutcome.place || equibaseOutcome.show)) {
-                          outcome = equibaseOutcome;
-                          step = "verify_race_fallback_equibase";
-                        }
-                      }
+                    const { outcome: eqOutcome, debugExtras } = await tryEquibaseFallback(safeTrack, usingDate, raceNoStr, debug);
+                    if (debugExtras) {
+                      equibaseDebug = debugExtras;
                     }
-                  } catch (equibaseErr) {
-                    // Silently fail - we already have hrnParseError set
+                    // DO NOT override the main outcome here in stub mode;
+                    // stub is google-only, this is just extra debug.
+                  } catch (err) {
+                    // absolutely never throw from stub because of Equibase
+                    equibaseDebug = {
+                      equibaseAttempted: false,
+                      equibaseParseError: String(err && err.message ? err.message : err),
+                    };
+                  }
+                  // Merge equibaseDebug into debug but do NOT change step or ok based on Equibase in stub mode
+                  if (Object.keys(equibaseDebug).length > 0) {
+                    debug = { ...debug, ...equibaseDebug };
                   }
                 }
               }
             } else {
               hrnParseError = `HTTP ${hrnRes ? hrnRes.status : "unknown"}`;
               
-              // HRN fetch failed, try Equibase fallback
+              // HRN fetch failed, try Equibase fallback (no-op in stub mode, just for debug info)
               if (safeTrack && usingDate && raceNoStr) {
+                let equibaseDebug = {};
                 try {
-                  const equibaseUrl = buildEquibaseUrl(safeTrack, usingDate, raceNoStr);
-                  if (equibaseUrl) {
-                    const equibaseRes = await fetch(equibaseUrl, {
-                      method: "GET",
-                      headers: {
-                        "User-Agent":
-                          "Mozilla/5.0 (compatible; FinishLineBot/1.0; +https://finishline-wps-ai.vercel.app)",
-                        "Accept-Language": "en-US,en;q=0.9",
-                      },
-                    });
-                    
-                    if (equibaseRes && equibaseRes.ok) {
-                      const equibaseHtml = await equibaseRes.text();
-                      const equibaseOutcome = extractOutcomeFromEquibaseHtml(equibaseHtml);
-                      
-                      if (equibaseOutcome && (equibaseOutcome.win || equibaseOutcome.place || equibaseOutcome.show)) {
-                        outcome = equibaseOutcome;
-                        step = "verify_race_fallback_equibase";
-                      }
-                    }
+                  const { outcome: eqOutcome, debugExtras } = await tryEquibaseFallback(safeTrack, usingDate, raceNoStr, debug);
+                  if (debugExtras) {
+                    equibaseDebug = debugExtras;
                   }
-                } catch (equibaseErr) {
-                  // Silently fail
+                  // DO NOT override the main outcome here in stub mode;
+                  // stub is google-only, this is just extra debug.
+                } catch (err) {
+                  // absolutely never throw from stub because of Equibase
+                  equibaseDebug = {
+                    equibaseAttempted: false,
+                    equibaseParseError: String(err && err.message ? err.message : err),
+                  };
+                }
+                // Merge equibaseDebug into debug but do NOT change step or ok based on Equibase in stub mode
+                if (Object.keys(equibaseDebug).length > 0) {
+                  debug = { ...debug, ...equibaseDebug };
                 }
               }
             }
