@@ -1,0 +1,17 @@
+# Small, real-world manifest for HTTP backfill.
+# Columns: date (YYYY-MM-DD), track, raceNo, pred_win, pred_place, pred_show
+# NOTE: We are intentionally leaving pred_* empty to avoid fake perfect stats.
+# Known-good HRN WPS parses (we've visually confirmed these already):
+date,track,raceNo,pred_win,pred_place,pred_show
+2025-11-24,Parx Racing,1,,,
+2025-11-25,Parx Racing,1,,,
+2025-11-25,Parx Racing,2,,,
+2025-11-25,Delta Downs,1,,,
+2025-11-25,Delta Downs,2,,,
+2025-11-25,Mountaineer,1,,,
+# Probe races on other tracks/dates (ok if some fail; script should handle gracefully):
+2025-11-25,Laurel Park,2,,,
+2025-11-25,Remington Park,3,,,
+2025-11-25,Hawthorne,1,,,
+2025-11-27,Churchill Downs,1,,,
+

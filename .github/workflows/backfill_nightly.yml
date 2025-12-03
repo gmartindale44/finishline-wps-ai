@@ -1,0 +1,56 @@
+name: Nightly Verify Backfill
+
+on:
+  schedule:
+    # Run at midnight CST (6:00 UTC)
+    - cron: '0 6 * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run dry-run backfill
+        env:
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+          FINISHLINE_VERIFY_BASE_URL: ${{ secrets.FINISHLINE_VERIFY_BASE_URL || 'https://finishline-wps-ai.vercel.app' }}
+        run: |
+          echo "Running dry-run backfill for today's races..."
+          node scripts/backfill/run_full_backfill.mjs --mode=today --dryRun
+      
+      - name: Run live backfill
+        if: success()
+        env:
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+          FINISHLINE_VERIFY_BASE_URL: ${{ secrets.FINISHLINE_VERIFY_BASE_URL || 'https://finishline-wps-ai.vercel.app' }}
+        run: |
+          echo "Running live backfill for today's races..."
+          node scripts/backfill/run_full_backfill.mjs --mode=today --live
+      
+      - name: Post summary to Discord (optional)
+        if: always()
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          if [ -n "$DISCORD_WEBHOOK_URL" ]; then
+            echo "Posting summary to Discord..."
+            # TODO: Implement Discord webhook posting with backfill summary
+            echo "Discord webhook integration pending"
+          else
+            echo "Discord webhook not configured, skipping"
+          fi
+

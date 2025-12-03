@@ -1,4 +1,5 @@
 [![Nightly Calibration](https://github.com/gmartindale44/finishline-wps-ai/actions/workflows/nightly-calibration.yml/badge.svg)](https://github.com/gmartindale44/finishline-wps-ai/actions/workflows/nightly-calibration.yml)
+[![Nightly Backfill](https://github.com/gmartindale44/finishline-wps-ai/actions/workflows/backfill_nightly.yml/badge.svg)](https://github.com/gmartindale44/finishline-wps-ai/actions/workflows/backfill_nightly.yml)
 [![Vercel Deploy](https://img.shields.io/badge/deploy-vercel-green?logo=vercel)](https://finishline-wps-ai.vercel.app)
 
 # FinishLine WPS AI
@@ -348,6 +349,86 @@ For issues and questions:
 3) **Optional subdomain finishline.hiredhive.xyz**
    - Vercel → Project → Settings → Domains → Add subdomain
    - Namecheap → add CNAME: host=finishline, target=cname.vercel-dns.com → Verify.
+
+## 🔄 Verify Backfill Automation
+
+The FinishLine system includes automated backfill scripts to ensure verify results are captured for all predictions.
+
+### Backfill Scripts
+
+- **`scripts/backfill/run_full_backfill.mjs`** - Main entry point for all backfill operations
+- **`scripts/backfill/run_backfill_missing.mjs`** - Backfill only races missing verify results
+- **`scripts/backfill/run_backfill_day.mjs`** - Backfill all races for a specific date
+- **`scripts/backfill/run_backfill_track.mjs`** - Backfill all races for a specific track
+
+### Usage Examples
+
+```bash
+# Backfill today's races (dry run)
+node scripts/backfill/run_full_backfill.mjs --mode=today --dryRun
+
+# Backfill today's races (live - writes to Redis)
+node scripts/backfill/run_full_backfill.mjs --mode=today --live
+
+# Backfill missing verify results
+node scripts/backfill/run_full_backfill.mjs --mode=missing --dryRun
+
+# Backfill a specific date
+node scripts/backfill/run_full_backfill.mjs --mode=day --date=2025-12-01 --dryRun
+
+# Backfill a specific track
+node scripts/backfill/run_full_backfill.mjs --mode=track --track="Parx Racing" --dryRun
+
+# Backfill with filters
+node scripts/backfill/run_full_backfill.mjs --mode=missing --track="Laurel Park" --date=2025-11-30 --maxRaces=10 --dryRun
+```
+
+### API Endpoint
+
+The `/api/verify_backfill` endpoint can be called programmatically:
+
+```bash
+# POST request
+curl -X POST https://finishline-wps-ai.vercel.app/api/verify_backfill \
+  -H "Content-Type: application/json" \
+  -d '{
+    "track": "Laurel Park",
+    "date": "2025-11-30",
+    "raceNo": "1",
+    "dryRun": true
+  }'
+
+# GET request (for testing)
+curl "https://finishline-wps-ai.vercel.app/api/verify_backfill?track=Laurel%20Park&date=2025-11-30&raceNo=1&dryRun=true"
+```
+
+### Nightly Automation
+
+A GitHub Actions workflow runs automatically at midnight CST to backfill today's races:
+
+- **Workflow**: `.github/workflows/backfill_nightly.yml`
+- **Schedule**: Runs daily at 6:00 UTC (midnight CST)
+- **Process**: 
+  1. Runs dry-run first to validate
+  2. If successful, runs live backfill to persist results
+  3. Optionally posts summary to Discord webhook
+
+### Environment Variables
+
+Required for backfill scripts:
+
+- `UPSTASH_REDIS_REST_URL` - Upstash Redis REST URL
+- `UPSTASH_REDIS_REST_TOKEN` - Upstash Redis REST token
+- `FINISHLINE_VERIFY_BASE_URL` - Base URL for verify_race API (optional, defaults to production)
+
+### Data Storage
+
+Backfill results are stored in Redis:
+
+- **Verify logs**: `fl:verify:{raceId}` - JSON string with verify result
+- **Audit logs**: `fl:verify:log:{date}` - List of audit entries for each day
+
+The calibration pipeline (`scripts/rebuild_calibration_from_logs.mjs`) automatically reads these verify logs to generate calibration CSV files.
 
 ---
 

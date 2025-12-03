@@ -1,0 +1,8 @@
+# This is an example manifest for the HTTP backfill script.
+# Real backfill runs should copy this structure into data/historical_manifest.csv or another file.
+# Format: date (ISO YYYY-MM-DD), track (string), raceNo (integer), pred_win, pred_place, pred_show (optional horse names)
+date,track,raceNo,pred_win,pred_place,pred_show
+2025-11-27,Churchill Downs,1,Fountain Run,Winters Lion,Yellow Brick
+2025-11-27,Churchill Downs,2,Two Seven O,I Forgot to Ask,Silent Horizon
+2025-11-28,Laurel Park,2,Synergism,Ade,The Goddess Factor
+

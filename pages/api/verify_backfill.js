@@ -172,8 +172,28 @@ async function runVerifyBackfill({ races, dryRun = true }) {
     }
   }
   
-  // TODO: If dryRun === false, persist results to Redis
-  // For now, we just return the results
+  // Persist results to Redis if not dry run
+  if (!dryRun) {
+    const { writeToRedis, writeAuditLog } = await import("../../utils/finishline/backfill_helpers.js");
+    const today = new Date().toISOString().slice(0, 10);
+    
+    for (const resultEntry of results) {
+      try {
+        await writeToRedis(resultEntry);
+        await writeAuditLog(today, {
+          type: "verify_backfill_api",
+          track: resultEntry.track,
+          date: resultEntry.date,
+          raceNo: resultEntry.raceNo,
+          ok: resultEntry.ok,
+          step: resultEntry.step,
+          hasOutcome: !!(resultEntry.outcome.win || resultEntry.outcome.place || resultEntry.outcome.show),
+        });
+      } catch (err) {
+        console.error(`[verify_backfill] Error persisting result:`, err);
+      }
+    }
+  }
   
   return { results, count: results.length, successes, failures };
 }

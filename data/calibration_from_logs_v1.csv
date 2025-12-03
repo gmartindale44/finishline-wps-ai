@@ -1,0 +1,7 @@
+track,date,raceNo,strategyName,version,predWin,predPlace,predShow,outWin,outPlace,outShow,winHit,placeHit,showHit,top3Hit
+Mahoning Valley,2025-12-02,1,synthetic,,1,2,3,,,,,,,false
+Parx Racing,2025-12-01,1,Across The Board,,Gametime Gladiator,He's Got Swagger,Get Like Mike,He's Got Swagger,Get Like Mike,Fluff the Pillow,false,false,false,false
+Parx Racing,2025-12-01,2,Across The Board,,Our Notion,Filled With Desire,Chubasco Sauce,Our Notion,Mybandit,Filled With Desire,true,false,false,true
+Parx Racing,2025-12-01,3,Across The Board,,Davola,Stillwater Moon,We Miss Neil,Hoppy Time,Davola,We Miss Neil,false,false,true,true
+Parx Racing,2025-12-01,4,parx_r4_test,,1,2,3,Big Brown Shoes,Backtrack,Competitive Saint,false,false,false,false
+Parx Racing,2025-12-01,5,Across The Board,,My Kid Syd,Prince Lucas,Private Cabana,My Kid Syd,Aves Makin' Waves,Prince Lucas,true,false,false,true
