@@ -344,6 +344,70 @@ async function tryHrnFallback(track, dateIso, raceNo, baseDebug = {}) {
     
     const outcome = extractOutcomeFromHrnHtml(html, raceNo);
     
+    // Capture the actual payout table HTML snippet for debugging
+    try {
+      let tableSnippet = null;
+      
+      if (html && typeof html === "string") {
+        // Use the same race selection logic as extractOutcomeFromHrnHtml
+        let targetTableHtml = null;
+        
+        if (raceNo !== null && raceNo !== undefined) {
+          const raceNoStr = String(raceNo || "").trim();
+          if (raceNoStr) {
+            // Try to find the matching race block
+            const blocks = splitHrnHtmlIntoRaceBlocks(html);
+            const matchingBlock = blocks.find(b => String(b.raceNo) === raceNoStr);
+            
+            if (matchingBlock) {
+              // Extract the matching table
+              const tablePattern = /<table[^>]*table-payouts[^>]*>[\s\S]*?<\/table>/gi;
+              const allTables = [];
+              let tableMatch;
+              while ((tableMatch = tablePattern.exec(html)) !== null) {
+                allTables.push({ index: tableMatch.index, html: tableMatch[0] });
+              }
+              
+              if (allTables[matchingBlock.tableIndex]) {
+                targetTableHtml = allTables[matchingBlock.tableIndex].html;
+              }
+            } else {
+              // No matching block found, use first table as fallback
+              const tablePattern = /<table[^>]*table-payouts[^>]*>[\s\S]*?<\/table>/gi;
+              const firstMatch = tablePattern.exec(html);
+              if (firstMatch) {
+                targetTableHtml = firstMatch[0];
+              }
+            }
+          }
+        } else {
+          // No raceNo provided, use first table
+          const tablePattern = /<table[^>]*table-payouts[^>]*>[\s\S]*?<\/table>/gi;
+          const firstMatch = tablePattern.exec(html);
+          if (firstMatch) {
+            targetTableHtml = firstMatch[0];
+          }
+        }
+        
+        if (targetTableHtml) {
+          // Normalize whitespace: collapse multiple spaces/newlines to single space
+          tableSnippet = targetTableHtml
+            .replace(/\s+/g, " ")
+            .trim();
+          
+          // Truncate to max 3000 characters
+          if (tableSnippet.length > 3000) {
+            tableSnippet = tableSnippet.substring(0, 3000) + "... [truncated]";
+          }
+        }
+      }
+      
+      debugExtras.hrnTableSnippet = tableSnippet || null;
+    } catch (snapshotErr) {
+      // Never throw - just capture the error in debug
+      debugExtras.hrnTableSnippet = `SNAPSHOT_ERROR: ${String(snapshotErr && snapshotErr.message ? snapshotErr.message : snapshotErr)}`;
+    }
+    
     if (!outcome || (!outcome.win && !outcome.place && !outcome.show)) {
       debugExtras.hrnParseError = "No outcome parsed from HRN HTML";
       return { outcome: null, debugExtras };
