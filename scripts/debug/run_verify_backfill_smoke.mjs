@@ -51,6 +51,8 @@ async function testBackfill() {
     console.log("  count:", json.count);
     console.log("  successes:", json.successes);
     console.log("  failures:", json.failures);
+    console.log("  skipped:", json.skipped || 0);
+    console.log("  processed:", json.processed || json.count);
     
     if (json.summary) {
       console.log("  summary:", json.summary);

@@ -29,20 +29,53 @@ function getRedis() {
 
 /**
  * Build raceId from track, date, raceNo
- * Matches the format used by verify_race.js
+ * EXACTLY matches the format used by verify_race.js buildVerifyRaceId()
+ * This ensures Redis keys are consistent between verify_race and backfill operations.
  */
 export function buildRaceId(track, date, raceNo) {
-  function toSlug(str) {
-    return String(str || "")
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "");
+  // Normalize track: lowercase, collapse spaces, replace non-alphanum with '-', remove dup '-'
+  // This EXACTLY matches buildVerifyRaceId in pages/api/verify_race.js
+  const slugTrack = (track || "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+
+  // Normalize date: use YYYY-MM-DD format
+  let slugDate = date || "";
+  if (!slugDate || !/^\d{4}-\d{2}-\d{2}$/.test(slugDate)) {
+    // If date is invalid, use empty string (calibration script will handle it)
+    slugDate = "";
   }
-  
-  const trackSlug = toSlug(track);
-  const raceSuffix = `r${raceNo || 0}`;
-  return `${trackSlug}-${date}-unknown-${raceSuffix}`;
+
+  // Normalize race number
+  const slugRaceNo = String(raceNo || "").trim() || "0";
+
+  // Build: track-date-unknown-r{raceNo} (using "unknown" for postTime to match prediction pattern)
+  const parts = [slugTrack, slugDate, "unknown", `r${slugRaceNo}`].filter(Boolean);
+  return parts.join("-");
+}
+
+/**
+ * Build verify raceId from context object (for convenience)
+ * @param {object} ctx - Context with track, date/dateIso/dateRaw, raceNo
+ * @returns {string} - Race ID matching verify_race format
+ */
+export function buildVerifyRaceIdFromContext(ctx) {
+  const date = ctx.date || ctx.dateIso || ctx.dateRaw || "";
+  return buildRaceId(ctx.track, date, ctx.raceNo);
+}
+
+/**
+ * Build the Redis key for verify logs
+ * @param {string} raceId - Race ID (from buildRaceId or buildVerifyRaceIdFromContext)
+ * @returns {string} - Redis key: fl:verify:{raceId}
+ */
+export function buildVerifyKey(raceId) {
+  return `${VERIFY_PREFIX}${raceId}`;
 }
 
 /**
@@ -154,19 +187,36 @@ export async function fetchTrackDays(track) {
 
 /**
  * Check if a verify result already exists in Redis
- * @param {string} track
- * @param {string} date
- * @param {string} raceNo
- * @returns {Promise<boolean>}
+ * Accepts either a context object or individual track/date/raceNo parameters
+ * @param {object|string} ctxOrRaceId - Context object {track, date/dateIso/dateRaw, raceNo} OR a raceId string
+ * @param {string} [date] - Date (if ctxOrRaceId is track string)
+ * @param {string} [raceNo] - Race number (if ctxOrRaceId is track string)
+ * @returns {Promise<boolean>} - true if verify log exists, false otherwise
  */
-export async function verifyExists(track, date, raceNo) {
+export async function verifyLogExists(ctxOrRaceId, date, raceNo) {
   const redis = getRedis();
   if (!redis) {
     return false;
   }
   
-  const raceId = buildRaceId(track, date, raceNo);
-  const key = `${VERIFY_PREFIX}${raceId}`;
+  let raceId;
+  if (typeof ctxOrRaceId === "string") {
+    // If first param is a string, treat it as raceId (or track if date/raceNo provided)
+    if (date && raceNo) {
+      // ctxOrRaceId is track, date and raceNo are separate params
+      raceId = buildRaceId(ctxOrRaceId, date, raceNo);
+    } else {
+      // ctxOrRaceId is already a raceId
+      raceId = ctxOrRaceId;
+    }
+  } else if (ctxOrRaceId && typeof ctxOrRaceId === "object") {
+    // ctxOrRaceId is a context object
+    raceId = buildVerifyRaceIdFromContext(ctxOrRaceId);
+  } else {
+    return false;
+  }
+  
+  const key = buildVerifyKey(raceId);
   
   try {
     const type = await redis.type(key);
@@ -174,6 +224,18 @@ export async function verifyExists(track, date, raceNo) {
   } catch {
     return false;
   }
+}
+
+/**
+ * @deprecated Use verifyLogExists instead for consistency
+ * Check if a verify result already exists in Redis
+ * @param {string} track
+ * @param {string} date
+ * @param {string} raceNo
+ * @returns {Promise<boolean>}
+ */
+export async function verifyExists(track, date, raceNo) {
+  return verifyLogExists(track, date, raceNo);
 }
 
 /**

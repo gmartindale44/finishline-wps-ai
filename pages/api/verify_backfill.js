@@ -5,12 +5,16 @@
 // - Accepts POST JSON payloads from the Verify UI
 // - Normalizes into one or more "race" requests
 // - Optionally runs in dryRun mode (no HTTP calls)
+// - Checks Redis to skip races that are already verified
 // - Calls /api/verify_race for each race and aggregates results
 // - Never throws; always returns HTTP 200 with structured JSON
 
 export const config = {
   runtime: "nodejs",
 };
+
+// Import Redis helpers for skip logic
+import { verifyLogExists } from "../../utils/finishline/backfill_helpers.js";
 
 const DEFAULT_MAX_RACES = 10;
 const HARD_MAX_RACES = 50;
@@ -312,9 +316,49 @@ export default async function handler(req, res) {
       });
     }
   } else {
+    // Check Redis for existing verify logs before calling /api/verify_race
     for (const race of races) {
-      const result = await callVerifyRace(baseUrl, race);
-      results.push(result);
+      let shouldSkip = false;
+      let skipReason = null;
+
+      try {
+        // Check if this race already has a verify log in Redis
+        const exists = await verifyLogExists({
+          track: race.track,
+          date: race.dateIso || race.date,
+          dateIso: race.dateIso || race.date,
+          dateRaw: race.dateRaw,
+          raceNo: race.raceNo,
+        });
+
+        if (exists) {
+          shouldSkip = true;
+          skipReason = "already_verified_in_redis";
+        }
+      } catch (err) {
+        // If Redis check fails, log warning but proceed with verify call
+        console.warn("[verify_backfill] Redis check failed, proceeding without skip:", err.message);
+        // Continue to call verify_race as normal
+      }
+
+      if (shouldSkip) {
+        // Skip calling /api/verify_race - race already verified
+        results.push({
+          race,
+          ok: true,
+          skipped: true,
+          skipReason,
+          httpStatus: null,
+          step: "verify_backfill_skip",
+          outcome: null,
+          hits: null,
+          networkError: null,
+        });
+      } else {
+        // Call /api/verify_race as normal (it will write to Redis)
+        const result = await callVerifyRace(baseUrl, race);
+        results.push(result);
+      }
     }
   }
 
@@ -323,6 +367,8 @@ export default async function handler(req, res) {
     (r) => !r.ok && !r.skipped && !r.networkError
   ).length;
   const networkFailures = results.filter((r) => !!r.networkError).length;
+  const skipped = results.filter((r) => !!r.skipped && !r.dryRun).length;
+  const processed = results.filter((r) => !r.skipped || r.dryRun).length;
 
   // Keep the response payload modest; include a small sample of raw results.
   const sampleSize = 10;
@@ -330,6 +376,7 @@ export default async function handler(req, res) {
     race: r.race,
     ok: r.ok,
     skipped: !!r.skipped,
+    skipReason: r.skipReason || null,
     httpStatus: r.httpStatus,
     step: r.step,
     outcome: r.outcome,
@@ -346,6 +393,8 @@ export default async function handler(req, res) {
     successes,
     failures,
     networkFailures,
+    skipped,
+    processed,
     sampleLimit: sampleSize,
     results: sample,
   });

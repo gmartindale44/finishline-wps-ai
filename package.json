@@ -22,6 +22,7 @@
     "backfill:persistence": "node scripts/backfill-persistence.js",
     "backfill:calibrate": "node scripts/redis-backfill-to-csv.js",
     "backfill:http": "node scripts/backfill_verify_http.js",
+    "export:verify-redis": "node scripts/calibration/export_verify_redis_to_csv.mjs",
     "audit:server": "node scripts/fetch-audit.js",
     "sanitize:placeholders": "node scripts/sanitize-placeholders.js",
     "debug:verify": "node scripts/debug_verify_race.js",

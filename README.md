@@ -350,9 +350,18 @@ For issues and questions:
    - Vercel → Project → Settings → Domains → Add subdomain
    - Namecheap → add CNAME: host=finishline, target=cname.vercel-dns.com → Verify.
 
-## 🔄 Verify Backfill Automation
+## 🔄 Verify Backfill & Redis Export
 
-The FinishLine system includes automated backfill scripts to ensure verify results are captured for all predictions.
+The FinishLine system includes automated backfill scripts and Redis-based verification logging.
+
+### Verify Race Redis Logging
+
+The `/api/verify_race` endpoint automatically writes all verification results to Upstash Redis:
+
+- **Redis Key Pattern**: `fl:verify:{track-slug}-{date}-unknown-r{raceNo}`
+- **Example Key**: `fl:verify:tampa-bay-downs-2025-12-03-unknown-r5`
+- **Stored Data**: Includes track, date, raceNo, outcome (win/place/show), predicted picks, hits, and debug metadata
+- **Non-blocking**: Redis writes are wrapped in try/catch and never break the user flow
 
 ### Backfill Scripts
 
@@ -422,6 +431,35 @@ Required for backfill scripts:
 - `FINISHLINE_VERIFY_BASE_URL` - Base URL for verify_race API (optional, defaults to production)
 
 ### Data Storage
+
+### Redis-Aware Backfill Skip Logic
+
+The `/api/verify_backfill` endpoint now intelligently skips races that already have verify logs in Redis:
+
+- **Before calling `/api/verify_race`**: Checks if `fl:verify:{raceId}` exists in Redis
+- **If exists**: Skips the API call and returns `skipped: true, skipReason: "already_verified_in_redis"`
+- **If missing**: Proceeds with normal verify call (which will write to Redis)
+- **Response includes**: `skipped` and `processed` counters in addition to `successes` and `failures`
+
+This prevents duplicate verify calls and reduces API load.
+
+### Export Verify Logs to CSV
+
+Export all verify logs from Redis to a CSV file for calibration:
+
+```bash
+npm run export:verify-redis
+```
+
+**Output**: `data/finishline_tests_from_verify_redis_v1.csv`
+
+**CSV Schema** (matches `calibration_from_logs_v1.csv`):
+- `track,date,raceNo,strategyName,version,predWin,predPlace,predShow,outWin,outPlace,outShow,winHit,placeHit,showHit,top3Hit`
+
+**Usage**:
+- Run after verify runs to export latest data
+- Use as additional datasource for calibration
+- Does not overwrite existing calibration CSV files
 
 Backfill results are stored in Redis:
 
