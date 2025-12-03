@@ -213,7 +213,7 @@ async function tryHrnFallback(track, dateIso, raceNo, baseDebug = {}) {
   const debugExtras = {};
   try {
     debugExtras.hrnAttempted = true;
-    debugExtras.hrnRaceNo = raceNo ? String(raceNo).trim() : null;
+    debugExtras.hrnRaceNo = (raceNo !== null && raceNo !== undefined) ? String(raceNo || "").trim() : null;
 
     const hrnUrlFromGoogle = baseDebug.googleHtml ? extractHrnUrlFromGoogleHtml(baseDebug.googleHtml) : null;
     const hrnUrl = hrnUrlFromGoogle || buildHrnUrl(track, dateIso);
@@ -342,40 +342,46 @@ function splitHrnHtmlIntoRaceBlocks(html) {
     return blocks;
   }
   
-  // Find all table-payouts tables
-  const tablePattern = /<table[^>]*table-payouts[^>]*>/gi;
-  const tableMatches = [];
-  let match;
-  while ((match = tablePattern.exec(html)) !== null) {
-    tableMatches.push({ index: match.index, fullMatch: match[0] });
-  }
-  
-  // For each table, look backwards for the closest "Race N" marker
-  for (let i = 0; i < tableMatches.length; i++) {
-    const tableStart = tableMatches[i].index;
-    const beforeTable = html.substring(Math.max(0, tableStart - 5000), tableStart);
-    
-    // Find the closest "Race N" before this table (case-insensitive)
-    const racePattern = /Race\s+(\d+)/gi;
-    const raceMatches = [];
-    let raceMatch;
-    while ((raceMatch = racePattern.exec(beforeTable)) !== null) {
-      raceMatches.push({
-        raceNo: raceMatch[1],
-        index: raceMatch.index,
-        distance: beforeTable.length - raceMatch.index
-      });
+  try {
+    // Find all table-payouts tables
+    const tablePattern = /<table[^>]*table-payouts[^>]*>/gi;
+    const tableMatches = [];
+    let match;
+    while ((match = tablePattern.exec(html)) !== null) {
+      tableMatches.push({ index: match.index, fullMatch: match[0] });
     }
     
-    // Use the last (closest) race match before the table
-    if (raceMatches.length > 0) {
-      const closestRace = raceMatches[raceMatches.length - 1];
-      blocks.push({
-        raceNo: closestRace.raceNo,
-        tableIndex: i,
-        tableStart: tableStart
-      });
+    // For each table, look backwards for the closest "Race N" marker
+    for (let i = 0; i < tableMatches.length; i++) {
+      const tableStart = tableMatches[i].index;
+      const beforeTable = html.substring(Math.max(0, tableStart - 5000), tableStart);
+      
+      // Find the closest "Race N" before this table (case-insensitive)
+      const racePattern = /Race\s+(\d+)/gi;
+      const raceMatches = [];
+      let raceMatch;
+      while ((raceMatch = racePattern.exec(beforeTable)) !== null) {
+        raceMatches.push({
+          raceNo: raceMatch[1],
+          index: raceMatch.index,
+          distance: beforeTable.length - raceMatch.index
+        });
+      }
+      
+      // Use the last (closest) race match before the table
+      if (raceMatches.length > 0) {
+        const closestRace = raceMatches[raceMatches.length - 1];
+        blocks.push({
+          raceNo: closestRace.raceNo,
+          tableIndex: i,
+          tableStart: tableStart
+        });
+      }
     }
+  } catch (err) {
+    // On any error, return empty blocks (caller will fall back to parsing all tables)
+    console.error("[splitHrnHtmlIntoRaceBlocks] Error:", err.message);
+    return [];
   }
   
   return blocks;
@@ -395,32 +401,33 @@ function extractOutcomeFromHrnHtml(html, raceNo = null) {
     return outcome;
   }
   
-  // If raceNo is provided, try to find the matching race block
-  let targetHtml = html;
-  if (raceNo !== null && raceNo !== undefined) {
-    const raceNoStr = String(raceNo).trim();
-    const blocks = splitHrnHtmlIntoRaceBlocks(html);
-    
-    // Find the block matching the requested race
-    const matchingBlock = blocks.find(b => String(b.raceNo) === raceNoStr);
-    
-    if (matchingBlock) {
-      // Extract HTML from the matching table
-      const tablePattern = /<table[^>]*table-payouts[^>]*>[\s\S]*?<\/table>/gi;
-      const allTables = [];
-      let tableMatch;
-      while ((tableMatch = tablePattern.exec(html)) !== null) {
-        allTables.push({ index: tableMatch.index, html: tableMatch[0] });
-      }
-      
-      if (allTables[matchingBlock.tableIndex]) {
-        targetHtml = allTables[matchingBlock.tableIndex].html;
+  try {
+    // If raceNo is provided, try to find the matching race block
+    let targetHtml = html;
+    if (raceNo !== null && raceNo !== undefined) {
+      const raceNoStr = String(raceNo || "").trim();
+      if (raceNoStr) {
+        const blocks = splitHrnHtmlIntoRaceBlocks(html);
+        
+        // Find the block matching the requested race
+        const matchingBlock = blocks.find(b => String(b.raceNo) === raceNoStr);
+        
+        if (matchingBlock) {
+          // Extract HTML from the matching table
+          const tablePattern = /<table[^>]*table-payouts[^>]*>[\s\S]*?<\/table>/gi;
+          const allTables = [];
+          let tableMatch;
+          while ((tableMatch = tablePattern.exec(html)) !== null) {
+            allTables.push({ index: tableMatch.index, html: tableMatch[0] });
+          }
+          
+          if (allTables[matchingBlock.tableIndex]) {
+            targetHtml = allTables[matchingBlock.tableIndex].html;
+          }
+        }
+        // If no matching block found, fall back to parsing all tables (original behavior)
       }
     }
-    // If no matching block found, fall back to parsing all tables (original behavior)
-  }
-
-  try {
     // Helper to decode HTML entities
     const decodeEntity = (str) => {
       if (!str) return "";
@@ -458,7 +465,7 @@ function extractOutcomeFromHrnHtml(html, raceNo = null) {
     // Pattern 1: Look for table-payouts tables and extract first 3 rows
     const payoutTablePattern = /<table[^>]*table-payouts[^>]*>[\s\S]*?<tbody>([\s\S]*?)<\/tbody>/gi;
     let tableMatch;
-    while ((tableMatch = payoutTablePattern.exec(html)) !== null) {
+    while ((tableMatch = payoutTablePattern.exec(targetHtml)) !== null) {
       const tbody = tableMatch[1];
       
       // Extract rows from this table - match: <tr>...<td>Horse Name (Speed)</td>...<td>Win</td>...<td>Place</td>...<td>Show</td>
@@ -523,7 +530,7 @@ function extractOutcomeFromHrnHtml(html, raceNo = null) {
     // This handles tables with explicit Finish/Position columns
     if (!outcome.win || !outcome.place || !outcome.show) {
       // Try to find a results table section
-      const tableSectionMatch = html.match(/<table[^>]*>[\s\S]{0,5000}?<\/table>/i);
+      const tableSectionMatch = targetHtml.match(/<table[^>]*>[\s\S]{0,5000}?<\/table>/i);
       if (tableSectionMatch) {
         const tableHtml = tableSectionMatch[0];
         
@@ -579,11 +586,10 @@ function extractOutcomeFromHrnHtml(html, raceNo = null) {
     if (!isValid(outcome.show)) outcome.show = "";
     
   } catch (err) {
-    console.error("[extractOutcomeFromHrnHtml] Parse error:", err);
-    // Return empty outcome on error
+    console.error("[extractOutcomeFromHrnHtml] Parse error:", err.message || err);
+    // Return empty outcome on error - never throw
+    return { win: "", place: "", show: "" };
   }
-  
-  return outcome;
 }
 
 /**
