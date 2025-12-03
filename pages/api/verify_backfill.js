@@ -174,24 +174,29 @@ async function runVerifyBackfill({ races, dryRun = true }) {
   
   // Persist results to Redis if not dry run
   if (!dryRun) {
-    const { writeToRedis, writeAuditLog } = await import("../../utils/finishline/backfill_helpers.js");
-    const today = new Date().toISOString().slice(0, 10);
-    
-    for (const resultEntry of results) {
-      try {
-        await writeToRedis(resultEntry);
-        await writeAuditLog(today, {
-          type: "verify_backfill_api",
-          track: resultEntry.track,
-          date: resultEntry.date,
-          raceNo: resultEntry.raceNo,
-          ok: resultEntry.ok,
-          step: resultEntry.step,
-          hasOutcome: !!(resultEntry.outcome.win || resultEntry.outcome.place || resultEntry.outcome.show),
-        });
-      } catch (err) {
-        console.error(`[verify_backfill] Error persisting result:`, err);
+    try {
+      const { writeToRedis, writeAuditLog } = await import("../../utils/finishline/backfill_helpers.js");
+      const today = new Date().toISOString().slice(0, 10);
+      
+      for (const resultEntry of results) {
+        try {
+          await writeToRedis(resultEntry);
+          await writeAuditLog(today, {
+            type: "verify_backfill_api",
+            track: resultEntry.track,
+            date: resultEntry.date,
+            raceNo: resultEntry.raceNo,
+            ok: resultEntry.ok,
+            step: resultEntry.step,
+            hasOutcome: !!(resultEntry.outcome.win || resultEntry.outcome.place || resultEntry.outcome.show),
+          });
+        } catch (err) {
+          console.error(`[verify_backfill] Error persisting result:`, err);
+        }
       }
+    } catch (importErr) {
+      console.error(`[verify_backfill] Error importing persistence helpers:`, importErr);
+      // Continue without persistence - don't fail the request
     }
   }
   
@@ -312,6 +317,10 @@ export default async function handler(req, res) {
         step: results[0].step,
         outcome: results[0].outcome,
       } : null,
+      debug: {
+        backendVersion: "verify_backfill_v1",
+        handlerFile: "pages/api/verify_backfill.js",
+      },
     };
     
     // Add a brief summary string for UI display
@@ -335,6 +344,10 @@ export default async function handler(req, res) {
       successes: 0,
       failures: 0,
       error: String(err && err.message ? err.message : err),
+      debug: {
+        backendVersion: "verify_backfill_v1",
+        handlerFile: "pages/api/verify_backfill.js",
+      },
     });
   }
 }
