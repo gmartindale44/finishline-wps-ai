@@ -559,7 +559,7 @@ function extractOutcomeFromHrnHtml(html, raceNo = null) {
     // Pattern 3: Look for "Win:", "Place:", "Show:" text patterns in payout sections
     if (!outcome.win || !outcome.place || !outcome.show) {
       // Look for payout table or results summary
-      const payoutSection = html.match(/(?:payout|results|finish)[\s\S]{0,2000}?(?:win|place|show)[\s\S]{0,2000}?/i);
+      const payoutSection = targetHtml.match(/(?:payout|results|finish)[\s\S]{0,2000}?(?:win|place|show)[\s\S]{0,2000}?/i);
       if (payoutSection) {
         const section = payoutSection[0];
         
