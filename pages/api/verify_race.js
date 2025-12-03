@@ -1032,6 +1032,7 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
   let hrnUrl = null;
   let hrnOutcome = null;
   let hrnParseError = null;
+  let equibaseDebug = {}; // Store Equibase debug info for later merge
   
   try {
     const res = await fetch(googleUrl, {
@@ -1102,24 +1103,20 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
                 
                 // HRN failed, try Equibase fallback (no-op in stub mode, just for debug info)
                 if (safeTrack && usingDate && raceNoStr) {
-                  let equibaseDebug = {};
                   try {
-                    const { outcome: eqOutcome, debugExtras } = await tryEquibaseFallback(safeTrack, usingDate, raceNoStr, debug);
+                    const { outcome: eqOutcome, debugExtras } = await tryEquibaseFallback(safeTrack, usingDate, raceNoStr, {});
                     if (debugExtras) {
-                      equibaseDebug = debugExtras;
+                      equibaseDebug = { ...equibaseDebug, ...debugExtras };
                     }
                     // DO NOT override the main outcome here in stub mode;
                     // stub is google-only, this is just extra debug.
                   } catch (err) {
                     // absolutely never throw from stub because of Equibase
                     equibaseDebug = {
+                      ...equibaseDebug,
                       equibaseAttempted: false,
                       equibaseParseError: String(err && err.message ? err.message : err),
                     };
-                  }
-                  // Merge equibaseDebug into debug but do NOT change step or ok based on Equibase in stub mode
-                  if (Object.keys(equibaseDebug).length > 0) {
-                    debug = { ...debug, ...equibaseDebug };
                   }
                 }
               }
@@ -1128,24 +1125,20 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
               
               // HRN fetch failed, try Equibase fallback (no-op in stub mode, just for debug info)
               if (safeTrack && usingDate && raceNoStr) {
-                let equibaseDebug = {};
                 try {
-                  const { outcome: eqOutcome, debugExtras } = await tryEquibaseFallback(safeTrack, usingDate, raceNoStr, debug);
+                  const { outcome: eqOutcome, debugExtras } = await tryEquibaseFallback(safeTrack, usingDate, raceNoStr, {});
                   if (debugExtras) {
-                    equibaseDebug = debugExtras;
+                    equibaseDebug = { ...equibaseDebug, ...debugExtras };
                   }
                   // DO NOT override the main outcome here in stub mode;
                   // stub is google-only, this is just extra debug.
                 } catch (err) {
                   // absolutely never throw from stub because of Equibase
                   equibaseDebug = {
+                    ...equibaseDebug,
                     equibaseAttempted: false,
                     equibaseParseError: String(err && err.message ? err.message : err),
                   };
-                }
-                // Merge equibaseDebug into debug but do NOT change step or ok based on Equibase in stub mode
-                if (Object.keys(equibaseDebug).length > 0) {
-                  debug = { ...debug, ...equibaseDebug };
                 }
               }
             }
@@ -1251,6 +1244,11 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
   
   if (hrnParseError) {
     debug.hrnParseError = hrnParseError;
+  }
+  
+  // Merge Equibase debug info if it was collected (from no-op fallback in stub mode)
+  if (equibaseDebug && Object.keys(equibaseDebug).length > 0) {
+    Object.assign(debug, equibaseDebug);
   }
   
   // Store googleHtml in debug for potential future use (but don't send it in response to avoid bloat)
