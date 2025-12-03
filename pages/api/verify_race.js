@@ -198,6 +198,70 @@ function decodeHtmlEntities(text) {
     .replace(/&gt;/gi, ">");
 }
 
+/**
+ * Build summary text from outcome, date, step, and query
+ * Safe helper that never throws
+ * @param {object} params - { date, uiDateRaw, outcome, step, query }
+ * @returns {string} - Formatted summary text
+ */
+function buildSummary({ date, uiDateRaw, outcome, step, query }) {
+  try {
+    const lines = [];
+    
+    // UI date line
+    if (uiDateRaw && typeof uiDateRaw === "string") {
+      lines.push(`UI date: ${uiDateRaw}`);
+    }
+    
+    // Using date line
+    if (date && typeof date === "string") {
+      lines.push(`Using date: ${date}`);
+    }
+    
+    // Step line
+    if (step && typeof step === "string") {
+      lines.push(`Step: ${step}`);
+    }
+    
+    // Query line
+    if (query && typeof query === "string") {
+      lines.push(`Query: ${query}`);
+    }
+    
+    // Outcome section
+    lines.push("");
+    lines.push("Outcome:");
+    
+    const win = (outcome && outcome.win && typeof outcome.win === "string") ? outcome.win.trim() : "";
+    const place = (outcome && outcome.place && typeof outcome.place === "string") ? outcome.place.trim() : "";
+    const show = (outcome && outcome.show && typeof outcome.show === "string") ? outcome.show.trim() : "";
+    
+    if (win) {
+      lines.push(`  Win: ${win}`);
+    } else {
+      lines.push(`  Win: -`);
+    }
+    
+    if (place) {
+      lines.push(`  Place: ${place}`);
+    } else {
+      lines.push(`  Place: -`);
+    }
+    
+    if (show) {
+      lines.push(`  Show: ${show}`);
+    } else {
+      lines.push(`  Show: -`);
+    }
+    
+    return lines.join("\n");
+  } catch (err) {
+    console.error("[buildSummary] Error building summary:", err);
+    // Return a minimal safe summary
+    return `Step: ${step || "unknown"}\nOutcome:\n  Win: -\n  Place: -\n  Show: -`;
+  }
+}
+
 // ACTIVE handler for /api/verify_race is: pages/api/verify_race.js
 const HANDLER_FILE = "pages/api/verify_race.js";
 const BACKEND_VERSION = "verify_v4_hrn_equibase";
@@ -1116,14 +1180,20 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
     top3Hit,
   };
 
-  // Build base summary using helper
-  const baseSummary = buildSummary({
-    date: usingDate,
-    uiDateRaw: ctx.debug?.uiDateRaw,
-    outcome,
-    step,
-    query,
-  });
+  // Build base summary using helper (wrapped in try/catch for safety)
+  let baseSummary = "";
+  try {
+    baseSummary = buildSummary({
+      date: usingDate,
+      uiDateRaw: ctx.debug?.uiDateRaw,
+      outcome,
+      step,
+      query,
+    });
+  } catch (err) {
+    console.error("[buildStubResponse] Error building summary:", err);
+    baseSummary = `Step: ${step || "unknown"}\nOutcome:\n  Win: ${outcome.win || "-"}\n  Place: ${outcome.place || "-"}\n  Show: ${outcome.show || "-"}`;
+  }
   
   // Append predicted and hits info
   const summaryLines = baseSummary.split("\n");
@@ -1254,8 +1324,38 @@ export default async function handler(req, res) {
     const canonicalDateIso = canonicalizeDateFromClient(uiDateRaw);
 
     if (!canonicalDateIso) {
-      // If no valid date, respond with 400 instead of guessing "today"
-      return res.status(400).json({ ok: false, error: "Missing or invalid date" });
+      // If no valid date, respond with 200 JSON (not 400) to match our "never 500" policy
+      return res.status(200).json({
+        ok: false,
+        step: "verify_race_error",
+        error: "Missing or invalid date",
+        date: "",
+        track: track || "",
+        raceNo: raceNo || "",
+        query: "",
+        top: null,
+        outcome: { win: "", place: "", show: "" },
+        predicted: {
+          win: (predicted.win || "").trim(),
+          place: (predicted.place || "").trim(),
+          show: (predicted.show || "").trim(),
+        },
+        hits: {
+          winHit: false,
+          placeHit: false,
+          showHit: false,
+          top3Hit: false,
+        },
+        summary: "Error: Missing or invalid date",
+        debug: {
+          backendVersion: BACKEND_VERSION,
+          handlerFile: HANDLER_FILE,
+        },
+        responseMeta: {
+          handlerFile: HANDLER_FILE,
+          backendVersion: BACKEND_VERSION,
+        },
+      });
     }
     
     // Debug log (only in non-production to avoid noisy logs)
@@ -1308,7 +1408,48 @@ export default async function handler(req, res) {
         typeof fullResult !== "object" ||
         !fullResult.step
       ) {
-        throw new Error("Invalid full verify response structure");
+        // Don't throw - return a safe error response instead
+        console.error("[verify_race] Invalid full verify response structure", {
+          fullResult,
+          track,
+          date: canonicalDateIso,
+          raceNo,
+        });
+        const errorResponse = {
+          ok: false,
+          step: "verify_race_full_fallback",
+          date: canonicalDateIso,
+          track: track || "",
+          raceNo: raceNo || "",
+          query: "",
+          top: null,
+          outcome: { win: "", place: "", show: "" },
+          predicted: {
+            win: (predicted.win || "").trim(),
+            place: (predicted.place || "").trim(),
+            show: (predicted.show || "").trim(),
+          },
+          hits: {
+            winHit: false,
+            placeHit: false,
+            showHit: false,
+            top3Hit: false,
+          },
+          summary: "Full parser returned invalid response structure. Using fallback.",
+          debug: {
+            backendVersion: BACKEND_VERSION,
+            handlerFile: HANDLER_FILE,
+            fullError: "Invalid full verify response structure",
+          },
+        };
+        await logVerifyResult(errorResponse).catch(() => {}); // Ignore logging errors
+        return res.status(200).json({
+          ...errorResponse,
+          responseMeta: {
+            handlerFile: HANDLER_FILE,
+            backendVersion: BACKEND_VERSION,
+          },
+        });
       }
 
       // Import validation helper
@@ -1342,7 +1483,14 @@ export default async function handler(req, res) {
             ...fullResult.debug,
             googleUrl:
               fullResult.debug?.googleUrl ||
-              buildGoogleSearchUrl({ track, date: canonicalDateIso, raceNo }).url,
+              (() => {
+                try {
+                  return buildGoogleSearchUrl({ track, date: canonicalDateIso, raceNo }).url;
+                } catch (err) {
+                  console.error("[verify_race] Error building Google URL:", err);
+                  return "";
+                }
+              })(),
           },
         };
 
@@ -1379,13 +1527,18 @@ export default async function handler(req, res) {
             fallbackResult.ok = true;
             fallbackResult.step = "verify_race_fallback_hrn";
             // Rebuild summary with final outcome
-            fallbackResult.summary = buildSummary({
-              date: fallbackResult.date || canonicalDateIso,
-              uiDateRaw: fallbackResult.debug?.uiDateRaw,
-              outcome: fallbackResult.outcome,
-              step: fallbackResult.step,
-              query: fallbackResult.query,
-            });
+            try {
+              fallbackResult.summary = buildSummary({
+                date: fallbackResult.date || canonicalDateIso,
+                uiDateRaw: fallbackResult.debug?.uiDateRaw,
+                outcome: fallbackResult.outcome,
+                step: fallbackResult.step,
+                query: fallbackResult.query,
+              });
+            } catch (err) {
+              console.error("[verify_race] Error rebuilding summary:", err);
+              fallbackResult.summary = fallbackResult.summary || `Step: ${fallbackResult.step || "unknown"}`;
+            }
           } else {
             // HRN failed, try Equibase fallback
             const { outcome: equibaseOutcome, debugExtras: equibaseDebug } = await tryEquibaseFallback(track, canonicalDateIso, canonicalRaceNo, fallbackResult.debug);
@@ -1424,13 +1577,18 @@ export default async function handler(req, res) {
               }
               
               // Rebuild summary with final outcome
-              fallbackResult.summary = buildSummary({
-                date: fallbackResult.date || canonicalDateIso,
-                uiDateRaw: fallbackResult.debug?.uiDateRaw,
-                outcome: fallbackResult.outcome,
-                step: fallbackResult.step,
-                query: fallbackResult.query,
-              });
+              try {
+                fallbackResult.summary = buildSummary({
+                  date: fallbackResult.date || canonicalDateIso,
+                  uiDateRaw: fallbackResult.debug?.uiDateRaw,
+                  outcome: fallbackResult.outcome,
+                  step: fallbackResult.step,
+                  query: fallbackResult.query,
+                });
+              } catch (err) {
+                console.error("[verify_race] Error rebuilding summary:", err);
+                fallbackResult.summary = fallbackResult.summary || `Step: ${fallbackResult.step || "unknown"}`;
+              }
             }
           }
         }
@@ -1474,13 +1632,18 @@ export default async function handler(req, res) {
           fallbackStub.ok = true;
           fallbackStub.step = "verify_race_fallback_hrn";
           // Rebuild summary with final outcome
-          fallbackStub.summary = buildSummary({
-            date: fallbackStub.date || canonicalDateIso,
-            uiDateRaw: fallbackStub.debug?.uiDateRaw,
-            outcome: fallbackStub.outcome,
-            step: fallbackStub.step,
-            query: fallbackStub.query,
-          });
+          try {
+            fallbackStub.summary = buildSummary({
+              date: fallbackStub.date || canonicalDateIso,
+              uiDateRaw: fallbackStub.debug?.uiDateRaw,
+              outcome: fallbackStub.outcome,
+              step: fallbackStub.step,
+              query: fallbackStub.query,
+            });
+          } catch (err) {
+            console.error("[verify_race] Error rebuilding summary:", err);
+            fallbackStub.summary = fallbackStub.summary || `Step: ${fallbackStub.step || "unknown"}`;
+          }
         } else {
           // HRN failed, try Equibase fallback
           const { outcome: equibaseOutcome, debugExtras: equibaseDebug } = await tryEquibaseFallback(track, canonicalDateIso, canonicalRaceNo, fallbackStub.debug);
@@ -1519,13 +1682,18 @@ export default async function handler(req, res) {
             }
             
             // Rebuild summary with final outcome
-            fallbackStub.summary = buildSummary({
-              date: fallbackStub.date || canonicalDateIso,
-              uiDateRaw: fallbackStub.debug?.uiDateRaw,
-              outcome: fallbackStub.outcome,
-              step: fallbackStub.step,
-              query: fallbackStub.query,
-            });
+            try {
+              fallbackStub.summary = buildSummary({
+                date: fallbackStub.date || canonicalDateIso,
+                uiDateRaw: fallbackStub.debug?.uiDateRaw,
+                outcome: fallbackStub.outcome,
+                step: fallbackStub.step,
+                query: fallbackStub.query,
+              });
+            } catch (err) {
+              console.error("[verify_race] Error rebuilding summary:", err);
+              fallbackStub.summary = fallbackStub.summary || `Step: ${fallbackStub.step || "unknown"}`;
+            }
           }
         }
       }
@@ -1575,13 +1743,18 @@ export default async function handler(req, res) {
           errorStub.ok = true;
           errorStub.step = "verify_race_fallback_hrn";
           // Rebuild summary with final outcome
-          errorStub.summary = buildSummary({
-            date: errorStub.date || canonicalDateIso,
-            uiDateRaw: errorStub.debug?.uiDateRaw,
-            outcome: errorStub.outcome,
-            step: errorStub.step,
-            query: errorStub.query,
-          });
+          try {
+            errorStub.summary = buildSummary({
+              date: errorStub.date || canonicalDateIso,
+              uiDateRaw: errorStub.debug?.uiDateRaw,
+              outcome: errorStub.outcome,
+              step: errorStub.step,
+              query: errorStub.query,
+            });
+          } catch (err) {
+            console.error("[verify_race] Error rebuilding summary:", err);
+            errorStub.summary = errorStub.summary || `Step: ${errorStub.step || "unknown"}`;
+          }
         } else {
           // HRN failed, try Equibase fallback
           const { outcome: equibaseOutcome, debugExtras: equibaseDebug } = await tryEquibaseFallback(track, canonicalDateIso, canonicalRaceNo, errorStub.debug);
@@ -1620,13 +1793,18 @@ export default async function handler(req, res) {
             }
             
             // Rebuild summary with final outcome
-            errorStub.summary = buildSummary({
-              date: errorStub.date || canonicalDateIso,
-              uiDateRaw: errorStub.debug?.uiDateRaw,
-              outcome: errorStub.outcome,
-              step: errorStub.step,
-              query: errorStub.query,
-            });
+            try {
+              errorStub.summary = buildSummary({
+                date: errorStub.date || canonicalDateIso,
+                uiDateRaw: errorStub.debug?.uiDateRaw,
+                outcome: errorStub.outcome,
+                step: errorStub.step,
+                query: errorStub.query,
+              });
+            } catch (err) {
+              console.error("[verify_race] Error rebuilding summary:", err);
+              errorStub.summary = errorStub.summary || `Step: ${errorStub.step || "unknown"}`;
+            }
           }
         }
       }
