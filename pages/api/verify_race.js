@@ -610,11 +610,11 @@ function extractOutcomeFromHrnHtml(html, raceNo = null) {
         // HRN structure: [0] = Horse Name (Speed), [1] = empty/image, [2] = Win, [3] = Place, [4] = Show
         if (cells.length >= 5) {
           const horseNameRaw = cells[0];
-          // Extract horse name (remove speed figure in parentheses like "(92*)")
+          // Extract horse name (remove speed figure in parentheses like "(92*)" or "(89*)")
           const horseName = horseNameRaw.replace(/\s*\([^)]+\)\s*$/, "").trim();
-          const winPayout = cells[2] || "";
-          const placePayout = cells[3] || "";
-          const showPayout = cells[4] || "";
+          const winPayout = (cells[2] || "").trim();
+          const placePayout = (cells[3] || "").trim();
+          const showPayout = (cells[4] || "").trim();
           
           if (isValid(horseName)) {
             rows.push({ horseName, winPayout, placePayout, showPayout });
@@ -622,14 +622,24 @@ function extractOutcomeFromHrnHtml(html, raceNo = null) {
         }
       }
       
-      // First row with Win payout (not "-" and not empty) is the winner
+      // First row with Win payout (not "-" or "--" and not empty) is the winner
       // Second row is place, third row is show
-      if (rows.length >= 1 && rows[0].winPayout && rows[0].winPayout !== "-" && rows[0].winPayout && !outcome.win) {
+      // Check if first row has a valid win payout (starts with $ or is a number)
+      const firstRowHasWin = rows.length >= 1 && 
+        rows[0].winPayout && 
+        rows[0].winPayout !== "-" && 
+        rows[0].winPayout !== "--" &&
+        rows[0].winPayout.trim() !== "" &&
+        (rows[0].winPayout.startsWith("$") || /^\d/.test(rows[0].winPayout));
+      
+      if (firstRowHasWin && !outcome.win) {
         outcome.win = rows[0].horseName;
       }
+      // Place is always the second row (even if win payout is "-")
       if (rows.length >= 2 && !outcome.place) {
         outcome.place = rows[1].horseName;
       }
+      // Show is always the third row
       if (rows.length >= 3 && !outcome.show) {
         outcome.show = rows[2].horseName;
       }
