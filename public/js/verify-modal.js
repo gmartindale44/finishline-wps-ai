@@ -865,6 +865,8 @@ async function refreshGreenZone(host, ctx) {
         
         // Declare backfillCtx outside try block so it's accessible in finally
         let backfillCtx = null;
+        // Declare verifyData outside try block so it's accessible throughout
+        let verifyData = null;
         
         try {
           const track = (trackInputEl?.value || "").trim();
@@ -978,7 +980,7 @@ async function refreshGreenZone(host, ctx) {
             body: JSON.stringify(payload),
           });
           
-          const data = await resp.json().catch(() => ({}));
+          verifyData = await resp.json().catch(() => ({}));
           
           // Build summary payload with date and error info
           const baseSummary = {};
@@ -988,19 +990,19 @@ async function refreshGreenZone(host, ctx) {
           }
           
           const summaryPayload = resp.ok
-            ? { ...baseSummary, ...data }
+            ? { ...baseSummary, ...verifyData }
             : {
                 ...baseSummary,
-                ...data,
+                ...verifyData,
                 error:
-                  data && data.error
-                    ? data.error
+                  verifyData && verifyData.error
+                    ? verifyData.error
                     : `Request failed (${resp.status})`,
                 details:
-                  data && (data.details || data.message)
-                    ? data.details || data.message
+                  verifyData && (verifyData.details || verifyData.message)
+                    ? verifyData.details || verifyData.message
                     : null,
-                step: data && data.step ? data.step : "verify_race",
+                step: verifyData && verifyData.step ? verifyData.step : "verify_race",
               };
           
           if (statusNode) {
@@ -1011,8 +1013,8 @@ async function refreshGreenZone(host, ctx) {
           }
           
           host.__flvLast = {
-            top: data?.top || null,
-            query: data?.query || "",
+            top: verifyData?.top || null,
+            query: verifyData?.query || "",
           };
           
           renderSummary(summaryEl, summaryPayload);
@@ -1022,11 +1024,11 @@ async function refreshGreenZone(host, ctx) {
             try {
               const existing = JSON.parse(debugEl.textContent || "[]");
               const arr = Array.isArray(existing) ? existing : [];
-              arr.unshift({ request: { track, raceNo, date: canonicalDate, dateRaw: uiDateRaw }, response: data });
+              arr.unshift({ request: { track, raceNo, date: canonicalDate, dateRaw: uiDateRaw }, response: verifyData });
               debugEl.textContent = JSON.stringify(arr.slice(0, 5), null, 2);
             } catch {
               debugEl.textContent = JSON.stringify(
-                [{ request: { track, raceNo, date: canonicalDate, dateRaw: uiDateRaw }, response: data }],
+                [{ request: { track, raceNo, date: canonicalDate, dateRaw: uiDateRaw }, response: verifyData }],
                 null,
                 2
               );
@@ -1053,6 +1055,15 @@ async function refreshGreenZone(host, ctx) {
           runBtnEl.disabled = false;
           runBtnEl.textContent = defaultLabel;
           refreshGreenZone(host);
+          
+          // Optional: log verify response summary if available
+          if (verifyData) {
+            console.log("[verify_modal] verifyData summary", {
+              ok: verifyData.ok,
+              step: verifyData.step,
+            });
+          }
+          
           // Run backfill with the captured race context (if available)
           // backfillCtx is only set if we successfully built the payload
           try {
