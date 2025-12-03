@@ -1185,7 +1185,7 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
   try {
     baseSummary = buildSummary({
       date: usingDate,
-      uiDateRaw: ctx.debug?.uiDateRaw,
+      uiDateRaw: null, // buildStubResponse doesn't receive ctx, so uiDateRaw is not available here
       outcome,
       step,
       query,
@@ -1262,7 +1262,7 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
     },
     predicted: predictedNormalized,
     hits,
-    summary: finalSummary,
+    summary: summary,
     debug,
     responseMeta: {
       handlerFile: HANDLER_FILE,
