@@ -863,6 +863,9 @@ async function refreshGreenZone(host, ctx) {
         evt.preventDefault();
         evt.stopPropagation();
         
+        // Declare backfillCtx outside try block so it's accessible in finally
+        let backfillCtx = null;
+        
         try {
           const track = (trackInputEl?.value || "").trim();
           const raceNo =
@@ -948,7 +951,7 @@ async function refreshGreenZone(host, ctx) {
           console.log("[VERIFY_UI] outgoing payload", payload);
           
           // Capture context for backfill (available in finally block)
-          const backfillCtx = {
+          backfillCtx = {
             track,
             raceNo,
             date: canonicalDate,
@@ -1053,7 +1056,7 @@ async function refreshGreenZone(host, ctx) {
           // Run backfill with the captured race context (if available)
           // backfillCtx is only set if we successfully built the payload
           try {
-            if (typeof backfillCtx !== "undefined" && backfillCtx.track && backfillCtx.date) {
+            if (backfillCtx && backfillCtx.track && backfillCtx.date) {
               runVerifyBackfill(backfillCtx).catch(() => {
                 // Silently ignore backfill errors - it's a background operation
               });
