@@ -76,11 +76,14 @@ function normalizeSingleRace(input, fallback = {}) {
   const track =
     coerceString(input.track) ||
     coerceString(input.trackName) ||
+    coerceString(input.track_label) ||
     coerceString(fallback.track);
 
   const raceNo =
     coerceString(input.raceNo) ||
     coerceString(input.race) ||
+    coerceString(input.raceNumber) ||
+    coerceString(input.raceNum) ||
     coerceString(fallback.raceNo);
 
   // We try to keep both dateRaw and dateIso if the caller provides them.
@@ -118,11 +121,28 @@ function normalizeSingleRace(input, fallback = {}) {
  */
 function extractRacesFromBody(body, maxRaces) {
   const races = [];
+  // Try both top-level fields and a nested "ctx" object (for future-proofing).
+  const ctx = body.ctx && typeof body.ctx === "object" ? body.ctx : {};
+
   const fallback = {
-    track: coerceString(body.track),
-    raceNo: coerceString(body.raceNo || body.race),
-    dateRaw: coerceString(body.dateRaw || body.date),
-    dateIso: coerceString(body.dateIso),
+    track:
+      coerceString(body.track) ||
+      coerceString(body.trackName) ||
+      coerceString(ctx.track) ||
+      coerceString(ctx.trackName),
+    raceNo:
+      coerceString(body.raceNo || body.race) ||
+      coerceString(body.raceNumber) ||
+      coerceString(body.raceNum) ||
+      coerceString(ctx.raceNo || ctx.race) ||
+      coerceString(ctx.raceNumber) ||
+      coerceString(ctx.raceNum),
+    dateRaw:
+      coerceString(body.dateRaw || body.date) ||
+      coerceString(ctx.dateRaw || ctx.date),
+    dateIso:
+      coerceString(body.dateIso) ||
+      coerceString(ctx.dateIso),
   };
 
   if (Array.isArray(body.races)) {
@@ -136,6 +156,13 @@ function extractRacesFromBody(body, maxRaces) {
     if (normalized) races.push(normalized);
   } else {
     const normalized = normalizeSingleRace(body, fallback);
+    if (normalized) races.push(normalized);
+  }
+
+  // Extra defensive path: if we still have no races but there is a nested
+  // "request" inside something like { ctx: { request: {...} } }, try that too.
+  if (!races.length && ctx.request && typeof ctx.request === "object") {
+    const normalized = normalizeSingleRace(ctx.request, fallback);
     if (normalized) races.push(normalized);
   }
 
@@ -240,6 +267,22 @@ export default async function handler(req, res) {
   const races = extractRacesFromBody(body, maxRaces);
 
   if (!races.length) {
+    // Debug payload so we can see what the UI actually sent.
+    let bodyForDebug = normalizeBody(req);
+    let bodySample = null;
+    let bodyKeys = [];
+
+    try {
+      if (bodyForDebug && typeof bodyForDebug === "object") {
+        bodyKeys = Object.keys(bodyForDebug);
+        bodySample = JSON.stringify(bodyForDebug).slice(0, 1000);
+      } else if (typeof bodyForDebug === "string") {
+        bodySample = bodyForDebug.slice(0, 1000);
+      }
+    } catch {
+      bodySample = "[unserializable body]";
+    }
+
     return res.status(200).json({
       ok: false,
       step: "verify_backfill",
@@ -249,6 +292,10 @@ export default async function handler(req, res) {
       successes: 0,
       failures: 0,
       results: [],
+      debug: {
+        bodyKeys,
+        bodySample,
+      },
     });
   }
 
