@@ -352,9 +352,11 @@ function splitHrnHtmlIntoRaceBlocks(html) {
     }
     
     // For each table, look backwards for the closest "Race N" marker
+    // Also look at the table content itself to infer race number
     for (let i = 0; i < tableMatches.length; i++) {
       const tableStart = tableMatches[i].index;
-      const beforeTable = html.substring(Math.max(0, tableStart - 5000), tableStart);
+      // Look further back (up to 15000 chars) to find race markers
+      const beforeTable = html.substring(Math.max(0, tableStart - 15000), tableStart);
       
       // Find the closest "Race N" before this table (case-insensitive)
       const racePattern = /Race\s+(\d+)/gi;
@@ -376,6 +378,16 @@ function splitHrnHtmlIntoRaceBlocks(html) {
           tableIndex: i,
           tableStart: tableStart
         });
+      } else {
+        // Fallback: if no race marker found, try to infer from table order
+        // Table 0 = Race 1, Table 1 = Race 2, etc. (only if we have multiple tables)
+        if (tableMatches.length > 1) {
+          blocks.push({
+            raceNo: String(i + 1), // First table is Race 1, second is Race 2, etc.
+            tableIndex: i,
+            tableStart: tableStart
+          });
+        }
       }
     }
   } catch (err) {
@@ -463,31 +475,53 @@ function extractOutcomeFromHrnHtml(html, raceNo = null) {
     // Horse names are in format: "Horse Name (Speed)" in the first <td>
     
     // Pattern 1: Look for table-payouts tables and extract first 3 rows
+    // HRN structure: <td>Horse Name (Speed)</td><td><img></td><td>Win</td><td>Place</td><td>Show</td>
     const payoutTablePattern = /<table[^>]*table-payouts[^>]*>[\s\S]*?<tbody>([\s\S]*?)<\/tbody>/gi;
     let tableMatch;
     while ((tableMatch = payoutTablePattern.exec(targetHtml)) !== null) {
       const tbody = tableMatch[1];
       
-      // Extract rows from this table - match: <tr>...<td>Horse Name (Speed)</td>...<td>Win</td>...<td>Place</td>...<td>Show</td>
-      const rowPattern = /<tr[^>]*>[\s\S]*?<td[^>]*>([^<]+(?:\([^)]+\))?)[\s\S]*?<td[^>]*>[\s\S]*?<td[^>]*>([^<]+)[\s\S]*?<td[^>]*>([^<]+)[\s\S]*?<td[^>]*>([^<]+)/gi;
+      // Extract all TRs and parse TDs more generically
+      const trPattern = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
       const rows = [];
-      let rowMatch;
-      while ((rowMatch = rowPattern.exec(tbody)) !== null && rows.length < 3) {
-        const horseNameRaw = decodeEntity(rowMatch[1]);
-        // Extract horse name (remove speed figure in parentheses)
-        const horseName = horseNameRaw.replace(/\s*\([^)]+\)\s*$/, "").trim();
-        const winPayout = rowMatch[2].trim();
-        const placePayout = rowMatch[3].trim();
-        const showPayout = rowMatch[4].trim();
+      let trMatch;
+      while ((trMatch = trPattern.exec(tbody)) !== null && rows.length < 5) {
+        const rowHtml = trMatch[1];
         
-        if (isValid(horseName)) {
-          rows.push({ horseName, winPayout, placePayout, showPayout });
+        // Extract all TDs in this row
+        const tdPattern = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+        const cells = [];
+        let tdMatch;
+        while ((tdMatch = tdPattern.exec(rowHtml)) !== null) {
+          // Remove all HTML tags and decode entities
+          const cellContent = tdMatch[1]
+            .replace(/<[^>]+>/g, "")
+            .replace(/&amp;/g, "&")
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'")
+            .replace(/&nbsp;/g, " ")
+            .trim();
+          cells.push(cellContent);
+        }
+        
+        // HRN structure: [0] = Horse Name (Speed), [1] = empty/image, [2] = Win, [3] = Place, [4] = Show
+        if (cells.length >= 5) {
+          const horseNameRaw = cells[0];
+          // Extract horse name (remove speed figure in parentheses like "(92*)")
+          const horseName = horseNameRaw.replace(/\s*\([^)]+\)\s*$/, "").trim();
+          const winPayout = cells[2] || "";
+          const placePayout = cells[3] || "";
+          const showPayout = cells[4] || "";
+          
+          if (isValid(horseName)) {
+            rows.push({ horseName, winPayout, placePayout, showPayout });
+          }
         }
       }
       
-      // First row with Win payout (not "-") is the winner
+      // First row with Win payout (not "-" and not empty) is the winner
       // Second row is place, third row is show
-      if (rows.length >= 1 && rows[0].winPayout && rows[0].winPayout !== "-" && !outcome.win) {
+      if (rows.length >= 1 && rows[0].winPayout && rows[0].winPayout !== "-" && rows[0].winPayout && !outcome.win) {
         outcome.win = rows[0].horseName;
       }
       if (rows.length >= 2 && !outcome.place) {
