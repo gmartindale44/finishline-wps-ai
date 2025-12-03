@@ -280,13 +280,10 @@ async function tryEquibaseFallback(track, dateIso, raceNo, baseDebug = {}) {
   // Stub / no-op implementation for stub mode.
   // The full verify pipeline has its own real Equibase fallback;
   // this version is just to keep the stub path from erroring.
+  // Return minimal debug info - no error message needed in stub mode
   return {
     outcome: null,
-    debugExtras: {
-      equibaseAttempted: false,
-      equibaseUrl: null,
-      equibaseParseError: "Equibase fallback disabled in stub mode",
-    },
+    debugExtras: {},
   };
 }
 
@@ -327,86 +324,7 @@ async function tryHrnFallback(track, dateIso, raceNo, baseDebug = {}) {
     }
 
     const html = await res.text();
-    
-    // TEMPORARY: Deep debug diagnostics for Zia Park 2025-12-02 Race 2
-    // This helps diagnose why parsing fails in production but works locally
-    const isZiaParkDebugCase = track === "Zia Park" && dateIso === "2025-12-02" && String(raceNo) === "2";
-    const hasPayoutTable = typeof html === "string" && html.includes("table-payouts");
-    const shouldAddDiagnostics = isZiaParkDebugCase || !hasPayoutTable;
-    
-    if (shouldAddDiagnostics) {
-      debugExtras.hrnHtmlHasPayoutTable = hasPayoutTable;
-      debugExtras.hrnHtmlLength = typeof html === "string" ? html.length : null;
-      debugExtras.hrnHtmlFingerprint = typeof html === "string"
-        ? html.slice(0, 200).replace(/\s+/g, " ").trim()
-        : null;
-    }
-    
     const outcome = extractOutcomeFromHrnHtml(html, raceNo);
-    
-    // Capture the actual payout table HTML snippet for debugging
-    try {
-      let tableSnippet = null;
-      
-      if (html && typeof html === "string") {
-        // Use the same race selection logic as extractOutcomeFromHrnHtml
-        let targetTableHtml = null;
-        
-        if (raceNo !== null && raceNo !== undefined) {
-          const raceNoStr = String(raceNo || "").trim();
-          if (raceNoStr) {
-            // Try to find the matching race block
-            const blocks = splitHrnHtmlIntoRaceBlocks(html);
-            const matchingBlock = blocks.find(b => String(b.raceNo) === raceNoStr);
-            
-            if (matchingBlock) {
-              // Extract the matching table
-              const tablePattern = /<table[^>]*table-payouts[^>]*>[\s\S]*?<\/table>/gi;
-              const allTables = [];
-              let tableMatch;
-              while ((tableMatch = tablePattern.exec(html)) !== null) {
-                allTables.push({ index: tableMatch.index, html: tableMatch[0] });
-              }
-              
-              if (allTables[matchingBlock.tableIndex]) {
-                targetTableHtml = allTables[matchingBlock.tableIndex].html;
-              }
-            } else {
-              // No matching block found, use first table as fallback
-              const tablePattern = /<table[^>]*table-payouts[^>]*>[\s\S]*?<\/table>/gi;
-              const firstMatch = tablePattern.exec(html);
-              if (firstMatch) {
-                targetTableHtml = firstMatch[0];
-              }
-            }
-          }
-        } else {
-          // No raceNo provided, use first table
-          const tablePattern = /<table[^>]*table-payouts[^>]*>[\s\S]*?<\/table>/gi;
-          const firstMatch = tablePattern.exec(html);
-          if (firstMatch) {
-            targetTableHtml = firstMatch[0];
-          }
-        }
-        
-        if (targetTableHtml) {
-          // Normalize whitespace: collapse multiple spaces/newlines to single space
-          tableSnippet = targetTableHtml
-            .replace(/\s+/g, " ")
-            .trim();
-          
-          // Truncate to max 3000 characters
-          if (tableSnippet.length > 3000) {
-            tableSnippet = tableSnippet.substring(0, 3000) + "... [truncated]";
-          }
-        }
-      }
-      
-      debugExtras.hrnTableSnippet = tableSnippet || null;
-    } catch (snapshotErr) {
-      // Never throw - just capture the error in debug
-      debugExtras.hrnTableSnippet = `SNAPSHOT_ERROR: ${String(snapshotErr && snapshotErr.message ? snapshotErr.message : snapshotErr)}`;
-    }
     
     if (!outcome || (!outcome.win && !outcome.place && !outcome.show)) {
       debugExtras.hrnParseError = "No outcome parsed from HRN HTML";
@@ -1106,7 +1024,6 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
   let hrnUrl = null;
   let hrnOutcome = null;
   let hrnParseError = null;
-  let equibaseDebug = {}; // Store Equibase debug info for later merge
   
   try {
     const res = await fetch(googleUrl, {
@@ -1174,47 +1091,11 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
                 }
               } else {
                 hrnParseError = "No outcome parsed from HRN HTML";
-                
-                // HRN failed, try Equibase fallback (no-op in stub mode, just for debug info)
-                if (safeTrack && usingDate && raceNoStr) {
-                  try {
-                    const { outcome: eqOutcome, debugExtras } = await tryEquibaseFallback(safeTrack, usingDate, raceNoStr, {});
-                    if (debugExtras) {
-                      equibaseDebug = { ...equibaseDebug, ...debugExtras };
-                    }
-                    // DO NOT override the main outcome here in stub mode;
-                    // stub is google-only, this is just extra debug.
-                  } catch (err) {
-                    // absolutely never throw from stub because of Equibase
-                    equibaseDebug = {
-                      ...equibaseDebug,
-                      equibaseAttempted: false,
-                      equibaseParseError: String(err && err.message ? err.message : err),
-                    };
-                  }
-                }
+                // HRN failed - no Equibase fallback in stub mode
               }
             } else {
               hrnParseError = `HTTP ${hrnRes ? hrnRes.status : "unknown"}`;
-              
-              // HRN fetch failed, try Equibase fallback (no-op in stub mode, just for debug info)
-              if (safeTrack && usingDate && raceNoStr) {
-                try {
-                  const { outcome: eqOutcome, debugExtras } = await tryEquibaseFallback(safeTrack, usingDate, raceNoStr, {});
-                  if (debugExtras) {
-                    equibaseDebug = { ...equibaseDebug, ...debugExtras };
-                  }
-                  // DO NOT override the main outcome here in stub mode;
-                  // stub is google-only, this is just extra debug.
-                } catch (err) {
-                  // absolutely never throw from stub because of Equibase
-                  equibaseDebug = {
-                    ...equibaseDebug,
-                    equibaseAttempted: false,
-                    equibaseParseError: String(err && err.message ? err.message : err),
-                  };
-                }
-              }
+              // HRN fetch failed - no Equibase fallback in stub mode
             }
           } catch (hrnErr) {
             hrnParseError = String(hrnErr.message || hrnErr);
@@ -1304,25 +1185,22 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
   const hasOutcome = !!(outcome.win || outcome.place || outcome.show);
   const ok = hasOutcome || step === "verify_race_fallback_hrn" || step === "verify_race_fallback_hrn_partial";
   
-  // Build debug object - preserve all existing fields
+  // Build debug object - only lightweight fields
   const debug = {
     googleUrl,
     backendVersion: BACKEND_VERSION,
     handlerFile: HANDLER_FILE,
+    canonicalDateIso: usingDate,
   };
   
-  // Always include HRN debug info if we attempted it
+  // Include HRN debug info if we attempted it (lightweight fields only)
+  // Note: hrnRaceNo will be added by tryHrnFallback if called from full mode
   if (hrnUrl) {
     debug.hrnUrl = hrnUrl;
   }
   
   if (hrnParseError) {
     debug.hrnParseError = hrnParseError;
-  }
-  
-  // Merge Equibase debug info if it was collected (from no-op fallback in stub mode)
-  if (equibaseDebug && Object.keys(equibaseDebug).length > 0) {
-    Object.assign(debug, equibaseDebug);
   }
   
   // Store googleHtml in debug for potential future use (but don't send it in response to avoid bloat)
