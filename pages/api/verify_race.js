@@ -830,28 +830,17 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
     top3Hit,
   };
 
-  const summaryLines = [];
-  summaryLines.push(`Using date: ${usingDate || "(none)"}`);
-  summaryLines.push(`Step: ${step}`);
-  summaryLines.push(`Query: ${query}`);
-  summaryLines.push(`Top Result: Google search (see Open Top Result button).`);
-
-  // Display outcome in format: "Outcome: <win> / <place> / <show>"
-  if (outcome && outcome.win && outcome.place && outcome.show) {
-    // All three extracted successfully
-    summaryLines.push(`Outcome: ${outcome.win} / ${outcome.place} / ${outcome.show}`);
-  } else if (outcome && (outcome.win || outcome.place || outcome.show)) {
-    // Partial extraction - show what we have
-    const win = outcome.win || "(none)";
-    const place = outcome.place || "(none)";
-    const show = outcome.show || "(none)";
-    summaryLines.push(`Outcome: ${win} / ${place} / ${show}`);
-  } else {
-    // No extraction
-    summaryLines.push("Outcome: (none)");
-  }
-
-  // Show predicted values
+  // Build base summary using helper
+  const baseSummary = buildSummary({
+    date: usingDate,
+    uiDateRaw: ctx.debug?.uiDateRaw,
+    outcome,
+    step,
+    query,
+  });
+  
+  // Append predicted and hits info
+  const summaryLines = baseSummary.split("\n");
   const predictedParts = [predictedNormalized.win, predictedNormalized.place, predictedNormalized.show].filter(Boolean);
   if (predictedParts.length) {
     summaryLines.push(`Predicted: ${predictedParts.join(" / ")}`);
@@ -874,14 +863,7 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
     );
   }
 
-  // Use buildSummary helper to ensure consistent format
-  const summary = buildSummary({
-    date: usingDate,
-    uiDateRaw: ctx.debug?.uiDateRaw,
-    outcome,
-    step,
-    query,
-  });
+  const summary = summaryLines.join("\n");
 
   // Determine ok status: true if we have at least one outcome field
   const hasOutcome = !!(outcome.win || outcome.place || outcome.show);
