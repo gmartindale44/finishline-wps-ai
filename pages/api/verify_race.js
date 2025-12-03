@@ -239,6 +239,21 @@ async function tryHrnFallback(track, dateIso, raceNo, baseDebug = {}) {
     }
 
     const html = await res.text();
+    
+    // TEMPORARY: Deep debug diagnostics for Zia Park 2025-12-02 Race 2
+    // This helps diagnose why parsing fails in production but works locally
+    const isZiaParkDebugCase = track === "Zia Park" && dateIso === "2025-12-02" && String(raceNo) === "2";
+    const hasPayoutTable = typeof html === "string" && html.includes("table-payouts");
+    const shouldAddDiagnostics = isZiaParkDebugCase || !hasPayoutTable;
+    
+    if (shouldAddDiagnostics) {
+      debugExtras.hrnHtmlHasPayoutTable = hasPayoutTable;
+      debugExtras.hrnHtmlLength = typeof html === "string" ? html.length : null;
+      debugExtras.hrnHtmlFingerprint = typeof html === "string"
+        ? html.slice(0, 200).replace(/\s+/g, " ").trim()
+        : null;
+    }
+    
     const outcome = extractOutcomeFromHrnHtml(html, raceNo);
     
     if (!outcome || (!outcome.win && !outcome.place && !outcome.show)) {
