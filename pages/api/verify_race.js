@@ -209,10 +209,11 @@ const BACKEND_VERSION = "verify_v3_hrn_debug";
  * @param {object} baseDebug - Existing debug object (may contain googleHtml)
  * @returns {{ outcome: object|null, debugExtras: object }}
  */
-async function tryHrnFallback(track, dateIso, baseDebug = {}) {
+async function tryHrnFallback(track, dateIso, raceNo, baseDebug = {}) {
   const debugExtras = {};
   try {
     debugExtras.hrnAttempted = true;
+    debugExtras.hrnRaceNo = raceNo ? String(raceNo).trim() : null;
 
     const hrnUrlFromGoogle = baseDebug.googleHtml ? extractHrnUrlFromGoogleHtml(baseDebug.googleHtml) : null;
     const hrnUrl = hrnUrlFromGoogle || buildHrnUrl(track, dateIso);
@@ -238,7 +239,7 @@ async function tryHrnFallback(track, dateIso, baseDebug = {}) {
     }
 
     const html = await res.text();
-    const outcome = extractOutcomeFromHrnHtml(html);
+    const outcome = extractOutcomeFromHrnHtml(html, raceNo);
     
     if (!outcome || (!outcome.win && !outcome.place && !outcome.show)) {
       debugExtras.hrnParseError = "No outcome parsed from HRN HTML";
@@ -330,16 +331,93 @@ function buildHrnUrl(track, date) {
 }
 
 /**
+ * Split HRN HTML into race blocks by finding sections that contain "Race N" followed by a payout table
+ * @param {string} html - Full HRN page HTML
+ * @returns {Array<{ raceNo: string, html: string, tableIndex: number }>}
+ */
+function splitHrnHtmlIntoRaceBlocks(html) {
+  const blocks = [];
+  
+  if (!html || typeof html !== "string") {
+    return blocks;
+  }
+  
+  // Find all table-payouts tables
+  const tablePattern = /<table[^>]*table-payouts[^>]*>/gi;
+  const tableMatches = [];
+  let match;
+  while ((match = tablePattern.exec(html)) !== null) {
+    tableMatches.push({ index: match.index, fullMatch: match[0] });
+  }
+  
+  // For each table, look backwards for the closest "Race N" marker
+  for (let i = 0; i < tableMatches.length; i++) {
+    const tableStart = tableMatches[i].index;
+    const beforeTable = html.substring(Math.max(0, tableStart - 5000), tableStart);
+    
+    // Find the closest "Race N" before this table (case-insensitive)
+    const racePattern = /Race\s+(\d+)/gi;
+    const raceMatches = [];
+    let raceMatch;
+    while ((raceMatch = racePattern.exec(beforeTable)) !== null) {
+      raceMatches.push({
+        raceNo: raceMatch[1],
+        index: raceMatch.index,
+        distance: beforeTable.length - raceMatch.index
+      });
+    }
+    
+    // Use the last (closest) race match before the table
+    if (raceMatches.length > 0) {
+      const closestRace = raceMatches[raceMatches.length - 1];
+      blocks.push({
+        raceNo: closestRace.raceNo,
+        tableIndex: i,
+        tableStart: tableStart
+      });
+    }
+  }
+  
+  return blocks;
+}
+
+/**
  * Extract Win/Place/Show from HRN entries-results HTML
  * Parses the finish order table to find horses in positions 1, 2, 3
  * @param {string} html - HRN page HTML
+ * @param {string|number} raceNo - Race number to target (optional, defaults to first table)
  * @returns {{ win: string, place: string, show: string }}
  */
-function extractOutcomeFromHrnHtml(html) {
+function extractOutcomeFromHrnHtml(html, raceNo = null) {
   const outcome = { win: "", place: "", show: "" };
   
   if (!html || typeof html !== "string") {
     return outcome;
+  }
+  
+  // If raceNo is provided, try to find the matching race block
+  let targetHtml = html;
+  if (raceNo !== null && raceNo !== undefined) {
+    const raceNoStr = String(raceNo).trim();
+    const blocks = splitHrnHtmlIntoRaceBlocks(html);
+    
+    // Find the block matching the requested race
+    const matchingBlock = blocks.find(b => String(b.raceNo) === raceNoStr);
+    
+    if (matchingBlock) {
+      // Extract HTML from the matching table
+      const tablePattern = /<table[^>]*table-payouts[^>]*>[\s\S]*?<\/table>/gi;
+      const allTables = [];
+      let tableMatch;
+      while ((tableMatch = tablePattern.exec(html)) !== null) {
+        allTables.push({ index: tableMatch.index, html: tableMatch[0] });
+      }
+      
+      if (allTables[matchingBlock.tableIndex]) {
+        targetHtml = allTables[matchingBlock.tableIndex].html;
+      }
+    }
+    // If no matching block found, fall back to parsing all tables (original behavior)
   }
 
   try {
@@ -692,7 +770,7 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
             
             if (hrnRes && hrnRes.ok) {
               const hrnHtml = await hrnRes.text();
-              hrnOutcome = extractOutcomeFromHrnHtml(hrnHtml);
+              hrnOutcome = extractOutcomeFromHrnHtml(hrnHtml, raceNoStr);
               
               // If HRN parsing found at least one result, use it
               if (hrnOutcome && (hrnOutcome.win || hrnOutcome.place || hrnOutcome.show)) {
@@ -796,7 +874,14 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
     );
   }
 
-  const summary = summaryLines.join("\n");
+  // Use buildSummary helper to ensure consistent format
+  const summary = buildSummary({
+    date: usingDate,
+    uiDateRaw: ctx.debug?.uiDateRaw,
+    outcome,
+    step,
+    query,
+  });
 
   // Determine ok status: true if we have at least one outcome field
   const hasOutcome = !!(outcome.win || outcome.place || outcome.show);
@@ -839,7 +924,7 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
     },
     predicted: predictedNormalized,
     hits,
-    summary,
+    summary: finalSummary,
     debug,
     responseMeta: {
       handlerFile: HANDLER_FILE,
@@ -1017,13 +1102,22 @@ export default async function handler(req, res) {
 
         // Try HRN fallback if we have track and date
         if (track && canonicalDateIso) {
-          const { outcome: hrnOutcome, debugExtras } = await tryHrnFallback(track, canonicalDateIso, fallbackResult.debug);
+          const canonicalRaceNo = String(raceNo || "").trim();
+          const { outcome: hrnOutcome, debugExtras } = await tryHrnFallback(track, canonicalDateIso, canonicalRaceNo, fallbackResult.debug);
           fallbackResult.debug = { ...fallbackResult.debug, ...debugExtras };
 
           if (hrnOutcome) {
             fallbackResult.outcome = hrnOutcome;
             fallbackResult.ok = true;
             fallbackResult.step = "verify_race_fallback_hrn";
+            // Rebuild summary with final outcome
+            fallbackResult.summary = buildSummary({
+              date: fallbackResult.date || canonicalDateIso,
+              uiDateRaw: fallbackResult.debug?.uiDateRaw,
+              outcome: fallbackResult.outcome,
+              step: fallbackResult.step,
+              query: fallbackResult.query,
+            });
           }
         }
 
@@ -1057,13 +1151,22 @@ export default async function handler(req, res) {
 
       // Try HRN fallback if we have track and date
       if (track && canonicalDateIso) {
-        const { outcome: hrnOutcome, debugExtras } = await tryHrnFallback(track, canonicalDateIso, fallbackStub.debug);
+        const canonicalRaceNo = String(raceNo || "").trim();
+        const { outcome: hrnOutcome, debugExtras } = await tryHrnFallback(track, canonicalDateIso, canonicalRaceNo, fallbackStub.debug);
         fallbackStub.debug = { ...fallbackStub.debug, ...debugExtras };
 
         if (hrnOutcome) {
           fallbackStub.outcome = hrnOutcome;
           fallbackStub.ok = true;
           fallbackStub.step = "verify_race_fallback_hrn";
+          // Rebuild summary with final outcome
+          fallbackStub.summary = buildSummary({
+            date: fallbackStub.date || canonicalDateIso,
+            uiDateRaw: fallbackStub.debug?.uiDateRaw,
+            outcome: fallbackStub.outcome,
+            step: fallbackStub.step,
+            query: fallbackStub.query,
+          });
         }
       }
 
@@ -1103,13 +1206,22 @@ export default async function handler(req, res) {
 
       // Try HRN fallback if we have track and date
       if (track && canonicalDateIso) {
-        const { outcome: hrnOutcome, debugExtras } = await tryHrnFallback(track, canonicalDateIso, errorStub.debug);
+        const canonicalRaceNo = String(raceNo || "").trim();
+        const { outcome: hrnOutcome, debugExtras } = await tryHrnFallback(track, canonicalDateIso, canonicalRaceNo, errorStub.debug);
         errorStub.debug = { ...errorStub.debug, ...debugExtras };
 
         if (hrnOutcome) {
           errorStub.outcome = hrnOutcome;
           errorStub.ok = true;
           errorStub.step = "verify_race_fallback_hrn";
+          // Rebuild summary with final outcome
+          errorStub.summary = buildSummary({
+            date: errorStub.date || canonicalDateIso,
+            uiDateRaw: errorStub.debug?.uiDateRaw,
+            outcome: errorStub.outcome,
+            step: errorStub.step,
+            query: errorStub.query,
+          });
         }
       }
 
