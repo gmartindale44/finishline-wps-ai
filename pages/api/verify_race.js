@@ -200,7 +200,7 @@ function decodeHtmlEntities(text) {
 
 // ACTIVE handler for /api/verify_race is: pages/api/verify_race.js
 const HANDLER_FILE = "pages/api/verify_race.js";
-const BACKEND_VERSION = "verify_v3_hrn_debug";
+const BACKEND_VERSION = "verify_v4_hrn_equibase";
 
 /**
  * Try HRN fallback - attempts to fetch and parse HRN entries-results page
@@ -642,6 +642,179 @@ function extractOutcomeFromHrnHtml(html, raceNo = null) {
 }
 
 /**
+ * Extract Win/Place/Show from Equibase chart HTML
+ * Parses the finishing order table to find horses in positions 1, 2, 3
+ * @param {string} html - Equibase page HTML
+ * @returns {{ win: string, place: string, show: string }}
+ */
+function extractOutcomeFromEquibaseHtml(html) {
+  const outcome = { win: "", place: "", show: "" };
+  
+  if (!html || typeof html !== "string") {
+    return outcome;
+  }
+  
+  // Check for bot blocking (common patterns)
+  if (html.includes("Incapsula") || html.includes("_Incapsula_Resource") || html.length < 2000) {
+    // Likely bot-blocked, return empty
+    return outcome;
+  }
+  
+  try {
+    // Helper to decode HTML entities
+    const decodeEntity = (str) => {
+      if (!str) return "";
+      return str
+        .replace(/&amp;/g, "&")
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&nbsp;/g, " ")
+        .replace(/&#160;/g, " ")
+        .trim();
+    };
+    
+    // Helper to validate horse name
+    const isValid = (name) => {
+      if (!name || name.length === 0) return false;
+      if (name.length > 50) return false;
+      if (!/[A-Za-z]/.test(name)) return false;
+      if (name.includes("<") || name.includes(">") || name.includes("function")) return false;
+      if (/^\d+$/.test(name)) return false;
+      if (name.toLowerCase().includes("finish") || name.toLowerCase().includes("position")) return false;
+      return true;
+    };
+    
+    // Strategy A: Look for finishing order table
+    // Equibase typically has a table with Finish/Horse columns
+    const finishTablePattern = /<table[^>]*>[\s\S]*?(?:Finish|Fin|Horse|Pos)[\s\S]*?<tbody>([\s\S]*?)<\/tbody>/i;
+    const tableMatch = html.match(finishTablePattern);
+    
+    if (tableMatch) {
+      const tbody = tableMatch[1];
+      
+      // Extract rows and look for position 1, 2, 3
+      const trPattern = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+      const finishMap = {};
+      
+      let trMatch;
+      while ((trMatch = trPattern.exec(tbody)) !== null) {
+        const rowHtml = trMatch[1];
+        
+        // Extract all TDs
+        const tdPattern = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+        const cells = [];
+        let tdMatch;
+        while ((tdMatch = tdPattern.exec(rowHtml)) !== null) {
+          const cellContent = tdMatch[1]
+            .replace(/<[^>]+>/g, "")
+            .replace(/&amp;/g, "&")
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'")
+            .replace(/&nbsp;/g, " ")
+            .trim();
+          cells.push(cellContent);
+        }
+        
+        // Look for position number (usually first or second cell)
+        // And horse name (usually after position)
+        for (let i = 0; i < cells.length; i++) {
+          const cell = cells[i];
+          const positionMatch = cell.match(/^(\d+)$/);
+          
+          if (positionMatch) {
+            const position = parseInt(positionMatch[1], 10);
+            if (position >= 1 && position <= 3 && !finishMap[position]) {
+              // Horse name is likely in the next cell or a few cells after
+              for (let j = i + 1; j < Math.min(i + 4, cells.length); j++) {
+                const nameCandidate = decodeEntity(cells[j])
+                  .replace(/\s*\([^)]+\)\s*$/, "") // Remove odds/comments in parentheses
+                  .trim();
+                
+                if (isValid(nameCandidate)) {
+                  finishMap[position] = nameCandidate;
+                  break;
+                }
+              }
+            }
+          }
+        }
+      }
+      
+      if (finishMap[1]) outcome.win = finishMap[1];
+      if (finishMap[2]) outcome.place = finishMap[2];
+      if (finishMap[3]) outcome.show = finishMap[3];
+    }
+    
+    // Strategy B: Look for Win/Place/Show text patterns
+    if (!outcome.win || !outcome.place || !outcome.show) {
+      // Try to find text like "Win: Horse Name" or "1. Horse Name"
+      const winPattern = /(?:Win|Winner|1st)[:\s]+([A-Za-z0-9\s'\-\.]+?)(?:\s|$|,|;|<\/|\(|\[)/i;
+      const placePattern = /(?:Place|2nd)[:\s]+([A-Za-z0-9\s'\-\.]+?)(?:\s|$|,|;|<\/|\(|\[)/i;
+      const showPattern = /(?:Show|3rd)[:\s]+([A-Za-z0-9\s'\-\.]+?)(?:\s|$|,|;|<\/|\(|\[)/i;
+      
+      const winMatch = html.match(winPattern);
+      const placeMatch = html.match(placePattern);
+      const showMatch = html.match(showPattern);
+      
+      if (winMatch && winMatch[1] && !outcome.win) {
+        const name = decodeEntity(winMatch[1].trim());
+        if (isValid(name)) {
+          outcome.win = name;
+        }
+      }
+      
+      if (placeMatch && placeMatch[1] && !outcome.place) {
+        const name = decodeEntity(placeMatch[1].trim());
+        if (isValid(name)) {
+          outcome.place = name;
+        }
+      }
+      
+      if (showMatch && showMatch[1] && !outcome.show) {
+        const name = decodeEntity(showMatch[1].trim());
+        if (isValid(name)) {
+          outcome.show = name;
+        }
+      }
+    }
+    
+    // Strategy C: Look for numbered list pattern "1. Horse Name"
+    if (!outcome.win || !outcome.place || !outcome.show) {
+      const numberedPattern = /(\d+)\.\s*([A-Za-z0-9\s'\-\.]+?)(?:\s|$|,|;|<\/|\(|\[)/gi;
+      const numberedMap = {};
+      
+      let match;
+      while ((match = numberedPattern.exec(html)) !== null) {
+        const position = parseInt(match[1], 10);
+        if (position >= 1 && position <= 3 && !numberedMap[position]) {
+          const name = decodeEntity(match[2].trim());
+          if (isValid(name)) {
+            numberedMap[position] = name;
+          }
+        }
+      }
+      
+      if (!outcome.win && numberedMap[1]) outcome.win = numberedMap[1];
+      if (!outcome.place && numberedMap[2]) outcome.place = numberedMap[2];
+      if (!outcome.show && numberedMap[3]) outcome.show = numberedMap[3];
+    }
+    
+    // Final validation
+    if (!isValid(outcome.win)) outcome.win = "";
+    if (!isValid(outcome.place)) outcome.place = "";
+    if (!isValid(outcome.show)) outcome.show = "";
+    
+  } catch (err) {
+    console.error("[extractOutcomeFromEquibaseHtml] Parse error:", err.message || err);
+    return { win: "", place: "", show: "" };
+  }
+  
+  return outcome;
+}
+
+/**
  * Extract Win/Place/Show from Google HTML using regex
  * This is a lightweight parser that matches Google AI Overview format:
  * "Win: Doc Sullivan", "Place: Dr. Kraft", "Show: Bank Frenzy"
@@ -838,9 +1011,67 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
                 }
               } else {
                 hrnParseError = "No outcome parsed from HRN HTML";
+                
+                // HRN failed, try Equibase fallback
+                if (safeTrack && usingDate && raceNoStr) {
+                  try {
+                    const equibaseUrl = buildEquibaseUrl(safeTrack, usingDate, raceNoStr);
+                    if (equibaseUrl) {
+                      const equibaseRes = await fetch(equibaseUrl, {
+                        method: "GET",
+                        headers: {
+                          "User-Agent":
+                            "Mozilla/5.0 (compatible; FinishLineBot/1.0; +https://finishline-wps-ai.vercel.app)",
+                          "Accept-Language": "en-US,en;q=0.9",
+                        },
+                      });
+                      
+                      if (equibaseRes && equibaseRes.ok) {
+                        const equibaseHtml = await equibaseRes.text();
+                        const equibaseOutcome = extractOutcomeFromEquibaseHtml(equibaseHtml);
+                        
+                        if (equibaseOutcome && (equibaseOutcome.win || equibaseOutcome.place || equibaseOutcome.show)) {
+                          outcome = equibaseOutcome;
+                          step = "verify_race_fallback_equibase";
+                        }
+                      }
+                    }
+                  } catch (equibaseErr) {
+                    // Silently fail - we already have hrnParseError set
+                  }
+                }
               }
             } else {
               hrnParseError = `HTTP ${hrnRes ? hrnRes.status : "unknown"}`;
+              
+              // HRN fetch failed, try Equibase fallback
+              if (safeTrack && usingDate && raceNoStr) {
+                try {
+                  const equibaseUrl = buildEquibaseUrl(safeTrack, usingDate, raceNoStr);
+                  if (equibaseUrl) {
+                    const equibaseRes = await fetch(equibaseUrl, {
+                      method: "GET",
+                      headers: {
+                        "User-Agent":
+                          "Mozilla/5.0 (compatible; FinishLineBot/1.0; +https://finishline-wps-ai.vercel.app)",
+                        "Accept-Language": "en-US,en;q=0.9",
+                      },
+                    });
+                    
+                    if (equibaseRes && equibaseRes.ok) {
+                      const equibaseHtml = await equibaseRes.text();
+                      const equibaseOutcome = extractOutcomeFromEquibaseHtml(equibaseHtml);
+                      
+                      if (equibaseOutcome && (equibaseOutcome.win || equibaseOutcome.place || equibaseOutcome.show)) {
+                        outcome = equibaseOutcome;
+                        step = "verify_race_fallback_equibase";
+                      }
+                    }
+                  }
+                } catch (equibaseErr) {
+                  // Silently fail
+                }
+              }
             }
           } catch (hrnErr) {
             hrnParseError = String(hrnErr.message || hrnErr);
@@ -1140,8 +1371,8 @@ export default async function handler(req, res) {
         // Try HRN fallback if we have track and date
         if (track && canonicalDateIso) {
           const canonicalRaceNo = String(raceNo || "").trim();
-          const { outcome: hrnOutcome, debugExtras } = await tryHrnFallback(track, canonicalDateIso, canonicalRaceNo, fallbackResult.debug);
-          fallbackResult.debug = { ...fallbackResult.debug, ...debugExtras };
+          const { outcome: hrnOutcome, debugExtras: hrnDebug } = await tryHrnFallback(track, canonicalDateIso, canonicalRaceNo, fallbackResult.debug);
+          fallbackResult.debug = { ...fallbackResult.debug, ...hrnDebug };
 
           if (hrnOutcome) {
             fallbackResult.outcome = hrnOutcome;
@@ -1155,6 +1386,52 @@ export default async function handler(req, res) {
               step: fallbackResult.step,
               query: fallbackResult.query,
             });
+          } else {
+            // HRN failed, try Equibase fallback
+            const { outcome: equibaseOutcome, debugExtras: equibaseDebug } = await tryEquibaseFallback(track, canonicalDateIso, canonicalRaceNo, fallbackResult.debug);
+            fallbackResult.debug = { ...fallbackResult.debug, ...equibaseDebug };
+
+            if (equibaseOutcome) {
+              fallbackResult.outcome = equibaseOutcome;
+              fallbackResult.ok = true;
+              fallbackResult.step = "verify_race_fallback_equibase";
+              
+              // Recompute hits if we have predicted values
+              if (fallbackResult.predicted) {
+                const normalizeHorseName = (name) => (name || "").toLowerCase().replace(/\s+/g, " ").trim();
+                const norm = normalizeHorseName;
+                const pWin = norm(fallbackResult.predicted.win);
+                const pPlace = norm(fallbackResult.predicted.place);
+                const pShow = norm(fallbackResult.predicted.show);
+                const oWin = norm(equibaseOutcome.win);
+                const oPlace = norm(equibaseOutcome.place);
+                const oShow = norm(equibaseOutcome.show);
+
+                const winHit = !!pWin && !!oWin && pWin === oWin;
+                const placeHit = !!pPlace && !!oPlace && pPlace === oPlace;
+                const showHit = !!pShow && !!oShow && pShow === oShow;
+                const top3Set = new Set([oWin, oPlace, oShow].filter(Boolean));
+                const top3Hit = [pWin, pPlace, pShow]
+                  .filter(Boolean)
+                  .some(name => top3Set.has(name));
+
+                fallbackResult.hits = {
+                  winHit,
+                  placeHit,
+                  showHit,
+                  top3Hit,
+                };
+              }
+              
+              // Rebuild summary with final outcome
+              fallbackResult.summary = buildSummary({
+                date: fallbackResult.date || canonicalDateIso,
+                uiDateRaw: fallbackResult.debug?.uiDateRaw,
+                outcome: fallbackResult.outcome,
+                step: fallbackResult.step,
+                query: fallbackResult.query,
+              });
+            }
           }
         }
 
@@ -1189,8 +1466,8 @@ export default async function handler(req, res) {
       // Try HRN fallback if we have track and date
       if (track && canonicalDateIso) {
         const canonicalRaceNo = String(raceNo || "").trim();
-        const { outcome: hrnOutcome, debugExtras } = await tryHrnFallback(track, canonicalDateIso, canonicalRaceNo, fallbackStub.debug);
-        fallbackStub.debug = { ...fallbackStub.debug, ...debugExtras };
+        const { outcome: hrnOutcome, debugExtras: hrnDebug } = await tryHrnFallback(track, canonicalDateIso, canonicalRaceNo, fallbackStub.debug);
+        fallbackStub.debug = { ...fallbackStub.debug, ...hrnDebug };
 
         if (hrnOutcome) {
           fallbackStub.outcome = hrnOutcome;
@@ -1204,6 +1481,52 @@ export default async function handler(req, res) {
             step: fallbackStub.step,
             query: fallbackStub.query,
           });
+        } else {
+          // HRN failed, try Equibase fallback
+          const { outcome: equibaseOutcome, debugExtras: equibaseDebug } = await tryEquibaseFallback(track, canonicalDateIso, canonicalRaceNo, fallbackStub.debug);
+          fallbackStub.debug = { ...fallbackStub.debug, ...equibaseDebug };
+
+          if (equibaseOutcome) {
+            fallbackStub.outcome = equibaseOutcome;
+            fallbackStub.ok = true;
+            fallbackStub.step = "verify_race_fallback_equibase";
+            
+            // Recompute hits if we have predicted values
+            if (fallbackStub.predicted) {
+              const normalizeHorseName = (name) => (name || "").toLowerCase().replace(/\s+/g, " ").trim();
+              const norm = normalizeHorseName;
+              const pWin = norm(fallbackStub.predicted.win);
+              const pPlace = norm(fallbackStub.predicted.place);
+              const pShow = norm(fallbackStub.predicted.show);
+              const oWin = norm(equibaseOutcome.win);
+              const oPlace = norm(equibaseOutcome.place);
+              const oShow = norm(equibaseOutcome.show);
+
+              const winHit = !!pWin && !!oWin && pWin === oWin;
+              const placeHit = !!pPlace && !!oPlace && pPlace === oPlace;
+              const showHit = !!pShow && !!oShow && pShow === oShow;
+              const top3Set = new Set([oWin, oPlace, oShow].filter(Boolean));
+              const top3Hit = [pWin, pPlace, pShow]
+                .filter(Boolean)
+                .some(name => top3Set.has(name));
+
+              fallbackStub.hits = {
+                winHit,
+                placeHit,
+                showHit,
+                top3Hit,
+              };
+            }
+            
+            // Rebuild summary with final outcome
+            fallbackStub.summary = buildSummary({
+              date: fallbackStub.date || canonicalDateIso,
+              uiDateRaw: fallbackStub.debug?.uiDateRaw,
+              outcome: fallbackStub.outcome,
+              step: fallbackStub.step,
+              query: fallbackStub.query,
+            });
+          }
         }
       }
 
@@ -1244,8 +1567,8 @@ export default async function handler(req, res) {
       // Try HRN fallback if we have track and date
       if (track && canonicalDateIso) {
         const canonicalRaceNo = String(raceNo || "").trim();
-        const { outcome: hrnOutcome, debugExtras } = await tryHrnFallback(track, canonicalDateIso, canonicalRaceNo, errorStub.debug);
-        errorStub.debug = { ...errorStub.debug, ...debugExtras };
+        const { outcome: hrnOutcome, debugExtras: hrnDebug } = await tryHrnFallback(track, canonicalDateIso, canonicalRaceNo, errorStub.debug);
+        errorStub.debug = { ...errorStub.debug, ...hrnDebug };
 
         if (hrnOutcome) {
           errorStub.outcome = hrnOutcome;
@@ -1259,6 +1582,52 @@ export default async function handler(req, res) {
             step: errorStub.step,
             query: errorStub.query,
           });
+        } else {
+          // HRN failed, try Equibase fallback
+          const { outcome: equibaseOutcome, debugExtras: equibaseDebug } = await tryEquibaseFallback(track, canonicalDateIso, canonicalRaceNo, errorStub.debug);
+          errorStub.debug = { ...errorStub.debug, ...equibaseDebug };
+
+          if (equibaseOutcome) {
+            errorStub.outcome = equibaseOutcome;
+            errorStub.ok = true;
+            errorStub.step = "verify_race_fallback_equibase";
+            
+            // Recompute hits if we have predicted values
+            if (errorStub.predicted) {
+              const normalizeHorseName = (name) => (name || "").toLowerCase().replace(/\s+/g, " ").trim();
+              const norm = normalizeHorseName;
+              const pWin = norm(errorStub.predicted.win);
+              const pPlace = norm(errorStub.predicted.place);
+              const pShow = norm(errorStub.predicted.show);
+              const oWin = norm(equibaseOutcome.win);
+              const oPlace = norm(equibaseOutcome.place);
+              const oShow = norm(equibaseOutcome.show);
+
+              const winHit = !!pWin && !!oWin && pWin === oWin;
+              const placeHit = !!pPlace && !!oPlace && pPlace === oPlace;
+              const showHit = !!pShow && !!oShow && pShow === oShow;
+              const top3Set = new Set([oWin, oPlace, oShow].filter(Boolean));
+              const top3Hit = [pWin, pPlace, pShow]
+                .filter(Boolean)
+                .some(name => top3Set.has(name));
+
+              errorStub.hits = {
+                winHit,
+                placeHit,
+                showHit,
+                top3Hit,
+              };
+            }
+            
+            // Rebuild summary with final outcome
+            errorStub.summary = buildSummary({
+              date: errorStub.date || canonicalDateIso,
+              uiDateRaw: errorStub.debug?.uiDateRaw,
+              outcome: errorStub.outcome,
+              step: errorStub.step,
+              query: errorStub.query,
+            });
+          }
         }
       }
 
