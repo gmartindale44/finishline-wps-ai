@@ -23,6 +23,8 @@
     "backfill:calibrate": "node scripts/redis-backfill-to-csv.js",
     "backfill:http": "node scripts/backfill_verify_http.js",
     "export:verify-redis": "node scripts/calibration/export_verify_redis_to_csv.mjs",
+    "build:calibration-sample": "node scripts/calibration/build_calibration_sample_from_verify_csv.mjs",
+    "calibrate:verify-v1": "node scripts/calibration/run_calibrate_verify_v1.mjs",
     "audit:server": "node scripts/fetch-audit.js",
     "sanitize:placeholders": "node scripts/sanitize-placeholders.js",
     "debug:verify": "node scripts/debug_verify_race.js",
