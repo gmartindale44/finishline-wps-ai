@@ -42,23 +42,64 @@
     try {
       const picks = { win: "", place: "", show: "" };
       
-      // Try multiple strategies to find predictions from the UI
+      // Strategy 1: Check localStorage for stored prediction (finishline-picker-bootstrap.js format)
+      try {
+        const stored = localStorage.getItem('prediction');
+        if (stored) {
+          const data = JSON.parse(stored);
+          const storedPicks = data?.picks || [];
+          if (Array.isArray(storedPicks) && storedPicks.length >= 3) {
+            const winPick = storedPicks.find(p => p.slot === 'Win') || storedPicks[0];
+            const placePick = storedPicks.find(p => p.slot === 'Place') || storedPicks[1];
+            const showPick = storedPicks.find(p => p.slot === 'Show') || storedPicks[2];
+            
+            if (winPick?.name) picks.win = String(winPick.name).trim();
+            if (placePick?.name) picks.place = String(placePick.name).trim();
+            if (showPick?.name) picks.show = String(showPick.name).trim();
+            
+            // If we found all three from localStorage, return early
+            if (picks.win && picks.place && picks.show) {
+              return picks;
+            }
+          }
+          // Fallback: check if data has win/place/show directly
+          if (data?.win) picks.win = String(data.win).trim();
+          if (data?.place) picks.place = String(data.place).trim();
+          if (data?.show) picks.show = String(data.show).trim();
+          
+          if (picks.win && picks.place && picks.show) {
+            return picks;
+          }
+        }
+      } catch (e) {
+        // Ignore localStorage errors, continue to other strategies
+      }
       
-      // Strategy 1: Look for badge elements (results-panel.js format)
+      // Strategy 2: Check window.FLResults state (results-panel.js format)
+      try {
+        if (window.FLResults && typeof window.FLResults.show === 'function') {
+          // Try to access lastPred from results-panel if available
+          // Note: results-panel stores in closure, but we can check DOM elements it renders
+        }
+      } catch (e) {
+        // Ignore, continue
+      }
+      
+      // Strategy 3: Look for badge elements (results-panel.js format)
       const badgeWin = document.querySelector('.fl-badge--win .fl-badge__name, [data-badge="win"] .fl-badge__name');
       const badgePlace = document.querySelector('.fl-badge--place .fl-badge__name, [data-badge="place"] .fl-badge__name');
       const badgeShow = document.querySelector('.fl-badge--show .fl-badge__name, [data-badge="show"] .fl-badge__name');
       
-      if (badgeWin) picks.win = (badgeWin.textContent || "").trim();
-      if (badgePlace) picks.place = (badgePlace.textContent || "").trim();
-      if (badgeShow) picks.show = (badgeShow.textContent || "").trim();
+      if (!picks.win && badgeWin) picks.win = (badgeWin.textContent || "").trim();
+      if (!picks.place && badgePlace) picks.place = (badgePlace.textContent || "").trim();
+      if (!picks.show && badgeShow) picks.show = (badgeShow.textContent || "").trim();
       
       // If we found all three, return early
       if (picks.win && picks.place && picks.show) {
         return picks;
       }
       
-      // Strategy 2: Look for prediction cards
+      // Strategy 4: Look for prediction cards
       const scope =
         document.querySelector(
           '[data-panel="predictions"], .predictions-panel'
@@ -74,9 +115,9 @@
           );
           return ((el && el.textContent) || "").trim();
         });
-        if (names[0]) picks.win = names[0];
-        if (names[1]) picks.place = names[1];
-        if (names[2]) picks.show = names[2];
+        if (!picks.win && names[0]) picks.win = names[0];
+        if (!picks.place && names[1]) picks.place = names[1];
+        if (!picks.show && names[2]) picks.show = names[2];
         
         // If we found all three, return
         if (picks.win && picks.place && picks.show) {
@@ -84,7 +125,7 @@
         }
       }
 
-      // Strategy 3: Look for data-pick attributes
+      // Strategy 5: Look for data-pick attributes
       const fetchText = (selector) =>
         (scope.querySelector(selector)?.textContent || "").trim();
       
@@ -92,7 +133,7 @@
       if (!picks.place) picks.place = fetchText("[data-pick='place'], .pick-place b, .emoji-place~b, .fl-badge--place .fl-badge__name");
       if (!picks.show) picks.show = fetchText("[data-pick='show'], .pick-show b, .emoji-show~b, .fl-badge--show .fl-badge__name");
       
-      // Strategy 4: Look for ID-based elements (legacy format)
+      // Strategy 6: Look for ID-based elements (legacy format)
       const winEl = document.getElementById('winName');
       const placeEl = document.getElementById('placeName');
       const showEl = document.getElementById('showName');
@@ -950,7 +991,21 @@ async function refreshGreenZone(host, ctx) {
             predicted: predicted,
           };
           
-          console.log("[VERIFY_UI] outgoing payload", payload);
+          // Log payload with predictions (guarded to prevent crashes)
+          try {
+            console.log("[verify_modal] verify payload", {
+              track: track || "",
+              raceNo: raceNo || "",
+              date: canonicalDate || "",
+              predicted: (predicted && typeof predicted === 'object') ? {
+                win: String(predicted.win || ""),
+                place: String(predicted.place || ""),
+                show: String(predicted.show || "")
+              } : { win: "", place: "", show: "" }
+            });
+          } catch (logErr) {
+            // Silently ignore logging errors
+          }
           
           // Capture context for backfill (available in finally block)
           backfillCtx = {
