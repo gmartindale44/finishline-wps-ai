@@ -1,3 +1,17 @@
+# Nightly Calibration Workflow
+#
+# This workflow runs nightly to:
+# 1. Export verify logs from Redis (fl:verify:* keys) to CSV
+# 2. Build a filtered calibration sample (max 5000 rows, predictions-only)
+# 3. Run verify-v1 calibration to compute metrics and generate reports
+# 4. Commit the resulting artifacts back to master:
+#    - data/finishline_tests_from_verify_redis_v1.csv (all verify logs)
+#    - data/finishline_tests_calibration_v1.csv (filtered predictions-only sample)
+#    - data/calibration/verify_v1_report.json (machine-readable metrics)
+#    - data/calibration/verify_v1_report.md (human-readable summary)
+#
+# The workflow is scheduled to run daily at 08:00 UTC and can also be triggered manually.
+
 name: nightly-calibration
 
 on:
@@ -20,29 +34,56 @@ jobs:
     env:
       UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
       UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
-      CAL_THRESHOLD_MIN_NEW: ${{ vars.CAL_THRESHOLD_MIN_NEW }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Use Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20"
 
-      - name: Install
+      - name: Install dependencies
         run: npm ci
 
-      - name: Append from Redis (idempotent)
-        run: npm run append:redis || true
+      - name: Export verify logs from Redis
+        run: npm run export:verify-redis
 
-      - name: Validate + Calibrate + Report
-        run: npm run calibrate:all
+      - name: Build calibration sample
+        run: npm run build:calibration-sample
 
-      - name: Commit calibration artifacts
+      - name: Run verify v1 calibration
+        run: npm run calibrate:verify-v1
+
+      - name: Check for artifact changes
+        id: check-changes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/finishline_tests_v1.csv data/calibration_v1.json data/calibration_report_v1.md || true
-          git commit -m "ci: nightly calibration artifacts" || true
-          git push || true
+          if git diff --quiet --exit-code \
+            data/finishline_tests_from_verify_redis_v1.csv \
+            data/finishline_tests_calibration_v1.csv \
+            data/calibration/verify_v1_report.json \
+            data/calibration/verify_v1_report.md; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "No changes detected in calibration artifacts"
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "Changes detected in calibration artifacts"
+          fi
+
+      - name: Commit calibration artifacts
+        if: steps.check-changes.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add \
+            data/finishline_tests_from_verify_redis_v1.csv \
+            data/finishline_tests_calibration_v1.csv \
+            data/calibration/verify_v1_report.json \
+            data/calibration/verify_v1_report.md
+          git commit -m "ci: nightly calibration artifacts"
+          git push origin HEAD:master
