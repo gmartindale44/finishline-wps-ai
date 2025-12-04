@@ -185,6 +185,49 @@ function normalizePrediction(predicted) {
 }
 
 /**
+ * Normalize predictions from request body - handles multiple formats
+ * Supports:
+ * - body.predicted.win/place/show
+ * - body.predWin/predPlace/predShow
+ * - body.win/place/show
+ * Returns normalized object with win/place/show strings (trimmed)
+ */
+function normalizePredictedFromBody(body) {
+  if (!body || typeof body !== "object") {
+    return { win: "", place: "", show: "" };
+  }
+
+  // Try body.predicted object first
+  if (body.predicted && typeof body.predicted === "object") {
+    const win = (body.predicted.win || "").trim();
+    const place = (body.predicted.place || "").trim();
+    const show = (body.predicted.show || "").trim();
+    if (win || place || show) {
+      return { win, place, show };
+    }
+  }
+
+  // Try body.predWin/predPlace/predShow
+  const predWin = (body.predWin || "").trim();
+  const predPlace = (body.predPlace || "").trim();
+  const predShow = (body.predShow || "").trim();
+  if (predWin || predPlace || predShow) {
+    return { win: predWin, place: predPlace, show: predShow };
+  }
+
+  // Try body.win/place/show (less common but possible)
+  const win = (body.win || "").trim();
+  const place = (body.place || "").trim();
+  const show = (body.show || "").trim();
+  if (win || place || show) {
+    return { win, place, show };
+  }
+
+  // No predictions found - return empty object
+  return { win: "", place: "", show: "" };
+}
+
+/**
  * Decode common HTML entities
  */
 function decodeHtmlEntities(text) {
@@ -1255,6 +1298,9 @@ export default async function handler(req, res) {
     const body = await safeParseBody(req);
     const track = (body.track || body.trackName || "").trim();
     
+    // Normalize predictions from request body (handles multiple formats)
+    const predictedFromClient = normalizePredictedFromBody(body);
+    
     // Pure string helper for date normalization (no Date objects for user dates)
     function canonicalizeDateFromClient(raw) {
       if (!raw) return null;
@@ -1297,11 +1343,7 @@ export default async function handler(req, res) {
         query: "",
         top: null,
         outcome: { win: "", place: "", show: "" },
-        predicted: {
-          win: (predicted.win || "").trim(),
-          place: (predicted.place || "").trim(),
-          show: (predicted.show || "").trim(),
-        },
+        predicted: predictedFromClient,
         hits: {
           winHit: false,
           placeHit: false,
@@ -1329,7 +1371,6 @@ export default async function handler(req, res) {
     }
     
     const raceNo = (body.raceNo || body.race || "").toString().trim() || "";
-    const predicted = body.predicted || {};
 
     // Build context - include all date fields for maximum compatibility
     const ctx = {
@@ -1339,7 +1380,7 @@ export default async function handler(req, res) {
       raceDate: canonicalDateIso,
       canonicalDateIso: canonicalDateIso,
       dateRaw: uiDateRaw,        // for debugging
-      predicted: body.predicted || {},
+      predicted: predictedFromClient,
     };
 
     // Read feature flag INSIDE the handler (not at top level)
@@ -1386,11 +1427,7 @@ export default async function handler(req, res) {
           query: "",
           top: null,
           outcome: { win: "", place: "", show: "" },
-          predicted: {
-            win: (predicted.win || "").trim(),
-            place: (predicted.place || "").trim(),
-            show: (predicted.show || "").trim(),
-          },
+          predicted: predictedFromClient,
           hits: {
             winHit: false,
             placeHit: false,
@@ -1429,11 +1466,7 @@ export default async function handler(req, res) {
           query: fullResult.query || "",
           top: fullResult.top || null,
           outcome: fullResult.outcome || { win: "", place: "", show: "" },
-          predicted: fullResult.predicted || {
-            win: (predicted.win || "").trim(),
-            place: (predicted.place || "").trim(),
-            show: (predicted.show || "").trim(),
-          },
+          predicted: fullResult.predicted || predictedFromClient,
           hits: fullResult.hits || {
             winHit: false,
             placeHit: false,
@@ -1471,6 +1504,7 @@ export default async function handler(req, res) {
         const fallbackResult = {
           ...fullResult,
           date: fullResult.date || canonicalDateIso, // Ensure canonical date
+          predicted: fullResult.predicted || predictedFromClient,
           debug: {
             ...(fullResult.debug || {}),
             backendVersion: BACKEND_VERSION,
@@ -1574,6 +1608,7 @@ export default async function handler(req, res) {
         ...stub,
         step: "verify_race_full_fallback",
         date: canonicalDateIso, // Ensure canonical date
+        predicted: stub.predicted || predictedFromClient,
         summary: `Full parser attempted but failed: step=${fullResult.step}. Using stub fallback (Google search only).\n${stub.summary}`,
         debug: {
           ...stub.debug,
@@ -1684,6 +1719,7 @@ export default async function handler(req, res) {
         ...stub,
         step: "verify_race_full_fallback",
         date: canonicalDateIso, // Ensure canonical date
+        predicted: stub.predicted || predictedFromClient,
         summary: `Full parser attempted but failed: ${errorMsg}. Using stub fallback (Google search only).\n${stub.summary}`,
         debug: {
           ...stub.debug,
@@ -1805,10 +1841,12 @@ export default async function handler(req, res) {
     }
     
     const errorDateIso = canonicalizeDateFromClient(rawDateFromBody) || "";  // No fallback to today
+    const errorPredicted = normalizePredictedFromBody(errorBody);
     const stub = await buildStubResponse({
       track: null,
       date: errorDateIso,
       raceNo: null,
+      predicted: errorPredicted,
     });
     const errorStub = {
       ...stub,
@@ -1817,6 +1855,7 @@ export default async function handler(req, res) {
       error: String(err && err.message ? err.message : err),
       summary: "Verify Race stub encountered an unexpected error, but the handler still returned 200.",
       date: errorDateIso,
+      predicted: stub.predicted || errorPredicted,
     };
     // Don't log error cases (ok: false)
     return res.status(200).json(errorStub);
