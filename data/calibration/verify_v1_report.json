@@ -1,0 +1,54 @@
+{
+  "meta": {
+    "source": "finishline_tests_calibration_v1.csv",
+    "generatedAt": "2025-12-04T03:12:34.005Z",
+    "totalRows": 4000,
+    "filteredRows": 4000
+  },
+  "global": {
+    "races": 4000,
+    "winHitRate": 0.5,
+    "placeHitRate": 0,
+    "showHitRate": 0,
+    "top3HitRate": 0.75,
+    "anyHitRate": 0.5,
+    "exactTrifectaRate": 0,
+    "partialOrderTop3Rate": 0.75
+  },
+  "byTrack": {
+    "Parx Racing": {
+      "races": 4000,
+      "winHitRate": 0.5,
+      "top3HitRate": 0.75
+    }
+  },
+  "byRaceNo": {
+    "5": {
+      "races": 1000,
+      "winHitRate": 0,
+      "top3HitRate": 1
+    },
+    "6": {
+      "races": 1000,
+      "winHitRate": 1,
+      "top3HitRate": 1
+    },
+    "7": {
+      "races": 1000,
+      "winHitRate": 0,
+      "top3HitRate": 0
+    },
+    "8": {
+      "races": 1000,
+      "winHitRate": 1,
+      "top3HitRate": 1
+    }
+  },
+  "byStrategy": {
+    "default@v1": {
+      "races": 4000,
+      "winHitRate": 0.5,
+      "top3HitRate": 0.75
+    }
+  }
+}
