@@ -550,6 +550,83 @@
     }
   }
 
+  /**
+   * Handle verify response - reusable for both /api/verify_race and /api/manual_verify
+   * Updates summary, GreenZone, and debug JSON
+   */
+  function handleVerifyResponse(host, verifyData, requestCtx = {}) {
+    const summaryEl = qs("#flv-sum-body", host);
+    const statusNode = qs("#flv-status", host);
+    
+    if (!verifyData) {
+      if (statusNode) {
+        statusNode.textContent = "Error";
+        statusNode.style.color = "#f87171";
+      }
+      if (summaryEl) {
+        summaryEl.textContent = "No response data received.";
+      }
+      return;
+    }
+    
+    // Build summary payload
+    const baseSummary = {};
+    if (requestCtx.date) {
+      baseSummary.date = requestCtx.date;
+    }
+    if (requestCtx.dateRaw) {
+      baseSummary.dateRaw = requestCtx.dateRaw;
+    }
+    
+    const summaryPayload = verifyData.ok !== false
+      ? { ...baseSummary, ...verifyData }
+      : {
+          ...baseSummary,
+          ...verifyData,
+          error: verifyData.error || "Request failed",
+          details: verifyData.details || verifyData.message || null,
+          step: verifyData.step || "verify_race",
+        };
+    
+    // Update status
+    if (statusNode) {
+      statusNode.textContent = verifyData.ok !== false ? "OK" : "Error";
+      statusNode.style.color = verifyData.ok !== false ? "#cbd5f5" : "#f87171";
+    }
+    
+    // Update last verify data
+    host.__flvLast = {
+      top: verifyData?.top || null,
+      query: verifyData?.query || "",
+    };
+    
+    // Render summary
+    renderSummary(summaryEl, summaryPayload);
+    
+    // Render GreenZone v1 data
+    renderGreenZoneV1(host, verifyData?.greenZone);
+    
+    // Update debug JSON
+    const debugEl = qs("#flv-gz-json", host);
+    if (debugEl) {
+      try {
+        const existing = JSON.parse(debugEl.textContent || "[]");
+        const arr = Array.isArray(existing) ? existing : [];
+        arr.unshift({
+          request: requestCtx,
+          response: verifyData,
+        });
+        debugEl.textContent = JSON.stringify(arr.slice(0, 5), null, 2);
+      } catch {
+        debugEl.textContent = JSON.stringify(
+          [{ request: requestCtx, response: verifyData }],
+          null,
+          2
+        );
+      }
+    }
+  }
+
  // GreenZone fetch (same UI, but POSTs track/race/date to backend)
 async function refreshGreenZone(host, ctx) {
   // Keep the message element behavior you already had
@@ -820,6 +897,76 @@ async function refreshGreenZone(host, ctx) {
     summaryDetails.appendChild(summarySummary);
     summaryDetails.appendChild(summaryBody);
     card.appendChild(summaryDetails);
+
+    // Manual Outcome Entry (Optional)
+    const manualDetails = document.createElement("details");
+    manualDetails.id = "flv-manual";
+    manualDetails.style.cssText = "margin-top:14px;";
+
+    const manualSummary = document.createElement("summary");
+    manualSummary.style.cssText = "cursor:pointer;opacity:.9;";
+    manualSummary.textContent = "Manual Outcome Entry (TwinSpires / Tote Board) — Optional";
+
+    const manualWrap = document.createElement("div");
+    manualWrap.style.cssText = "margin-top:12px;";
+
+    const manualNote = document.createElement("small");
+    manualNote.style.cssText = "display:block;margin-bottom:12px;opacity:.7;font-size:11px;";
+    manualNote.textContent = "Use this when TwinSpires shows results before HRN/Equibase or when scraping fails.";
+
+    const manualGrid = document.createElement("div");
+    manualGrid.style.cssText = "display:grid;gap:10px;grid-template-columns:1fr 1fr 1fr;margin-bottom:10px;";
+
+    const winWrap = document.createElement("div");
+    const winLabel = document.createElement("label");
+    winLabel.style.cssText = "display:block;margin-bottom:4px;opacity:.9;font-size:12px;";
+    winLabel.textContent = "Win";
+    const winInput = document.createElement("input");
+    winInput.id = "fl-manual-win";
+    winInput.type = "text";
+    winInput.placeholder = "Horse name";
+    winInput.style.cssText = "width:100%;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.12);background:transparent;color:inherit;font-size:13px;";
+    winLabel.appendChild(winInput);
+    winWrap.appendChild(winLabel);
+    manualGrid.appendChild(winWrap);
+
+    const placeWrap = document.createElement("div");
+    const placeLabel = document.createElement("label");
+    placeLabel.style.cssText = "display:block;margin-bottom:4px;opacity:.9;font-size:12px;";
+    placeLabel.textContent = "Place";
+    const placeInput = document.createElement("input");
+    placeInput.id = "fl-manual-place";
+    placeInput.type = "text";
+    placeInput.placeholder = "Horse name";
+    placeInput.style.cssText = "width:100%;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.12);background:transparent;color:inherit;font-size:13px;";
+    placeLabel.appendChild(placeInput);
+    placeWrap.appendChild(placeLabel);
+    manualGrid.appendChild(placeWrap);
+
+    const showWrap = document.createElement("div");
+    const showLabel = document.createElement("label");
+    showLabel.style.cssText = "display:block;margin-bottom:4px;opacity:.9;font-size:12px;";
+    showLabel.textContent = "Show";
+    const showInput = document.createElement("input");
+    showInput.id = "fl-manual-show";
+    showInput.type = "text";
+    showInput.placeholder = "Horse name";
+    showInput.style.cssText = "width:100%;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.12);background:transparent;color:inherit;font-size:13px;";
+    showLabel.appendChild(showInput);
+    showWrap.appendChild(showLabel);
+    manualGrid.appendChild(showWrap);
+
+    const manualBtn = document.createElement("button");
+    manualBtn.id = "fl-manual-verify-btn";
+    manualBtn.textContent = "Submit Manual Verify";
+    manualBtn.style.cssText = "width:100%;padding:10px 14px;border-radius:10px;border:none;background:#10b981;color:#fff;font-weight:600;cursor:pointer;margin-top:8px;";
+
+    manualWrap.appendChild(manualNote);
+    manualWrap.appendChild(manualGrid);
+    manualWrap.appendChild(manualBtn);
+    manualDetails.appendChild(manualSummary);
+    manualDetails.appendChild(manualWrap);
+    card.appendChild(manualDetails);
 
     // GreenZone details
     const gzDetails = document.createElement("details");
@@ -1246,6 +1393,153 @@ async function refreshGreenZone(host, ctx) {
         }
       } catch {
         /* ignore */
+      }
+    });
+
+    // Manual Verify button handler
+    qs("#fl-manual-verify-btn", host)?.addEventListener("click", async () => {
+      try {
+        const track = (trackInputEl?.value || "").trim();
+        const raceNo = (raceInputEl?.value || "").trim();
+        const winInput = qs("#fl-manual-win", host);
+        const placeInput = qs("#fl-manual-place", host);
+        const showInput = qs("#fl-manual-show", host);
+        
+        const win = (winInput?.value || "").trim();
+        const place = (placeInput?.value || "").trim();
+        const show = (showInput?.value || "").trim();
+        
+        // Validate required fields
+        if (!track) {
+          alert("Please enter a track.");
+          if (trackInputEl) trackInputEl.focus();
+          return;
+        }
+        
+        if (!raceNo) {
+          alert("Please enter a race number.");
+          if (raceInputEl) raceInputEl.focus();
+          return;
+        }
+        
+        if (!win || !place) {
+          alert("Please enter Win and Place (Show is optional but recommended).");
+          return;
+        }
+        
+        // Get date (same logic as verify button)
+        const mainPageDateInput = document.querySelector('#fl-race-date, input[name="race_date"], input[data-role="race-date"]');
+        let uiDateRaw = null;
+        if (mainPageDateInput) {
+          uiDateRaw = mainPageDateInput.value || null;
+        }
+        if (!uiDateRaw && dateInputEl && dateInputEl.value) {
+          uiDateRaw = dateInputEl.value.trim();
+        }
+        if (!uiDateRaw) {
+          uiDateRaw = todayISO();
+        }
+        
+        // Canonicalize date (reuse same logic)
+        function formatUiDateForApi(uiDate) {
+          if (!uiDate) return null;
+          const trimmed = String(uiDate).trim();
+          if (!trimmed) return null;
+          const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+          if (isoMatch) {
+            const [, yyyy, mm, dd] = isoMatch;
+            const month = parseInt(mm, 10);
+            const day = parseInt(dd, 10);
+            if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+              return trimmed;
+            }
+            return null;
+          }
+          const mdyMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+          if (mdyMatch) {
+            const [, mm, dd, yyyy] = mdyMatch;
+            const month = parseInt(mm, 10);
+            const day = parseInt(dd, 10);
+            if (month < 1 || month > 12 || day < 1 || day > 31) {
+              return null;
+            }
+            const monthStr = String(month).padStart(2, "0");
+            const dayStr = String(day).padStart(2, "0");
+            return `${yyyy}-${monthStr}-${dayStr}`;
+          }
+          return null;
+        }
+        
+        const canonicalDate = formatUiDateForApi(uiDateRaw);
+        if (!canonicalDate) {
+          alert("Invalid date format. Please use YYYY-MM-DD or MM/DD/YYYY.");
+          return;
+        }
+        
+        // Get predicted (reuse existing helper)
+        const predicted = readUIPredictions();
+        
+        // Build payload
+        const payload = {
+          track,
+          raceNo,
+          dateIso: canonicalDate,
+          dateRaw: uiDateRaw,
+          outcome: {
+            win,
+            place,
+            show: show || "",
+          },
+          predicted,
+          provider: "TwinSpires",
+        };
+        
+        // Update UI state
+        if (statusNode) {
+          statusNode.textContent = "Running…";
+          statusNode.style.color = "#cbd5f5";
+        }
+        if (summaryEl) summaryEl.textContent = "Submitting manual verify…";
+        
+        const manualBtn = qs("#fl-manual-verify-btn", host);
+        if (manualBtn) {
+          manualBtn.disabled = true;
+          manualBtn.textContent = "Submitting…";
+        }
+        
+        // Send request
+        const resp = await fetch("/api/manual_verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        
+        const verifyData = await resp.json().catch(() => ({}));
+        
+        // Handle response (reuse same handler)
+        handleVerifyResponse(host, verifyData, {
+          track,
+          raceNo,
+          date: canonicalDate,
+          dateRaw: uiDateRaw,
+        });
+        
+      } catch (error) {
+        console.error("[manual_verify] error", error);
+        alert("Manual verify encountered an error. See console for details.");
+        if (statusNode) {
+          statusNode.textContent = "Error";
+          statusNode.style.color = "#f87171";
+        }
+        if (summaryEl) {
+          summaryEl.textContent = "Error: Manual verify failed. See console for details.";
+        }
+      } finally {
+        const manualBtn = qs("#fl-manual-verify-btn", host);
+        if (manualBtn) {
+          manualBtn.disabled = false;
+          manualBtn.textContent = "Submit Manual Verify";
+        }
       }
     });
 
