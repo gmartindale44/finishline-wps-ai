@@ -270,6 +270,51 @@ async function computeGreenZoneSafe(result) {
 }
 
 /**
+ * Check if scraped race metadata doesn't match the requested race
+ * Returns true if there's a mismatch (should reject the scraped result)
+ * @param {Object} ctx - Request context: { dateIso, raceNo, track }
+ * @param {Object} scraped - Scraped metadata: { canonicalDateIso, raceNo, track }
+ * @returns {boolean} - True if mismatch detected (should reject)
+ */
+function isScrapedRaceMismatched(ctx, scraped) {
+  try {
+    if (!scraped || !ctx) return false;
+
+    const { canonicalDateIso, raceNo: scrapedRaceNo, track: scrapedTrack } = scraped || {};
+    const { dateIso, raceNo: requestedRaceNo, track: requestedTrack } = ctx || {};
+
+    // 1. Date mismatch: if canonical date exists and != ctx date, treat as mismatch
+    if (canonicalDateIso && dateIso && canonicalDateIso !== dateIso) {
+      return true;
+    }
+
+    // 2. Race number mismatch (if we can detect it)
+    if (scrapedRaceNo != null && requestedRaceNo != null) {
+      const scrapedStr = String(scrapedRaceNo).trim();
+      const requestedStr = String(requestedRaceNo).trim();
+      if (scrapedStr && requestedStr && scrapedStr !== requestedStr) {
+        return true;
+      }
+    }
+
+    // 3. Optional: obvious track mismatch (case-insensitive)
+    if (scrapedTrack && requestedTrack) {
+      const scrapedLower = scrapedTrack.toLowerCase().trim();
+      const requestedLower = requestedTrack.toLowerCase().trim();
+      if (scrapedLower && requestedLower && scrapedLower !== requestedLower) {
+        return true;
+      }
+    }
+
+    return false;
+  } catch (err) {
+    // On any error, fail *safe* (do NOT treat as trusted)
+    console.warn("[isScrapedRaceMismatched] Error checking mismatch, treating as mismatch:", err?.message || err);
+    return true;
+  }
+}
+
+/**
  * Add GreenZone to response object - safe wrapper that never throws
  * Modifies response object in-place, adds greenZone field
  */
@@ -1508,38 +1553,103 @@ export default async function handler(req, res) {
       
       // If step is "verify_race", return success directly (Equibase or HRN succeeded)
       if (fullResult.step === "verify_race") {
-        // Ensure all required fields are present - use canonical date from context
-        const validatedResult = {
-          ok: fullResult.ok !== undefined ? fullResult.ok : true,
-          step: "verify_race",
-          date: fullResult.date || canonicalDateIso, // Use canonicalDateIso from handler
-          track: fullResult.track || track || "",
-          raceNo: fullResult.raceNo || raceNo || "",
-          query: fullResult.query || "",
-          top: fullResult.top || null,
-          outcome: fullResult.outcome || { win: "", place: "", show: "" },
-          predicted: fullResult.predicted || predictedFromClient,
-          hits: fullResult.hits || {
+        // Check for mismatch between requested race and scraped race metadata
+        const scrapedMeta = {
+          canonicalDateIso: fullResult.date || fullResult.debug?.canonicalDateIso,
+          raceNo: fullResult.raceNo || fullResult.debug?.raceNo,
+          track: fullResult.track || fullResult.debug?.track,
+        };
+        
+        const requestedCtx = {
+          dateIso: canonicalDateIso,
+          raceNo: raceNo,
+          track: track,
+        };
+        
+        const mismatched = isScrapedRaceMismatched(requestedCtx, scrapedMeta);
+        
+        let validatedResult;
+        if (mismatched) {
+          // Treat as "results not yet available" - return empty outcome
+          const safeOutcome = { win: "", place: "", show: "" };
+          const safeHits = {
             winHit: false,
             placeHit: false,
             showHit: false,
             top3Hit: false,
-          },
-          summary: fullResult.summary || "Full verify race completed.",
-          debug: {
-            ...fullResult.debug,
-            googleUrl:
-              fullResult.debug?.googleUrl ||
-              (() => {
-                try {
-                  return buildGoogleSearchUrl({ track, date: canonicalDateIso, raceNo }).url;
-                } catch (err) {
-                  console.error("[verify_race] Error building Google URL:", err);
-                  return "";
-                }
-              })(),
-          },
-        };
+          };
+          
+          let mismatchSummary = fullResult.summary || "";
+          mismatchSummary += "\nResults not available yet on HRN/Equibase (scraped race/date did not match UI).";
+          
+          validatedResult = {
+            ok: false,
+            step: "verify_race_mismatch",
+            date: canonicalDateIso,
+            track: track || "",
+            raceNo: raceNo || "",
+            query: fullResult.query || "",
+            top: fullResult.top || null,
+            outcome: safeOutcome,
+            predicted: fullResult.predicted || predictedFromClient,
+            hits: safeHits,
+            summary: mismatchSummary,
+            debug: {
+              ...fullResult.debug,
+              mismatch: {
+                canonicalDateIso: scrapedMeta.canonicalDateIso,
+                scrapedRaceNo: scrapedMeta.raceNo,
+                scrapedTrack: scrapedMeta.track,
+                requestedDateIso: canonicalDateIso,
+                requestedRaceNo: raceNo,
+                requestedTrack: track,
+              },
+              googleUrl:
+                fullResult.debug?.googleUrl ||
+                (() => {
+                  try {
+                    return buildGoogleSearchUrl({ track, date: canonicalDateIso, raceNo }).url;
+                  } catch (err) {
+                    console.error("[verify_race] Error building Google URL:", err);
+                    return "";
+                  }
+                })(),
+            },
+          };
+        } else {
+          // Normal path - no mismatch
+          validatedResult = {
+            ok: fullResult.ok !== undefined ? fullResult.ok : true,
+            step: "verify_race",
+            date: fullResult.date || canonicalDateIso, // Use canonicalDateIso from handler
+            track: fullResult.track || track || "",
+            raceNo: fullResult.raceNo || raceNo || "",
+            query: fullResult.query || "",
+            top: fullResult.top || null,
+            outcome: fullResult.outcome || { win: "", place: "", show: "" },
+            predicted: fullResult.predicted || predictedFromClient,
+            hits: fullResult.hits || {
+              winHit: false,
+              placeHit: false,
+              showHit: false,
+              top3Hit: false,
+            },
+            summary: fullResult.summary || "Full verify race completed.",
+            debug: {
+              ...fullResult.debug,
+              googleUrl:
+                fullResult.debug?.googleUrl ||
+                (() => {
+                  try {
+                    return buildGoogleSearchUrl({ track, date: canonicalDateIso, raceNo }).url;
+                  } catch (err) {
+                    console.error("[verify_race] Error building Google URL:", err);
+                    return "";
+                  }
+                })(),
+            },
+          };
+        }
 
         // Add GreenZone (safe, never throws)
         await addGreenZoneToResponse(validatedResult);
@@ -1574,59 +1684,62 @@ export default async function handler(req, res) {
           fallbackResult.debug = { ...fallbackResult.debug, ...hrnDebug };
 
           if (hrnOutcome) {
-            fallbackResult.outcome = hrnOutcome;
-            fallbackResult.ok = true;
-            fallbackResult.step = "verify_race_fallback_hrn";
-            // Rebuild summary with final outcome
-            try {
-              fallbackResult.summary = buildSummary({
-                date: fallbackResult.date || canonicalDateIso,
-                uiDateRaw: fallbackResult.debug?.uiDateRaw,
-                outcome: fallbackResult.outcome,
-                step: fallbackResult.step,
-                query: fallbackResult.query,
-              });
-            } catch (err) {
-              console.error("[verify_race] Error rebuilding summary:", err);
-              fallbackResult.summary = fallbackResult.summary || `Step: ${fallbackResult.step || "unknown"}`;
-            }
-          } else {
-            // HRN failed, try Equibase fallback
-            const { outcome: equibaseOutcome, debugExtras: equibaseDebug } = await tryEquibaseFallback(track, canonicalDateIso, canonicalRaceNo, fallbackResult.debug);
-            fallbackResult.debug = { ...fallbackResult.debug, ...equibaseDebug };
-
-            if (equibaseOutcome) {
-              fallbackResult.outcome = equibaseOutcome;
-              fallbackResult.ok = true;
-              fallbackResult.step = "verify_race_fallback_equibase";
-              
-              // Recompute hits if we have predicted values
-              if (fallbackResult.predicted) {
-                const normalizeHorseName = (name) => (name || "").toLowerCase().replace(/\s+/g, " ").trim();
-                const norm = normalizeHorseName;
-                const pWin = norm(fallbackResult.predicted.win);
-                const pPlace = norm(fallbackResult.predicted.place);
-                const pShow = norm(fallbackResult.predicted.show);
-                const oWin = norm(equibaseOutcome.win);
-                const oPlace = norm(equibaseOutcome.place);
-                const oShow = norm(equibaseOutcome.show);
-
-                const winHit = !!pWin && !!oWin && pWin === oWin;
-                const placeHit = !!pPlace && !!oPlace && pPlace === oPlace;
-                const showHit = !!pShow && !!oShow && pShow === oShow;
-                const top3Set = new Set([oWin, oPlace, oShow].filter(Boolean));
-                const top3Hit = [pWin, pPlace, pShow]
-                  .filter(Boolean)
-                  .some(name => top3Set.has(name));
-
-                fallbackResult.hits = {
-                  winHit,
-                  placeHit,
-                  showHit,
-                  top3Hit,
-                };
+            // Check for mismatch before accepting HRN outcome
+            const hrnScrapedMeta = {
+              canonicalDateIso: hrnDebug?.hrnDateIso || canonicalDateIso,
+              raceNo: hrnDebug?.hrnRaceNo || canonicalRaceNo,
+              track: track,
+            };
+            
+            const requestedCtx = {
+              dateIso: canonicalDateIso,
+              raceNo: canonicalRaceNo,
+              track: track,
+            };
+            
+            const hrnMismatched = isScrapedRaceMismatched(requestedCtx, hrnScrapedMeta);
+            
+            if (hrnMismatched) {
+              // Reject HRN outcome - treat as no results
+              fallbackResult.outcome = { win: "", place: "", show: "" };
+              fallbackResult.hits = {
+                winHit: false,
+                placeHit: false,
+                showHit: false,
+                top3Hit: false,
+              };
+              fallbackResult.ok = false;
+              fallbackResult.step = "verify_race_fallback_hrn_mismatch";
+              fallbackResult.debug = {
+                ...fallbackResult.debug,
+                ...hrnDebug,
+                mismatch: {
+                  canonicalDateIso: hrnScrapedMeta.canonicalDateIso,
+                  scrapedRaceNo: hrnScrapedMeta.raceNo,
+                  scrapedTrack: hrnScrapedMeta.track,
+                  requestedDateIso: canonicalDateIso,
+                  requestedRaceNo: canonicalRaceNo,
+                  requestedTrack: track,
+                },
+              };
+              try {
+                fallbackResult.summary = buildSummary({
+                  date: fallbackResult.date || canonicalDateIso,
+                  uiDateRaw: fallbackResult.debug?.uiDateRaw,
+                  outcome: fallbackResult.outcome,
+                  step: fallbackResult.step,
+                  query: fallbackResult.query,
+                });
+                fallbackResult.summary += "\nResults not available yet on HRN (scraped race/date did not match UI).";
+              } catch (err) {
+                console.error("[verify_race] Error rebuilding summary:", err);
+                fallbackResult.summary = fallbackResult.summary || `Step: ${fallbackResult.step || "unknown"}\nResults not available yet on HRN (scraped race/date did not match UI).`;
               }
-              
+            } else {
+              // Accept HRN outcome - no mismatch
+              fallbackResult.outcome = hrnOutcome;
+              fallbackResult.ok = true;
+              fallbackResult.step = "verify_race_fallback_hrn";
               // Rebuild summary with final outcome
               try {
                 fallbackResult.summary = buildSummary({
@@ -1639,6 +1752,110 @@ export default async function handler(req, res) {
               } catch (err) {
                 console.error("[verify_race] Error rebuilding summary:", err);
                 fallbackResult.summary = fallbackResult.summary || `Step: ${fallbackResult.step || "unknown"}`;
+              }
+            }
+          } else {
+            // HRN failed, try Equibase fallback
+            const { outcome: equibaseOutcome, debugExtras: equibaseDebug } = await tryEquibaseFallback(track, canonicalDateIso, canonicalRaceNo, fallbackResult.debug);
+            fallbackResult.debug = { ...fallbackResult.debug, ...equibaseDebug };
+
+            if (equibaseOutcome) {
+              // Check for mismatch before accepting Equibase outcome
+              const equibaseScrapedMeta = {
+                canonicalDateIso: equibaseDebug?.equibaseDateIso || canonicalDateIso,
+                raceNo: equibaseDebug?.equibaseRaceNo || canonicalRaceNo,
+                track: track,
+              };
+              
+              const requestedCtx = {
+                dateIso: canonicalDateIso,
+                raceNo: canonicalRaceNo,
+                track: track,
+              };
+              
+              const equibaseMismatched = isScrapedRaceMismatched(requestedCtx, equibaseScrapedMeta);
+              
+              if (equibaseMismatched) {
+                // Reject Equibase outcome - treat as no results
+                fallbackResult.outcome = { win: "", place: "", show: "" };
+                fallbackResult.hits = {
+                  winHit: false,
+                  placeHit: false,
+                  showHit: false,
+                  top3Hit: false,
+                };
+                fallbackResult.ok = false;
+                fallbackResult.step = "verify_race_fallback_equibase_mismatch";
+                fallbackResult.debug = {
+                  ...fallbackResult.debug,
+                  mismatch: {
+                    canonicalDateIso: equibaseScrapedMeta.canonicalDateIso,
+                    scrapedRaceNo: equibaseScrapedMeta.raceNo,
+                    scrapedTrack: equibaseScrapedMeta.track,
+                    requestedDateIso: canonicalDateIso,
+                    requestedRaceNo: canonicalRaceNo,
+                    requestedTrack: track,
+                  },
+                };
+                try {
+                  fallbackResult.summary = buildSummary({
+                    date: fallbackResult.date || canonicalDateIso,
+                    uiDateRaw: fallbackResult.debug?.uiDateRaw,
+                    outcome: fallbackResult.outcome,
+                    step: fallbackResult.step,
+                    query: fallbackResult.query,
+                  });
+                  fallbackResult.summary += "\nResults not available yet on Equibase (scraped race/date did not match UI).";
+                } catch (err) {
+                  console.error("[verify_race] Error rebuilding summary:", err);
+                  fallbackResult.summary = fallbackResult.summary || `Step: ${fallbackResult.step || "unknown"}\nResults not available yet on Equibase (scraped race/date did not match UI).`;
+                }
+              } else {
+                // Accept Equibase outcome - no mismatch
+                fallbackResult.outcome = equibaseOutcome;
+                fallbackResult.ok = true;
+                fallbackResult.step = "verify_race_fallback_equibase";
+                
+                // Recompute hits if we have predicted values
+                if (fallbackResult.predicted) {
+                  const normalizeHorseName = (name) => (name || "").toLowerCase().replace(/\s+/g, " ").trim();
+                  const norm = normalizeHorseName;
+                  const pWin = norm(fallbackResult.predicted.win);
+                  const pPlace = norm(fallbackResult.predicted.place);
+                  const pShow = norm(fallbackResult.predicted.show);
+                  const oWin = norm(equibaseOutcome.win);
+                  const oPlace = norm(equibaseOutcome.place);
+                  const oShow = norm(equibaseOutcome.show);
+
+                  const winHit = !!pWin && !!oWin && pWin === oWin;
+                  const placeHit = !!pPlace && !!oPlace && pPlace === oPlace;
+                  const showHit = !!pShow && !!oShow && pShow === oShow;
+                  const top3Set = new Set([oWin, oPlace, oShow].filter(Boolean));
+                  const top3Hit = [pWin, pPlace, pShow]
+                    .filter(Boolean)
+                    .some(name => top3Set.has(name));
+
+                  fallbackResult.hits = {
+                    winHit,
+                    placeHit,
+                    showHit,
+                    top3Hit,
+                  };
+                }
+                
+                // Rebuild summary with final outcome
+                try {
+                  fallbackResult.summary = buildSummary({
+                    date: fallbackResult.date || canonicalDateIso,
+                    uiDateRaw: fallbackResult.debug?.uiDateRaw,
+                    outcome: fallbackResult.outcome,
+                    step: fallbackResult.step,
+                    query: fallbackResult.query,
+                  });
+                } catch (err) {
+                  console.error("[verify_race] Error rebuilding summary:", err);
+                  fallbackResult.summary = fallbackResult.summary || `Step: ${fallbackResult.step || "unknown"}`;
+                }
               }
             }
           }
