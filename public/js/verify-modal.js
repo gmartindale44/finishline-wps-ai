@@ -1514,7 +1514,35 @@ async function refreshGreenZone(host, ctx) {
           body: JSON.stringify(payload),
         });
         
+        // Check HTTP status before parsing JSON
+        if (!resp.ok) {
+          const text = await resp.text().catch(() => "");
+          console.error("[manual_verify] HTTP error", resp.status, text);
+          alert("Manual verify failed (" + resp.status + "). Please check the console and make sure /api/manual_verify is deployed.");
+          if (statusNode) {
+            statusNode.textContent = `Error ${resp.status}`;
+            statusNode.style.color = "#f87171";
+          }
+          if (summaryEl) {
+            summaryEl.textContent = `Error: Manual verify endpoint returned ${resp.status}. This usually means the route hasn't been deployed yet. Please wait for deployment or check the console.`;
+          }
+          return;
+        }
+        
         const verifyData = await resp.json().catch(() => ({}));
+        console.log("[manual_verify] response", verifyData);
+        
+        if (!verifyData || verifyData.ok === false) {
+          alert("Manual verify failed: " + (verifyData?.error || verifyData?.message || "Unknown error"));
+          if (statusNode) {
+            statusNode.textContent = "Error";
+            statusNode.style.color = "#f87171";
+          }
+          if (summaryEl) {
+            summaryEl.textContent = "Error: " + (verifyData?.error || verifyData?.message || "Unknown error");
+          }
+          return;
+        }
         
         // Handle response (reuse same handler)
         handleVerifyResponse(host, verifyData, {
