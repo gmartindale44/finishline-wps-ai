@@ -10,6 +10,8 @@ export const config = {
 
 // Upstash Redis client for verify logging
 import { Redis } from "@upstash/redis";
+// GreenZone v1 integration
+import { computeGreenZoneForRace } from "../../lib/greenzone/greenzone_v1.js";
 
 const VERIFY_PREFIX = "fl:verify:";
 
@@ -239,6 +241,54 @@ function decodeHtmlEntities(text) {
     .replace(/&#39;/gi, "'")
     .replace(/&lt;/gi, "<")
     .replace(/&gt;/gi, ">");
+}
+
+/**
+ * Compute GreenZone for a race result - ultra-safe wrapper
+ * Returns disabled state on any error (never throws)
+ */
+async function computeGreenZoneSafe(result) {
+  try {
+    if (!result || !result.track || !result.date || !result.raceNo) {
+      return { enabled: false, reason: "missing_race_context" };
+    }
+    
+    const raceCtx = {
+      track: result.track,
+      raceNo: result.raceNo,
+      dateIso: result.date,
+      predicted: result.predicted,
+      outcome: result.outcome,
+    };
+    
+    const greenZone = await computeGreenZoneForRace(raceCtx);
+    return greenZone || { enabled: false, reason: "computation_failed" };
+  } catch (error) {
+    console.warn("[verify_race] GreenZone computation failed:", error?.message || error);
+    return { enabled: false, reason: "internal_error" };
+  }
+}
+
+/**
+ * Add GreenZone to response object - safe wrapper that never throws
+ * Modifies response object in-place, adds greenZone field
+ */
+async function addGreenZoneToResponse(response) {
+  try {
+    if (!response || typeof response !== "object") return;
+    
+    // Compute GreenZone (safe, returns disabled state on error)
+    const greenZone = await computeGreenZoneSafe(response);
+    
+    // Add to response
+    response.greenZone = greenZone || { enabled: false };
+  } catch (error) {
+    // Ultra-safe: if anything fails, just add disabled state
+    console.warn("[verify_race] Failed to add GreenZone to response:", error?.message || error);
+    if (response && typeof response === "object") {
+      response.greenZone = { enabled: false, reason: "internal_error" };
+    }
+  }
 }
 
 /**
@@ -1389,6 +1439,8 @@ export default async function handler(req, res) {
     // If not in full mode, immediately return stub
     if (mode !== "full") {
       const stub = await buildStubResponse(ctx);
+      // Add GreenZone (safe, never throws)
+      await addGreenZoneToResponse(stub);
       await logVerifyResult(stub);
       return res.status(200).json(stub);
     }
@@ -1489,6 +1541,9 @@ export default async function handler(req, res) {
           },
         };
 
+        // Add GreenZone (safe, never throws)
+        await addGreenZoneToResponse(validatedResult);
+        
         await logVerifyResult(validatedResult);
         return res.status(200).json(validatedResult);
       }
@@ -1807,6 +1862,9 @@ export default async function handler(req, res) {
         }
       }
 
+      // Add GreenZone (safe, never throws)
+      await addGreenZoneToResponse(errorStub);
+      
       await logVerifyResult(errorStub);
       return res.status(200).json({
         ...errorStub,
@@ -1857,6 +1915,8 @@ export default async function handler(req, res) {
       date: errorDateIso,
       predicted: stub.predicted || errorPredicted,
     };
+    // Add GreenZone (safe, never throws) - even for error cases
+    await addGreenZoneToResponse(errorStub);
     // Don't log error cases (ok: false)
     return res.status(200).json(errorStub);
   }

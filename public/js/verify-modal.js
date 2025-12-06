@@ -459,7 +459,96 @@
   
     el.textContent = lines.join("\n");
   }
-  
+
+  /**
+   * Render GreenZone v1 data from verify_race response
+   * Safe function that handles all error cases
+   */
+  function renderGreenZoneV1(host, greenZone) {
+    const gzMessageEl = qs("#flv-gz-message", host || document);
+    if (!gzMessageEl) return;
+    
+    try {
+      // If GreenZone is missing or disabled, show a simple message
+      if (!greenZone || !greenZone.enabled) {
+        const reason = greenZone?.reason || "not_available";
+        const reasons = {
+          missing_race_context: "Missing race context",
+          no_prediction_for_race: "No prediction found for this race",
+          insufficient_historical_data: "Not enough historical data yet",
+          no_matches: "No matching historical races found",
+          internal_error: "GreenZone temporarily unavailable",
+        };
+        gzMessageEl.textContent = `GreenZone: ${reasons[reason] || "Not available"}.`;
+        return;
+      }
+      
+      const lines = [];
+      
+      // Current race GreenZone summary
+      if (greenZone.current) {
+        const current = greenZone.current;
+        const conf = current.confidence || 0;
+        const t3m = current.top3Mass || 0;
+        const similarity = current.similarityScore || 0;
+        const matchCount = current.matchedRaces?.length || 0;
+        
+        // Determine level
+        let level = "Weak Match";
+        if (similarity >= 0.9 && matchCount >= 10) {
+          level = "Strong Match";
+        } else if (similarity >= 0.85 && matchCount >= 5) {
+          level = "Medium Match";
+        }
+        
+        lines.push("GreenZone Summary");
+        lines.push(`${level} (Similarity Score: ${similarity.toFixed(2)})`);
+        lines.push(
+          `This race's confidence (${Math.round(conf)}) and T3M (${Math.round(t3m)}%) match ${matchCount} past races where the app predicted the winner correctly.`
+        );
+        
+        // Show closest match if available
+        const closest = current.matchedRaces?.[0];
+        if (closest) {
+          const closestTrack = closest.track || "?";
+          const closestRaceNo = closest.raceNo || "?";
+          const closestConf = Math.round(closest.confidence || 0);
+          const closestT3m = Math.round(closest.top3Mass || 0);
+          const closestWin = closest.outcome?.win || "";
+          lines.push(
+            `Closest Match: ${closestTrack} Race ${closestRaceNo} — Confidence ${closestConf}, T3M ${closestT3m}% — WIN was correct${closestWin ? ` (${closestWin})` : ""}.`
+          );
+        }
+        
+        lines.push("");
+      }
+      
+      // Card candidates
+      if (greenZone.cardCandidates && greenZone.cardCandidates.length > 0) {
+        const track = greenZone.current?.track || "?";
+        lines.push(`Other GreenZone Candidates at ${track} (Today)`);
+        
+        greenZone.cardCandidates.forEach((candidate, idx) => {
+          const raceNo = candidate.raceNo || "?";
+          const conf = candidate.confidence || 0;
+          const t3m = candidate.top3Mass || 0;
+          const matchCount = candidate.matchedCount || 0;
+          const similarity = candidate.similarityScore || 0;
+          
+          lines.push(
+            `• Race ${raceNo} – Confidence ${Math.round(conf)}, T3M ${Math.round(t3m)}% — ${matchCount} matching past wins (Similarity ${similarity.toFixed(2)})`
+          );
+        });
+      } else if (greenZone.current) {
+        lines.push("No other GreenZone candidates found for today's card.");
+      }
+      
+      gzMessageEl.textContent = lines.join("\n");
+    } catch (error) {
+      console.warn("[verify-modal] GreenZone v1 render failed:", error);
+      gzMessageEl.textContent = "GreenZone: Unable to display (see console for details).";
+    }
+  }
 
  // GreenZone fetch (same UI, but POSTs track/race/date to backend)
 async function refreshGreenZone(host, ctx) {
@@ -1073,6 +1162,9 @@ async function refreshGreenZone(host, ctx) {
           };
           
           renderSummary(summaryEl, summaryPayload);
+          
+          // Render GreenZone v1 data from verify response
+          renderGreenZoneV1(host, verifyData?.greenZone);
           
           const debugEl = qs("#flv-gz-json", host);
           if (debugEl) {

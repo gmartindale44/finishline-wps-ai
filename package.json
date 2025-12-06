@@ -28,6 +28,7 @@
     "audit:server": "node scripts/fetch-audit.js",
     "sanitize:placeholders": "node scripts/sanitize-placeholders.js",
     "debug:verify": "node scripts/debug_verify_race.js",
+    "debug:greenzone": "node scripts/debug/run_greenzone_smoke.mjs",
     "shadow:report": "node scripts/shadow_calibration_report.js",
     "build": "echo \"no build step\""
   },
