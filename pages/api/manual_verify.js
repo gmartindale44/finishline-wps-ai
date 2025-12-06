@@ -290,7 +290,16 @@ function safeParseBody(req) {
 }
 
 export default async function handler(req, res) {
-  // Only accept POST
+  // GET ping handler for testing/debugging
+  if (req.method === "GET") {
+    return res.status(200).json({
+      ok: true,
+      route: "manual_verify",
+      method: "GET",
+    });
+  }
+
+  // Only accept POST for actual manual verify
   if (req.method !== "POST") {
     return res.status(405).json({
       ok: false,
