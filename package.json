@@ -8,6 +8,8 @@
   },
   "scripts": {
     "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
     "append:raw": "node scripts/csv-append.js",
     "append:rows": "node scripts/csv-append.js",
     "append:today": "node scripts/map-append-current.js && node scripts/merge-append-current.js",
@@ -29,13 +31,19 @@
     "sanitize:placeholders": "node scripts/sanitize-placeholders.js",
     "debug:verify": "node scripts/debug_verify_race.js",
     "debug:greenzone": "node scripts/debug/run_greenzone_smoke.mjs",
-    "shadow:report": "node scripts/shadow_calibration_report.js",
-    "build": "echo \"no build step\""
+    "shadow:report": "node scripts/shadow_calibration_report.js"
   },
   "dependencies": {
     "@upstash/redis": "^1.28.2",
     "cheerio": "^1.0.0-rc.12",
     "formidable": "^3.5.3",
-    "openai": "^4.0.0"
+    "next": "^14.2.0",
+    "openai": "^4.0.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.7",
+    "typescript": "5.9.3"
   }
 }

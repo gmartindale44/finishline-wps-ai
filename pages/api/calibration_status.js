@@ -1,6 +1,6 @@
 // pages/api/calibration_status.js - Read-only calibration status endpoint
 
-import { keys as redisKeys, hgetall as redisHGetAll } from '../../../lib/redis.js';
+import { keys as redisKeys, hgetall as redisHGetAll } from '../../lib/redis.js';
 import fs from 'fs';
 import path from 'path';
 

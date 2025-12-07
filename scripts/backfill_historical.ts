@@ -73,7 +73,7 @@ const GENERIC_ALIASES = {
  * @param {string} line
  * @param {number} [expected]
  */
-function parseCsvLine(line, expected) {
+function parseCsvLine(line, expected?: number) {
   const result = [];
   let current = "";
   let quoted = false;
