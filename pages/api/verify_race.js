@@ -1471,17 +1471,21 @@ export default async function handler(req, res) {
       return s;
     }
     
-    // Extract the raw date from body
+    // Extract the raw date from body (check multiple fields, including dateIso)
     const uiDateRaw =
-      (body && (body.date || body.raceDate || body.canonicalDate)) ||
+      (body && (body.date || body.dateRaw || body.dateIso || body.raceDate || body.canonicalDate)) ||
       null;
 
-    const canonicalDateIso = canonicalizeDateFromClient(uiDateRaw);
+    let canonicalDateIso = canonicalizeDateFromClient(uiDateRaw);
     
     // Extract raceNo early - needed for error responses and manual verify branch
     const raceNo = (body.raceNo || body.race || "").toString().trim() || "";
 
-    if (!canonicalDateIso) {
+    // Detect manual mode
+    const isManual = body.mode === "manual";
+
+    // Normal verify: still require a valid date
+    if (!canonicalDateIso && !isManual) {
       // If no valid date, respond with 200 JSON (not 400) to match our "never 500" policy
       return res.status(200).json({
         ok: false,
@@ -1510,6 +1514,11 @@ export default async function handler(req, res) {
           backendVersion: BACKEND_VERSION,
         },
       });
+    }
+
+    // Manual verify: if date is missing/invalid, fall back to "today"
+    if (!canonicalDateIso && isManual) {
+      canonicalDateIso = new Date().toISOString().slice(0, 10);
     }
     
     // Debug log (only in non-production to avoid noisy logs)

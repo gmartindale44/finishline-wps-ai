@@ -1470,21 +1470,20 @@ async function refreshGreenZone(host, ctx) {
           return null;
         }
         
-        const canonicalDate = formatUiDateForApi(uiDateRaw);
-        if (!canonicalDate) {
-          alert("Invalid date format. Please use YYYY-MM-DD or MM/DD/YYYY.");
-          return;
-        }
-        
         // Get predicted (reuse existing helper)
         const predicted = readUIPredictions();
         
+        // Try to format date, but don't block if invalid (backend will fallback to today for manual mode)
+        const canonicalDate = formatUiDateForApi(uiDateRaw);
+        const todayIso = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+        
         // Build payload - use /api/verify_race with mode: "manual"
+        // Always send at least one date field (backend will use today as fallback if both are missing/invalid)
         const payload = {
           track,
           raceNo,
-          dateIso: canonicalDate,
-          dateRaw: uiDateRaw,
+          dateIso: canonicalDate || todayIso,
+          dateRaw: uiDateRaw || todayIso,
           mode: "manual",
           outcome: {
             win,
