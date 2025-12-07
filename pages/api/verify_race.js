@@ -1477,6 +1477,9 @@ export default async function handler(req, res) {
       null;
 
     const canonicalDateIso = canonicalizeDateFromClient(uiDateRaw);
+    
+    // Extract raceNo early - needed for error responses and manual verify branch
+    const raceNo = (body.raceNo || body.race || "").toString().trim() || "";
 
     if (!canonicalDateIso) {
       // If no valid date, respond with 200 JSON (not 400) to match our "never 500" policy
@@ -1516,8 +1519,6 @@ export default async function handler(req, res) {
         canonicalDateIso,
       });
     }
-    
-    const raceNo = (body.raceNo || body.race || "").toString().trim() || "";
 
     // Manual verify branch - handle manual outcome entry
     if (body.mode === "manual" && body.outcome) {
