@@ -12,8 +12,12 @@ export const config = {
 import { Redis } from "@upstash/redis";
 // GreenZone v1 integration
 import { computeGreenZoneForRace } from "../../lib/greenzone/greenzone_v1.js";
+// Normalize helpers for prediction lookup
+import { slugRaceId } from "../../lib/normalize.js";
+import { hgetall } from "../../lib/redis.js";
 
 const VERIFY_PREFIX = "fl:verify:";
+const PRED_PREFIX = "fl:pred:";
 
 let redisClient = null;
 function getRedis() {
@@ -266,6 +270,54 @@ async function computeGreenZoneSafe(result) {
   } catch (error) {
     console.warn("[verify_race] GreenZone computation failed:", error?.message || error);
     return { enabled: false, reason: "internal_error" };
+  }
+}
+
+/**
+ * Fetch prediction log from Redis for a specific race
+ * Returns predicted picks, confidence, and top3Mass if available
+ */
+async function fetchPredictionLog(track, dateIso, raceNo) {
+  try {
+    // Try multiple possible key patterns
+    const patterns = [
+      slugRaceId({ track, date: dateIso, postTime: "unknown", raceNo }),
+      slugRaceId({ track, date: dateIso, postTime: "", raceNo }),
+    ];
+
+    for (const raceId of patterns) {
+      const key = `${PRED_PREFIX}${raceId}`;
+      const hash = await hgetall(key);
+      if (hash && Object.keys(hash).length > 0) {
+        // Parse predicted picks from picks field (JSON string)
+        let predicted = { win: "", place: "", show: "" };
+        try {
+          const picksStr = hash.picks || "{}";
+          const picks = typeof picksStr === "string" ? JSON.parse(picksStr) : picksStr;
+          predicted = {
+            win: picks.win || "",
+            place: picks.place || "",
+            show: picks.show || "",
+          };
+        } catch {
+          // picks might not be parseable, that's ok
+        }
+
+        const confRaw = parseFloat(hash.confidence || "0") || 0;
+        const confidence = confRaw <= 1 ? confRaw * 100 : confRaw;
+        const t3Raw = parseFloat(hash.top3_mass || "0") || 0;
+        const top3Mass = t3Raw <= 1 ? t3Raw * 100 : t3Raw;
+
+        return {
+          predicted,
+          confidence: Number.isFinite(confidence) && confidence > 0 ? confidence : null,
+          top3Mass: Number.isFinite(top3Mass) && top3Mass > 0 ? top3Mass : null,
+        };
+      }
+    }
+    return null;
+  } catch (error) {
+    return null;
   }
 }
 
@@ -1466,6 +1518,150 @@ export default async function handler(req, res) {
     }
     
     const raceNo = (body.raceNo || body.race || "").toString().trim() || "";
+
+    // Manual verify branch - handle manual outcome entry
+    if (body.mode === "manual" && body.outcome) {
+      try {
+        const outcome = {
+          win: (body.outcome.win || "").trim(),
+          place: (body.outcome.place || "").trim(),
+          show: (body.outcome.show || "").trim(),
+        };
+
+        // Get predictions from body or fetch from Redis
+        let predicted = predictedFromClient;
+        let confidence = body.confidence || null;
+        let top3Mass = body.top3Mass || null;
+
+        // If predictions not provided in body, try fetching from Redis
+        if (!predicted || (!predicted.win && !predicted.place && !predicted.show)) {
+          const predLog = await fetchPredictionLog(track, canonicalDateIso, raceNo);
+          if (predLog) {
+            predicted = predLog.predicted || { win: "", place: "", show: "" };
+            if (predLog.confidence !== null) confidence = predLog.confidence;
+            if (predLog.top3Mass !== null) top3Mass = predLog.top3Mass;
+          }
+        }
+
+        // Normalize predictions
+        const predictedNormalized = normalizePrediction(predicted);
+
+        // Compute hits using normalized horse names
+        const normalizeHorseName = (name) => (name || "").toLowerCase().replace(/\s+/g, " ").trim();
+        const norm = normalizeHorseName;
+        const pWin = norm(predictedNormalized.win);
+        const pPlace = norm(predictedNormalized.place);
+        const pShow = norm(predictedNormalized.show);
+        const oWin = norm(outcome.win);
+        const oPlace = norm(outcome.place);
+        const oShow = norm(outcome.show);
+
+        const winHit = !!pWin && !!oWin && pWin === oWin;
+        const placeHit = !!pPlace && !!oPlace && pPlace === oPlace;
+        const showHit = !!pShow && !!oShow && pShow === oShow;
+
+        // Top3Hit: any predicted horse is in the top 3 outcome positions
+        const top3Set = new Set([oWin, oPlace, oShow].filter(Boolean));
+        const top3Hit = [pWin, pPlace, pShow]
+          .filter(Boolean)
+          .some((name) => top3Set.has(name));
+
+        const hits = {
+          winHit,
+          placeHit,
+          showHit,
+          top3Hit,
+        };
+
+        // Build summary for manual entry
+        const summaryLines = [];
+        if (uiDateRaw && uiDateRaw !== canonicalDateIso) {
+          summaryLines.push(`UI date: ${uiDateRaw}`);
+        }
+        if (canonicalDateIso) {
+          summaryLines.push(`Using date: ${canonicalDateIso}`);
+        }
+        summaryLines.push("Outcome (manual entry):");
+        summaryLines.push(`  Win: ${outcome.win || "-"}`);
+        summaryLines.push(`  Place: ${outcome.place || "-"}`);
+        summaryLines.push(`  Show: ${outcome.show || "-"}`);
+
+        if (predictedNormalized && (predictedNormalized.win || predictedNormalized.place || predictedNormalized.show)) {
+          const predParts = [predictedNormalized.win, predictedNormalized.place, predictedNormalized.show].filter(Boolean);
+          if (predParts.length) {
+            summaryLines.push(`Predicted: ${predParts.join(" / ")}`);
+          }
+        }
+
+        const hitParts = [];
+        if (hits.winHit) hitParts.push("winHit");
+        if (hits.placeHit) hitParts.push("placeHit");
+        if (hits.showHit) hitParts.push("showHit");
+        if (hits.top3Hit) hitParts.push("top3Hit");
+        summaryLines.push(`Hits: ${hitParts.length ? hitParts.join(", ") : "(none)"}`);
+
+        const summary = summaryLines.join("\n");
+
+        // Build raceId
+        const raceId = buildVerifyRaceId(track, canonicalDateIso, raceNo);
+
+        // Build result object
+        const result = {
+          ok: true,
+          step: "manual_verify",
+          track,
+          date: canonicalDateIso,
+          raceNo,
+          raceId,
+          outcome,
+          predicted: predictedNormalized,
+          hits,
+          summary,
+          debug: {
+            source: "manual",
+            manualProvider: body.provider || "TwinSpires",
+            canonicalDateIso: canonicalDateIso,
+          },
+        };
+
+        // Add optional fields if present
+        if (confidence !== null) result.confidence = confidence;
+        if (top3Mass !== null) result.top3Mass = top3Mass;
+        if (body.provider) result.provider = body.provider;
+
+        // Log to Redis
+        await logVerifyResult(result);
+
+        // Add GreenZone (safe, never throws)
+        await addGreenZoneToResponse(result);
+
+        return res.status(200).json(result);
+      } catch (error) {
+        console.error("[verify_race] Manual verify error:", error);
+        // Return error response (still 200 to match never-500 policy)
+        return res.status(200).json({
+          ok: false,
+          step: "manual_verify_error",
+          track,
+          date: canonicalDateIso,
+          raceNo,
+          outcome: body.outcome || { win: "", place: "", show: "" },
+          predicted: predictedFromClient,
+          hits: {
+            winHit: false,
+            placeHit: false,
+            showHit: false,
+            top3Hit: false,
+          },
+          summary: "Error: Manual verify failed - " + (error?.message || "Unknown error"),
+          debug: {
+            error: error?.message || String(error),
+            source: "manual",
+          },
+          greenZone: { enabled: false, reason: "error" },
+        });
+      }
+    }
 
     // Build context - include all date fields for maximum compatibility
     const ctx = {

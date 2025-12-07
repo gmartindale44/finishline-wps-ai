@@ -1479,12 +1479,13 @@ async function refreshGreenZone(host, ctx) {
         // Get predicted (reuse existing helper)
         const predicted = readUIPredictions();
         
-        // Build payload
+        // Build payload - use /api/verify_race with mode: "manual"
         const payload = {
           track,
           raceNo,
           dateIso: canonicalDate,
           dateRaw: uiDateRaw,
+          mode: "manual",
           outcome: {
             win,
             place,
@@ -1507,8 +1508,8 @@ async function refreshGreenZone(host, ctx) {
           manualBtn.textContent = "Submitting…";
         }
         
-        // Send request
-        const resp = await fetch("/api/manual_verify", {
+        // Send request to /api/verify_race with mode: "manual"
+        const resp = await fetch("/api/verify_race", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -1518,13 +1519,13 @@ async function refreshGreenZone(host, ctx) {
         if (!resp.ok) {
           const text = await resp.text().catch(() => "");
           console.error("[manual_verify] HTTP error", resp.status, text);
-          alert("Manual verify failed (" + resp.status + "). Please check the console and make sure /api/manual_verify is deployed.");
+          alert("Manual verify failed (" + resp.status + "). Please check the console.");
           if (statusNode) {
             statusNode.textContent = `Error ${resp.status}`;
             statusNode.style.color = "#f87171";
           }
           if (summaryEl) {
-            summaryEl.textContent = `Error: Manual verify endpoint returned ${resp.status}. This usually means the route hasn't been deployed yet. Please wait for deployment or check the console.`;
+            summaryEl.textContent = `Error: Manual verify endpoint returned ${resp.status}.`;
           }
           return;
         }
