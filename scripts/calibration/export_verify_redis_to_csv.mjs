@@ -6,11 +6,16 @@
  * 
  * This script:
  * - Scans all fl:verify:* keys in Redis
+ * - Reads verify logs (stored as JSON strings via redis.set())
  * - Maps each verify log to the calibration CSV schema
+ * - Supports all step types: verify_race_full, verify_race_full_fallback, manual_verify
  * - Writes a new CSV file: data/finishline_tests_from_verify_redis_v1.csv
  * 
  * CSV Schema (matches calibration_from_logs_v1.csv):
  * track,date,raceNo,strategyName,version,predWin,predPlace,predShow,outWin,outPlace,outShow,winHit,placeHit,showHit,top3Hit
+ * 
+ * Note: Verify logs are stored as JSON strings (not hashes), so we use redis.get() and parse JSON.
+ * Manual verify entries are fully supported and treated as valid calibration data.
  * 
  * Usage:
  *   npm run export:verify-redis
@@ -79,13 +84,20 @@ function normalizeToCalibrationRow(verifyLog) {
   const top3Hit = hits.top3Hit === true ? "true" : "false";
 
   // Validate required fields
-  if (!track || !date || !raceNo) {
+  // Note: manual_verify entries may have date fallback to today, so we're more lenient
+  if (!track || !raceNo) {
     return null;
+  }
+  
+  // If date is missing, try debug.canonicalDateIso or skip (shouldn't happen but be safe)
+  const finalDate = date || (verifyLog.debug && verifyLog.debug.canonicalDateIso) || "";
+  if (!finalDate) {
+    return null; // Still require some date
   }
 
   return {
     track,
-    date,
+    date: finalDate,
     raceNo,
     strategyName,
     version,
