@@ -413,14 +413,26 @@ curl "https://finishline-wps-ai.vercel.app/api/verify_backfill?track=Laurel%20Pa
 
 ### Nightly Automation
 
-A GitHub Actions workflow runs automatically at midnight CST to backfill today's races:
-
+**Backfill Workflow**:
 - **Workflow**: `.github/workflows/backfill_nightly.yml`
 - **Schedule**: Runs daily at 6:00 UTC (midnight CST)
 - **Process**: 
   1. Runs dry-run first to validate
   2. If successful, runs live backfill to persist results
   3. Optionally posts summary to Discord webhook
+
+**Calibration Workflow**:
+- **Workflow**: `.github/workflows/nightly-calibration.yml`
+- **Schedule**: Runs daily at 8:00 UTC (2:00 AM CST / 3:00 AM CDT)
+- **Process**:
+  1. Exports verify logs from Redis to CSV (`npm run export:verify-redis`)
+  2. Builds filtered calibration sample with predictions (`npm run build:calibration-sample`)
+  3. Runs verify-v1 calibration metrics (`npm run calibrate:verify-v1`)
+  4. Commits generated artifacts back to master (CSV files and JSON/MD reports)
+- **Required Environment Variables** (set as GitHub repo secrets):
+  - `UPSTASH_REDIS_REST_URL` - Upstash Redis REST URL
+  - `UPSTASH_REDIS_REST_TOKEN` - Upstash Redis REST token
+- **Note**: The workflow passes these env vars to all Node.js script steps. The calibration scripts use `Redis.fromEnv()` which reads these environment variables.
 
 ### Environment Variables
 
@@ -442,6 +454,42 @@ The `/api/verify_backfill` endpoint now intelligently skips races that already h
 - **Response includes**: `skipped` and `processed` counters in addition to `successes` and `failures`
 
 This prevents duplicate verify calls and reduces API load.
+
+### Manual Outcome Entry API
+
+The `/api/manual_verify` endpoint allows manually entering race outcomes (Win/Place/Show) from TwinSpires or other tote boards:
+
+**Endpoint**: `POST /api/manual_verify`
+
+**Request Body**:
+```json
+{
+  "track": "Tampa Bay Downs",
+  "raceNo": "5",
+  "dateIso": "2025-12-31",
+  "dateRaw": "12/31/2025",
+  "outcome": {
+    "win": "Horse A",
+    "place": "Horse B",
+    "show": "Horse C"
+  },
+  "predicted": {
+    "win": "Horse X",
+    "place": "Horse Y",
+    "show": "Horse Z"
+  }
+}
+```
+
+**Response**: Returns the same structure as `/api/verify_race`, including computed hits, summary, and GreenZone data.
+
+**Note**: This is a Next.js API route and requires `npm run build` for production deployment. The route writes to Redis using the same structure as normal verify calls, ensuring compatibility with calibration and GreenZone.
+
+**GET Ping Test**:
+```bash
+curl https://your-app.vercel.app/api/manual_verify
+# Returns: {"ok":true,"route":"manual_verify","method":"GET"}
+```
 
 ### Export Verify Logs to CSV
 
