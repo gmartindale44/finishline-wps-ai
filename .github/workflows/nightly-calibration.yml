@@ -10,14 +10,14 @@
 #    - data/calibration/verify_v1_report.json (machine-readable metrics)
 #    - data/calibration/verify_v1_report.md (human-readable summary)
 #
-# The workflow is scheduled to run daily at 08:00 UTC and can also be triggered manually.
+# The workflow is scheduled to run weekly on Sunday at 08:15 UTC and can also be triggered manually.
 
 name: nightly-calibration
 
 on:
   schedule:
-    # 08:00 UTC daily (02:00 AM CST / 03:00 AM CDT)
-    - cron: "0 8 * * *"
+    # 08:15 UTC weekly on Sunday (02:15 AM CST / 03:15 AM CDT)
+    - cron: "15 8 * * 0"
   workflow_dispatch: {}
 
 permissions:
