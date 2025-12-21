@@ -1,6 +1,6 @@
 # Verify V1 Calibration Report
 
-**Generated:** 12/14/2025, 9:47:56 AM
+**Generated:** 12/21/2025, 9:44:50 AM
 **Source:** finishline_tests_calibration_v1.csv
 **Total Rows:** 5,000
 **Filtered Rows:** 5,000
@@ -10,34 +10,34 @@
 | Metric | Value |
 |--------|-------|
 | Total Races | 5,000 |
-| Win Hit Rate | 25.0% |
-| Place Hit Rate | 18.3% |
-| Show Hit Rate | 11.7% |
-| Top 3 Hit Rate | 76.7% |
-| Any Hit Rate | 40.0% |
+| Win Hit Rate | 24.1% |
+| Place Hit Rate | 19.0% |
+| Show Hit Rate | 12.7% |
+| Top 3 Hit Rate | 73.5% |
+| Any Hit Rate | 40.6% |
 | Exact Trifecta Rate | 0.0% |
-| Partial Order Top 3 Rate | 76.7% |
+| Partial Order Top 3 Rate | 73.5% |
 
 ## Top 10 Tracks (by Race Count)
 
 | Track | Races | Win Hit Rate | Top 3 Hit Rate |
 |-------|-------|--------------|----------------|
-| Mountaineer Park | 498 | 33.3% | 83.3% |
-| Gulfstream Park | 415 | 40.0% | 80.0% |
-| Parx Racing | 415 | 40.0% | 80.0% |
-| Charles Town | 336 | 0.0% | 100.0% |
-| Fair Grounds | 250 | 0.0% | 66.4% |
-| Remington Park | 249 | 33.3% | 66.7% |
-| yonkers | 249 | 0.0% | 100.0% |
-| Aqueduct | 168 | 0.0% | 0.0% |
-| Century Mile Harness | 168 | 50.0% | 100.0% |
-| Dayton | 168 | 50.0% | 100.0% |
+| Gulfstream Park | 441 | 28.6% | 71.4% |
+| Mountaineer Park | 378 | 33.3% | 83.3% |
+| Parx Racing | 315 | 40.0% | 80.0% |
+| Charles Town | 256 | 0.0% | 100.0% |
+| Delta Downs | 256 | 50.0% | 100.0% |
+| Laurel Park | 252 | 0.0% | 75.0% |
+| Remington Park | 252 | 50.0% | 75.0% |
+| Zia Park | 252 | 25.0% | 50.0% |
+| Fair Grounds | 190 | 0.0% | 66.3% |
+| Northfield Park | 189 | 0.0% | 66.7% |
 
 ## Strategy Summary
 
 | Strategy | Races | Win Hit Rate | Top 3 Hit Rate |
 |----------|-------|--------------|----------------|
-| default@v1 | 5,000 | 25.0% | 76.7% |
+| default@v1 | 5,000 | 24.1% | 73.5% |
 
 ## Notes
 
