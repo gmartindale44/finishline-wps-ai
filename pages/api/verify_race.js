@@ -336,8 +336,11 @@ async function logVerifyResult(result) {
       if (typeof predmeta.confidence_pct === 'number') {
         logPayload.confidence_pct = predmeta.confidence_pct;
       }
+      // Accept both t3m_pct and top3_mass_pct (for backward compatibility)
       if (typeof predmeta.t3m_pct === 'number') {
         logPayload.t3m_pct = predmeta.t3m_pct;
+      } else if (typeof predmeta.top3_mass_pct === 'number') {
+        logPayload.t3m_pct = predmeta.top3_mass_pct;
       }
       if (Array.isArray(predmeta.top3_list) && predmeta.top3_list.length > 0) {
         logPayload.top3_list = predmeta.top3_list;

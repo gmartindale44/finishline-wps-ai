@@ -607,64 +607,43 @@ export default async function handler(req, res) {
           return; // Skip if normalization failed
         }
         
-        // Build top3 list
-        const top3List = picks && picks.length >= 3
-          ? picks.slice(0, 3).map(p => p.name || p.slot || "").filter(Boolean)
-          : [];
-        
-        // Extract predicted picks
+        // Extract predicted picks from picks array
         const predictedWin = picks && picks.length > 0 ? (picks[0]?.name || picks[0]?.slot || "") : "";
         const predictedPlace = picks && picks.length > 1 ? (picks[1]?.name || picks[1]?.slot || "") : "";
         const predictedShow = picks && picks.length > 2 ? (picks[2]?.name || picks[2]?.slot || "") : "";
         
-        // Validate confidence and T3M are numbers
-        const confidencePct = typeof calibratedResponse.confidence === 'number' 
-          ? calibratedResponse.confidence 
+        // Extract top3_list from ranking (ordered top 3 horses)
+        const top3List = (calibratedResponse.ranking || []).slice(0, 3)
+          .map(r => r?.name || "")
+          .filter(Boolean);
+        
+        // Derive confidence_pct and t3m_pct from correct sources
+        // confidence: already in 0-100 range from calibratedResponse
+        const confidencePct = typeof calibratedResponse.confidence === 'number' && Number.isFinite(calibratedResponse.confidence)
+          ? calibratedResponse.confidence
           : null;
-        const t3mPct = typeof calibratedResponse.top3_mass === 'number'
-          ? calibratedResponse.top3_mass
-          : null;
+        
+        // t3m_pct: prefer strategy.metrics.top3Mass (fractional 0-1) * 100, fallback to top3_mass if already percentage
+        const top3MassFrac = calibratedResponse.strategy?.metrics?.top3Mass;
+        let t3mPct = null;
+        if (typeof top3MassFrac === 'number' && Number.isFinite(top3MassFrac)) {
+          t3mPct = Math.round(top3MassFrac * 100);
+        } else if (typeof calibratedResponse.top3_mass === 'number' && Number.isFinite(calibratedResponse.top3_mass)) {
+          // Fallback: if top3_mass is already a percentage, use it directly
+          t3mPct = Math.round(calibratedResponse.top3_mass);
+        }
         
         const now = new Date();
         const created_at = now.toISOString();
+        const timestamp = Date.now();
         
         const { setex } = await import('../lib/redis.js');
         
-        // If date and raceNo are available, persist to permanent key
-        if (date && raceNo) {
-          const normDate = normalizeDate(date);
-          const normRaceNo = String(raceNo).trim();
-          
-          if (normDate && normRaceNo) {
-            // Build join key: date|track|raceNo
-            const joinKey = `${normDate}|${normTrack}|${normRaceNo}`;
-            const predmetaKey = `fl:predmeta:${joinKey}`;
-            
-            // Build metadata payload
-            const predmeta = {
-              date: normDate,
-              track: normTrack,
-              raceNo: normRaceNo,
-              confidence_pct: confidencePct,
-              t3m_pct: t3mPct,
-              predicted_win: predictedWin,
-              predicted_place: predictedPlace,
-              predicted_show: predictedShow,
-              top3_list: top3List,
-              created_at,
-              model_version: calibratedResponse.meta?.model || "",
-              calibration_id: calibratedResponse.strategy?.recommended || "",
-            };
-            
-            // Write with TTL (45 days = 3888000 seconds)
-            await setex(predmetaKey, 3888000, JSON.stringify(predmeta));
-            return; // Done
-          }
+        // Persist if we have at least confidence_pct (prefer persisting even if t3m missing)
+        if (!Number.isFinite(confidencePct)) {
+          // Skip only if confidence is missing
+          return;
         }
-        
-        // Otherwise, persist to temporary pending key
-        const timestamp = Date.now();
-        const pendingKey = `fl:predmeta:pending:${timestamp}`;
         
         // Compute horses fingerprint (simple hash from ordered horse names)
         const horsesFingerprint = (() => {
@@ -684,11 +663,11 @@ export default async function handler(req, res) {
           return Math.abs(hash).toString(16).slice(0, 12).padStart(12, '0');
         })();
         
-        // Build metadata payload (without date/raceNo)
-        const predmeta = {
+        // Common predmeta payload fields
+        const basePredmeta = {
           track: normTrack,
           confidence_pct: confidencePct,
-          t3m_pct: t3mPct,
+          t3m_pct: t3mPct, // may be null, but still persist
           predicted_win: predictedWin,
           predicted_place: predictedPlace,
           predicted_show: predictedShow,
@@ -697,22 +676,54 @@ export default async function handler(req, res) {
           created_at_ms: timestamp,
           model_version: calibratedResponse.meta?.model || "",
           calibration_id: calibratedResponse.strategy?.recommended || "",
-          // Additional fields for matching
+          // Additional fields for matching (always include for both permanent and pending)
           distance: distance_input || null,
           surface: surface || null,
+          distance_furlongs: calibratedResponse.meta?.distance_furlongs || null,
+          distance_meters: calibratedResponse.meta?.distance_meters || null,
           runners_count: horses ? horses.length : 0,
           horses_fingerprint: horsesFingerprint || null,
         };
         
+        // If date and raceNo are available, persist to permanent key
+        if (date && raceNo) {
+          const normDate = normalizeDate(date);
+          const normRaceNo = String(raceNo).trim();
+          
+          if (normDate && normRaceNo) {
+            // Build join key: date|track|raceNo
+            const joinKey = `${normDate}|${normTrack}|${normRaceNo}`;
+            const predmetaKey = `fl:predmeta:${joinKey}`;
+            
+            // Build metadata payload
+            const predmeta = {
+              ...basePredmeta,
+              date: normDate,
+              raceNo: normRaceNo,
+            };
+            
+            // Write with TTL (45 days = 3888000 seconds)
+            await setex(predmetaKey, 3888000, JSON.stringify(predmeta));
+            return; // Done
+          }
+        }
+        
+        // Otherwise, persist to temporary pending key (ALWAYS write if confidence exists)
+        const pendingKey = `fl:predmeta:pending:${timestamp}`;
+        
+        // Build metadata payload (without date/raceNo)
+        const predmeta = {
+          ...basePredmeta,
+        };
+        
         // Write with short TTL (2 hours = 7200 seconds)
         await setex(pendingKey, 7200, JSON.stringify(predmeta));
-        
-        // Store pending key ID in response (attach to response object)
-        // Note: response is already being sent, so we can't modify it here
-        // The pending key will be found by verify_race.js via track matching
       } catch (err) {
         // Fail silently - must not break prediction flow
-        console.warn("[predmeta] write failed:", err?.message || err);
+        // Minimal debug logging (no env vars/tokens)
+        const mode = (date && raceNo) ? 'permanent' : 'pending';
+        const keyPrefix = mode === 'permanent' ? 'fl:predmeta:{date}|{track}|{raceNo}' : 'fl:predmeta:pending:{timestamp}';
+        console.warn("[predmeta] write failed", { mode, key: keyPrefix, reason: err?.message || String(err) });
       }
     })();
     
