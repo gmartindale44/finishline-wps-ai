@@ -563,6 +563,230 @@ export default async function handler(req, res) {
         // Ignore all errors - this is fire-and-forget
       }
     })();
+
+    // Helper function to safely write predmeta with debugging
+    async function safeWritePredmeta(payload) {
+      const debugResult = {
+        enabled: false,
+        mode: null,
+        key: null,
+        written: false,
+        error: null,
+      };
+      
+      try {
+        // Check persistence enabled (treat as string "true")
+        const persistEnabledRaw = process.env.FINISHLINE_PERSISTENCE_ENABLED || '';
+        const persistEnabled = String(persistEnabledRaw).toLowerCase() === 'true';
+        debugResult.enabled = persistEnabled;
+        
+        // Skip if not enabled
+        if (!persistEnabled) {
+          return debugResult;
+        }
+        
+        // Check Redis env vars
+        const hasRedis = Boolean(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
+        if (!hasRedis) {
+          debugResult.error = 'Redis env vars missing';
+          return debugResult;
+        }
+        
+        const { setex } = await import('../lib/redis.js');
+        
+        const date = payload.date || null;
+        const raceNo = payload.raceNo || null;
+        const normTrack = payload.track || '';
+        const timestamp = payload.created_at_ms || Date.now();
+        
+        // Determine key and mode
+        let targetKey = null;
+        let mode = null;
+        let ttl = 0;
+        
+        if (date && raceNo) {
+          // Permanent key
+          const joinKey = `${date}|${normTrack}|${raceNo}`;
+          targetKey = `fl:predmeta:${joinKey}`;
+          mode = 'permanent';
+          ttl = 3888000; // 45 days
+        } else {
+          // Pending key
+          targetKey = `fl:predmeta:pending:${timestamp}`;
+          mode = 'pending';
+          ttl = 7200; // 2 hours
+        }
+        
+        debugResult.mode = mode;
+        debugResult.key = targetKey;
+        
+        // Write predmeta key
+        await setex(targetKey, ttl, JSON.stringify(payload));
+        debugResult.written = true;
+        
+        // Always write debug key (6 hours TTL = 21600 seconds)
+        const debugKey = 'fl:predmeta:last_write';
+        const debugPayload = {
+          ts: timestamp,
+          persistEnabledRaw: String(persistEnabledRaw),
+          track: normTrack,
+          date: date || null,
+          raceNo: raceNo || null,
+          keyWritten: targetKey,
+          confidence_pct: payload.confidence_pct || null,
+          t3m_pct: payload.t3m_pct || null,
+          mode,
+        };
+        await setex(debugKey, 21600, JSON.stringify(debugPayload));
+        
+      } catch (err) {
+        debugResult.error = err?.message || String(err);
+        // Log one line error (key name only, no env vars/tokens)
+        console.warn("[predmeta] write failed", debugResult.key, debugResult.error);
+      }
+      
+      return debugResult;
+    }
+    
+    // Persist prediction metadata (confidence/T3M) for join key lookup
+    // If date/raceNo available: persist to permanent key
+    // If date/raceNo missing: persist to temporary pending key
+    let predmetaDebug = { enabled: false, mode: null, key: null, written: false, error: null };
+    
+    // Await predmeta write (with timeout to avoid blocking too long)
+    const predmetaWritePromise = (async () => {
+      try {
+        const date = body.date || body.dateIso || null;
+        const raceNo = body.raceNo || body.race || null;
+        
+        // Skip if track missing
+        if (!track) {
+          predmetaDebug.error = 'track missing';
+          return;
+        }
+        
+        // Normalize track name (same as verify_race.js)
+        const normalizeTrack = (t) => {
+          if (!t) return "";
+          return String(t)
+            .toLowerCase()
+            .trim()
+            .replace(/\s+/g, " ")
+            .replace(/[^a-z0-9\s]/g, "")
+            .replace(/\s+/g, " ");
+        };
+        
+        // Normalize date to YYYY-MM-DD
+        const normalizeDate = (d) => {
+          if (!d) return "";
+          const str = String(d).trim();
+          if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+          try {
+            const parsed = new Date(str);
+            if (!isNaN(parsed.getTime())) {
+              return parsed.toISOString().slice(0, 10);
+            }
+          } catch {}
+          return "";
+        };
+        
+        const normTrack = normalizeTrack(track);
+        if (!normTrack) {
+          predmetaDebug.error = 'track normalization failed';
+          return;
+        }
+        
+        // Extract predicted picks from picks array
+        const predictedWin = picks && picks.length > 0 ? (picks[0]?.name || picks[0]?.slot || "") : "";
+        const predictedPlace = picks && picks.length > 1 ? (picks[1]?.name || picks[1]?.slot || "") : "";
+        const predictedShow = picks && picks.length > 2 ? (picks[2]?.name || picks[2]?.slot || "") : "";
+        
+        // Extract top3_list from ranking (ordered top 3 horses)
+        const top3List = (calibratedResponse.ranking || []).slice(0, 3)
+          .map(r => r?.name || "")
+          .filter(Boolean);
+        
+        // Derive confidence_pct and t3m_pct from correct sources
+        // confidence: already in 0-100 range from calibratedResponse
+        const confidencePct = typeof calibratedResponse.confidence === 'number' && Number.isFinite(calibratedResponse.confidence)
+          ? calibratedResponse.confidence
+          : null;
+        
+        // t3m_pct: use strategy.metrics.top3Mass (fractional 0-1) * 100
+        const top3MassFrac = calibratedResponse.strategy?.metrics?.top3Mass;
+        const t3mPct = typeof top3MassFrac === 'number' && Number.isFinite(top3MassFrac)
+          ? Math.round(top3MassFrac * 100)
+          : null;
+        
+        // Persist if we have at least confidence_pct (prefer persisting even if t3m missing)
+        if (!Number.isFinite(confidencePct)) {
+          predmetaDebug.error = 'confidence_pct not finite';
+          return;
+        }
+        
+        const now = new Date();
+        const created_at = now.toISOString();
+        const timestamp = Date.now();
+        
+        // Compute horses fingerprint (simple hash from ordered horse names)
+        const horsesFingerprint = (() => {
+          if (!Array.isArray(horses) || horses.length === 0) return "";
+          const names = horses
+            .map(h => String(h?.name || h?.slot || "").trim().toLowerCase())
+            .filter(Boolean);
+          if (names.length === 0) return "";
+          const combined = names.join("|");
+          let hash = 0;
+          for (let i = 0; i < combined.length; i++) {
+            hash = ((hash << 5) - hash) + combined.charCodeAt(i);
+            hash = hash & hash;
+          }
+          return Math.abs(hash).toString(16).slice(0, 12).padStart(12, '0');
+        })();
+        
+        // Prepare predmeta payload
+        const normDate = date ? normalizeDate(date) : null;
+        const normRaceNo = raceNo ? String(raceNo).trim() : null;
+        
+        const predmetaPayload = {
+          track: normTrack,
+          confidence_pct: confidencePct,
+          t3m_pct: t3mPct,
+          predicted_win: predictedWin,
+          predicted_place: predictedPlace,
+          predicted_show: predictedShow,
+          top3_list: top3List,
+          created_at,
+          created_at_ms: timestamp,
+          model_version: calibratedResponse.meta?.model || "",
+          calibration_id: calibratedResponse.strategy?.recommended || "",
+          distance: distance_input || null,
+          surface: surface || null,
+          distance_furlongs: calibratedResponse.meta?.distance_furlongs || null,
+          distance_meters: calibratedResponse.meta?.distance_meters || null,
+          runners_count: horses ? horses.length : 0,
+          horses_fingerprint: horsesFingerprint || null,
+          ...(normDate && normRaceNo ? { date: normDate, raceNo: normRaceNo } : {}),
+        };
+        
+        // Write via helper (includes debug key)
+        predmetaDebug = await safeWritePredmeta(predmetaPayload);
+        
+      } catch (err) {
+        predmetaDebug.error = err?.message || String(err);
+        console.warn("[predmeta] write failed", predmetaDebug.key || 'unknown', predmetaDebug.error);
+      }
+    })();
+    
+    // Wait for predmeta write with timeout (max 1 second, then proceed)
+    try {
+      await Promise.race([
+        predmetaWritePromise,
+        new Promise(resolve => setTimeout(resolve, 1000))
+      ]);
+    } catch {
+      // Ignore timeout - proceed with response
+    }
     
     return res.status(200).json({
       ...calibratedResponse,
@@ -571,6 +795,7 @@ export default async function handler(req, res) {
         strategyName: thresholds.strategyName,
         version: thresholds.version,
       },
+      predmeta_debug: predmetaDebug,
     });
   } catch (err) {
     console.error('[predict_wps] Error:', err);
