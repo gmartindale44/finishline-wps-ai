@@ -118,6 +118,7 @@ async function logVerifyResult(result) {
       const normDate = normalizeDate(date);
       const normRaceNo = String(raceNo || "").trim();
       
+      // First, try permanent key
       if (normTrack && normDate && normRaceNo) {
         const joinKey = `${normDate}|${normTrack}|${normRaceNo}`;
         const predmetaKey = `fl:predmeta:${joinKey}`;
@@ -129,6 +130,172 @@ async function logVerifyResult(result) {
           } catch {
             // Invalid JSON, skip
           }
+        }
+      }
+      
+      // If permanent key not found, try to find and reconcile pending key
+      if (!predmeta && normTrack && normDate && normRaceNo) {
+        try {
+          // Use REST client for keys/search operations
+          const { keys: redisKeys, get: redisGet, del: redisDel, setex: redisSetex } = await import('../../lib/redis.js');
+          
+          // Search for pending keys
+          const pendingPattern = 'fl:predmeta:pending:*';
+          const pendingKeyList = await redisKeys(pendingPattern);
+          
+          // Extract verify context fields for matching
+          const verifyDistance = result.distance || result.distance_input || null;
+          const verifySurface = result.surface || null;
+          // Count runners from outcome or predicted if available
+          const verifyRunnersCount = (() => {
+            if (result.outcome && result.outcome.win && result.outcome.place && result.outcome.show) {
+              // Count unique horses in outcome
+              const horses = new Set([
+                result.outcome.win,
+                result.outcome.place,
+                result.outcome.show
+              ].filter(Boolean));
+              // This is minimum 3, but actual count might be higher - use predicted if available
+              if (result.predicted && Array.isArray(result.predicted.top3_list)) {
+                return result.predicted.top3_list.length;
+              }
+              return horses.size >= 3 ? horses.size : null;
+            }
+            if (result.predicted && Array.isArray(result.predicted.top3_list)) {
+              return result.predicted.top3_list.length;
+            }
+            return null;
+          })();
+          // Compute horses fingerprint from outcome/predicted if available
+          const verifyHorsesFingerprint = (() => {
+            const names = [];
+            if (result.outcome) {
+              if (result.outcome.win) names.push(result.outcome.win);
+              if (result.outcome.place) names.push(result.outcome.place);
+              if (result.outcome.show) names.push(result.outcome.show);
+            }
+            if (result.predicted && Array.isArray(result.predicted.top3_list)) {
+              names.push(...result.predicted.top3_list);
+            }
+            if (names.length === 0) return null;
+            // Same hash logic as predict_wps.js
+            const combined = names.map(n => String(n).trim().toLowerCase()).filter(Boolean).join("|");
+            if (!combined) return null;
+            let hash = 0;
+            for (let i = 0; i < combined.length; i++) {
+              hash = ((hash << 5) - hash) + combined.charCodeAt(i);
+              hash = hash & hash;
+            }
+            return Math.abs(hash).toString(16).slice(0, 12).padStart(12, '0');
+          })();
+          
+          // Filter by track and time window (within 2 hours)
+          const twoHoursAgo = Date.now() - (2 * 60 * 60 * 1000);
+          const candidates = [];
+          
+          for (const pendingKey of pendingKeyList) {
+            try {
+              const rawPending = await redisGet(pendingKey);
+              if (!rawPending) continue;
+              
+              const pendingMeta = JSON.parse(rawPending);
+              
+              // Check track matches (normalized)
+              const pendingTrack = normalizeTrack(pendingMeta.track || "");
+              if (pendingTrack !== normTrack) continue;
+              
+              // Check created_at is within 2 hours
+              const createdTs = pendingMeta.created_at_ms || new Date(pendingMeta.created_at || 0).getTime();
+              if (createdTs < twoHoursAgo) continue;
+              
+              // Compute match score
+              let score = 0;
+              
+              // Distance match (+5)
+              if (verifyDistance && pendingMeta.distance) {
+                const normVerifyDist = String(verifyDistance).trim().toLowerCase();
+                const normPendingDist = String(pendingMeta.distance).trim().toLowerCase();
+                if (normVerifyDist === normPendingDist) {
+                  score += 5;
+                }
+              }
+              
+              // Surface match (+5)
+              if (verifySurface && pendingMeta.surface) {
+                const normVerifySurf = String(verifySurface).trim().toLowerCase();
+                const normPendingSurf = String(pendingMeta.surface).trim().toLowerCase();
+                if (normVerifySurf === normPendingSurf) {
+                  score += 5;
+                }
+              }
+              
+              // Runners count match (+3)
+              if (verifyRunnersCount !== null && typeof pendingMeta.runners_count === 'number') {
+                if (verifyRunnersCount === pendingMeta.runners_count) {
+                  score += 3;
+                }
+              }
+              
+              // Horses fingerprint match (+2)
+              if (verifyHorsesFingerprint && pendingMeta.horses_fingerprint) {
+                if (verifyHorsesFingerprint === pendingMeta.horses_fingerprint) {
+                  score += 2;
+                }
+              }
+              
+              // Recency bonus (up to +3) - newer gets higher score
+              const ageMs = Date.now() - createdTs;
+              const ageHours = ageMs / (60 * 60 * 1000);
+              const recencyBonus = Math.max(0, 3 - (ageHours / 2)); // Max +3 for very recent, decays to 0 over 2 hours
+              score += recencyBonus;
+              
+              candidates.push({
+                key: pendingKey,
+                meta: pendingMeta,
+                score,
+                createdTs,
+              });
+            } catch {
+              // Skip invalid pending keys
+              continue;
+            }
+          }
+          
+          // Sort by score (descending), then by recency (descending)
+          candidates.sort((a, b) => {
+            if (a.score !== b.score) return b.score - a.score;
+            return b.createdTs - a.createdTs;
+          });
+          
+          // Pick best match only if score meets threshold (>= 8)
+          const bestCandidate = candidates.length > 0 && candidates[0].score >= 8 ? candidates[0] : null;
+          
+          // If found, copy to permanent key and delete pending
+          if (bestCandidate) {
+            const reconciledMeta = {
+              ...bestCandidate.meta,
+              date: normDate,
+              raceNo: normRaceNo,
+            };
+            
+            const joinKey = `${normDate}|${normTrack}|${normRaceNo}`;
+            const permanentKey = `fl:predmeta:${joinKey}`;
+            
+            // Write permanent key with 45-day TTL using REST client
+            await redisSetex(permanentKey, 3888000, JSON.stringify(reconciledMeta));
+            
+            // Delete pending key (best-effort, don't fail if deletion fails)
+            try {
+              await redisDel(bestCandidate.key);
+            } catch {
+              // Ignore deletion errors
+            }
+            
+            predmeta = reconciledMeta;
+          }
+        } catch (err) {
+          // Fail open - if pending key search fails, continue without it
+          // Do not log error to avoid noise
         }
       }
     } catch (err) {

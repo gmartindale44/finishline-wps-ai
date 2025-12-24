@@ -565,15 +565,16 @@ export default async function handler(req, res) {
     })();
 
     // Persist prediction metadata (confidence/T3M) for join key lookup
-    // Only persists if date and raceNo are available in request body
+    // If date/raceNo available: persist to permanent key
+    // If date/raceNo missing: persist to temporary pending key
     (async () => {
       try {
         const date = body.date || body.dateIso || null;
         const raceNo = body.raceNo || body.race || null;
         
-        // Skip if date or raceNo missing
-        if (!date || !raceNo || !track) {
-          return; // Fail silently - not all predictions have race context
+        // Skip if track missing
+        if (!track) {
+          return; // Fail silently - not all predictions have track context
         }
         
         // Normalize track name (same as verify_race.js)
@@ -602,16 +603,9 @@ export default async function handler(req, res) {
         };
         
         const normTrack = normalizeTrack(track);
-        const normDate = normalizeDate(date);
-        const normRaceNo = String(raceNo).trim();
-        
-        if (!normTrack || !normDate || !normRaceNo) {
+        if (!normTrack) {
           return; // Skip if normalization failed
         }
-        
-        // Build join key: date|track|raceNo
-        const joinKey = `${normDate}|${normTrack}|${normRaceNo}`;
-        const predmetaKey = `fl:predmeta:${joinKey}`;
         
         // Build top3 list
         const top3List = picks && picks.length >= 3
@@ -631,25 +625,91 @@ export default async function handler(req, res) {
           ? calibratedResponse.top3_mass
           : null;
         
-        // Build metadata payload
+        const now = new Date();
+        const created_at = now.toISOString();
+        
+        const { setex } = await import('../lib/redis.js');
+        
+        // If date and raceNo are available, persist to permanent key
+        if (date && raceNo) {
+          const normDate = normalizeDate(date);
+          const normRaceNo = String(raceNo).trim();
+          
+          if (normDate && normRaceNo) {
+            // Build join key: date|track|raceNo
+            const joinKey = `${normDate}|${normTrack}|${normRaceNo}`;
+            const predmetaKey = `fl:predmeta:${joinKey}`;
+            
+            // Build metadata payload
+            const predmeta = {
+              date: normDate,
+              track: normTrack,
+              raceNo: normRaceNo,
+              confidence_pct: confidencePct,
+              t3m_pct: t3mPct,
+              predicted_win: predictedWin,
+              predicted_place: predictedPlace,
+              predicted_show: predictedShow,
+              top3_list: top3List,
+              created_at,
+              model_version: calibratedResponse.meta?.model || "",
+              calibration_id: calibratedResponse.strategy?.recommended || "",
+            };
+            
+            // Write with TTL (45 days = 3888000 seconds)
+            await setex(predmetaKey, 3888000, JSON.stringify(predmeta));
+            return; // Done
+          }
+        }
+        
+        // Otherwise, persist to temporary pending key
+        const timestamp = Date.now();
+        const pendingKey = `fl:predmeta:pending:${timestamp}`;
+        
+        // Compute horses fingerprint (simple hash from ordered horse names)
+        const horsesFingerprint = (() => {
+          if (!Array.isArray(horses) || horses.length === 0) return "";
+          const names = horses
+            .map(h => String(h?.name || h?.slot || "").trim().toLowerCase())
+            .filter(Boolean);
+          if (names.length === 0) return "";
+          // Create a simple fingerprint: join names with "|" then take first 12 chars of hash-like string
+          const combined = names.join("|");
+          // Simple hash: sum of char codes mod a large prime, then hex
+          let hash = 0;
+          for (let i = 0; i < combined.length; i++) {
+            hash = ((hash << 5) - hash) + combined.charCodeAt(i);
+            hash = hash & hash; // Convert to 32-bit integer
+          }
+          return Math.abs(hash).toString(16).slice(0, 12).padStart(12, '0');
+        })();
+        
+        // Build metadata payload (without date/raceNo)
         const predmeta = {
-          date: normDate,
           track: normTrack,
-          raceNo: normRaceNo,
           confidence_pct: confidencePct,
           t3m_pct: t3mPct,
           predicted_win: predictedWin,
           predicted_place: predictedPlace,
           predicted_show: predictedShow,
           top3_list: top3List,
-          created_at: new Date().toISOString(),
+          created_at,
+          created_at_ms: timestamp,
           model_version: calibratedResponse.meta?.model || "",
           calibration_id: calibratedResponse.strategy?.recommended || "",
+          // Additional fields for matching
+          distance: distance_input || null,
+          surface: surface || null,
+          runners_count: horses ? horses.length : 0,
+          horses_fingerprint: horsesFingerprint || null,
         };
         
-        // Write with TTL (45 days = 3888000 seconds)
-        const { setex } = await import('../lib/redis.js');
-        await setex(predmetaKey, 3888000, JSON.stringify(predmeta));
+        // Write with short TTL (2 hours = 7200 seconds)
+        await setex(pendingKey, 7200, JSON.stringify(predmeta));
+        
+        // Store pending key ID in response (attach to response object)
+        // Note: response is already being sent, so we can't modify it here
+        // The pending key will be found by verify_race.js via track matching
       } catch (err) {
         // Fail silently - must not break prediction flow
         console.warn("[predmeta] write failed:", err?.message || err);
