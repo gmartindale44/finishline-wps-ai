@@ -87,6 +87,55 @@ async function logVerifyResult(result) {
     // Build raceId for the key
     const raceId = buildVerifyRaceId(track, date, raceNo);
 
+    // Try to fetch prediction metadata (confidence/T3M) if available
+    let predmeta = null;
+    try {
+      // Build join key (same normalization as predmeta write)
+      const normalizeTrack = (t) => {
+        if (!t) return "";
+        return String(t)
+          .toLowerCase()
+          .trim()
+          .replace(/\s+/g, " ")
+          .replace(/[^a-z0-9\s]/g, "")
+          .replace(/\s+/g, " ");
+      };
+      
+      const normalizeDate = (d) => {
+        if (!d) return "";
+        const str = String(d).trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+        try {
+          const parsed = new Date(str);
+          if (!isNaN(parsed.getTime())) {
+            return parsed.toISOString().slice(0, 10);
+          }
+        } catch {}
+        return "";
+      };
+      
+      const normTrack = normalizeTrack(track);
+      const normDate = normalizeDate(date);
+      const normRaceNo = String(raceNo || "").trim();
+      
+      if (normTrack && normDate && normRaceNo) {
+        const joinKey = `${normDate}|${normTrack}|${normRaceNo}`;
+        const predmetaKey = `fl:predmeta:${joinKey}`;
+        const rawValue = await redis.get(predmetaKey);
+        
+        if (rawValue) {
+          try {
+            predmeta = JSON.parse(rawValue);
+          } catch {
+            // Invalid JSON, skip
+          }
+        }
+      }
+    } catch (err) {
+      // Fail open - if predmeta read fails, continue without it
+      // Do not log error to avoid noise
+    }
+
     // Build the log payload matching what calibration script expects
     // The calibration script looks for: track, date (or dateIso or debug.canonicalDateIso), raceNo, outcome
     const logPayload = {
@@ -114,6 +163,19 @@ async function logVerifyResult(result) {
       },
       ts: Date.now(),
     };
+
+    // Attach prediction metadata if available
+    if (predmeta) {
+      if (typeof predmeta.confidence_pct === 'number') {
+        logPayload.confidence_pct = predmeta.confidence_pct;
+      }
+      if (typeof predmeta.t3m_pct === 'number') {
+        logPayload.t3m_pct = predmeta.t3m_pct;
+      }
+      if (Array.isArray(predmeta.top3_list) && predmeta.top3_list.length > 0) {
+        logPayload.top3_list = predmeta.top3_list;
+      }
+    }
 
     const logKey = `${VERIFY_PREFIX}${raceId}`;
     await redis.set(logKey, JSON.stringify(logPayload));

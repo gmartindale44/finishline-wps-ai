@@ -563,6 +563,98 @@ export default async function handler(req, res) {
         // Ignore all errors - this is fire-and-forget
       }
     })();
+
+    // Persist prediction metadata (confidence/T3M) for join key lookup
+    // Only persists if date and raceNo are available in request body
+    (async () => {
+      try {
+        const date = body.date || body.dateIso || null;
+        const raceNo = body.raceNo || body.race || null;
+        
+        // Skip if date or raceNo missing
+        if (!date || !raceNo || !track) {
+          return; // Fail silently - not all predictions have race context
+        }
+        
+        // Normalize track name (same as verify_race.js)
+        const normalizeTrack = (t) => {
+          if (!t) return "";
+          return String(t)
+            .toLowerCase()
+            .trim()
+            .replace(/\s+/g, " ")
+            .replace(/[^a-z0-9\s]/g, "")
+            .replace(/\s+/g, " ");
+        };
+        
+        // Normalize date to YYYY-MM-DD
+        const normalizeDate = (d) => {
+          if (!d) return "";
+          const str = String(d).trim();
+          if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+          try {
+            const parsed = new Date(str);
+            if (!isNaN(parsed.getTime())) {
+              return parsed.toISOString().slice(0, 10);
+            }
+          } catch {}
+          return "";
+        };
+        
+        const normTrack = normalizeTrack(track);
+        const normDate = normalizeDate(date);
+        const normRaceNo = String(raceNo).trim();
+        
+        if (!normTrack || !normDate || !normRaceNo) {
+          return; // Skip if normalization failed
+        }
+        
+        // Build join key: date|track|raceNo
+        const joinKey = `${normDate}|${normTrack}|${normRaceNo}`;
+        const predmetaKey = `fl:predmeta:${joinKey}`;
+        
+        // Build top3 list
+        const top3List = picks && picks.length >= 3
+          ? picks.slice(0, 3).map(p => p.name || p.slot || "").filter(Boolean)
+          : [];
+        
+        // Extract predicted picks
+        const predictedWin = picks && picks.length > 0 ? (picks[0]?.name || picks[0]?.slot || "") : "";
+        const predictedPlace = picks && picks.length > 1 ? (picks[1]?.name || picks[1]?.slot || "") : "";
+        const predictedShow = picks && picks.length > 2 ? (picks[2]?.name || picks[2]?.slot || "") : "";
+        
+        // Validate confidence and T3M are numbers
+        const confidencePct = typeof calibratedResponse.confidence === 'number' 
+          ? calibratedResponse.confidence 
+          : null;
+        const t3mPct = typeof calibratedResponse.top3_mass === 'number'
+          ? calibratedResponse.top3_mass
+          : null;
+        
+        // Build metadata payload
+        const predmeta = {
+          date: normDate,
+          track: normTrack,
+          raceNo: normRaceNo,
+          confidence_pct: confidencePct,
+          t3m_pct: t3mPct,
+          predicted_win: predictedWin,
+          predicted_place: predictedPlace,
+          predicted_show: predictedShow,
+          top3_list: top3List,
+          created_at: new Date().toISOString(),
+          model_version: calibratedResponse.meta?.model || "",
+          calibration_id: calibratedResponse.strategy?.recommended || "",
+        };
+        
+        // Write with TTL (45 days = 3888000 seconds)
+        const { setex } = await import('../lib/redis.js');
+        await setex(predmetaKey, 3888000, JSON.stringify(predmeta));
+      } catch (err) {
+        // Fail silently - must not break prediction flow
+        console.warn("[predmeta] write failed:", err?.message || err);
+      }
+    })();
     
     return res.status(200).json({
       ...calibratedResponse,
