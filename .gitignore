@@ -7,3 +7,5 @@ venv/
 .vercel/
 .DS_Store
 .vercel
+node_modules/
+scripts/debug/inspect_verify_keys.mjs
