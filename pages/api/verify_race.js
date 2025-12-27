@@ -135,13 +135,28 @@ async function logVerifyResult(result) {
       
       // If permanent key not found, try to find and reconcile pending key
       if (!predmeta && normTrack && normDate && normRaceNo) {
+        let reconciled = false;
+        let reconcileReason = null;
+        let reconciledKey = null;
+        
         try {
           // Use REST client for keys/search operations
           const { keys: redisKeys, get: redisGet, del: redisDel, setex: redisSetex } = await import('../../lib/redis.js');
           
-          // Search for pending keys
+          // Search for pending keys with hard limit for safety
           const pendingPattern = 'fl:predmeta:pending:*';
-          const pendingKeyList = await redisKeys(pendingPattern);
+          const allPendingKeys = await redisKeys(pendingPattern);
+          // Safety: limit to most recent 25 keys (sorted by timestamp in key name)
+          // Extract timestamp from key: fl:predmeta:pending:${timestamp}
+          const pendingKeyList = allPendingKeys
+            .map(k => {
+              const match = k.match(/fl:predmeta:pending:(\d+)$/);
+              return match ? { key: k, ts: parseInt(match[1], 10) } : null;
+            })
+            .filter(Boolean)
+            .sort((a, b) => b.ts - a.ts) // Most recent first
+            .slice(0, 25) // Hard limit: max 25 keys
+            .map(item => item.key);
           
           // Extract verify context fields for matching
           const verifyDistance = result.distance || result.distance_input || null;
@@ -200,16 +215,19 @@ async function logVerifyResult(result) {
               
               const pendingMeta = JSON.parse(rawPending);
               
-              // Check track matches (normalized)
+              // Check track matches (normalized) - REQUIRED
               const pendingTrack = normalizeTrack(pendingMeta.track || "");
               if (pendingTrack !== normTrack) continue;
               
-              // Check created_at is within 2 hours
+              // Check created_at is within 2 hours - REQUIRED
               const createdTs = pendingMeta.created_at_ms || new Date(pendingMeta.created_at || 0).getTime();
               if (createdTs < twoHoursAgo) continue;
               
               // Compute match score
               let score = 0;
+              
+              // Track match (already filtered, but worth noting: +3 base score for passing filter)
+              score += 3;
               
               // Distance match (+5)
               if (verifyDistance && pendingMeta.distance) {
@@ -243,10 +261,10 @@ async function logVerifyResult(result) {
                 }
               }
               
-              // Recency bonus (up to +3) - newer gets higher score
+              // Recency bonus (up to +5) - newer gets higher score, prioritize very recent matches
               const ageMs = Date.now() - createdTs;
               const ageHours = ageMs / (60 * 60 * 1000);
-              const recencyBonus = Math.max(0, 3 - (ageHours / 2)); // Max +3 for very recent, decays to 0 over 2 hours
+              const recencyBonus = Math.max(0, 5 - (ageHours * 2.5)); // Max +5 for very recent (< 1 hour), decays to 0 over 2 hours
               score += recencyBonus;
               
               candidates.push({
@@ -267,8 +285,9 @@ async function logVerifyResult(result) {
             return b.createdTs - a.createdTs;
           });
           
-          // Pick best match only if score meets threshold (>= 8)
-          const bestCandidate = candidates.length > 0 && candidates[0].score >= 8 ? candidates[0] : null;
+          // Lowered threshold: require score >= 5 (allows track match + recency, or track + one metadata match)
+          // This is more lenient than the previous >= 8 threshold
+          const bestCandidate = candidates.length > 0 && candidates[0].score >= 5 ? candidates[0] : null;
           
           // If found, copy to permanent key and delete pending
           if (bestCandidate) {
@@ -292,10 +311,28 @@ async function logVerifyResult(result) {
             }
             
             predmeta = reconciledMeta;
+            reconciled = true;
+            reconciledKey = bestCandidate.key;
+            reconcileReason = `score=${bestCandidate.score} (track match + recency/metadata)`;
+          } else if (candidates.length > 0) {
+            reconcileReason = `no_match_above_threshold (best_score=${candidates[0].score}, threshold=5, candidates=${candidates.length})`;
+          } else {
+            reconcileReason = `no_candidates (pending_keys_checked=${pendingKeyList.length})`;
           }
         } catch (err) {
           // Fail open - if pending key search fails, continue without it
-          // Do not log error to avoid noise
+          reconcileReason = `error: ${err.message}`;
+        }
+        
+        // Add debug info to result.debug if available (for diagnostics, but don't break on failure)
+        if (result.debug && typeof result.debug === 'object') {
+          result.debug.predmeta_reconciled = reconciled;
+          if (reconcileReason) {
+            result.debug.predmeta_reconcile_reason = reconcileReason;
+          }
+          if (reconciledKey) {
+            result.debug.predmeta_reconciled_from = reconciledKey;
+          }
         }
       }
     } catch (err) {
