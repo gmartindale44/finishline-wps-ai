@@ -75,11 +75,16 @@ async function loadCalibrationCsv(filePath) {
     placeHit: header.indexOf("placeHit"),
     showHit: header.indexOf("showHit"),
     top3Hit: header.indexOf("top3Hit"),
+    // Optional predmeta fields (indexOf returns -1 if not found, safe to use)
+    confidence_pct: header.indexOf("confidence_pct"),
+    t3m_pct: header.indexOf("t3m_pct"),
+    top3_list: header.indexOf("top3_list"),
   };
 
-  // Validate required fields
-  for (const [field, index] of Object.entries(fieldMap)) {
-    if (index === -1) {
+  // Validate required fields (predmeta fields are optional)
+  const requiredFields = ['track', 'date', 'raceNo', 'strategyName', 'version', 'predWin', 'predPlace', 'predShow', 'outWin', 'outPlace', 'outShow', 'winHit', 'placeHit', 'showHit', 'top3Hit'];
+  for (const field of requiredFields) {
+    if (fieldMap[field] === -1) {
       throw new Error(`Missing required field in CSV: ${field}`);
     }
   }
@@ -94,6 +99,28 @@ async function loadCalibrationCsv(filePath) {
     if (columns.length < header.length) {
       continue; // Skip incomplete rows
     }
+
+    // Helper to safely parse optional numeric field
+    const parseOptionalNumber = (idx) => {
+      if (idx === -1 || idx >= columns.length) return null;
+      const val = columns[idx]?.trim();
+      if (!val) return null;
+      const num = Number(val);
+      return Number.isFinite(num) ? num : null;
+    };
+
+    // Helper to safely parse optional JSON array field
+    const parseOptionalArray = (idx) => {
+      if (idx === -1 || idx >= columns.length) return null;
+      const val = columns[idx]?.trim();
+      if (!val) return null;
+      try {
+        const parsed = JSON.parse(val);
+        return Array.isArray(parsed) ? parsed : null;
+      } catch {
+        return null;
+      }
+    };
 
     rows.push({
       track: columns[fieldMap.track] || "",
@@ -111,6 +138,10 @@ async function loadCalibrationCsv(filePath) {
       placeHit: columns[fieldMap.placeHit] || "false",
       showHit: columns[fieldMap.showHit] || "false",
       top3Hit: columns[fieldMap.top3Hit] || "false",
+      // Optional predmeta fields (null if column missing or invalid)
+      confidence_pct: parseOptionalNumber(fieldMap.confidence_pct),
+      t3m_pct: parseOptionalNumber(fieldMap.t3m_pct),
+      top3_list: parseOptionalArray(fieldMap.top3_list),
     });
   }
 
@@ -152,6 +183,50 @@ function generateMarkdownReport(metrics) {
   md += `| Any Hit Rate | ${formatPercent(global.anyHitRate)} |\n`;
   md += `| Exact Trifecta Rate | ${formatPercent(global.exactTrifectaRate)} |\n`;
   md += `| Partial Order Top 3 Rate | ${formatPercent(global.partialOrderTop3Rate)} |\n\n`;
+
+  // Predmeta metrics section (if coverage > 0)
+  const { predmeta } = metrics;
+  if (predmeta && predmeta.coverage && predmeta.coverage.coverageRate > 0) {
+    md += `## Predmeta Metrics\n\n`;
+    md += `| Metric | Value |\n`;
+    md += `|--------|-------|\n`;
+    md += `| Predmeta Coverage | ${formatPercent(predmeta.coverage.coverageRate)} |\n`;
+    md += `| Rows with Confidence | ${predmeta.coverage.rowsWithConfidence.toLocaleString()} |\n`;
+    md += `| Rows with T3M | ${predmeta.coverage.rowsWithT3m.toLocaleString()} |\n`;
+    md += `| Rows with Both | ${predmeta.coverage.rowsWithBoth.toLocaleString()} |\n\n`;
+
+    // Accuracy by confidence bucket
+    const confBuckets = Object.entries(predmeta.accuracyByConfidenceBucket || {});
+    if (confBuckets.length > 0) {
+      md += `### Accuracy by Confidence Bucket\n\n`;
+      md += `| Confidence | Races | Win Hit Rate | Top 3 Hit Rate |\n`;
+      md += `|------------|-------|--------------|----------------|\n`;
+      for (const [bucket, stats] of confBuckets.sort((a, b) => {
+        const aMin = parseInt(a[0].split('-')[0] || a[0].replace('+', ''));
+        const bMin = parseInt(b[0].split('-')[0] || b[0].replace('+', ''));
+        return aMin - bMin;
+      })) {
+        md += `| ${bucket}% | ${stats.races.toLocaleString()} | ${formatPercent(stats.winHitRate)} | ${formatPercent(stats.top3HitRate)} |\n`;
+      }
+      md += `\n`;
+    }
+
+    // Accuracy by T3M bucket
+    const t3mBuckets = Object.entries(predmeta.accuracyByT3mBucket || {});
+    if (t3mBuckets.length > 0) {
+      md += `### Accuracy by T3M Bucket\n\n`;
+      md += `| T3M % | Races | Win Hit Rate | Top 3 Hit Rate |\n`;
+      md += `|-------|-------|--------------|----------------|\n`;
+      for (const [bucket, stats] of t3mBuckets.sort((a, b) => {
+        const aMin = parseInt(a[0].split('-')[0] || a[0].replace('+', ''));
+        const bMin = parseInt(b[0].split('-')[0] || b[0].replace('+', ''));
+        return aMin - bMin;
+      })) {
+        md += `| ${bucket}% | ${stats.races.toLocaleString()} | ${formatPercent(stats.winHitRate)} | ${formatPercent(stats.top3HitRate)} |\n`;
+      }
+      md += `\n`;
+    }
+  }
 
   // Top tracks
   const trackEntries = Object.entries(byTrack)

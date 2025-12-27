@@ -11,8 +11,8 @@
  * - Supports all step types: verify_race_full, verify_race_full_fallback, manual_verify
  * - Writes a new CSV file: data/finishline_tests_from_verify_redis_v1.csv
  * 
- * CSV Schema (matches calibration_from_logs_v1.csv):
- * track,date,raceNo,strategyName,version,predWin,predPlace,predShow,outWin,outPlace,outShow,winHit,placeHit,showHit,top3Hit
+ * CSV Schema (matches calibration_from_logs_v1.csv + predmeta):
+ * track,date,raceNo,strategyName,version,predWin,predPlace,predShow,outWin,outPlace,outShow,winHit,placeHit,showHit,top3Hit,confidence_pct,t3m_pct,top3_list
  * 
  * Note: Verify logs are stored as JSON strings (not hashes), so we use redis.get() and parse JSON.
  * Manual verify entries are fully supported and treated as valid calibration data.
@@ -95,6 +95,25 @@ function normalizeToCalibrationRow(verifyLog) {
     return null; // Still require some date
   }
 
+  // Extract predmeta fields (if present, added by verify_race.js)
+  const confidencePct = verifyLog.confidence_pct;
+  const t3mPct = verifyLog.t3m_pct;
+  const top3List = verifyLog.top3_list;
+
+  // Format predmeta fields (backward compatible - empty if missing)
+  const confidencePctStr = typeof confidencePct === 'number' && Number.isFinite(confidencePct)
+    ? csvEscape(String(Math.round(confidencePct)))
+    : "";
+  
+  const t3mPctStr = typeof t3mPct === 'number' && Number.isFinite(t3mPct)
+    ? csvEscape(String(Math.round(t3mPct)))
+    : "";
+  
+  // top3_list: JSON stringify array if present, then CSV escape the JSON string
+  const top3ListStr = Array.isArray(top3List) && top3List.length > 0
+    ? csvEscape(JSON.stringify(top3List))
+    : "";
+
   return {
     track,
     date: finalDate,
@@ -111,6 +130,9 @@ function normalizeToCalibrationRow(verifyLog) {
     placeHit,
     showHit,
     top3Hit,
+    confidence_pct: confidencePctStr,
+    t3m_pct: t3mPctStr,
+    top3_list: top3ListStr,
   };
 }
 
@@ -118,7 +140,7 @@ function normalizeToCalibrationRow(verifyLog) {
  * Write CSV rows to file
  */
 async function writeCsv(rows, outputPath) {
-  // CSV header (matches calibration_from_logs_v1.csv schema)
+  // CSV header (matches calibration_from_logs_v1.csv schema + predmeta fields)
   const header = [
     "track",
     "date",
@@ -135,6 +157,9 @@ async function writeCsv(rows, outputPath) {
     "placeHit",
     "showHit",
     "top3Hit",
+    "confidence_pct",
+    "t3m_pct",
+    "top3_list",
   ].join(",");
 
   // Build CSV content
@@ -156,6 +181,9 @@ async function writeCsv(rows, outputPath) {
       row.placeHit,
       row.showHit,
       row.top3Hit,
+      row.confidence_pct || "",
+      row.t3m_pct || "",
+      row.top3_list || "",
     ].join(",");
     lines.push(csvRow);
   }
