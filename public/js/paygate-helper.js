@@ -123,6 +123,8 @@
       
       // Handle bypass key
       if (!unlocked && bypass === '1' && key) {
+      // Handle bypass key
+      if (bypass === '1' && key) {
         if (BYPASS_KEYS.includes(key)) {
           const duration = 30 * 24 * 60 * 60 * 1000; // 30 days
           if (unlock(duration)) {
