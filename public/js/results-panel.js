@@ -3,6 +3,21 @@
 (function () {
   'use strict';
 
+  // PayGate toggle - set to false to disable paygate entirely
+  const PAYWALL_ENABLED = false;
+
+  // PayGate helper - fail-open: if helper not loaded, default to unlocked
+  const paygate = (typeof window !== 'undefined' && window.__FL_PAYGATE__) || (() => {
+    console.warn('[FLResults] PayGate helper not loaded; showing all content (fail-open)');
+    return {
+      isUnlocked: () => true,
+      checkUrlParams: () => ({ unlocked: false, bypassUsed: false }),
+      getBypassUsed: () => false,
+      DAY_PASS_URL: '#',
+      CORE_MONTHLY_URL: '#'
+    };
+  })();
+
   const persistenceHelper = (() => {
     let readyPromise = null;
 
@@ -126,6 +141,15 @@
   }
 
   const root = ensureResultsRoot();
+
+  // Check URL params on init (fail-open: ignore errors)
+  if (PAYWALL_ENABLED && typeof window !== 'undefined') {
+    try {
+      paygate.checkUrlParams();
+    } catch (err) {
+      console.warn('[FLResults] PayGate URL check error (ignored, fail-open):', err?.message || err);
+    }
+  }
 
   let elements = null;
   let lastPred = null;
@@ -858,6 +882,107 @@
       });
     }
 
+  // Show PayGate UI when locked
+  function showPaygateUI() {
+    if (!elements || !elements.tabContentPredictions) return;
+    
+    // Check if paygate UI already exists
+    let paygateEl = elements.tabContentPredictions.querySelector('#fl-paygate-ui');
+    if (paygateEl) {
+      paygateEl.style.display = 'block';
+      return;
+    }
+    
+    // Create paygate UI
+    paygateEl = document.createElement('div');
+    paygateEl.id = 'fl-paygate-ui';
+    paygateEl.style.cssText = `
+      margin-top: 20px;
+      padding: 24px;
+      background: rgba(139, 92, 246, 0.1);
+      border: 2px solid rgba(139, 92, 246, 0.3);
+      border-radius: 12px;
+      text-align: center;
+    `;
+    
+    const dayPassUrl = paygate.DAY_PASS_URL || '#';
+    const coreUrl = paygate.CORE_MONTHLY_URL || '#';
+    
+    paygateEl.innerHTML = `
+      <h3 style="margin: 0 0 12px 0; font-size: 18px; font-weight: 600; color: #dfe3ff;">
+        Unlock FinishLine Premium
+      </h3>
+      <p style="margin: 0 0 20px 0; font-size: 14px; color: #b8bdd4; line-height: 1.5;">
+        Get full access to confidence scores, T3M metrics, strategy insights, and exotic betting ideas.
+      </p>
+      <ul style="margin: 0 0 20px 0; padding-left: 24px; text-align: left; color: #b8bdd4; font-size: 13px; max-width: 400px; margin-left: auto; margin-right: auto;">
+        <li style="margin-bottom: 8px;">Full confidence % and T3M % metrics</li>
+        <li style="margin-bottom: 8px;">Complete strategy breakdown with betting recommendations</li>
+        <li style="margin-bottom: 8px;">Exotic ticket ideas (Trifecta, Superfecta, Super High Five)</li>
+        <li style="margin-bottom: 8px;">Detailed reasoning for picks</li>
+      </ul>
+      <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+        <a href="${dayPassUrl}" 
+           target="_blank" 
+           rel="noopener noreferrer"
+           style="padding: 12px 24px; background: #8b5cf6; color: #fff; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px; display: inline-block; transition: background 0.2s;"
+           onmouseover="this.style.background='#7c3aed'" 
+           onmouseout="this.style.background='#8b5cf6'">
+          Unlock Day Pass $7.99
+        </a>
+        <a href="${coreUrl}" 
+           target="_blank" 
+           rel="noopener noreferrer"
+           style="padding: 12px 24px; background: #6b46c1; color: #fff; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px; display: inline-block; transition: background 0.2s;"
+           onmouseover="this.style.background='#5b21b6'" 
+           onmouseout="this.style.background='#6b46c1'">
+          Unlock Core $24.99/mo
+        </a>
+        <button id="fl-paygate-already-paid" 
+                style="padding: 12px 24px; background: transparent; border: 1px solid rgba(139, 92, 246, 0.5); color: #dfe3ff; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 14px; transition: background 0.2s;"
+                onmouseover="this.style.background='rgba(139, 92, 246, 0.1)'" 
+                onmouseout="this.style.background='transparent'">
+          I already paid
+        </button>
+      </div>
+    `;
+    
+    // Insert after badges, before confidence section (or at end if structure differs)
+    const badgesSection = elements.tabContentPredictions.querySelector('.fl-results__badges');
+    if (badgesSection) {
+      // Insert after badges
+      if (badgesSection.nextSibling) {
+        elements.tabContentPredictions.insertBefore(paygateEl, badgesSection.nextSibling);
+      } else {
+        elements.tabContentPredictions.appendChild(paygateEl);
+      }
+    } else {
+      elements.tabContentPredictions.appendChild(paygateEl);
+    }
+    
+    // Wire "I already paid" button
+    const alreadyPaidBtn = paygateEl.querySelector('#fl-paygate-already-paid');
+    if (alreadyPaidBtn) {
+      alreadyPaidBtn.addEventListener('click', () => {
+        try {
+          // Re-check URL params and localStorage
+          const result = paygate.checkUrlParams();
+          if (result.unlocked || paygate.isUnlocked()) {
+            // Re-render to show premium content
+            if (lastPred) {
+              render(lastPred);
+            }
+          } else {
+            alert('No active subscription found. If you just paid, please wait a moment and try again, or contact support.');
+          }
+        } catch (err) {
+          console.warn('[FLResults] "I already paid" error:', err);
+          alert('Error checking subscription status. Please try refreshing the page.');
+        }
+      });
+    }
+  }
+
   function render(pred) {
     // Guard: ensure modal root exists before rendering
     if (!root || !document.body.contains(root)) {
@@ -869,6 +994,16 @@
 
     const { win, place, show, confidence, horses = [], reasons = {}, tickets } = pred || {};
 
+    // Check unlock state (fail-open: default to unlocked on any error)
+    const isUnlocked = !PAYWALL_ENABLED || (() => {
+      try {
+        return paygate.isUnlocked();
+      } catch (err) {
+        console.warn('[FLResults] PayGate check error, defaulting to unlocked (fail-open):', err?.message || err);
+        return true;
+      }
+    })();
+
     const getOdds = (name) => {
       if (!name) return '';
       const h = horses.find((x) => {
@@ -879,65 +1014,121 @@
       return h?.odds || '';
     };
 
-    // Fill badges
+    // Fill badges (always visible - free preview)
     fillBadge(elements.badgeWin, '🥇 Win', win, getOdds(win), 'fl-badge--gold');
     fillBadge(elements.badgePlace, '🥈 Place', place, getOdds(place), 'fl-badge--silver');
     fillBadge(elements.badgeShow, '🥉 Show', show, getOdds(show), 'fl-badge--bronze');
 
-    // Confidence - use calibrated value from strategy if available, otherwise fallback
-    let conf = Math.max(0, Math.min(100, Number(confidence) || 0));
-    
-    // Prefer strategy confidence if available (calibrated value)
-    if (pred.strategy?.metrics?.confidence != null) {
-      const stratConf = Number(pred.strategy.metrics.confidence);
-      if (!Number.isNaN(stratConf)) {
-        conf = Math.max(0, Math.min(100, Math.round(stratConf * 100)));
+    // Show teaser text if locked
+    if (!isUnlocked) {
+      const winName = win || 'Top pick';
+      let teaser = elements.tabContentPredictions.querySelector('#fl-teaser');
+      if (!teaser) {
+        teaser = document.createElement('div');
+        teaser.id = 'fl-teaser';
+        teaser.style.cssText = 'font-size: 13px; color: #b8bdd4; margin-top: 12px; text-align: center; font-style: italic;';
+        const badgesSection = elements.tabContentPredictions.querySelector('.fl-results__badges');
+        if (badgesSection && badgesSection.nextSibling) {
+          elements.tabContentPredictions.insertBefore(teaser, badgesSection.nextSibling);
+        } else {
+          elements.tabContentPredictions.appendChild(teaser);
+        }
       }
+      teaser.textContent = `${winName} shown — unlock full card for confidence scores and strategy`;
+      teaser.style.display = 'block';
+    } else {
+      const teaser = elements.tabContentPredictions?.querySelector('#fl-teaser');
+      if (teaser) teaser.style.display = 'none';
     }
-    
-    // Dynamic color based on confidence level
-    let confColor = '#00e6a8'; // green default (≥ 68%)
-    if (conf < 60) {
-      confColor = '#ff4d4d'; // red (< 60)
-    } else if (conf < 68) {
-      confColor = '#ffcc00'; // yellow (60-67)
-    }
-    
-    // Update confidence display
-    elements.confPct.textContent = `${conf.toFixed(0)}%`;
-    elements.confBar.style.width = `${conf}%`;
-    elements.confBar.style.background = confColor;
-    elements.confBar.style.transition = 'width 0.8s ease, background 0.5s ease';
 
-    // Reasons chips (show for winner) - now with +/- deltas
-    const winnerReasons = reasons[win] || [];
-    
-    if (winnerReasons.length > 0 && elements.reasonsSection && elements.reasonsChips) {
-      elements.reasonsChips.innerHTML = winnerReasons
-        .map(reason => {
-          // Format: "factor +0.25" or "factor -0.15"
-          const isPositive = reason.includes('+') || (!reason.includes('-') && !reason.includes('0.00'));
-          const chipColor = isPositive ? 'rgba(92,134,255,0.15)' : 'rgba(255,153,102,0.15)';
-          const chipBorder = isPositive ? 'rgba(92,134,255,0.3)' : 'rgba(255,153,102,0.3)';
-          return `<span class="fl-reason-chip" style="display:inline-block;padding:4px 10px;background:${chipColor};border:1px solid ${chipBorder};border-radius:12px;font-size:12px;color:#b8bdd4;">${reason}</span>`;
-        })
-        .join('');
-      elements.reasonsSection.style.display = 'block';
-    } else if (elements.reasonsSection) {
-      elements.reasonsSection.style.display = 'none';
+    // Premium sections: Confidence % and Reasons (gated)
+    if (isUnlocked) {
+      // Confidence - use calibrated value from strategy if available, otherwise fallback
+      let conf = Math.max(0, Math.min(100, Number(confidence) || 0));
+      
+      // Prefer strategy confidence if available (calibrated value)
+      if (pred.strategy?.metrics?.confidence != null) {
+        const stratConf = Number(pred.strategy.metrics.confidence);
+        if (!Number.isNaN(stratConf)) {
+          conf = Math.max(0, Math.min(100, Math.round(stratConf * 100)));
+        }
+      }
+      
+      // Dynamic color based on confidence level
+      let confColor = '#00e6a8'; // green default (≥ 68%)
+      if (conf < 60) {
+        confColor = '#ff4d4d'; // red (< 60)
+      } else if (conf < 68) {
+        confColor = '#ffcc00'; // yellow (60-67)
+      }
+      
+      // Update confidence display
+      elements.confPct.textContent = `${conf.toFixed(0)}%`;
+      elements.confBar.style.width = `${conf}%`;
+      elements.confBar.style.background = confColor;
+      elements.confBar.style.transition = 'width 0.8s ease, background 0.5s ease';
+      
+      // Show confidence section
+      const confSection = elements.confPct?.parentElement?.parentElement;
+      if (confSection) confSection.style.display = 'block';
+
+      // Reasons chips (show for winner) - now with +/- deltas
+      const winnerReasons = reasons[win] || [];
+      
+      if (winnerReasons.length > 0 && elements.reasonsSection && elements.reasonsChips) {
+        elements.reasonsChips.innerHTML = winnerReasons
+          .map(reason => {
+            // Format: "factor +0.25" or "factor -0.15"
+            const isPositive = reason.includes('+') || (!reason.includes('-') && !reason.includes('0.00'));
+            const chipColor = isPositive ? 'rgba(92,134,255,0.15)' : 'rgba(255,153,102,0.15)';
+            const chipBorder = isPositive ? 'rgba(92,134,255,0.3)' : 'rgba(255,153,102,0.3)';
+            return `<span class="fl-reason-chip" style="display:inline-block;padding:4px 10px;background:${chipColor};border:1px solid ${chipBorder};border-radius:12px;font-size:12px;color:#b8bdd4;">${reason}</span>`;
+          })
+          .join('');
+        elements.reasonsSection.style.display = 'block';
+      } else if (elements.reasonsSection) {
+        elements.reasonsSection.style.display = 'none';
+      }
+    } else {
+      // Hide confidence section
+      const confSection = elements.confPct?.parentElement?.parentElement;
+      if (confSection) confSection.style.display = 'none';
+      
+      // Hide reasons section
+      if (elements.reasonsSection) {
+        elements.reasonsSection.style.display = 'none';
+      }
+      
+      // Show paygate UI
+      showPaygateUI();
     }
 
     // Update pin button text
     const isPinned = localStorage.getItem('fl_results_pinned') === '1';
     elements.pinBtn.textContent = isPinned ? 'Unpin' : 'Pin';
 
-    // Render exotics if available
-    if (tickets) {
-      renderExotics(tickets);
-    }
+    // Premium tabs: Exotics and Strategy (gated)
+    if (isUnlocked) {
+      // Show tabs
+      if (elements.tabExotics) elements.tabExotics.style.display = 'inline-block';
+      if (elements.tabStrategy) elements.tabStrategy.style.display = 'inline-block';
+      
+      // Render exotics if available
+      if (tickets) {
+        renderExotics(tickets);
+      }
 
-    // Render strategy if available (with fallback)
-    renderStrategy(pred.strategy || null, { confidence: pred.confidence });
+      // Render strategy if available (with fallback)
+      renderStrategy(pred.strategy || null, { confidence: pred.confidence });
+    } else {
+      // Hide tabs
+      if (elements.tabExotics) elements.tabExotics.style.display = 'none';
+      if (elements.tabStrategy) elements.tabStrategy.style.display = 'none';
+      
+      // Hide tab contents
+      if (elements.tabContentExotics) elements.tabContentExotics.style.display = 'none';
+      if (elements.tabContentStrategy) elements.tabContentStrategy.style.display = 'none';
+    }
     
     // Diagnostics: log strategy payload
     try {
@@ -951,6 +1142,34 @@
       }
     } catch (e) {
       // Ignore logging errors
+    }
+
+    // Show tester badge if bypass was used
+    if (isUnlocked && PAYWALL_ENABLED) {
+      try {
+        const bypassUsed = paygate.getBypassUsed && paygate.getBypassUsed();
+        if (bypassUsed) {
+          let badge = elements.dialog.querySelector('#fl-tester-badge');
+          if (!badge) {
+            badge = document.createElement('span');
+            badge.id = 'fl-tester-badge';
+            badge.style.cssText = 'font-size: 10px; padding: 2px 6px; background: rgba(255, 193, 7, 0.2); color: #ffc107; border-radius: 4px; margin-left: 8px; font-weight: 600;';
+            const title = elements.dialog.querySelector('.fl-results__title');
+            if (title) title.appendChild(badge);
+          }
+          badge.textContent = 'Tester Access';
+          badge.style.display = 'inline-block';
+        } else {
+          const badge = elements.dialog.querySelector('#fl-tester-badge');
+          if (badge) badge.style.display = 'none';
+        }
+      } catch (err) {
+        // Ignore badge errors (fail-open)
+        console.warn('[FLResults] Tester badge error (ignored):', err?.message || err);
+      }
+    } else {
+      const badge = elements.dialog.querySelector('#fl-tester-badge');
+      if (badge) badge.style.display = 'none';
     }
 
     // Open and apply pinned state
