@@ -7,8 +7,8 @@
   const STORAGE_KEY = 'fl:paygate:access';
   const BYPASS_KEYS = ['FLTEST2025']; // Array for easy rotation
 
-  const DAY_PASS_URL = "PASTE_STRIPE_DAY_PASS_LINK_HERE";
-  const CORE_MONTHLY_URL = "PASTE_STRIPE_CORE_MONTHLY_LINK_HERE";
+  const DAY_PASS_URL = "https://buy.stripe.com/9B600c09y5GU0HS3kn9k405";
+  const CORE_MONTHLY_URL = "https://buy.stripe.com/14A7sEaOc8T6aisbQT9k407";
 
   // Check if unlocked (with expiry validation)
   function isUnlocked() {
