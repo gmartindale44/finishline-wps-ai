@@ -74,10 +74,55 @@
       const plan = url.searchParams.get('plan');
       const bypass = url.searchParams.get('bypass');
       const key = url.searchParams.get('key');
+      const family = url.searchParams.get('family');
+      const token = url.searchParams.get('token');
       
       let unlocked = false;
       let bypassUsed = false;
       
+      // Handle family unlock (environment variable token)
+      if (family === '1' && token) {
+        try {
+          const expectedToken = (typeof window !== 'undefined' && window.__FL_FAMILY_UNLOCK_TOKEN__) || null;
+          // Debug log (temporary, guarded - does not print token value)
+          if (typeof console !== 'undefined' && console.log) {
+            console.log('[PayGate] Family unlock check:', {
+              hasExpectedToken: expectedToken !== null && expectedToken !== undefined,
+              tokenLength: expectedToken ? String(expectedToken).length : 0,
+              providedTokenLength: token ? String(token).length : 0
+            });
+          }
+          if (expectedToken && token === expectedToken) {
+            // Unlock for 365 days (1 year) for family access
+            const duration = 365 * 24 * 60 * 60 * 1000;
+            if (unlock(duration)) {
+              // Store plan as "family" for tracking
+              try {
+                const stored = localStorage.getItem(STORAGE_KEY);
+                if (stored) {
+                  const data = JSON.parse(stored);
+                  data.plan = 'family';
+                  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+                }
+              } catch {
+                // Ignore errors storing plan
+              }
+              unlocked = true;
+            }
+            
+            // Clean URL
+            url.searchParams.delete('family');
+            url.searchParams.delete('token');
+            window.history.replaceState({}, '', url);
+          }
+        } catch (err) {
+          // Fail-open: ignore family unlock errors
+          console.warn('[PayGate] Family unlock error (ignored):', err?.message || err);
+        }
+      }
+      
+      // Handle bypass key
+      if (!unlocked && bypass === '1' && key) {
       // Handle bypass key
       if (bypass === '1' && key) {
         if (BYPASS_KEYS.includes(key)) {
