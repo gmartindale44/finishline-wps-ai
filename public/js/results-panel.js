@@ -916,7 +916,7 @@
         Get full access to confidence scores, T3M metrics, strategy insights, and exotic betting ideas.
       </p>
       <ul style="margin: 0 0 20px 0; padding-left: 24px; text-align: left; color: #b8bdd4; font-size: 13px; max-width: 400px; margin-left: auto; margin-right: auto;">
-        <li style="margin-bottom: 8px;">Full confidence % and T3M % metrics</li>
+        <li style="margin-bottom: 8px;">Full confidence % and T3M % metrics — stay in race vs skip race</li>
         <li style="margin-bottom: 8px;">Complete strategy breakdown with betting recommendations</li>
         <li style="margin-bottom: 8px;">Exotic ticket ideas (Trifecta, Superfecta, Super High Five)</li>
         <li style="margin-bottom: 8px;">Detailed reasoning for picks</li>
