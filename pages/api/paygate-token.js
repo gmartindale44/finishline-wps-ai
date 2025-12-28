@@ -13,6 +13,9 @@ export default function handler(req, res) {
   // Get token from environment variable
   const token = process.env.FAMILY_UNLOCK_TOKEN || null;
   
+  // Get configurable family unlock duration (default 365 days)
+  const familyUnlockDays = parseInt(process.env.FAMILY_UNLOCK_DAYS || '365', 10);
+  
   // Compute token version (first 12 chars of SHA-256 hash, safe to expose)
   let tokenVersion = null;
   if (token) {
@@ -23,7 +26,8 @@ export default function handler(req, res) {
   // Use JSON.stringify to safely escape the token value
   const js = `window.__FL_FAMILY_UNLOCK_TOKEN__ = ${JSON.stringify(token)};
 window.__FL_FAMILY_UNLOCK_TOKEN_VERSION__ = ${JSON.stringify(tokenVersion)};
-console.log('[PayGate] Token script loaded:', { hasToken: ${token !== null}, hasTokenVersion: ${tokenVersion !== null} });`;
+window.__FL_FAMILY_UNLOCK_DAYS__ = ${familyUnlockDays};
+console.log('[PayGate] Token script loaded:', { hasToken: ${token !== null}, hasTokenVersion: ${tokenVersion !== null}, familyUnlockDays: ${familyUnlockDays} });`;
   
   // Cache for 5 minutes (token changes require redeploy anyway)
   res.setHeader('Cache-Control', 'public, max-age=300');

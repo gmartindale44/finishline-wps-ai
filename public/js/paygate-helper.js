@@ -74,8 +74,9 @@
         return false;
       }
       
-      // Token rotation check: If plan is "family", verify token version matches
+      // Token rotation check: If plan is "family", verify token script and version matches
       if (storedPlan === 'family') {
+        const tokenScriptLoaded = typeof window.__FL_FAMILY_UNLOCK_TOKEN__ !== 'undefined';
         const tokenVersionLoaded = typeof window.__FL_FAMILY_UNLOCK_TOKEN_VERSION__ !== 'undefined';
         const expectedVersion = tokenVersionLoaded ? window.__FL_FAMILY_UNLOCK_TOKEN_VERSION__ : null;
         const storedVersion = data.tokenVersion || null;
@@ -84,6 +85,7 @@
         if (typeof console !== 'undefined' && console.log) {
           console.log('[PayGate] Family token version check:', {
             storedPlan,
+            tokenScriptLoaded,
             tokenVersionPresent: tokenVersionLoaded,
             familyVersionMatch,
             storedVersion: storedVersion ? storedVersion.substring(0, 4) + '...' : null,
@@ -91,11 +93,15 @@
           });
         }
         
-        // Fail closed: If token version mismatch or missing, revoke family access
-        if (!tokenVersionLoaded || !familyVersionMatch) {
+        // Fail closed: If token script missing OR token version mismatch/missing, revoke family access
+        if (!tokenScriptLoaded || !tokenVersionLoaded || !familyVersionMatch) {
           localStorage.removeItem(STORAGE_KEY);
           if (typeof console !== 'undefined' && console.warn) {
-            console.warn('[PayGate] Family access revoked (token rotated)');
+            if (!tokenScriptLoaded || !tokenVersionLoaded) {
+              console.warn('[PayGate] Family access revoked (token script/version missing)');
+            } else {
+              console.warn('[PayGate] Family access revoked (token rotated)');
+            }
           }
           return false;
         }
@@ -193,8 +199,11 @@
               }
               // Don't unlock - stay locked
             } else {
-              // Unlock for 365 days (1 year) for family access
-              const duration = 365 * 24 * 60 * 60 * 1000;
+              // Get configurable family unlock duration (default 365 days if not set)
+              const familyUnlockDays = typeof window.__FL_FAMILY_UNLOCK_DAYS__ !== 'undefined' && window.__FL_FAMILY_UNLOCK_DAYS__ !== null
+                ? parseInt(window.__FL_FAMILY_UNLOCK_DAYS__, 10)
+                : 365;
+              const duration = familyUnlockDays * 24 * 60 * 60 * 1000;
               if (unlock(duration, 'family', tokenVersion)) {
                 unlocked = true;
               }
