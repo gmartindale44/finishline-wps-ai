@@ -1,5 +1,13 @@
 // public/js/paygate-helper.js - PayGate helper for localStorage and URL param handling
 // Fail-closed design: all errors default to locked state (premium stays locked)
+//
+// QUICK SELF-TEST INSTRUCTIONS:
+// 1. Set FAMILY_UNLOCK_TOKEN in Vercel env vars
+// 2. Visit /api/paygate-token - should return JS with token version
+// 3. Visit ?family=1&token=<TOKEN> - should unlock and log version match
+// 4. Change FAMILY_UNLOCK_TOKEN in Vercel, redeploy
+// 5. Refresh page - should log "Family access revoked (token rotated)" and lock
+// 6. Paid unlocks (?paid=1&plan=day) should NOT be affected by token rotation
 
 (function () {
   'use strict';
@@ -24,12 +32,16 @@
       
       // Check if token script loaded (even if token is null, window var should exist)
       const tokenScriptLoaded = typeof window.__FL_FAMILY_UNLOCK_TOKEN__ !== 'undefined';
+      const tokenVersionLoaded = typeof window.__FL_FAMILY_UNLOCK_TOKEN_VERSION__ !== 'undefined';
       const hasToken = window.__FL_FAMILY_UNLOCK_TOKEN__ !== null && window.__FL_FAMILY_UNLOCK_TOKEN__ !== undefined;
+      const hasTokenVersion = window.__FL_FAMILY_UNLOCK_TOKEN_VERSION__ !== null && window.__FL_FAMILY_UNLOCK_TOKEN_VERSION__ !== undefined;
       
       if (typeof console !== 'undefined' && console.log) {
         console.log('[PayGate] Token status:', {
           tokenScriptLoaded,
-          hasToken
+          tokenVersionPresent: tokenVersionLoaded,
+          hasToken,
+          hasTokenVersion
         });
       }
       
@@ -51,6 +63,7 @@
       
       const data = JSON.parse(stored);
       const now = Date.now();
+      const storedPlan = data.plan || null;
       
       // Check expiry
       if (data.expiry && data.expiry < now) {
@@ -61,8 +74,37 @@
         return false;
       }
       
+      // Token rotation check: If plan is "family", verify token version matches
+      if (storedPlan === 'family') {
+        const tokenVersionLoaded = typeof window.__FL_FAMILY_UNLOCK_TOKEN_VERSION__ !== 'undefined';
+        const expectedVersion = tokenVersionLoaded ? window.__FL_FAMILY_UNLOCK_TOKEN_VERSION__ : null;
+        const storedVersion = data.tokenVersion || null;
+        const familyVersionMatch = expectedVersion !== null && storedVersion === expectedVersion;
+        
+        if (typeof console !== 'undefined' && console.log) {
+          console.log('[PayGate] Family token version check:', {
+            storedPlan,
+            tokenVersionPresent: tokenVersionLoaded,
+            familyVersionMatch,
+            storedVersion: storedVersion ? storedVersion.substring(0, 4) + '...' : null,
+            expectedVersion: expectedVersion ? expectedVersion.substring(0, 4) + '...' : null
+          });
+        }
+        
+        // Fail closed: If token version mismatch or missing, revoke family access
+        if (!tokenVersionLoaded || !familyVersionMatch) {
+          localStorage.removeItem(STORAGE_KEY);
+          if (typeof console !== 'undefined' && console.warn) {
+            console.warn('[PayGate] Family access revoked (token rotated)');
+          }
+          return false;
+        }
+      }
+      
       if (typeof console !== 'undefined' && console.log) {
-        console.log('[PayGate] isUnlocked: true (valid access)');
+        console.log('[PayGate] isUnlocked: true (valid access)', {
+          storedPlan: storedPlan || 'paid'
+        });
       }
       return true;
     } catch (err) {
@@ -139,21 +181,23 @@
             }
             // Don't unlock - stay locked
           } else if (expectedToken && token === expectedToken) {
-            // Unlock for 365 days (1 year) for family access
-            const duration = 365 * 24 * 60 * 60 * 1000;
-            if (unlock(duration)) {
-              // Store plan as "family" for tracking
-              try {
-                const stored = localStorage.getItem(STORAGE_KEY);
-                if (stored) {
-                  const data = JSON.parse(stored);
-                  data.plan = 'family';
-                  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-                }
-              } catch {
-                // Ignore errors storing plan
+            // Get token version for rotation/revocation support
+            const tokenVersion = typeof window.__FL_FAMILY_UNLOCK_TOKEN_VERSION__ !== 'undefined' 
+              ? window.__FL_FAMILY_UNLOCK_TOKEN_VERSION__ 
+              : null;
+            
+            // Fail closed: token version must be available for family unlock
+            if (!tokenVersion) {
+              if (typeof console !== 'undefined' && console.warn) {
+                console.warn('[PayGate] Family unlock failed: token version not available (fail-closed)');
               }
-              unlocked = true;
+              // Don't unlock - stay locked
+            } else {
+              // Unlock for 365 days (1 year) for family access
+              const duration = 365 * 24 * 60 * 60 * 1000;
+              if (unlock(duration, 'family', tokenVersion)) {
+                unlocked = true;
+              }
             }
             
             // Clean URL
@@ -162,8 +206,8 @@
             window.history.replaceState({}, '', url);
           }
         } catch (err) {
-          // Fail-open: ignore family unlock errors
-          console.warn('[PayGate] Family unlock error (ignored):', err?.message || err);
+          // Fail-closed: ignore family unlock errors (stay locked)
+          console.warn('[PayGate] Family unlock error (ignored, staying locked):', err?.message || err);
         }
       }
       
@@ -187,14 +231,19 @@
       // Handle Stripe return
       if (!unlocked && (success === '1' || paid === '1')) {
         let duration;
+        let planName = null;
         if (plan === 'day') {
           duration = 24 * 60 * 60 * 1000; // 24 hours
+          planName = 'day';
         } else {
           duration = 30 * 24 * 60 * 60 * 1000; // 30 days (default to Core)
+          planName = 'core';
         }
         
-        unlock(duration);
-        unlocked = true;
+        // Paid unlocks don't require token version (not affected by token rotation)
+        if (unlock(duration, planName, null)) {
+          unlocked = true;
+        }
         
         // Clean URL
         url.searchParams.delete('success');
