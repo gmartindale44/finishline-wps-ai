@@ -1,5 +1,5 @@
 // public/js/paygate-helper.js - PayGate helper for localStorage and URL param handling
-// Fail-open design: all errors default to unlocked state
+// Fail-closed design: all errors default to locked state (premium stays locked)
 
 (function () {
   'use strict';
@@ -11,14 +11,41 @@
   const CORE_MONTHLY_URL = "https://buy.stripe.com/14A7sEaOc8T6aisbQT9k407";
 
   // Check if unlocked (with expiry validation)
+  // FAIL CLOSED: If token script failed to load or token is missing, stay locked
   function isUnlocked() {
     try {
       if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
-        return true; // Fail-open: SSR or no localStorage = unlocked
+        // SSR or no localStorage - fail closed (locked)
+        if (typeof console !== 'undefined' && console.log) {
+          console.log('[PayGate] isUnlocked: false (no window/localStorage)');
+        }
+        return false;
+      }
+      
+      // Check if token script loaded (even if token is null, window var should exist)
+      const tokenScriptLoaded = typeof window.__FL_FAMILY_UNLOCK_TOKEN__ !== 'undefined';
+      const hasToken = window.__FL_FAMILY_UNLOCK_TOKEN__ !== null && window.__FL_FAMILY_UNLOCK_TOKEN__ !== undefined;
+      
+      if (typeof console !== 'undefined' && console.log) {
+        console.log('[PayGate] Token status:', {
+          tokenScriptLoaded,
+          hasToken
+        });
+      }
+      
+      // Fail closed: if token script didn't load, stay locked
+      if (!tokenScriptLoaded) {
+        if (typeof console !== 'undefined' && console.warn) {
+          console.warn('[PayGate] Token script not loaded - staying locked (fail-closed)');
+        }
+        return false;
       }
       
       const stored = localStorage.getItem(STORAGE_KEY);
       if (!stored) {
+        if (typeof console !== 'undefined' && console.log) {
+          console.log('[PayGate] isUnlocked: false (no stored access)');
+        }
         return false;
       }
       
@@ -28,14 +55,22 @@
       // Check expiry
       if (data.expiry && data.expiry < now) {
         localStorage.removeItem(STORAGE_KEY);
+        if (typeof console !== 'undefined' && console.log) {
+          console.log('[PayGate] isUnlocked: false (expired)');
+        }
         return false;
       }
       
+      if (typeof console !== 'undefined' && console.log) {
+        console.log('[PayGate] isUnlocked: true (valid access)');
+      }
       return true;
     } catch (err) {
-      // Fail-open: any error = unlocked
-      console.warn('[PayGate] isUnlocked() error, defaulting to unlocked:', err?.message || err);
-      return true;
+      // Fail closed: any error = locked
+      if (typeof console !== 'undefined' && console.warn) {
+        console.warn('[PayGate] isUnlocked() error, defaulting to locked (fail-closed):', err?.message || err);
+      }
+      return false;
     }
   }
 
@@ -83,16 +118,27 @@
       // Handle family unlock (environment variable token)
       if (family === '1' && token) {
         try {
-          const expectedToken = (typeof window !== 'undefined' && window.__FL_FAMILY_UNLOCK_TOKEN__) || null;
+          const tokenScriptLoaded = typeof window !== 'undefined' && typeof window.__FL_FAMILY_UNLOCK_TOKEN__ !== 'undefined';
+          const expectedToken = tokenScriptLoaded ? window.__FL_FAMILY_UNLOCK_TOKEN__ : null;
+          const hasExpectedToken = expectedToken !== null && expectedToken !== undefined;
+          
           // Debug log (temporary, guarded - does not print token value)
           if (typeof console !== 'undefined' && console.log) {
             console.log('[PayGate] Family unlock check:', {
-              hasExpectedToken: expectedToken !== null && expectedToken !== undefined,
+              tokenScriptLoaded,
+              hasExpectedToken,
               tokenLength: expectedToken ? String(expectedToken).length : 0,
               providedTokenLength: token ? String(token).length : 0
             });
           }
-          if (expectedToken && token === expectedToken) {
+          
+          // Fail closed: token script must be loaded and token must match
+          if (!tokenScriptLoaded) {
+            if (typeof console !== 'undefined' && console.warn) {
+              console.warn('[PayGate] Family unlock failed: token script not loaded (fail-closed)');
+            }
+            // Don't unlock - stay locked
+          } else if (expectedToken && token === expectedToken) {
             // Unlock for 365 days (1 year) for family access
             const duration = 365 * 24 * 60 * 60 * 1000;
             if (unlock(duration)) {
