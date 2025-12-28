@@ -84,6 +84,14 @@
       if (family === '1' && token) {
         try {
           const expectedToken = (typeof window !== 'undefined' && window.__FL_FAMILY_UNLOCK_TOKEN__) || null;
+          // Debug log (temporary, guarded - does not print token value)
+          if (typeof console !== 'undefined' && console.log) {
+            console.log('[PayGate] Family unlock check:', {
+              hasExpectedToken: expectedToken !== null && expectedToken !== undefined,
+              tokenLength: expectedToken ? String(expectedToken).length : 0,
+              providedTokenLength: token ? String(token).length : 0
+            });
+          }
           if (expectedToken && token === expectedToken) {
             // Unlock for 365 days (1 year) for family access
             const duration = 365 * 24 * 60 * 60 * 1000;
