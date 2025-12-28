@@ -63,7 +63,7 @@ apps/api/  # Python API, handled separately by Vercel
 # - pages/ (Next.js pages router)
 # - pages/api/ (Next.js API routes)
 # - public/ (static assets)
-# - next.config.js (Next.js configuration)
+# - next.config.cjs (Next.js configuration - CommonJS format for ESM projects)
 # - package.json (dependencies and scripts)
 # - lib/ (library code used by API routes)
 # - Any .js/.ts files in pages/api/
