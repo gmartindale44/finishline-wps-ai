@@ -22,12 +22,11 @@ export default function handler(req, res) {
     tokenVersion = crypto.createHash('sha256').update(token).digest('hex').slice(0, 12);
   }
   
-  // Return JavaScript that sets window variables and logs confirmation
-  // Use JSON.stringify to safely escape the token value
-  const js = `window.__FL_FAMILY_UNLOCK_TOKEN__ = ${JSON.stringify(token)};
-window.__FL_FAMILY_UNLOCK_TOKEN_VERSION__ = ${JSON.stringify(tokenVersion)};
+  // Return JavaScript that sets window variables (DO NOT expose raw token)
+  // Only expose tokenVersion (safe hash) and familyUnlockDays
+  const js = `window.__FL_FAMILY_UNLOCK_TOKEN_VERSION__ = ${JSON.stringify(tokenVersion)};
 window.__FL_FAMILY_UNLOCK_DAYS__ = ${familyUnlockDays};
-console.log('[PayGate] Token script loaded:', { hasToken: ${token !== null}, hasTokenVersion: ${tokenVersion !== null}, familyUnlockDays: ${familyUnlockDays} });`;
+console.log('[PayGate] Token script loaded:', { hasTokenVersion: ${tokenVersion !== null}, familyUnlockDays: ${familyUnlockDays} });`;
   
   // Cache for 5 minutes (token changes require redeploy anyway)
   res.setHeader('Cache-Control', 'public, max-age=300');

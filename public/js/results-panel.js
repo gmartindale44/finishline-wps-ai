@@ -6,11 +6,11 @@
   // PayGate toggle - set to false to disable paygate entirely
   const PAYWALL_ENABLED = true;
 
-  // PayGate helper - fail-open: if helper not loaded, default to unlocked
+  // PayGate helper - fail-closed: if helper not loaded, default to locked
   const paygate = (typeof window !== 'undefined' && window.__FL_PAYGATE__) || (() => {
-    console.warn('[FLResults] PayGate helper not loaded; showing all content (fail-open)');
+    console.warn('[FLResults] PayGate helper not loaded; hiding premium content (fail-closed)');
     return {
-      isUnlocked: () => true,
+      isUnlocked: () => false,
       checkUrlParams: () => ({ unlocked: false, bypassUsed: false }),
       getBypassUsed: () => false,
       DAY_PASS_URL: '#',
@@ -142,12 +142,12 @@
 
   const root = ensureResultsRoot();
 
-  // Check URL params on init (fail-open: ignore errors)
+  // Check URL params on init (fail-closed: ignore errors but stay locked)
   if (PAYWALL_ENABLED && typeof window !== 'undefined') {
     try {
       paygate.checkUrlParams();
     } catch (err) {
-      console.warn('[FLResults] PayGate URL check error (ignored, fail-open):', err?.message || err);
+      console.warn('[FLResults] PayGate URL check error (ignored, fail-closed):', err?.message || err);
     }
   }
 
@@ -994,13 +994,13 @@
 
     const { win, place, show, confidence, horses = [], reasons = {}, tickets } = pred || {};
 
-    // Check unlock state (fail-open: default to unlocked on any error)
+    // Check unlock state (fail-closed: default to locked on any error)
     const isUnlocked = !PAYWALL_ENABLED || (() => {
       try {
         return paygate.isUnlocked();
       } catch (err) {
-        console.warn('[FLResults] PayGate check error, defaulting to unlocked (fail-open):', err?.message || err);
-        return true;
+        console.warn('[FLResults] PayGate check error, defaulting to locked (fail-closed):', err?.message || err);
+        return false;
       }
     })();
 

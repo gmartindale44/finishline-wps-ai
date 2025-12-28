@@ -30,25 +30,21 @@
         return false;
       }
       
-      // Check if token script loaded (even if token is null, window var should exist)
-      const tokenScriptLoaded = typeof window.__FL_FAMILY_UNLOCK_TOKEN__ !== 'undefined';
+      // Check if token version script loaded (token version is safe to expose)
       const tokenVersionLoaded = typeof window.__FL_FAMILY_UNLOCK_TOKEN_VERSION__ !== 'undefined';
-      const hasToken = window.__FL_FAMILY_UNLOCK_TOKEN__ !== null && window.__FL_FAMILY_UNLOCK_TOKEN__ !== undefined;
       const hasTokenVersion = window.__FL_FAMILY_UNLOCK_TOKEN_VERSION__ !== null && window.__FL_FAMILY_UNLOCK_TOKEN_VERSION__ !== undefined;
       
       if (typeof console !== 'undefined' && console.log) {
         console.log('[PayGate] Token status:', {
-          tokenScriptLoaded,
           tokenVersionPresent: tokenVersionLoaded,
-          hasToken,
           hasTokenVersion
         });
       }
       
-      // Fail closed: if token script didn't load, stay locked
-      if (!tokenScriptLoaded) {
+      // Fail closed: if token version script didn't load, stay locked
+      if (!tokenVersionLoaded) {
         if (typeof console !== 'undefined' && console.warn) {
-          console.warn('[PayGate] Token script not loaded - staying locked (fail-closed)');
+          console.warn('[PayGate] Token version script not loaded - staying locked (fail-closed)');
         }
         return false;
       }
@@ -74,9 +70,8 @@
         return false;
       }
       
-      // Token rotation check: If plan is "family", verify token script and version matches
+      // Token rotation check: If plan is "family", verify token version matches
       if (storedPlan === 'family') {
-        const tokenScriptLoaded = typeof window.__FL_FAMILY_UNLOCK_TOKEN__ !== 'undefined';
         const tokenVersionLoaded = typeof window.__FL_FAMILY_UNLOCK_TOKEN_VERSION__ !== 'undefined';
         const expectedVersion = tokenVersionLoaded ? window.__FL_FAMILY_UNLOCK_TOKEN_VERSION__ : null;
         const storedVersion = data.tokenVersion || null;
@@ -85,7 +80,6 @@
         if (typeof console !== 'undefined' && console.log) {
           console.log('[PayGate] Family token version check:', {
             storedPlan,
-            tokenScriptLoaded,
             tokenVersionPresent: tokenVersionLoaded,
             familyVersionMatch,
             storedVersion: storedVersion ? storedVersion.substring(0, 4) + '...' : null,
@@ -93,12 +87,12 @@
           });
         }
         
-        // Fail closed: If token script missing OR token version mismatch/missing, revoke family access
-        if (!tokenScriptLoaded || !tokenVersionLoaded || !familyVersionMatch) {
+        // Fail closed: If token version missing OR mismatch, revoke family access
+        if (!tokenVersionLoaded || !familyVersionMatch) {
           localStorage.removeItem(STORAGE_KEY);
           if (typeof console !== 'undefined' && console.warn) {
-            if (!tokenScriptLoaded || !tokenVersionLoaded) {
-              console.warn('[PayGate] Family access revoked (token script/version missing)');
+            if (!tokenVersionLoaded) {
+              console.warn('[PayGate] Family access revoked (token version missing)');
             } else {
               console.warn('[PayGate] Family access revoked (token rotated)');
             }
@@ -123,7 +117,7 @@
   }
 
   // Unlock for specified duration
-  function unlock(durationMs) {
+  function unlock(durationMs, plan = null, tokenVersion = null) {
     try {
       if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
         return false; // Can't unlock without localStorage
@@ -133,7 +127,9 @@
       const data = {
         expiry,
         unlockedAt: Date.now(),
-        durationMs
+        durationMs,
+        plan: plan || null,
+        tokenVersion: tokenVersion || null
       };
       
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -163,57 +159,44 @@
       let unlocked = false;
       let bypassUsed = false;
       
-      // Handle family unlock (environment variable token)
+      // Handle family unlock (server-side token validation)
       if (family === '1' && token) {
         try {
-          const tokenScriptLoaded = typeof window !== 'undefined' && typeof window.__FL_FAMILY_UNLOCK_TOKEN__ !== 'undefined';
-          const expectedToken = tokenScriptLoaded ? window.__FL_FAMILY_UNLOCK_TOKEN__ : null;
-          const hasExpectedToken = expectedToken !== null && expectedToken !== undefined;
-          
-          // Debug log (temporary, guarded - does not print token value)
-          if (typeof console !== 'undefined' && console.log) {
-            console.log('[PayGate] Family unlock check:', {
-              tokenScriptLoaded,
-              hasExpectedToken,
-              tokenLength: expectedToken ? String(expectedToken).length : 0,
-              providedTokenLength: token ? String(token).length : 0
-            });
-          }
-          
-          // Fail closed: token script must be loaded and token must match
-          if (!tokenScriptLoaded) {
-            if (typeof console !== 'undefined' && console.warn) {
-              console.warn('[PayGate] Family unlock failed: token script not loaded (fail-closed)');
-            }
-            // Don't unlock - stay locked
-          } else if (expectedToken && token === expectedToken) {
-            // Get token version for rotation/revocation support
-            const tokenVersion = typeof window.__FL_FAMILY_UNLOCK_TOKEN_VERSION__ !== 'undefined' 
-              ? window.__FL_FAMILY_UNLOCK_TOKEN_VERSION__ 
-              : null;
-            
-            // Fail closed: token version must be available for family unlock
-            if (!tokenVersion) {
-              if (typeof console !== 'undefined' && console.warn) {
-                console.warn('[PayGate] Family unlock failed: token version not available (fail-closed)');
-              }
-              // Don't unlock - stay locked
-            } else {
+          // Validate token via server endpoint (timing-safe comparison)
+          fetch('/api/family-unlock', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token })
+          })
+          .then(response => response.json())
+          .then(data => {
+            if (data.ok && data.tokenVersion) {
               // Get configurable family unlock duration (default 365 days if not set)
               const familyUnlockDays = typeof window.__FL_FAMILY_UNLOCK_DAYS__ !== 'undefined' && window.__FL_FAMILY_UNLOCK_DAYS__ !== null
                 ? parseInt(window.__FL_FAMILY_UNLOCK_DAYS__, 10)
                 : 365;
               const duration = familyUnlockDays * 24 * 60 * 60 * 1000;
-              if (unlock(duration, 'family', tokenVersion)) {
+              if (unlock(duration, 'family', data.tokenVersion)) {
                 unlocked = true;
+                // Clean URL
+                const cleanUrl = new URL(window.location.href);
+                cleanUrl.searchParams.delete('family');
+                cleanUrl.searchParams.delete('token');
+                window.history.replaceState({}, '', cleanUrl);
+              }
+            } else {
+              // Fail closed: invalid token - stay locked
+              if (typeof console !== 'undefined' && console.warn) {
+                console.warn('[PayGate] Family unlock failed: invalid token (fail-closed)');
               }
             }
-            
-            // Clean URL
-            url.searchParams.delete('family');
-            url.searchParams.delete('token');
-            window.history.replaceState({}, '', url);
-          }
+          })
+          .catch(err => {
+            // Fail closed: network error - stay locked
+            if (typeof console !== 'undefined' && console.warn) {
+              console.warn('[PayGate] Family unlock error (ignored, staying locked):', err?.message || err);
+            }
+          });
         } catch (err) {
           // Fail-closed: ignore family unlock errors (stay locked)
           console.warn('[PayGate] Family unlock error (ignored, staying locked):', err?.message || err);

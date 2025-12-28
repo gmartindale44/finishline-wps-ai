@@ -1,16 +1,23 @@
 import { Html, Head, Main, NextScript } from "next/document";
+import crypto from 'node:crypto';
 
 export default function Document() {
-  // Inject family unlock token from env var (available on all pages)
+  // Compute token version (safe to expose, not the raw token)
   const familyToken = process.env.FAMILY_UNLOCK_TOKEN || null;
+  let tokenVersion = null;
+  if (familyToken) {
+    tokenVersion = crypto.createHash('sha256').update(familyToken).digest('hex').slice(0, 12);
+  }
+  const familyUnlockDays = parseInt(process.env.FAMILY_UNLOCK_DAYS || '365', 10);
   
   return (
     <Html>
       <Head>
-        {/* Inject family unlock token before any other scripts */}
+        {/* Inject token version (NOT raw token) before any other scripts */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `window.__FL_FAMILY_UNLOCK_TOKEN__ = ${JSON.stringify(familyToken)};`,
+            __html: `window.__FL_FAMILY_UNLOCK_TOKEN_VERSION__ = ${JSON.stringify(tokenVersion)};
+window.__FL_FAMILY_UNLOCK_DAYS__ = ${familyUnlockDays};`,
           }}
         />
       </Head>
