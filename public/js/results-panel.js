@@ -4,7 +4,7 @@
   'use strict';
 
   // PayGate toggle - set to false to disable paygate entirely
-  const PAYWALL_ENABLED = false;
+  const PAYWALL_ENABLED = true;
 
   // PayGate helper - fail-open: if helper not loaded, default to unlocked
   const paygate = (typeof window !== 'undefined' && window.__FL_PAYGATE__) || (() => {
