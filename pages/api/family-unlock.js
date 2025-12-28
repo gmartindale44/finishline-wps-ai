@@ -7,8 +7,10 @@ import crypto from 'node:crypto';
 export const config = { runtime: 'nodejs' };
 
 export default async function handler(req, res) {
+  // Always set JSON content type first (never return HTML)
+  res.setHeader('Content-Type', 'application/json');
+  
   if (req.method !== 'POST') {
-    res.setHeader('Content-Type', 'application/json');
     return res.status(405).json({ ok: false, error: 'Method not allowed' });
   }
 
@@ -21,14 +23,12 @@ export default async function handler(req, res) {
     const { token } = body;
     
     if (!token || typeof token !== 'string') {
-      res.setHeader('Content-Type', 'application/json');
       return res.status(400).json({ ok: false, error: 'Token required' });
     }
 
     const expectedToken = process.env.FAMILY_UNLOCK_TOKEN || null;
     
     if (!expectedToken) {
-      res.setHeader('Content-Type', 'application/json');
       return res.status(200).json({ ok: false, error: 'Family unlock not configured' });
     }
 
@@ -43,21 +43,19 @@ export default async function handler(req, res) {
     );
 
     if (!isValid) {
-      res.setHeader('Content-Type', 'application/json');
       return res.status(200).json({ ok: false, error: 'Invalid token' });
     }
 
     // Compute token version (first 12 chars of SHA-256 hash)
     const tokenVersion = crypto.createHash('sha256').update(expectedToken).digest('hex').slice(0, 12);
 
-    res.setHeader('Content-Type', 'application/json');
-    res.status(200).json({
+    return res.status(200).json({
       ok: true,
       tokenVersion
     });
   } catch (err) {
-    res.setHeader('Content-Type', 'application/json');
-    res.status(500).json({
+    // Always return JSON, even on errors
+    return res.status(500).json({
       ok: false,
       error: err?.message || 'Internal server error'
     });

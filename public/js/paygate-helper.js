@@ -168,7 +168,19 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ token })
           })
-          .then(response => response.json())
+          .then(response => {
+            // Check Content-Type before parsing JSON (prevent HTML error pages)
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+              throw new Error(`Expected JSON, got ${contentType || 'unknown'}`);
+            }
+            if (!response.ok) {
+              return response.json().then(data => {
+                throw new Error(data?.error || `HTTP ${response.status}`);
+              });
+            }
+            return response.json();
+          })
           .then(data => {
             if (data.ok && data.tokenVersion) {
               // Get configurable family unlock duration (default 365 days if not set)
