@@ -232,21 +232,35 @@
         }
       }
       
-      // Handle Stripe return
+      // Handle Stripe return and URL unlock params
       if (!unlocked && (success === '1' || paid === '1')) {
         let duration;
         let planName = null;
         if (plan === 'day') {
           duration = 24 * 60 * 60 * 1000; // 24 hours
           planName = 'day';
+        } else if (plan === 'family') {
+          duration = 180 * 24 * 60 * 60 * 1000; // 180 days
+          planName = 'family';
         } else {
           duration = 30 * 24 * 60 * 60 * 1000; // 30 days (default to Core)
           planName = 'core';
         }
         
-        // Paid unlocks don't require token version (not affected by token rotation)
+        // Paid unlocks (day/core) don't require token version (not affected by token rotation)
+        // Family plan requires token validation (handled separately via ?family=1&token=...)
+        // But if plan=family is used here, we still unlock (for URL-based family unlock)
         if (unlock(duration, planName, null)) {
           unlocked = true;
+          if (typeof console !== 'undefined' && console.log) {
+            const expiry = Date.now() + duration;
+            console.log('[PayGate] Unlocked via URL params:', {
+              plan: planName,
+              durationDays: Math.round(duration / (24 * 60 * 60 * 1000)),
+              expiry: new Date(expiry).toISOString(),
+              expiryTimestamp: expiry
+            });
+          }
         }
         
         // Clean URL
