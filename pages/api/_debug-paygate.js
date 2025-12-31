@@ -1,5 +1,6 @@
 // pages/api/_debug-paygate.js
 // Debug endpoint to verify paygate token configuration
+// NOTE: This is the pages/api version (Next.js API route)
 
 import crypto from 'node:crypto';
 
@@ -12,7 +13,7 @@ export default function handler(req, res) {
   // Set content type
   res.setHeader('Content-Type', 'application/json');
   // Identity header
-  res.setHeader('X-Handler-Identity', 'DEBUG_PAYGATE_PAGES_API_v2');
+  res.setHeader('X-Handler-Identity', 'DEBUG_PAYGATE_PAGES_API_v3');
 
   try {
     const token = process.env.FAMILY_UNLOCK_TOKEN || null;
@@ -25,7 +26,7 @@ export default function handler(req, res) {
     
     res.status(200).json({
       ok: true,
-      routeIdentity: 'DEBUG_PAYGATE_PAGES_API_v2',
+      routeIdentity: 'DEBUG_PAYGATE_PAGES_API_v3',
       hasToken: token !== null,
       hasVersion: tokenVersion !== null,
       tokenVersionLength: tokenVersion ? tokenVersion.length : 0,
@@ -36,7 +37,7 @@ export default function handler(req, res) {
     res.setHeader('Content-Type', 'application/json');
     res.status(500).json({
       ok: false,
-      routeIdentity: 'DEBUG_PAYGATE_PAGES_API_v2',
+      routeIdentity: 'DEBUG_PAYGATE_PAGES_API_v3',
       hasToken: false,
       hasVersion: false,
       error: err.message,

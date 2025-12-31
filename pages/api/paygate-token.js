@@ -1,7 +1,8 @@
 // pages/api/paygate-token.js
-// PAYGATE_TOKEN_HANDLER_PAGES_API_v2
+// PAYGATE_TOKEN_HANDLER_PAGES_API_v3
 // Returns a JavaScript file that sets the family unlock token from env var
 // This works for static HTML files that can't use Next.js _document.js
+// NOTE: This is the pages/api version (Next.js API route)
 
 import crypto from 'node:crypto';
 
@@ -14,7 +15,7 @@ export default function handler(req, res) {
   // Set content type to JavaScript
   res.setHeader('Content-Type', 'application/javascript');
   // Identity header
-  res.setHeader('X-Handler-Identity', 'PAYGATE_TOKEN_PAGES_API_v2');
+  res.setHeader('X-Handler-Identity', 'PAYGATE_TOKEN_PAGES_API_v3');
   
   // Get token from environment variable
   const token = process.env.FAMILY_UNLOCK_TOKEN || null;
@@ -30,7 +31,7 @@ export default function handler(req, res) {
   
   // Return JavaScript that sets window variables (DO NOT expose raw token)
   // Only expose tokenVersion (safe hash) and familyUnlockDays
-  const js = `// PAYGATE_TOKEN_HANDLER_PAGES_API_v2
+  const js = `// PAYGATE_TOKEN_HANDLER_PAGES_API_v3
 window.__FL_FAMILY_UNLOCK_TOKEN_VERSION__ = ${JSON.stringify(tokenVersion)};
 window.__FL_FAMILY_UNLOCK_DAYS__ = ${familyUnlockDays};
 console.log('[PayGate] Token script loaded:', { hasTokenVersion: ${tokenVersion !== null}, familyUnlockDays: ${familyUnlockDays} });`;

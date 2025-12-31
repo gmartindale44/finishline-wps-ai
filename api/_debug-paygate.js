@@ -12,7 +12,7 @@ export default function handler(req, res) {
   // Only allow GET
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
-    res.setHeader('X-Handler-Identity', 'DEBUG_PAYGATE_ROOT_API_v2');
+    res.setHeader('X-Handler-Identity', 'DEBUG_PAYGATE_ROOT_API_v3');
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
@@ -20,7 +20,7 @@ export default function handler(req, res) {
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Cache-Control', 'no-store');
   // Identity header
-  res.setHeader('X-Handler-Identity', 'DEBUG_PAYGATE_ROOT_API_v2');
+  res.setHeader('X-Handler-Identity', 'DEBUG_PAYGATE_ROOT_API_v3');
 
   try {
     // Get token from environment variable (same source as pages/api version)
@@ -35,7 +35,7 @@ export default function handler(req, res) {
     
     res.status(200).json({
       ok: true,
-      routeIdentity: 'DEBUG_PAYGATE_ROOT_API_v2',
+      routeIdentity: 'DEBUG_PAYGATE_ROOT_API_v3',
       apiRouteWorking: true,
       hasToken: token !== null,
       hasVersion: tokenVersion !== null,
@@ -45,7 +45,7 @@ export default function handler(req, res) {
   } catch (err) {
     res.status(500).json({
       ok: false,
-      routeIdentity: 'DEBUG_PAYGATE_ROOT_API_v2',
+      routeIdentity: 'DEBUG_PAYGATE_ROOT_API_v3',
       hasToken: false,
       hasVersion: false,
       error: err.message,
