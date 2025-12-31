@@ -6,6 +6,14 @@ import crypto from 'node:crypto';
 export const config = { runtime: 'nodejs' };
 
 export default function handler(req, res) {
+  // Identity logging
+  console.log("[DEBUG PAYGATE] handler= PAGES_API url=", req.url, "method=", req.method);
+  
+  // Set content type
+  res.setHeader('Content-Type', 'application/json');
+  // Identity header
+  res.setHeader('X-Handler-Identity', 'DEBUG_PAYGATE_PAGES_API_v2');
+
   try {
     const token = process.env.FAMILY_UNLOCK_TOKEN || null;
     let tokenVersion = null;
@@ -15,8 +23,9 @@ export default function handler(req, res) {
     
     const familyUnlockDays = parseInt(process.env.FAMILY_UNLOCK_DAYS || '365', 10);
     
-    res.setHeader('Content-Type', 'application/json');
     res.status(200).json({
+      ok: true,
+      routeIdentity: 'DEBUG_PAYGATE_PAGES_API_v2',
       hasToken: token !== null,
       hasVersion: tokenVersion !== null,
       tokenVersionLength: tokenVersion ? tokenVersion.length : 0,
@@ -26,6 +35,8 @@ export default function handler(req, res) {
   } catch (err) {
     res.setHeader('Content-Type', 'application/json');
     res.status(500).json({
+      ok: false,
+      routeIdentity: 'DEBUG_PAYGATE_PAGES_API_v2',
       hasToken: false,
       hasVersion: false,
       error: err.message,
@@ -33,4 +44,3 @@ export default function handler(req, res) {
     });
   }
 }
-
