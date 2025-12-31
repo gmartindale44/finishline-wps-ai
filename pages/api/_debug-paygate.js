@@ -13,7 +13,7 @@ export default function handler(req, res) {
   // Set content type
   res.setHeader('Content-Type', 'application/json');
   // Identity header
-  res.setHeader('X-Handler-Identity', 'DEBUG_PAYGATE_PAGES_API_v3');
+  res.setHeader('X-Handler-Identity', 'DEBUG_PAYGATE_OK');
 
   try {
     const token = process.env.FAMILY_UNLOCK_TOKEN || null;
@@ -26,18 +26,16 @@ export default function handler(req, res) {
     
     res.status(200).json({
       ok: true,
-      routeIdentity: 'DEBUG_PAYGATE_PAGES_API_v3',
+      apiRouteWorking: true,
       hasToken: token !== null,
       hasVersion: tokenVersion !== null,
       tokenVersionLength: tokenVersion ? tokenVersion.length : 0,
-      familyUnlockDays,
-      apiRouteWorking: true
+      familyUnlockDays
     });
   } catch (err) {
     res.setHeader('Content-Type', 'application/json');
     res.status(500).json({
       ok: false,
-      routeIdentity: 'DEBUG_PAYGATE_PAGES_API_v3',
       hasToken: false,
       hasVersion: false,
       error: err.message,
