@@ -1,4 +1,8 @@
-# Smoke Test Checklist - PayGate Routing Fix
+# Smoke Test - PayGate Routing Fix
+
+## Test URLs
+
+Replace `<PREVIEW-URL>` with your Vercel Preview deployment URL (e.g., `https://finishline-wps-ai-abc123.vercel.app`).
 
 ## Test 1: /api/paygate-token?cb=123
 
@@ -26,9 +30,9 @@ curl -i "https://<PREVIEW-URL>/api/paygate-token?cb=123" | head -30
 - ✅ Body starts with: `// PAYGATE_TOKEN_HANDLER_OK`
 - ✅ Body contains: `window.__PAYGATE_TEST_MODE__ = true` (or `false`)
 - ✅ Body contains: `window.__PAYGATE_TEST_MODE_ENV__ = "true"` (or empty string)
-- ❌ Must NOT contain: `verify_race_stub`, `METHOD_NOT_ALLOWED`, JSON structure
+- ❌ Must NOT contain: `verify_race_stub`, `METHOD_NOT_ALLOWED`, JSON structure, `handlerFile pages/api/verify_race.js`
 
-### Proof Line
+### Proof
 ```javascript
 // PAYGATE_TOKEN_HANDLER_OK
 window.__PAYGATE_TEST_MODE__ = true;
@@ -67,7 +71,7 @@ curl -i "https://<PREVIEW-URL>/api/debug-paygate?cb=123" | head -30
 - ✅ JSON contains: `"testModeParsed": true` (if test mode enabled)
 - ❌ Must NOT contain: `verify_race_stub`, `METHOD_NOT_ALLOWED`, `handlerFile pages/api/verify_race.js`
 
-### Proof JSON
+### Proof
 ```json
 {
   "ok": true,
@@ -134,3 +138,11 @@ Write-Host "Status: $($r.StatusCode)"
 - [ ] Other `/api` endpoints continue to work (no regressions)
 - [ ] No `verify_race_stub` in paygate endpoint responses
 
+## Deployment to Test
+
+**Preview URL:** Check Vercel Dashboard → Deployments → Latest Preview deployment URL
+
+**Test After:**
+1. Push changes to branch `hotfix/restore-paygate-lkg`
+2. Wait for Vercel Preview deployment to complete
+3. Use the Preview URL from Vercel Dashboard
