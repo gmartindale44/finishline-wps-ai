@@ -158,12 +158,56 @@ if ($r3.StatusCode -eq 200 -and $r3.Content -notmatch 'verify_race_stub') {
 Write-Host "`n=== Tests Complete ===" -ForegroundColor Green
 ```
 
+## Test 5: /api/photo_extract_openai_b64 (POST) - OCR Endpoint
+
+### PowerShell
+```powershell
+# Create a minimal test payload (base64-encoded 1x1 transparent PNG)
+$testB64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+$body = @{
+    b64 = $testB64
+} | ConvertTo-Json
+
+$r = Invoke-WebRequest -Uri "$PreviewUrl/api/photo_extract_openai_b64" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing
+Write-Host "Status: $($r.StatusCode)"
+Write-Host "X-Handler-Identity: $($r.Headers['X-Handler-Identity'])"
+Write-Host "Content-Type: $($r.Headers['Content-Type'])"
+$json = $r.Content | ConvertFrom-Json
+Write-Host "ok: $($json.ok)"
+Write-Host "error: $($json.error)"
+$json | ConvertTo-Json
+```
+
+### Expected Results
+- ✅ Status: `200` (or `400`/`500` with proper error message)
+- ✅ `X-Handler-Identity: PHOTO_EXTRACT_OK`
+- ✅ `Content-Type: application/json; charset=utf-8`
+- ✅ JSON contains: `"ok": true` (on success) or `"ok": false` with `"error"` field (on failure)
+- ❌ Must NOT return: `405 Method Not Allowed`
+
+### Alternative Payload Formats (All Should Work)
+```powershell
+# Format 1: { b64: string }
+$body1 = @{ b64 = $testB64 } | ConvertTo-Json
+
+# Format 2: { imagesB64: string[], kind?: string }
+$body2 = @{ imagesB64 = @($testB64); kind = "main" } | ConvertTo-Json
+
+# Format 3: { data_b64: string }
+$body3 = @{ data_b64 = $testB64 } | ConvertTo-Json
+
+# Format 4: { data: string }
+$body4 = @{ data = $testB64 } | ConvertTo-Json
+```
+
 ## Summary Checklist
 
 - [ ] `/api/paygate-token` returns JavaScript with `X-Handler-Identity: PAYGATE_TOKEN_OK`
 - [ ] `/api/paygate-token` body starts with `// PAYGATE_TOKEN_HANDLER_OK`
 - [ ] `/api/debug-paygate` returns JSON with `X-Handler-Identity: DEBUG_PAYGATE_OK`
 - [ ] `/api/debug-paygate` JSON contains `"handler": "debug-paygate"`
+- [ ] `/api/photo_extract_openai_b64` POST returns 200 (not 405)
+- [ ] `/api/photo_extract_openai_b64` has `X-Handler-Identity: PHOTO_EXTRACT_OK`
 - [ ] `/api/verify_race` POST works normally (unchanged behavior)
 - [ ] Other `/api` endpoints continue to work (no regressions)
 - [ ] No `verify_race_stub` in paygate endpoint responses
