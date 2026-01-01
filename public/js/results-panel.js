@@ -1174,9 +1174,16 @@
 
     // Show TEST MODE badge if test mode is enabled (env-driven, OFF by default)
     try {
-      const testModeEnabled = typeof window !== 'undefined' && 
-                              typeof window.__PAYGATE_TEST_MODE__ !== 'undefined' && 
-                              window.__PAYGATE_TEST_MODE__ === true;
+      const testModeValue = typeof window !== 'undefined' ? window.__PAYGATE_TEST_MODE__ : undefined;
+      const testModeEnabled = testModeValue === true;
+      
+      if (typeof console !== 'undefined' && console.log) {
+        console.log('[FLResults] Test mode badge check:', { 
+          testModeValue: testModeValue, 
+          testModeEnabled: testModeEnabled,
+          testModeType: typeof testModeValue
+        });
+      }
       
       if (testModeEnabled) {
         let testBadge = elements.dialog.querySelector('#fl-test-mode-badge');
@@ -1187,8 +1194,11 @@
           const title = elements.dialog.querySelector('.fl-results__title');
           if (title) title.appendChild(testBadge);
         }
-        testBadge.textContent = 'TEST MODE';
+        testBadge.textContent = 'TEST MODE ON';
         testBadge.style.display = 'inline-block';
+        if (typeof console !== 'undefined' && console.log) {
+          console.log('[FLResults] TEST MODE badge displayed');
+        }
       } else {
         const testBadge = elements.dialog.querySelector('#fl-test-mode-badge');
         if (testBadge) testBadge.style.display = 'none';
