@@ -14,9 +14,12 @@ export default function handler(req, res) {
   }
 
   // Set headers with aggressive cache-busting
-  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-    res.setHeader('X-Handler-Identity', 'DEBUG_PAYGATE_OK');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
+  res.setHeader('X-Handler-Identity', 'DEBUG_PAYGATE_OK');
 
   try {
     // Get token from environment variable (check multiple possible names for backward compatibility)
@@ -37,6 +40,7 @@ export default function handler(req, res) {
     res.status(200).json({
       ok: true,
       apiRouteWorking: true,
+      handler: 'debug-paygate',
       hasToken: token !== null,
       tokenVersionLength: tokenVersion ? tokenVersion.length : 0,
       familyUnlockDays

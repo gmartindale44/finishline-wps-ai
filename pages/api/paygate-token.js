@@ -19,6 +19,7 @@ export default function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
   res.setHeader('X-Handler-Identity', 'PAYGATE_TOKEN_OK');
 
   // Get token from environment variable (check multiple possible names for backward compatibility)
