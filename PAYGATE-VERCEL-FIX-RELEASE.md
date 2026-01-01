@@ -118,6 +118,6 @@ curl -i -X POST "https://<PREVIEW-URL>/api/verify_race" \
 ## Commit Details
 
 - **Branch:** `hotfix/restore-paygate-lkg`
-- **Commit:** (to be filled after commit)
+- **Commit:** `00cdc37c`
 - **Files Changed:** 2 files (api/paygate-token.js, api/debug-paygate.js)
 
