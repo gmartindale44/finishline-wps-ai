@@ -8,4 +8,5 @@ venv/
 .DS_Store
 .vercel
 node_modules/
+.next
 scripts/debug/inspect_verify_keys.mjs

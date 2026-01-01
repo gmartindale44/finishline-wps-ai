@@ -1,25 +1,27 @@
 # Smoke Test - PayGate Routing Fix
 
-## Test URLs
+## Prerequisites
 
-Replace `<PREVIEW-URL>` with your Vercel Preview deployment URL (e.g., `https://finishline-wps-ai-abc123.vercel.app`).
+1. **Get Preview URL:**
+   - Vercel Dashboard → Deployments → Latest Preview
+   - Copy the Preview URL (e.g., `https://finishline-wps-ai-abc123.vercel.app`)
+
+2. **Set Variable in PowerShell:**
+   ```powershell
+   $PreviewUrl = "https://<YOUR-PREVIEW-URL>.vercel.app"
+   ```
 
 ## Test 1: /api/paygate-token?cb=123
 
 ### PowerShell
 ```powershell
-$r = Invoke-WebRequest -Uri "https://<PREVIEW-URL>/api/paygate-token?cb=123" -UseBasicParsing
+$r = Invoke-WebRequest -Uri "$PreviewUrl/api/paygate-token?cb=123" -UseBasicParsing
 Write-Host "Status: $($r.StatusCode)"
 Write-Host "X-Handler-Identity: $($r.Headers['X-Handler-Identity'])"
 Write-Host "Content-Type: $($r.Headers['Content-Type'])"
 Write-Host "Cache-Control: $($r.Headers['Cache-Control'])"
 Write-Host "Body (first 300 chars):"
 $r.Content.Substring(0, [Math]::Min(300, $r.Content.Length))
-```
-
-### curl
-```bash
-curl -i "https://<PREVIEW-URL>/api/paygate-token?cb=123" | head -30
 ```
 
 ### Expected Results
@@ -43,7 +45,7 @@ window.__PAYGATE_TEST_MODE_ENV__ = "true";
 
 ### PowerShell
 ```powershell
-$r = Invoke-WebRequest -Uri "https://<PREVIEW-URL>/api/debug-paygate?cb=123" -UseBasicParsing
+$r = Invoke-WebRequest -Uri "$PreviewUrl/api/debug-paygate?cb=123" -UseBasicParsing
 Write-Host "Status: $($r.StatusCode)"
 Write-Host "X-Handler-Identity: $($r.Headers['X-Handler-Identity'])"
 Write-Host "Content-Type: $($r.Headers['Content-Type'])"
@@ -53,11 +55,6 @@ Write-Host "handler: $($json.handler)"
 Write-Host "testModeEnvRaw: $($json.testModeEnvRaw)"
 Write-Host "testModeParsed: $($json.testModeParsed)"
 $json | ConvertTo-Json
-```
-
-### curl
-```bash
-curl -i "https://<PREVIEW-URL>/api/debug-paygate?cb=123" | head -30
 ```
 
 ### Expected Results
@@ -92,17 +89,10 @@ $body = @{
     raceNo = "8"
 } | ConvertTo-Json
 
-$r = Invoke-WebRequest -Uri "https://<PREVIEW-URL>/api/verify_race" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing
+$r = Invoke-WebRequest -Uri "$PreviewUrl/api/verify_race" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing
 Write-Host "Status: $($r.StatusCode)"
 Write-Host "Body (first 200 chars):"
 $r.Content.Substring(0, [Math]::Min(200, $r.Content.Length))
-```
-
-### curl
-```bash
-curl -i -X POST "https://<PREVIEW-URL>/api/verify_race" \
-  -H "Content-Type: application/json" \
-  -d '{"date":"2025-12-31","track":"Turfway Park","raceNo":"8"}' | head -30
 ```
 
 ### Expected Results
@@ -114,19 +104,59 @@ curl -i -X POST "https://<PREVIEW-URL>/api/verify_race" \
 
 ### /api/health
 ```powershell
-$r = Invoke-WebRequest -Uri "https://<PREVIEW-URL>/api/health" -UseBasicParsing
+$r = Invoke-WebRequest -Uri "$PreviewUrl/api/health" -UseBasicParsing
 Write-Host "Status: $($r.StatusCode)"
 ```
 
 ### /api/tracks
 ```powershell
-$r = Invoke-WebRequest -Uri "https://<PREVIEW-URL>/api/tracks" -UseBasicParsing
+$r = Invoke-WebRequest -Uri "$PreviewUrl/api/tracks" -UseBasicParsing
 Write-Host "Status: $($r.StatusCode)"
 ```
 
 ### Expected Results
 - ✅ All existing endpoints continue to work
 - ✅ No regressions
+
+## Complete Test Script
+
+```powershell
+# Set your Preview URL
+$PreviewUrl = "https://<YOUR-PREVIEW-URL>.vercel.app"
+
+Write-Host "`n=== Test 1: /api/paygate-token ===" -ForegroundColor Cyan
+$r1 = Invoke-WebRequest -Uri "$PreviewUrl/api/paygate-token?cb=123" -UseBasicParsing
+Write-Host "Status: $($r1.StatusCode)"
+Write-Host "X-Handler-Identity: $($r1.Headers['X-Handler-Identity'])"
+if ($r1.Headers['X-Handler-Identity'] -eq 'PAYGATE_TOKEN_OK' -and $r1.Content -match 'PAYGATE_TOKEN_HANDLER_OK') {
+    Write-Host "✅ PASS" -ForegroundColor Green
+} else {
+    Write-Host "❌ FAIL" -ForegroundColor Red
+}
+
+Write-Host "`n=== Test 2: /api/debug-paygate ===" -ForegroundColor Cyan
+$r2 = Invoke-WebRequest -Uri "$PreviewUrl/api/debug-paygate?cb=123" -UseBasicParsing
+Write-Host "Status: $($r2.StatusCode)"
+Write-Host "X-Handler-Identity: $($r2.Headers['X-Handler-Identity'])"
+$json2 = $r2.Content | ConvertFrom-Json
+if ($r2.Headers['X-Handler-Identity'] -eq 'DEBUG_PAYGATE_OK' -and $json2.handler -eq 'debug-paygate') {
+    Write-Host "✅ PASS" -ForegroundColor Green
+} else {
+    Write-Host "❌ FAIL" -ForegroundColor Red
+}
+
+Write-Host "`n=== Test 3: /api/verify_race (POST) ===" -ForegroundColor Cyan
+$body = @{date="2025-12-31";track="Turfway Park";raceNo="8"} | ConvertTo-Json
+$r3 = Invoke-WebRequest -Uri "$PreviewUrl/api/verify_race" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing
+Write-Host "Status: $($r3.StatusCode)"
+if ($r3.StatusCode -eq 200 -and $r3.Content -notmatch 'verify_race_stub') {
+    Write-Host "✅ PASS" -ForegroundColor Green
+} else {
+    Write-Host "❌ FAIL" -ForegroundColor Red
+}
+
+Write-Host "`n=== Tests Complete ===" -ForegroundColor Green
+```
 
 ## Summary Checklist
 
@@ -137,12 +167,3 @@ Write-Host "Status: $($r.StatusCode)"
 - [ ] `/api/verify_race` POST works normally (unchanged behavior)
 - [ ] Other `/api` endpoints continue to work (no regressions)
 - [ ] No `verify_race_stub` in paygate endpoint responses
-
-## Deployment to Test
-
-**Preview URL:** Check Vercel Dashboard → Deployments → Latest Preview deployment URL
-
-**Test After:**
-1. Push changes to branch `hotfix/restore-paygate-lkg`
-2. Wait for Vercel Preview deployment to complete
-3. Use the Preview URL from Vercel Dashboard
