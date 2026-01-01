@@ -1701,6 +1701,7 @@ export default async function handler(req, res) {
         date: null,
         raceNo: null,
       });
+      res.setHeader('X-Handler-Identity', 'VERIFY_RACE_STUB');
       return res.status(200).json({
         ...stub,
         ok: false,

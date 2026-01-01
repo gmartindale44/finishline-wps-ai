@@ -2,6 +2,21 @@
 
 ## Root Cause
 
+### Exact Mechanism (Evidence Table)
+
+| Request | Actual Handler (Bug) | Expected Handler | Root Cause |
+|---------|---------------------|------------------|------------|
+| `GET /api/paygate-token` | `pages/api/verify_race.js` (returns stub) | `pages/api/paygate-token.js` | Routing conflict between root `/api/` and `pages/api/` |
+| `GET /api/debug-paygate` | `pages/api/verify_race.js` (returns stub) | `pages/api/debug-paygate.js` | Routing conflict between root `/api/` and `pages/api/` |
+
+**Evidence:**
+- ❌ No `vercel.json` found
+- ❌ No `middleware.ts/js` found
+- ❌ No catch-all routes (`[...slug].js`) found
+- ✅ `next.config.cjs` clean (no rewrites)
+- ⚠️ Root `/api/` directory exists with `api/verify_race.js` re-export shim
+- ✅ `pages/api/paygate-token.js` and `pages/api/debug-paygate.js` exist
+
 ### Exact Mechanism
 
 **Problem:** Requests to `/api/paygate-token` and `/api/debug-paygate` return `verify_race_stub` JSON from `pages/api/verify_race.js` instead of their own handlers.

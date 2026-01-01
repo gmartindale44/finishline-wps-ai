@@ -2,6 +2,11 @@
 
 This document provides copy/paste commands to verify that `/api/paygate-token` and `/api/debug-paygate` work correctly and do NOT route to `verify_race`.
 
+**NON-NEGOTIABLE OUTCOME:**
+- GET /api/paygate-token?cb=123 returns JavaScript (not JSON), includes header X-Handler-Identity: PAYGATE_TOKEN_OK, and body begins with // PAYGATE_TOKEN_HANDLER_OK
+- GET /api/debug-paygate?cb=123 returns JSON { ok: true, apiRouteWorking: true }, includes header X-Handler-Identity: DEBUG_PAYGATE_OK
+- Neither response contains verify_race_stub, METHOD_NOT_ALLOWED, or handlerFile pages/api/verify_race.js
+
 ## PowerShell Commands
 
 ### Test `/api/paygate-token`
