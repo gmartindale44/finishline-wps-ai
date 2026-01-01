@@ -42,6 +42,11 @@ export default function handler(req, res) {
     const testModeEnv = testModeEnvRaw.toLowerCase().trim();
     const testModeParsed = ['true', '1', 'yes', 'on'].includes(testModeEnv);
     
+    // Check for enforcement mode
+    const enforceEnvRaw = process.env.NEXT_PUBLIC_PAYGATE_ENFORCE || process.env.PAYGATE_ENFORCE || '';
+    const enforceEnv = enforceEnvRaw.toLowerCase().trim();
+    const enforceParsed = ['true', '1', 'yes', 'on'].includes(enforceEnv);
+    
     res.status(200).json({
       ok: true,
       apiRouteWorking: true,
@@ -50,7 +55,9 @@ export default function handler(req, res) {
       tokenVersionLength: tokenVersion ? tokenVersion.length : 0,
       familyUnlockDays,
       testModeEnvRaw: testModeEnvRaw,
-      testModeParsed: testModeParsed
+      testModeParsed: testModeParsed,
+      enforceEnvRaw: enforceEnvRaw,
+      enforceParsed: enforceParsed
     });
   } catch (err) {
     res.status(500).json({

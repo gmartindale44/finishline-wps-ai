@@ -200,12 +200,124 @@ $body3 = @{ data_b64 = $testB64 } | ConvertTo-Json
 $body4 = @{ data = $testB64 } | ConvertTo-Json
 ```
 
+## Test 6: PayGate Enforcement Toggle
+
+### Prerequisites
+1. **Set Environment Variables in Vercel:**
+   - `PAYGATE_ENFORCE` (or `NEXT_PUBLIC_PAYGATE_ENFORCE`) - Controls enforcement mode
+   - `NEXT_PUBLIC_PAYGATE_TEST_MODE` - Controls test mode bypass
+   - Redeploy after changing env vars
+
+### Test 6A: Enforcement OFF (Default Behavior)
+
+**Setup:**
+- Set `PAYGATE_ENFORCE=false` (or unset)
+- Set `NEXT_PUBLIC_PAYGATE_TEST_MODE=true` (optional, for test mode bypass)
+
+**PowerShell:**
+```powershell
+# Check debug endpoint for enforce flag
+$r = Invoke-WebRequest -Uri "$PreviewUrl/api/debug-paygate?cb=123" -UseBasicParsing
+$json = $r.Content | ConvertFrom-Json
+Write-Host "enforceEnvRaw: $($json.enforceEnvRaw)"
+Write-Host "enforceParsed: $($json.enforceParsed)"
+Write-Host "testModeParsed: $($json.testModeParsed)"
+
+# Check paygate-token script
+$r2 = Invoke-WebRequest -Uri "$PreviewUrl/api/paygate-token?cb=123" -UseBasicParsing
+Write-Host "Body contains __PAYGATE_ENFORCE__: $($r2.Content -match '__PAYGATE_ENFORCE__')"
+```
+
+**Expected Results:**
+- ✅ `enforceParsed: false` (enforcement OFF)
+- ✅ If `testModeParsed: true`, test mode bypass works
+- ✅ Paygate-token script contains `window.__PAYGATE_ENFORCE__ = false`
+- ✅ Premium content accessible when test mode enabled OR valid unlock marker present
+
+### Test 6B: Enforcement ON (Requires Valid Unlock Marker)
+
+**Setup:**
+- Set `PAYGATE_ENFORCE=true` (or `NEXT_PUBLIC_PAYGATE_ENFORCE=true`)
+- Set `NEXT_PUBLIC_PAYGATE_TEST_MODE=false` (or unset)
+- Redeploy Preview
+
+**PowerShell:**
+```powershell
+# Check debug endpoint
+$r = Invoke-WebRequest -Uri "$PreviewUrl/api/debug-paygate?cb=123" -UseBasicParsing
+$json = $r.Content | ConvertFrom-Json
+Write-Host "enforceEnvRaw: $($json.enforceEnvRaw)"
+Write-Host "enforceParsed: $($json.enforceParsed)"
+Write-Host "testModeParsed: $($json.testModeParsed)"
+
+# Check paygate-token script
+$r2 = Invoke-WebRequest -Uri "$PreviewUrl/api/paygate-token?cb=123" -UseBasicParsing
+Write-Host "Body contains __PAYGATE_ENFORCE__ = true: $($r2.Content -match '__PAYGATE_ENFORCE__ = true')"
+```
+
+**Expected Results:**
+- ✅ `enforceParsed: true` (enforcement ON)
+- ✅ Paygate-token script contains `window.__PAYGATE_ENFORCE__ = true`
+- ✅ Premium content BLOCKED unless valid unlock marker in localStorage
+- ✅ Test mode bypass IGNORED when enforcement is ON
+- ✅ Stripe checkout still works (can unlock via `?paid=1&plan=day`)
+
+### Test 6C: Enforcement ON + Test Mode ON (Enforcement Takes Precedence)
+
+**Setup:**
+- Set `PAYGATE_ENFORCE=true`
+- Set `NEXT_PUBLIC_PAYGATE_TEST_MODE=true`
+- Redeploy Preview
+
+**Expected Results:**
+- ✅ `enforceParsed: true` AND `testModeParsed: true`
+- ✅ Premium content BLOCKED (enforcement overrides test mode)
+- ✅ Valid unlock marker still required
+
+### Browser Console Test (Enforcement Flow)
+
+**Open Browser DevTools Console:**
+```javascript
+// Check current enforcement state
+console.log('Enforce:', window.__PAYGATE_ENFORCE__);
+console.log('Test Mode:', window.__PAYGATE_TEST_MODE__);
+
+// Check unlock status
+console.log('Is Unlocked:', window.__FL_PAYGATE__?.isUnlocked());
+
+// With enforcement ON and no unlock marker:
+// Expected: isUnlocked() = false
+
+// Unlock via URL (Stripe test checkout)
+// Visit: ?paid=1&plan=day
+// Expected: isUnlocked() = true (after URL params processed)
+```
+
+### Expected Behavior Matrix
+
+| Enforcement | Test Mode | Unlock Marker | Result |
+|------------|-----------|---------------|--------|
+| OFF | OFF | None | ❌ Locked |
+| OFF | OFF | Valid | ✅ Unlocked |
+| OFF | ON | None | ✅ Unlocked (test mode bypass) |
+| OFF | ON | Valid | ✅ Unlocked |
+| ON | OFF | None | ❌ Locked |
+| ON | OFF | Valid | ✅ Unlocked |
+| ON | ON | None | ❌ Locked (enforcement overrides) |
+| ON | ON | Valid | ✅ Unlocked |
+
 ## Summary Checklist
 
 - [ ] `/api/paygate-token` returns JavaScript with `X-Handler-Identity: PAYGATE_TOKEN_OK`
 - [ ] `/api/paygate-token` body starts with `// PAYGATE_TOKEN_HANDLER_OK`
+- [ ] `/api/paygate-token` body contains `window.__PAYGATE_ENFORCE__` (enforcement flag)
 - [ ] `/api/debug-paygate` returns JSON with `X-Handler-Identity: DEBUG_PAYGATE_OK`
 - [ ] `/api/debug-paygate` JSON contains `"handler": "debug-paygate"`
+- [ ] `/api/debug-paygate` JSON contains `"enforceEnvRaw"` and `"enforceParsed"` fields
+- [ ] Enforcement OFF: Test mode bypass works (if test mode enabled)
+- [ ] Enforcement ON: Premium blocked unless valid unlock marker
+- [ ] Enforcement ON: Test mode bypass ignored (enforcement takes precedence)
+- [ ] Stripe checkout still works (can unlock via URL params)
 - [ ] `/api/photo_extract_openai_b64` POST returns 200 (not 405)
 - [ ] `/api/photo_extract_openai_b64` has `X-Handler-Identity: PHOTO_EXTRACT_OK`
 - [ ] `/api/verify_race` POST works normally (unchanged behavior)

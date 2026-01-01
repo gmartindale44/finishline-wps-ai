@@ -22,6 +22,11 @@
   // FAIL CLOSED: If token script failed to load or token is missing, stay locked
   function isUnlocked() {
     try {
+      // Get enforcement flag (OFF by default)
+      const enforceValue = typeof window !== 'undefined' ? window.__PAYGATE_ENFORCE__ : undefined;
+      const enforceEnvRaw = typeof window !== 'undefined' ? window.__PAYGATE_ENFORCE_ENV__ : undefined;
+      const enforceEnabled = enforceValue === true;
+      
       // TEST MODE: Bypass paygate if enabled via environment variable (OFF by default)
       // Test mode is set by /api/paygate-token.js which reads NEXT_PUBLIC_PAYGATE_TEST_MODE env var
       const testModeValue = typeof window !== 'undefined' ? window.__PAYGATE_TEST_MODE__ : undefined;
@@ -29,20 +34,36 @@
       const testModeEnabled = testModeValue === true;
       
       if (typeof console !== 'undefined' && console.log) {
-        console.log('[PayGate] Test mode check:', { 
+        console.log('[PayGate] Config check:', { 
           testModeValue: testModeValue, 
           testModeEnvRaw: testModeEnvRaw,
           testModeEnabled: testModeEnabled,
+          enforceValue: enforceValue,
+          enforceEnvRaw: enforceEnvRaw,
+          enforceEnabled: enforceEnabled,
           testModeType: typeof testModeValue,
-          windowHasTestMode: typeof window !== 'undefined' && typeof window.__PAYGATE_TEST_MODE__ !== 'undefined'
+          enforceType: typeof enforceValue,
+          windowHasTestMode: typeof window !== 'undefined' && typeof window.__PAYGATE_TEST_MODE__ !== 'undefined',
+          windowHasEnforce: typeof window !== 'undefined' && typeof window.__PAYGATE_ENFORCE__ !== 'undefined'
         });
       }
       
-      if (testModeEnabled) {
-        if (typeof console !== 'undefined' && console.log) {
-          console.log('[PayGate] TEST MODE enabled - bypassing paygate checks');
+      // If enforcement is OFF, preserve current behavior (test mode bypass works)
+      if (!enforceEnabled) {
+        if (testModeEnabled) {
+          if (typeof console !== 'undefined' && console.log) {
+            console.log('[PayGate] TEST MODE enabled (enforcement OFF) - bypassing paygate checks');
+          }
+          return true; // Test mode: always unlocked when enforcement is OFF
         }
-        return true; // Test mode: always unlocked
+      } else {
+        // Enforcement is ON: require valid unlock marker even if test mode is enabled
+        if (testModeEnabled) {
+          if (typeof console !== 'undefined' && console.log) {
+            console.log('[PayGate] Enforcement ON - test mode ignored, checking unlock marker');
+          }
+          // Continue to unlock marker check below
+        }
       }
       
       if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
