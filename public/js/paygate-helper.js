@@ -25,13 +25,16 @@
       // TEST MODE: Bypass paygate if enabled via environment variable (OFF by default)
       // Test mode is set by /api/paygate-token.js which reads NEXT_PUBLIC_PAYGATE_TEST_MODE env var
       const testModeValue = typeof window !== 'undefined' ? window.__PAYGATE_TEST_MODE__ : undefined;
+      const testModeEnvRaw = typeof window !== 'undefined' ? window.__PAYGATE_TEST_MODE_ENV__ : undefined;
       const testModeEnabled = testModeValue === true;
       
       if (typeof console !== 'undefined' && console.log) {
         console.log('[PayGate] Test mode check:', { 
           testModeValue: testModeValue, 
+          testModeEnvRaw: testModeEnvRaw,
           testModeEnabled: testModeEnabled,
-          testModeType: typeof testModeValue
+          testModeType: typeof testModeValue,
+          windowHasTestMode: typeof window !== 'undefined' && typeof window.__PAYGATE_TEST_MODE__ !== 'undefined'
         });
       }
       

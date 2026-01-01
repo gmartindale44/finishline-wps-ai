@@ -41,8 +41,17 @@ export default function handler(req, res) {
 
   // Check for test mode (OFF by default, only enabled via env var)
   // Accept: "true", "1", "yes", "on" (case-insensitive)
-  const testModeEnv = (process.env.NEXT_PUBLIC_PAYGATE_TEST_MODE || process.env.PAYGATE_TEST_MODE || '').toLowerCase().trim();
+  const testModeEnvRaw = process.env.NEXT_PUBLIC_PAYGATE_TEST_MODE || process.env.PAYGATE_TEST_MODE || '';
+  const testModeEnv = testModeEnvRaw.toLowerCase().trim();
   const testModeEnabled = ['true', '1', 'yes', 'on'].includes(testModeEnv);
+
+  // Server-side debug logging
+  console.log('[PayGate Token Handler] Test mode check:', {
+    testModeEnvRaw: testModeEnvRaw,
+    testModeEnvParsed: testModeEnv,
+    testModeEnabled: testModeEnabled,
+    envVarPresent: !!(process.env.NEXT_PUBLIC_PAYGATE_TEST_MODE || process.env.PAYGATE_TEST_MODE)
+  });
 
   // Return JavaScript that sets window variables (DO NOT expose raw token)
   // Only expose tokenVersion (safe hash) and familyUnlockDays
@@ -50,7 +59,8 @@ export default function handler(req, res) {
 window.__FL_FAMILY_UNLOCK_TOKEN_VERSION__ = ${JSON.stringify(tokenVersion || '')};
 window.__FL_FAMILY_UNLOCK_DAYS__ = ${familyUnlockDays};
 window.__PAYGATE_TEST_MODE__ = ${testModeEnabled ? 'true' : 'false'};
-console.log('[PayGate] Token script loaded:', { hasTokenVersion: ${tokenVersion !== null}, familyUnlockDays: ${familyUnlockDays}, testMode: ${testModeEnabled}, testModeEnvValue: ${JSON.stringify(testModeEnv)} });`;
+window.__PAYGATE_TEST_MODE_ENV__ = ${JSON.stringify(testModeEnvRaw)};
+console.log('[PayGate] Token script loaded:', { hasTokenVersion: ${tokenVersion !== null}, familyUnlockDays: ${familyUnlockDays}, testMode: ${testModeEnabled}, testModeEnvValue: ${JSON.stringify(testModeEnv)}, testModeEnvRaw: ${JSON.stringify(testModeEnvRaw)} });`;
 
   res.status(200).send(js);
 }

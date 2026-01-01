@@ -37,13 +37,20 @@ export default function handler(req, res) {
       10
     );
     
+    // Check for test mode (for Preview debugging only)
+    const testModeEnvRaw = process.env.NEXT_PUBLIC_PAYGATE_TEST_MODE || process.env.PAYGATE_TEST_MODE || '';
+    const testModeEnv = testModeEnvRaw.toLowerCase().trim();
+    const testModeParsed = ['true', '1', 'yes', 'on'].includes(testModeEnv);
+    
     res.status(200).json({
       ok: true,
       apiRouteWorking: true,
       handler: 'debug-paygate',
       hasToken: token !== null,
       tokenVersionLength: tokenVersion ? tokenVersion.length : 0,
-      familyUnlockDays
+      familyUnlockDays,
+      testModeEnvRaw: testModeEnvRaw,
+      testModeParsed: testModeParsed
     });
   } catch (err) {
     res.status(500).json({
