@@ -1,2 +1,6 @@
-export { default } from "../pages/api/paygate-token.js";
+import handler from "../pages/api/paygate-token.js";
+
+export const config = { runtime: 'nodejs' };
+
+export default handler;
 
