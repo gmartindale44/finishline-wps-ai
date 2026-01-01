@@ -1172,6 +1172,32 @@
       if (badge) badge.style.display = 'none';
     }
 
+    // Show TEST MODE badge if test mode is enabled (env-driven, OFF by default)
+    try {
+      const testModeEnabled = typeof window !== 'undefined' && 
+                              typeof window.__PAYGATE_TEST_MODE__ !== 'undefined' && 
+                              window.__PAYGATE_TEST_MODE__ === true;
+      
+      if (testModeEnabled) {
+        let testBadge = elements.dialog.querySelector('#fl-test-mode-badge');
+        if (!testBadge) {
+          testBadge = document.createElement('span');
+          testBadge.id = 'fl-test-mode-badge';
+          testBadge.style.cssText = 'font-size: 10px; padding: 2px 6px; background: rgba(76, 175, 80, 0.2); color: #4caf50; border-radius: 4px; margin-left: 8px; font-weight: 600;';
+          const title = elements.dialog.querySelector('.fl-results__title');
+          if (title) title.appendChild(testBadge);
+        }
+        testBadge.textContent = 'TEST MODE';
+        testBadge.style.display = 'inline-block';
+      } else {
+        const testBadge = elements.dialog.querySelector('#fl-test-mode-badge');
+        if (testBadge) testBadge.style.display = 'none';
+      }
+    } catch (err) {
+      // Ignore badge errors (fail-open)
+      console.warn('[FLResults] Test mode badge error (ignored):', err?.message || err);
+    }
+
     // Open and apply pinned state
     elements.root.classList.add(clsOpen);
     if (isPinned) {

@@ -140,6 +140,37 @@ X-Handler-Identity: DEBUG_PAYGATE_OK
 - [ ] JSON structure in `/api/paygate-token` response (should be JavaScript)
 - [ ] `Expected POST, received GET` message
 
+## Test Mode
+
+### Enabling Test Mode (Preview Only)
+
+Test mode allows bypassing the paygate for testing purposes. It is **OFF by default** and **must be enabled via environment variables**.
+
+**To enable in Vercel Preview:**
+1. Go to Vercel Dashboard → Project → Settings → Environment Variables
+2. Add environment variable:
+   - **Name:** `NEXT_PUBLIC_PAYGATE_TEST_MODE`
+   - **Value:** `true`
+   - **Environment:** Preview (NOT Production)
+3. Redeploy or wait for next deployment
+
+**Behavior when enabled:**
+- Paygate is bypassed (all content unlocked)
+- UI shows green "TEST MODE" badge
+- Console logs: `[PayGate] TEST MODE enabled - bypassing paygate checks`
+- "I already paid" button works immediately (no token required)
+
+**Behavior when disabled (default):**
+- Normal fail-closed paygate behavior
+- Premium content locked by default
+- Requires valid unlock (paid, family token, or bypass key)
+
+**Safety:**
+- ✅ OFF by default (production safe)
+- ✅ Only enabled via env var (no code changes needed)
+- ✅ Visible badge prevents confusion
+- ✅ Does NOT affect Stripe keys or production flows
+
 ## Troubleshooting
 
 ### If you see `verify_race_stub` in response:

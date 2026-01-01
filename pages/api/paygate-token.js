@@ -39,12 +39,17 @@ export default function handler(req, res) {
     tokenVersion = crypto.createHash('sha256').update(token).digest('hex').slice(0, 12);
   }
 
+  // Check for test mode (OFF by default, only enabled via env var)
+  const testModeEnabled = process.env.NEXT_PUBLIC_PAYGATE_TEST_MODE === 'true' || 
+                          process.env.PAYGATE_TEST_MODE === 'true';
+
   // Return JavaScript that sets window variables (DO NOT expose raw token)
   // Only expose tokenVersion (safe hash) and familyUnlockDays
   const js = `// PAYGATE_TOKEN_HANDLER_OK
 window.__FL_FAMILY_UNLOCK_TOKEN_VERSION__ = ${JSON.stringify(tokenVersion || '')};
 window.__FL_FAMILY_UNLOCK_DAYS__ = ${familyUnlockDays};
-console.log('[PayGate] Token script loaded:', { hasTokenVersion: ${tokenVersion !== null}, familyUnlockDays: ${familyUnlockDays} });`;
+window.__PAYGATE_TEST_MODE__ = ${testModeEnabled ? 'true' : 'false'};
+console.log('[PayGate] Token script loaded:', { hasTokenVersion: ${tokenVersion !== null}, familyUnlockDays: ${familyUnlockDays}, testMode: ${testModeEnabled} });`;
 
   res.status(200).send(js);
 }
