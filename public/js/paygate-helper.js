@@ -234,6 +234,23 @@
               const duration = familyUnlockDays * 24 * 60 * 60 * 1000;
               if (unlock(duration, 'family', data.tokenVersion)) {
                 unlocked = true;
+                
+                // Issue server-side cookie (non-blocking, fail silently)
+                fetch('/api/paygate/issue-cookie', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    plan: 'family',
+                    durationMs: duration,
+                    tokenVersion: data.tokenVersion
+                  })
+                }).catch(err => {
+                  // Non-fatal: log but don't block unlock
+                  if (typeof console !== 'undefined' && console.warn) {
+                    console.warn('[PayGate] Cookie issuance failed (non-fatal):', err?.message);
+                  }
+                });
+                
                 // Clean URL
                 const cleanUrl = new URL(window.location.href);
                 cleanUrl.searchParams.delete('family');
@@ -267,6 +284,18 @@
             setBypassUsed(); // Mark bypass as used for badge display
             unlocked = true;
             bypassUsed = true;
+            
+            // Issue server-side cookie for bypass (non-blocking)
+            fetch('/api/paygate/issue-cookie', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                plan: 'core', // Bypass defaults to core
+                durationMs: duration
+              })
+            }).catch(() => {
+              // Silent fail - frontend unlock still works
+            });
           }
           
           // Clean URL
@@ -305,12 +334,55 @@
               expiryTimestamp: expiry
             });
           }
+          
+          // Try to validate Stripe session if session_id is present
+          const sessionId = url.searchParams.get('session_id');
+          if (sessionId) {
+            // Validate Stripe session and issue cookie
+            fetch('/api/paygate/stripe-validate', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                session_id: sessionId,
+                plan: planName
+              })
+            }).catch(err => {
+              // Non-fatal: fallback to simple cookie issuance
+              if (typeof console !== 'undefined' && console.warn) {
+                console.warn('[PayGate] Stripe validation failed, using fallback:', err?.message);
+              }
+              // Fallback: issue cookie without Stripe validation
+              fetch('/api/paygate/issue-cookie', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  plan: planName,
+                  durationMs: duration
+                })
+              }).catch(() => {
+                // Silent fail - frontend unlock still works
+              });
+            });
+          } else {
+            // No session_id: issue cookie directly (URL param unlock)
+            fetch('/api/paygate/issue-cookie', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                plan: planName,
+                durationMs: duration
+              })
+            }).catch(() => {
+              // Silent fail - frontend unlock still works
+            });
+          }
         }
         
         // Clean URL
         url.searchParams.delete('success');
         url.searchParams.delete('paid');
         url.searchParams.delete('plan');
+        url.searchParams.delete('session_id');
         window.history.replaceState({}, '', url);
       }
       

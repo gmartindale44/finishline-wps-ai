@@ -151,6 +151,24 @@ export default async function handler(req, res) {
     return res.status(405).json({ ok: false, error: 'METHOD_NOT_ALLOWED', message: `Expected POST, received ${req.method}` });
   }
 
+  // Server-side PayGate check (non-blocking in monitor mode)
+  try {
+    const { checkPayGateAccess } = await import('../../lib/paygate-server.js');
+    const accessCheck = checkPayGateAccess(req);
+    if (!accessCheck.allowed) {
+      return res.status(403).json({
+        ok: false,
+        error: 'PayGate locked',
+        message: 'Premium access required. Please unlock to continue.',
+        code: 'paygate_locked',
+        reason: accessCheck.reason
+      });
+    }
+  } catch (paygateErr) {
+    // Non-fatal: log but allow request (fail-open for safety)
+    console.warn('[predict_wps] PayGate check failed (non-fatal):', paygateErr?.message);
+  }
+
   try {
     const body = await parseJSONBody(req);
     

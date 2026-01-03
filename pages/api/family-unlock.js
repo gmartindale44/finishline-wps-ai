@@ -49,6 +49,27 @@ export default async function handler(req, res) {
     // Compute token version (first 12 chars of SHA-256 hash)
     const tokenVersion = crypto.createHash('sha256').update(expectedToken).digest('hex').slice(0, 12);
 
+    // Issue server-side access cookie (if server enforcement is enabled)
+    try {
+      const { issueAccessCookie } = await import('../../lib/paygate-server.js');
+      const familyUnlockDays = parseInt(
+        process.env.FAMILY_UNLOCK_DAYS || 
+        process.env.FAMILY_PASS_DAYS || 
+        '365', 
+        10
+      );
+      const durationMs = familyUnlockDays * 24 * 60 * 60 * 1000;
+      
+      issueAccessCookie(res, {
+        plan: 'family',
+        durationMs,
+        tokenVersion
+      });
+    } catch (cookieErr) {
+      // Non-fatal: log but don't fail the unlock
+      console.warn('[family-unlock] Failed to issue cookie (non-fatal):', cookieErr?.message);
+    }
+
     return res.status(200).json({
       ok: true,
       tokenVersion
