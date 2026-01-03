@@ -21,6 +21,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ ok: false, error: 'Method Not Allowed' });
   }
 
+  // Server-side PayGate check (non-blocking in monitor mode)
+  try {
+    const { checkPayGateAccess } = await import('../../lib/paygate-server.js');
+    const accessCheck = checkPayGateAccess(req);
+    if (!accessCheck.allowed) {
+      return res.status(403).json({
+        ok: false,
+        error: 'PayGate locked',
+        message: 'Premium access required. Please unlock to continue.',
+        code: 'paygate_locked',
+        reason: accessCheck.reason
+      });
+    }
+  } catch (paygateErr) {
+    // Non-fatal: log but allow request (fail-open for safety)
+    console.warn('[green_zone] PayGate check failed (non-fatal):', paygateErr?.message);
+  }
+
   try {
     const { signals = {}, track = '', date = '', raceNo = '' } = req.body || {};
     const parsedSignals = {

@@ -335,47 +335,17 @@
             });
           }
           
-          // Try to validate Stripe session if session_id is present
-          const sessionId = url.searchParams.get('session_id');
-          if (sessionId) {
-            // Validate Stripe session and issue cookie
-            fetch('/api/paygate/stripe-validate', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                session_id: sessionId,
-                plan: planName
-              })
-            }).catch(err => {
-              // Non-fatal: fallback to simple cookie issuance
-              if (typeof console !== 'undefined' && console.warn) {
-                console.warn('[PayGate] Stripe validation failed, using fallback:', err?.message);
-              }
-              // Fallback: issue cookie without Stripe validation
-              fetch('/api/paygate/issue-cookie', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  plan: planName,
-                  durationMs: duration
-                })
-              }).catch(() => {
-                // Silent fail - frontend unlock still works
-              });
-            });
-          } else {
-            // No session_id: issue cookie directly (URL param unlock)
-            fetch('/api/paygate/issue-cookie', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                plan: planName,
-                durationMs: duration
-              })
-            }).catch(() => {
-              // Silent fail - frontend unlock still works
-            });
-          }
+          // Issue server-side cookie (non-blocking, fail silently)
+          fetch('/api/paygate/issue-cookie', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              plan: planName,
+              durationMs: duration
+            })
+          }).catch(() => {
+            // Silent fail - frontend unlock still works
+          });
         }
         
         // Clean URL
