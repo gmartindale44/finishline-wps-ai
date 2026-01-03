@@ -8,8 +8,6 @@ export const config = {
   runtime: "nodejs",
 };
 
-// Upstash Redis client for verify logging
-import { Redis } from "@upstash/redis";
 // GreenZone v1 integration
 import { computeGreenZoneForRace } from "../../lib/greenzone/greenzone_v1.js";
 // Normalize helpers for prediction lookup
@@ -18,19 +16,6 @@ import { hgetall } from "../../lib/redis.js";
 
 const VERIFY_PREFIX = "fl:verify:";
 const PRED_PREFIX = "fl:pred:";
-
-let redisClient = null;
-function getRedis() {
-  if (!redisClient) {
-    try {
-      redisClient = Redis.fromEnv();
-    } catch (error) {
-      console.error("[verify_race] Failed to init Redis client", error);
-      redisClient = null;
-    }
-  }
-  return redisClient;
-}
 
 /**
  * Build a race ID for verify logs (similar to prediction logs but without postTime)
@@ -75,12 +60,6 @@ async function logVerifyResult(result) {
     return;
   }
 
-  const redis = getRedis();
-  if (!redis) {
-    // Redis not available - silently skip (non-breaking)
-    return;
-  }
-
   try {
     const { track, date, raceNo } = result;
 
@@ -122,7 +101,9 @@ async function logVerifyResult(result) {
       if (normTrack && normDate && normRaceNo) {
         const joinKey = `${normDate}|${normTrack}|${normRaceNo}`;
         const predmetaKey = `fl:predmeta:${joinKey}`;
-        const rawValue = await redis.get(predmetaKey);
+        // Use REST client for get operations
+        const { get: redisGet } = await import('../../lib/redis.js');
+        const rawValue = await redisGet(predmetaKey);
         
         if (rawValue) {
           try {
@@ -385,7 +366,9 @@ async function logVerifyResult(result) {
     }
 
     const logKey = `${VERIFY_PREFIX}${raceId}`;
-    await redis.set(logKey, JSON.stringify(logPayload));
+    // Use REST client setex for verify logs (90 days TTL = 7776000 seconds)
+    const { setex } = await import('../../lib/redis.js');
+    await setex(logKey, 7776000, JSON.stringify(logPayload));
   } catch (err) {
     // IMPORTANT: logging failures must NOT break the user flow
     console.error("[verify-log] Failed to log verify result", err);
@@ -1701,6 +1684,7 @@ export default async function handler(req, res) {
         date: null,
         raceNo: null,
       });
+      res.setHeader('X-Handler-Identity', 'VERIFY_RACE_STUB');
       return res.status(200).json({
         ...stub,
         ok: false,

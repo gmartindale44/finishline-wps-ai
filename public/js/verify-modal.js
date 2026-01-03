@@ -284,7 +284,7 @@
   }
 
   function renderGreenZone(host, payload) {
-    const el = state.gxMessageEl || qs("#flv-gz-message", host || document);
+    const el = qs("#flv-gz-message", host || document);
     if (!el) return;
   
     const debugMode = !!window.__flVerifyDebug;

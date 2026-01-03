@@ -1,28 +1,69 @@
-# preview: ignore python stuff
-requirements.txt
-tools/python/*
+# .vercelignore - Minimal ignore patterns for Vercel deployment
+# Only ignore files/directories that are truly unnecessary for build/runtime
+# CRITICAL: Do NOT ignore Next.js routing, API routes, or config files
+
+# Python files (not needed for Next.js deployment)
 **/*.py
-tests/
+**/*.pyc
+**/*.pyo
+**/*.pyd
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
 .pytest_cache/
+*.py[cod]
 .coverage
 htmlcov/
+requirements.txt
+# Note: api/ directory Python files are needed for Python API routes,
+# but those are handled separately by Vercel, so ignoring .py is safe here
+
+# Test and development files
+tests/
+.pytest_cache/
 .vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git and version control
 .git/
+.gitignore
+
+# Node.js caches (Vercel will install fresh)
+node_modules/
+.npm/
+.yarn/
+.pnp/
+
+# Build artifacts (Vercel builds fresh)
+.next/
+dist/
+build/
+out/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Documentation (optional - not needed for runtime)
 *.md
 !README.md
-DEPLOYMENT*.md
-COUNTDOWN*.md
-ENHANCED*.md
-ERROR*.md
-FINAL*.md
-PREDICT*.md
-RELIABILITY*.md
-NEW_SCHEMA*.md
-*.log
-legacy_api/
-apps/api/
 
+# Legacy/old directories (not needed for Next.js)
+legacy_api/
+apps/api/  # Python API, handled separately by Vercel
+
+# Local environment files
+.env.local
+.env.*.local
+
+# IMPORTANT: The following are REQUIRED and must NOT be ignored:
+# - pages/ (Next.js pages router)
+# - pages/api/ (Next.js API routes)
+# - public/ (static assets)
+# - next.config.cjs (Next.js configuration - CommonJS format for ESM projects)
+# - package.json (dependencies and scripts)
+# - lib/ (library code used by API routes)
+# - Any .js/.ts files in pages/api/
