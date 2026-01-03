@@ -1271,6 +1271,15 @@ async function refreshGreenZone(host, ctx) {
             body: JSON.stringify(payload),
           });
           
+          // Check if PayGate is locked before parsing
+          if (!resp.ok && typeof window !== 'undefined' && window.handlePaygateLocked) {
+            const isPaygateLocked = await window.handlePaygateLocked(resp);
+            if (isPaygateLocked) {
+              // PayGate modal shown, don't continue
+              return;
+            }
+          }
+          
           verifyData = await resp.json().catch(() => ({}));
           
           // Build summary payload with date and error info

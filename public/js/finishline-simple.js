@@ -70,6 +70,14 @@
       console.log('[Analyze] OCR result:', j1);
       
       if (!r1.ok || !j1?.ok) {
+        // Check if PayGate is locked
+        if (typeof window !== 'undefined' && window.handlePaygateLocked) {
+          const isPaygateLocked = await window.handlePaygateLocked(j1);
+          if (isPaygateLocked) {
+            // PayGate modal shown, don't throw error
+            return;
+          }
+        }
         throw new Error(j1?.error || 'Extract failed');
       }
 
@@ -123,6 +131,14 @@
       console.log('[Predict] result:', j);
       
       if (!r.ok || !j?.ok) {
+        // Check if PayGate is locked
+        if (typeof window !== 'undefined' && window.handlePaygateLocked) {
+          const isPaygateLocked = await window.handlePaygateLocked(j);
+          if (isPaygateLocked) {
+            // PayGate modal shown, don't throw error
+            return;
+          }
+        }
         throw new Error(j?.error || 'Predict failed');
       }
 

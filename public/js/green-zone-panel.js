@@ -55,8 +55,22 @@
       date: dateInput && dateInput.value ? dateInput.value.trim() : '',
     }),
   })
-    .then((r) => r.json())
+    .then(async (r) => {
+      // Check if PayGate is locked before parsing
+      if (!r.ok && typeof window !== 'undefined' && window.handlePaygateLocked) {
+        const isPaygateLocked = await window.handlePaygateLocked(r);
+        if (isPaygateLocked) {
+          // PayGate modal shown, return empty data to stop processing
+          return { ok: false, paygateLocked: true };
+        }
+      }
+      return r.json();
+    })
     .then((data) => {
+      // Skip processing if PayGate was locked
+      if (data?.paygateLocked) {
+        return;
+      }
       if (!data || !data.ok) return;
       const badge = document.getElementById('gz-badge');
       const note = document.getElementById('gz-note');

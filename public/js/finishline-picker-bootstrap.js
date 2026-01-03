@@ -305,6 +305,16 @@ import { mountTrackCombobox } from './track-combobox.js';
         });
 
         if (!mainResp.ok) {
+          // Check if PayGate is locked and show modal
+          if (typeof window !== 'undefined' && window.handlePaygateLocked) {
+            const isPaygateLocked = await window.handlePaygateLocked(mainResp, toast);
+            if (isPaygateLocked) {
+              // PayGate modal shown, don't throw error
+              return;
+            }
+          }
+          
+          // Not PayGate error, throw as normal
           const t = await mainResp.text();
           throw new Error(`OCR ${mainResp.status}: ${t}`);
         }
@@ -545,6 +555,15 @@ import { mountTrackCombobox } from './track-combobox.js';
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
           });
+
+          // Check if PayGate is locked before parsing
+          if (!r.ok && typeof window !== 'undefined' && window.handlePaygateLocked) {
+            const isPaygateLocked = await window.handlePaygateLocked(r, showToast);
+            if (isPaygateLocked) {
+              // PayGate modal shown, don't continue
+              return;
+            }
+          }
 
           // Robust JSON parsing
           try {

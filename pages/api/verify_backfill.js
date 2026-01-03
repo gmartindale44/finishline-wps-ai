@@ -242,6 +242,23 @@ async function callVerifyRace(baseUrl, race) {
 }
 
 export default async function handler(req, res) {
+  // Server-side PayGate check (non-blocking in monitor mode)
+  try {
+    const { checkPayGateAccess } = await import('../../lib/paygate-server.js');
+    const accessCheck = checkPayGateAccess(req);
+    if (!accessCheck.allowed) {
+      return res.status(403).json({
+        ok: false,
+        error: 'PayGate locked',
+        message: 'Premium access required. Please unlock to continue.',
+        code: 'paygate_locked',
+        reason: accessCheck.reason
+      });
+    }
+  } catch (paygateErr) {
+    // Non-fatal: log but allow request (fail-open for safety)
+    console.warn('[verify_backfill] PayGate check failed (non-fatal):', paygateErr?.message);
+  }
   if (req.method !== "POST") {
     // We stay nice and return 200 with a descriptive message instead of 405,
     // to keep the UI simple and avoid surprises.
