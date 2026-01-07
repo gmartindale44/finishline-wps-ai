@@ -934,16 +934,23 @@ export default async function handler(req, res) {
     }
 
     // ADDITIVE: Store prediction snapshot in Redis (if enabled and raceId available)
-    const enablePredSnapshots = process.env.ENABLE_PRED_SNAPSHOTS === 'true'; // default false
+    // Track snapshot debug info for response
+    const snapshotDebug = {
+      enablePredSnapshots: process.env.ENABLE_PRED_SNAPSHOTS === 'true',
+      redisConfigured: Boolean(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN),
+      snapshotAttempted: false,
+      snapshotWriteOk: null
+    };
+    
+    const enablePredSnapshots = snapshotDebug.enablePredSnapshots;
+    
     if (enablePredSnapshots && raceId) {
-      (async () => {
-        try {
-          const hasRedis = Boolean(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
-          if (!hasRedis) {
-            console.warn('[predict_wps] Snapshot write skipped: Redis env vars not available');
-            return; // Skip if Redis not available
-          }
-          
+      snapshotDebug.snapshotAttempted = true;
+      
+      try {
+        if (!snapshotDebug.redisConfigured) {
+          console.warn('[predict_wps] Snapshot write skipped: Redis env vars not available');
+        } else {
           const { setex } = await import('../../lib/redis.js');
           const snapshotKey = `fl:predsnap:${raceId}:${asOf}`;
           
@@ -964,16 +971,14 @@ export default async function handler(req, res) {
             snapshot_raceId: raceId
           };
           
-          // TTL: 7 days (604800 seconds)
+          // TTL: 7 days (604800 seconds) - await inline for reliability
           await setex(snapshotKey, 604800, JSON.stringify(snapshotPayload));
-        } catch (err) {
-          // Non-fatal: log but don't block response
-          console.warn('[predict_wps] Snapshot write failed (non-fatal):', err?.message || err);
+          snapshotDebug.snapshotWriteOk = true;
         }
-      })();
-    } else {
-      if (enablePredSnapshots && !raceId) {
-        console.warn('[predict_wps] Snapshot write skipped: raceId is null');
+      } catch (err) {
+        // Non-fatal: log but don't block response
+        snapshotDebug.snapshotWriteOk = false;
+        console.warn('[predict_wps] Snapshot write failed (non-fatal):', err?.message || err);
       }
     }
 
@@ -986,6 +991,8 @@ export default async function handler(req, res) {
         version: thresholds.version,
       },
       predmeta_debug: predmetaDebug,
+      // ADDITIVE: Snapshot debug info (non-sensitive)
+      snapshot_debug: snapshotDebug,
     });
   } catch (err) {
     console.error('[predict_wps] Error:', err);
