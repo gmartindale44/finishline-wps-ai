@@ -98,6 +98,7 @@ async function logVerifyResult(result) {
       const normRaceNo = String(raceNo || "").trim();
       
       // ADDITIVE: Try to fetch best snapshot first (if enabled)
+      // Define outside if block so it's available for debug logging later
       const enablePredSnapshots = process.env.ENABLE_PRED_SNAPSHOTS === 'true'; // default false
       if (enablePredSnapshots && normTrack && normDate && normRaceNo) {
         try {
@@ -174,11 +175,34 @@ async function logVerifyResult(result) {
                 // Store snapshot timestamp for logging
                 predsnap_asOf: selected.asOf.toISOString()
               };
+              
+              // ADDITIVE: Store debug info for successful snapshot selection
+              if (!predmeta.debug) predmeta.debug = {};
+              predmeta.debug.snapshotKeysFoundCount = snapshotKeys.length;
+              predmeta.debug.snapshotSelectedAsOf = selected.asOf.toISOString();
+            } else {
+              // ADDITIVE: Store debug info when no snapshot found (for diagnostics)
+              if (!predmeta) predmeta = {};
+              if (!predmeta.debug) predmeta.debug = {};
+              predmeta.debug.snapshotKeysFoundCount = 0;
+              predmeta.debug.snapshotSelectedAsOf = null;
             }
+          } else {
+            // ADDITIVE: Store debug info when snapshot lookup not attempted (pattern match returned 0)
+            if (!predmeta) predmeta = {};
+            if (!predmeta.debug) predmeta.debug = {};
+            predmeta.debug.snapshotKeysFoundCount = 0;
+            predmeta.debug.snapshotSelectedAsOf = null;
           }
         } catch (snapshotErr) {
           // Non-fatal: log but continue to predmeta lookup
           console.warn('[verify_race] Snapshot lookup failed (non-fatal):', snapshotErr?.message || snapshotErr);
+          // ADDITIVE: Store debug info when snapshot lookup throws error
+          if (!predmeta) predmeta = {};
+          if (!predmeta.debug) predmeta.debug = {};
+          predmeta.debug.snapshotKeysFoundCount = null;
+          predmeta.debug.snapshotSelectedAsOf = null;
+          predmeta.debug.snapshotLookupError = snapshotErr?.message || String(snapshotErr);
         }
       }
       
@@ -451,6 +475,15 @@ async function logVerifyResult(result) {
       // ADDITIVE: Store snapshot timestamp if snapshot was used
       if (predmeta.predsnap_asOf) {
         logPayload.predsnap_asOf = predmeta.predsnap_asOf;
+      }
+      // ADDITIVE: Store snapshot debug fields if snapshot feature is enabled
+      if (enablePredSnapshots && predmeta.debug) {
+        if (!logPayload.debug) logPayload.debug = {};
+        logPayload.debug.snapshotKeysFoundCount = predmeta.debug.snapshotKeysFoundCount;
+        logPayload.debug.snapshotSelectedAsOf = predmeta.debug.snapshotSelectedAsOf;
+        if (predmeta.debug.snapshotLookupError) {
+          logPayload.debug.snapshotLookupError = predmeta.debug.snapshotLookupError;
+        }
       }
     }
 

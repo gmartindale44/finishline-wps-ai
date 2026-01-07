@@ -940,6 +940,7 @@ export default async function handler(req, res) {
         try {
           const hasRedis = Boolean(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
           if (!hasRedis) {
+            console.warn('[predict_wps] Snapshot write skipped: Redis env vars not available');
             return; // Skip if Redis not available
           }
           
@@ -970,6 +971,10 @@ export default async function handler(req, res) {
           console.warn('[predict_wps] Snapshot write failed (non-fatal):', err?.message || err);
         }
       })();
+    } else {
+      if (enablePredSnapshots && !raceId) {
+        console.warn('[predict_wps] Snapshot write skipped: raceId is null');
+      }
     }
 
     return res.status(200).json({
