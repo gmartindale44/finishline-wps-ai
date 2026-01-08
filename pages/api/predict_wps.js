@@ -933,7 +933,8 @@ export default async function handler(req, res) {
       // Ignore timeout - proceed with response
     }
 
-    // ADDITIVE: Store prediction snapshot in Redis (if enabled and raceId available)
+    // ADDITIVE: Store prediction snapshot in Redis (if enabled, raceId available, and qualifies)
+    // Option A: high-signal only - only write snapshots when allowAny OR confidenceHigh
     // Track snapshot debug info for response
     const snapshotDebug = {
       enablePredSnapshots: process.env.ENABLE_PRED_SNAPSHOTS === 'true',
@@ -941,46 +942,56 @@ export default async function handler(req, res) {
       snapshotAttempted: false,
       snapshotKey: null,
       snapshotWriteOk: null,
-      snapshotWriteError: null
+      snapshotWriteError: null,
+      shouldSnapshot: false,
+      allowAny: false,
+      confidenceHigh: false
     };
     
     const enablePredSnapshots = snapshotDebug.enablePredSnapshots;
+    const redisConfigured = snapshotDebug.redisConfigured;
     
-    if (enablePredSnapshots && raceId) {
-      snapshotDebug.snapshotAttempted = true;
+    // Determine if this prediction qualifies for snapshot (high-signal only)
+    const allow = shadowDecision?.allow || {};
+    const allowAny = !!(allow?.win || allow?.place || allow?.show);
+    const confidenceHigh = (typeof calibratedResponse.confidence === 'number' ? calibratedResponse.confidence : 0) >= 80;
+    const shouldSnapshot = enablePredSnapshots && redisConfigured && raceId && (allowAny || confidenceHigh);
+    
+    // Update debug fields
+    snapshotDebug.shouldSnapshot = shouldSnapshot;
+    snapshotDebug.allowAny = allowAny;
+    snapshotDebug.confidenceHigh = confidenceHigh;
+    snapshotDebug.snapshotAttempted = shouldSnapshot;
+    
+    if (shouldSnapshot) {
       snapshotDebug.snapshotKey = `fl:predsnap:${raceId}:${asOf}`;
       
       try {
-        if (!snapshotDebug.redisConfigured) {
-          console.warn('[predict_wps] Snapshot write skipped: Redis env vars not available');
-          snapshotDebug.snapshotWriteError = 'Redis env vars not available';
-        } else {
-          const { setex } = await import('../../lib/redis.js');
-          const snapshotKey = snapshotDebug.snapshotKey;
-          
-          // Store minimal snapshot payload (enough for verification)
-          const snapshotPayload = {
-            picks: calibratedResponse.picks,
-            ranking: calibratedResponse.ranking,
-            confidence: calibratedResponse.confidence,
-            top3_mass: calibratedResponse.top3_mass,
-            meta: {
-              ...calibratedResponse.meta,
-              asOf,
-              raceId
-            },
-            strategy: calibratedResponse.strategy || null,
-            // Store top-level fields for convenience
-            snapshot_asOf: asOf,
-            snapshot_raceId: raceId
-          };
-          
-          // TTL: 7 days (604800 seconds) - await inline for reliability
-          await setex(snapshotKey, 604800, JSON.stringify(snapshotPayload));
-          snapshotDebug.snapshotWriteOk = true;
-        }
+        const { setex } = await import('../../lib/redis.js');
+        const snapshotKey = snapshotDebug.snapshotKey;
+        
+        // Store minimal snapshot payload (enough for verification)
+        const snapshotPayload = {
+          picks: calibratedResponse.picks,
+          ranking: calibratedResponse.ranking,
+          confidence: calibratedResponse.confidence,
+          top3_mass: calibratedResponse.top3_mass,
+          meta: {
+            ...calibratedResponse.meta,
+            asOf,
+            raceId
+          },
+          strategy: calibratedResponse.strategy || null,
+          // Store top-level fields for convenience
+          snapshot_asOf: asOf,
+          snapshot_raceId: raceId
+        };
+        
+        // TTL: 7 days (604800 seconds) - await inline for reliability
+        await setex(snapshotKey, 604800, JSON.stringify(snapshotPayload));
+        snapshotDebug.snapshotWriteOk = true;
       } catch (err) {
-        // Non-fatal: log but don't block response
+        // Non-fatal: log but don't block response (fail-open)
         snapshotDebug.snapshotWriteOk = false;
         snapshotDebug.snapshotWriteError = err?.message || String(err);
         console.warn('[predict_wps] Snapshot write failed (non-fatal):', snapshotDebug.snapshotWriteError);
