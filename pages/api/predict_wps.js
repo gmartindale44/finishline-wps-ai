@@ -939,20 +939,24 @@ export default async function handler(req, res) {
       enablePredSnapshots: process.env.ENABLE_PRED_SNAPSHOTS === 'true',
       redisConfigured: Boolean(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN),
       snapshotAttempted: false,
-      snapshotWriteOk: null
+      snapshotKey: null,
+      snapshotWriteOk: null,
+      snapshotWriteError: null
     };
     
     const enablePredSnapshots = snapshotDebug.enablePredSnapshots;
     
     if (enablePredSnapshots && raceId) {
       snapshotDebug.snapshotAttempted = true;
+      snapshotDebug.snapshotKey = `fl:predsnap:${raceId}:${asOf}`;
       
       try {
         if (!snapshotDebug.redisConfigured) {
           console.warn('[predict_wps] Snapshot write skipped: Redis env vars not available');
+          snapshotDebug.snapshotWriteError = 'Redis env vars not available';
         } else {
           const { setex } = await import('../../lib/redis.js');
-          const snapshotKey = `fl:predsnap:${raceId}:${asOf}`;
+          const snapshotKey = snapshotDebug.snapshotKey;
           
           // Store minimal snapshot payload (enough for verification)
           const snapshotPayload = {
@@ -978,7 +982,8 @@ export default async function handler(req, res) {
       } catch (err) {
         // Non-fatal: log but don't block response
         snapshotDebug.snapshotWriteOk = false;
-        console.warn('[predict_wps] Snapshot write failed (non-fatal):', err?.message || err);
+        snapshotDebug.snapshotWriteError = err?.message || String(err);
+        console.warn('[predict_wps] Snapshot write failed (non-fatal):', snapshotDebug.snapshotWriteError);
       }
     }
 

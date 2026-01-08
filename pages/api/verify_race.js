@@ -107,6 +107,12 @@ async function logVerifyResult(result) {
           
           // Find all snapshots for this race
           const snapshotPattern = `fl:predsnap:${joinKey}:*`;
+          
+          // Initialize debug info
+          if (!predmeta) predmeta = {};
+          if (!predmeta.debug) predmeta.debug = {};
+          predmeta.debug.snapshotPattern = snapshotPattern;
+          
           const snapshotKeys = await redisKeys(snapshotPattern);
           
           if (snapshotKeys.length > 0) {
@@ -180,12 +186,14 @@ async function logVerifyResult(result) {
               if (!predmeta.debug) predmeta.debug = {};
               predmeta.debug.snapshotKeysFoundCount = snapshotKeys.length;
               predmeta.debug.snapshotSelectedAsOf = selected.asOf.toISOString();
+              predmeta.debug.snapshotSelectedKey = selected.key;
             } else {
               // ADDITIVE: Store debug info when no snapshot found (for diagnostics)
               if (!predmeta) predmeta = {};
               if (!predmeta.debug) predmeta.debug = {};
               predmeta.debug.snapshotKeysFoundCount = 0;
               predmeta.debug.snapshotSelectedAsOf = null;
+              predmeta.debug.snapshotSelectedKey = null;
             }
           } else {
             // ADDITIVE: Store debug info when snapshot lookup not attempted (pattern match returned 0)
@@ -193,6 +201,7 @@ async function logVerifyResult(result) {
             if (!predmeta.debug) predmeta.debug = {};
             predmeta.debug.snapshotKeysFoundCount = 0;
             predmeta.debug.snapshotSelectedAsOf = null;
+            predmeta.debug.snapshotSelectedKey = null;
           }
         } catch (snapshotErr) {
           // Non-fatal: log but continue to predmeta lookup
@@ -202,6 +211,7 @@ async function logVerifyResult(result) {
           if (!predmeta.debug) predmeta.debug = {};
           predmeta.debug.snapshotKeysFoundCount = null;
           predmeta.debug.snapshotSelectedAsOf = null;
+          predmeta.debug.snapshotSelectedKey = null;
           predmeta.debug.snapshotLookupError = snapshotErr?.message || String(snapshotErr);
         }
       }
@@ -488,9 +498,22 @@ async function logVerifyResult(result) {
     }
 
     const logKey = `${VERIFY_PREFIX}${raceId}`;
+    
+    // ADDITIVE: Add verify log key name to debug for diagnostics
+    if (!logPayload.debug) logPayload.debug = {};
+    logPayload.debug.verifyLogKey = logKey;
+    
     // Use REST client setex for verify logs (90 days TTL = 7776000 seconds)
-    const { setex } = await import('../../lib/redis.js');
-    await setex(logKey, 7776000, JSON.stringify(logPayload));
+    try {
+      const { setex } = await import('../../lib/redis.js');
+      await setex(logKey, 7776000, JSON.stringify(logPayload));
+      logPayload.debug.verifyWriteOk = true;
+    } catch (writeErr) {
+      // Track verify write error but don't break user flow
+      logPayload.debug.verifyWriteOk = false;
+      logPayload.debug.verifyWriteError = writeErr?.message || String(writeErr);
+      console.error("[verify-log] Failed to log verify result", writeErr);
+    }
   } catch (err) {
     // IMPORTANT: logging failures must NOT break the user flow
     console.error("[verify-log] Failed to log verify result", err);
