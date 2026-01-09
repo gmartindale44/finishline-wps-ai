@@ -524,6 +524,35 @@ import { mountTrackCombobox } from './track-combobox.js';
         // Sync inputs to state before predict
         syncInputsToState();
 
+        // Get date and raceNo from UI (required for snapshot persistence)
+        const raceDateEl = document.getElementById('fl-race-date');
+        const raceNoEl = document.getElementById('fl-race-number');
+        let raceDate = '';
+        let raceNo = '';
+        
+        if (raceDateEl && raceDateEl.value) {
+          raceDate = raceDateEl.value.trim(); // Already in YYYY-MM-DD format from date input
+        }
+        
+        if (raceNoEl && raceNoEl.value) {
+          raceNo = raceNoEl.value.trim();
+        }
+        
+        // Normalize date format if needed (handle MM/DD/YYYY or other formats)
+        if (raceDate && !/^\d{4}-\d{2}-\d{2}$/.test(raceDate)) {
+          // Try to parse and convert to YYYY-MM-DD
+          const parsed = new Date(raceDate);
+          if (!isNaN(parsed.getTime())) {
+            raceDate = parsed.toISOString().slice(0, 10);
+          }
+        }
+        
+        // Validate raceNo is numeric (if provided)
+        if (raceNo && isNaN(Number(raceNo))) {
+          showToast('Race # must be a number. Skipping snapshot persistence.', 'warn');
+          raceNo = ''; // Clear invalid value, but don't block prediction
+        }
+
         // Build payload for Model v2
         const payload = {
           horses: horses.map(h => ({
@@ -536,6 +565,14 @@ import { mountTrackCombobox } from './track-combobox.js';
           distance_input: window.__fl_state.distance_input || meta.distance || '',
           speedFigs: window.__fl_state.speedFigs || {},
         };
+        
+        // Add date and raceNo for snapshot persistence
+        if (raceDate) {
+          payload.date = raceDate;
+        }
+        if (raceNo) {
+          payload.raceNo = raceNo;
+        }
         
         // Add normalized distance fields if available
         if (meta.distance_furlongs != null) {

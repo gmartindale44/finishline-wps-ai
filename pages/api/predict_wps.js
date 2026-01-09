@@ -955,9 +955,9 @@ export default async function handler(req, res) {
     const allow = shadowDecision?.allow || {};
     const allowAny = !!(allow?.win || allow?.place || allow?.show);
     const confidenceHigh = (typeof calibratedResponse.confidence === 'number' ? calibratedResponse.confidence : 0) >= 80;
-    const shouldSnapshot = enablePredSnapshots && redisConfigured && raceId && (allowAny || confidenceHigh);
+    const shouldSnapshot = !!(enablePredSnapshots && redisConfigured && raceId && (allowAny || confidenceHigh));
     
-    // Update debug fields
+    // Update debug fields (force booleans, no nulls)
     snapshotDebug.shouldSnapshot = shouldSnapshot;
     snapshotDebug.allowAny = allowAny;
     snapshotDebug.confidenceHigh = confidenceHigh;
