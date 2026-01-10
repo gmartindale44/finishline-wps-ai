@@ -1899,23 +1899,35 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
 }
 
 export default async function handler(req, res) {
+  // Check for internal/system flag to bypass PayGate (for verify_backfill batch jobs)
+  const isInternalRequest = req.headers['x-finishline-internal'] === 'true';
+  let bypassedPayGate = false;
+
   // Server-side PayGate check (non-blocking in monitor mode)
-  try {
-    const { checkPayGateAccess } = await import('../../lib/paygate-server.js');
-    const accessCheck = checkPayGateAccess(req);
-    if (!accessCheck.allowed) {
-      return res.status(403).json({
-        ok: false,
-        error: 'PayGate locked',
-        message: 'Premium access required. Please unlock to continue.',
-        code: 'paygate_locked',
-        reason: accessCheck.reason,
-        step: 'verify_race_error'
-      });
+  // Skip PayGate if this is an internal system request (e.g., from verify_backfill)
+  if (!isInternalRequest) {
+    try {
+      const { checkPayGateAccess } = await import('../../lib/paygate-server.js');
+      const accessCheck = checkPayGateAccess(req);
+      if (!accessCheck.allowed) {
+        return res.status(403).json({
+          ok: false,
+          error: 'PayGate locked',
+          message: 'Premium access required. Please unlock to continue.',
+          code: 'paygate_locked',
+          reason: accessCheck.reason,
+          step: 'verify_race_error',
+          bypassedPayGate: false
+        });
+      }
+    } catch (paygateErr) {
+      // Non-fatal: log but allow request (fail-open for safety)
+      console.warn('[verify_race] PayGate check failed (non-fatal):', paygateErr?.message);
     }
-  } catch (paygateErr) {
-    // Non-fatal: log but allow request (fail-open for safety)
-    console.warn('[verify_race] PayGate check failed (non-fatal):', paygateErr?.message);
+  } else {
+    // Internal request - bypass PayGate
+    bypassedPayGate = true;
+    console.log('[verify_race] Internal request detected - PayGate bypassed');
   }
   // We NEVER throw from this handler. All errors are reported in the JSON body.
   try {
@@ -1972,22 +1984,11 @@ export default async function handler(req, res) {
 
     let canonicalDateIso = canonicalizeDateFromClient(uiDateRaw);
     
-    // Server-side PayGate check (non-blocking in monitor mode)
-    try {
-      const { checkPayGateAccess } = await import('../../lib/paygate-server.js');
-      const accessCheck = checkPayGateAccess(req);
-      if (!accessCheck.allowed) {
-        return res.status(403).json({
-          ok: false,
-          error: 'PayGate locked',
-          message: 'Premium access required. Please unlock to continue.',
-          code: 'paygate_locked',
-          reason: accessCheck.reason
-        });
-      }
-    } catch (paygateErr) {
-      // Non-fatal: log but allow request (fail-open for safety)
-      console.warn('[verify_race] PayGate check failed (non-fatal):', paygateErr?.message);
+    // Note: PayGate check already performed at top of handler - bypassedPayGate flag is set there
+    } else {
+      // Internal request - bypass PayGate
+      bypassedPayGate = true;
+      console.log('[verify_race] Internal request detected - PayGate bypassed');
     }
 
     // Extract raceNo early - needed for error responses and manual verify branch
@@ -2377,7 +2378,14 @@ export default async function handler(req, res) {
         await addGreenZoneToResponse(validatedResult);
         
         await logVerifyResult(validatedResult);
-        return res.status(200).json(validatedResult);
+        return res.status(200).json({
+          ...validatedResult,
+          bypassedPayGate: bypassedPayGate,
+          responseMeta: {
+            ...validatedResult.responseMeta,
+            bypassedPayGate: bypassedPayGate
+          }
+        });
       }
 
       // If step is "verify_race_full_fallback", use full result but ensure date is canonical
@@ -2616,9 +2624,11 @@ export default async function handler(req, res) {
         await logVerifyResult(fallbackResult);
         return res.status(200).json({
           ...fallbackResult,
+          bypassedPayGate: bypassedPayGate,
           responseMeta: {
             handlerFile: HANDLER_FILE,
             backendVersion: BACKEND_VERSION,
+            bypassedPayGate: bypassedPayGate,
           },
         });
       }
@@ -2760,9 +2770,11 @@ export default async function handler(req, res) {
       await logVerifyResult(fallbackStub);
       return res.status(200).json({
         ...fallbackStub,
+        bypassedPayGate: bypassedPayGate,
         responseMeta: {
           handlerFile: HANDLER_FILE,
           backendVersion: BACKEND_VERSION,
+          bypassedPayGate: bypassedPayGate,
         },
       });
     } catch (fullError) {
@@ -2913,9 +2925,11 @@ export default async function handler(req, res) {
       await logVerifyResult(errorStub);
       return res.status(200).json({
         ...errorStub,
+        bypassedPayGate: bypassedPayGate,
         responseMeta: {
           handlerFile: HANDLER_FILE,
           backendVersion: BACKEND_VERSION,
+          bypassedPayGate: bypassedPayGate,
         },
       });
     }

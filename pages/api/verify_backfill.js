@@ -205,6 +205,7 @@ async function callVerifyRace(baseUrl, race) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "x-finishline-internal": "true", // System flag to bypass PayGate for internal batch jobs
       },
       body: JSON.stringify(payload),
     });
@@ -248,6 +249,7 @@ async function callVerifyRace(baseUrl, race) {
     outcome: responseJson?.outcome || null,
     hits: responseJson?.hits || null,
     raw: responseJson || null,
+    bypassedPayGate: responseJson?.bypassedPayGate || responseJson?.responseMeta?.bypassedPayGate || false,
   };
 }
 
@@ -427,7 +429,11 @@ export default async function handler(req, res) {
     hits: r.hits,
     networkError: r.networkError || null,
     error: r.error || null, // Include structured error from verify_race
+    bypassedPayGate: r.bypassedPayGate || false,
   }));
+
+  // Check if any race bypassed PayGate (for debug visibility)
+  const anyBypassedPayGate = results.some(r => r.bypassedPayGate === true);
 
   // Always return HTTP 200 (never hard-fail the batch)
   // Let UI decide based on ok flag and failures count
@@ -447,5 +453,7 @@ export default async function handler(req, res) {
     results: sample,
     // Include first failure details for UI error display
     firstFailure: failures > 0 || networkFailures > 0 ? (results.find(r => !r.ok && !r.skipped) || null) : null,
+    // Debug: show if PayGate was bypassed for internal batch jobs
+    bypassedPayGate: anyBypassedPayGate,
   });
 }
