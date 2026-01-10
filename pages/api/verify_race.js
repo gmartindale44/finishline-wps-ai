@@ -1932,24 +1932,8 @@ export default async function handler(req, res) {
     bypassedPayGate = true;
     internalBypassAuthorized = true;
     console.log('[verify_race] Internal request detected with valid secret - PayGate bypassed');
-  // Server-side PayGate check (non-blocking in monitor mode)
-  try {
-    const { checkPayGateAccess } = await import('../../lib/paygate-server.js');
-    const accessCheck = checkPayGateAccess(req);
-    if (!accessCheck.allowed) {
-      return res.status(403).json({
-        ok: false,
-        error: 'PayGate locked',
-        message: 'Premium access required. Please unlock to continue.',
-        code: 'paygate_locked',
-        reason: accessCheck.reason,
-        step: 'verify_race_error'
-      });
-    }
-  } catch (paygateErr) {
-    // Non-fatal: log but allow request (fail-open for safety)
-    console.warn('[verify_race] PayGate check failed (non-fatal):', paygateErr?.message);
   }
+
   // We NEVER throw from this handler. All errors are reported in the JSON body.
   try {
     if (req.method !== "POST") {
