@@ -90,8 +90,8 @@ async function testPredictWps() {
   return json;
 }
 
-async function testVerifyRace() {
-  console.log('\n=== TEST 2: /api/verify_race ===');
+async function testVerifyRace(track = TEST_RACE.track, date = TEST_RACE.date, raceNo = TEST_RACE.raceNo) {
+  console.log(`\n=== TEST 2: /api/verify_race (${track} ${date} R${raceNo}) ===`);
   const url = `${BASE_URL}/api/verify_race`;
   console.log(`POST ${url}`);
   
@@ -99,10 +99,10 @@ async function testVerifyRace() {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      track: TEST_RACE.track,
-      date: TEST_RACE.date,
-      raceNo: TEST_RACE.raceNo,
-      outcome: { win: "Test Horse A", place: "Test Horse B", show: "Test Horse C" } // Dummy outcome
+      track,
+      date,
+      raceNo,
+      // No outcome provided - let it fetch from HRN
     }),
   });
 
@@ -113,6 +113,15 @@ async function testVerifyRace() {
 
   console.log(`HTTP ${status}`);
   console.log(`OK: ${json?.ok}`);
+  console.log(`Step: ${json?.step || 'N/A'}`);
+  console.log(`Source: ${json?.debug?.source || 'N/A'}`);
+  
+  if (json?.outcome) {
+    console.log('\nOutcome:');
+    console.log(`  Win: ${json.outcome.win || '(empty)'}`);
+    console.log(`  Place: ${json.outcome.place || '(empty)'}`);
+    console.log(`  Show: ${json.outcome.show || '(empty)'}`);
+  }
   
   if (json?.debug) {
     console.log('\nVerify Log Debug:');
@@ -120,6 +129,27 @@ async function testVerifyRace() {
     console.log(`  raceId: ${json.debug.raceId || 'N/A'}`);
     console.log(`  verifyWriteOk: ${json.debug.verifyWriteOk !== undefined ? json.debug.verifyWriteOk : 'N/A'}`);
     console.log(`  verifyWriteError: ${json.debug.verifyWriteError || 'null'}`);
+    
+    // HRN-specific debug fields
+    if (json.debug.hrnParsedBy) {
+      console.log(`\nHRN Parsing Debug:`);
+      console.log(`  hrnParsedBy: ${json.debug.hrnParsedBy}`);
+      if (json.debug.hrnFoundMarkers) {
+        console.log(`  hrnFoundMarkers:`, json.debug.hrnFoundMarkers);
+      }
+      if (json.debug.hrnOutcomeRaw) {
+        console.log(`  hrnOutcomeRaw:`, json.debug.hrnOutcomeRaw);
+      }
+      if (json.debug.hrnOutcomeNormalized) {
+        console.log(`  hrnOutcomeNormalized:`, json.debug.hrnOutcomeNormalized);
+      }
+    }
+    if (json.debug.hrnParseError) {
+      console.log(`  hrnParseError: ${json.debug.hrnParseError}`);
+    }
+    if (json.debug.hrnUrl) {
+      console.log(`  hrnUrl: ${json.debug.hrnUrl}`);
+    }
     
     if (json.debug.redisFingerprint) {
       const rf = json.debug.redisFingerprint;
@@ -319,6 +349,38 @@ async function compareFingerprints(predictResp, verifyResp, backfillResp) {
   }
 }
 
+async function testHrnParsing() {
+  console.log('\n=== HRN PARSING TESTS ===');
+  
+  // Test 1: Fair Grounds 2026-01-10 raceNo=5 (the failing case)
+  console.log('\n--- Test Case 1: Fair Grounds 2026-01-10 R5 (failing case) ---');
+  const test1 = await testVerifyRace("Fair Grounds", "2026-01-10", "5");
+  
+  // Test 2: Fair Grounds 2026-01-09 raceNo=5 (known good case)
+  console.log('\n--- Test Case 2: Fair Grounds 2026-01-09 R5 (known good case) ---');
+  const test2 = await testVerifyRace("Fair Grounds", "2026-01-09", "5");
+  
+  // Summary
+  console.log('\n=== HRN Parsing Summary ===');
+  console.log(`Test 1 (2026-01-10 R5): ${test1?.ok ? '✅ OK' : '❌ Failed'}`);
+  if (test1?.outcome) {
+    console.log(`  Win: ${test1.outcome.win || '(empty)'}, Place: ${test1.outcome.place || '(empty)'}, Show: ${test1.outcome.show || '(empty)'}`);
+  }
+  if (test1?.debug?.hrnParsedBy) {
+    console.log(`  Parsed by: ${test1.debug.hrnParsedBy}`);
+  }
+  
+  console.log(`Test 2 (2026-01-09 R5): ${test2?.ok ? '✅ OK' : '❌ Failed'}`);
+  if (test2?.outcome) {
+    console.log(`  Win: ${test2.outcome.win || '(empty)'}, Place: ${test2.outcome.place || '(empty)'}, Show: ${test2.outcome.show || '(empty)'}`);
+  }
+  if (test2?.debug?.hrnParsedBy) {
+    console.log(`  Parsed by: ${test2.debug.hrnParsedBy}`);
+  }
+  
+  return { test1, test2 };
+}
+
 async function runSmokeTest() {
   console.log(`\n=== Redis/Verify End-to-End Smoke Test ===`);
   console.log(`Testing against: ${BASE_URL}\n`);
@@ -327,6 +389,7 @@ async function runSmokeTest() {
   const verifyResp = await testVerifyRace();
   const backfillResp = await testVerifyBackfill();
   const debugResp = await testDebugRedisKeys();
+  const hrnTests = await testHrnParsing();
   
   await compareFingerprints(predictResp, verifyResp, backfillResp);
   
@@ -335,6 +398,8 @@ async function runSmokeTest() {
   console.log(`Verify Race: ${verifyResp ? (verifyResp.debug?.verifyWriteOk ? '✅ Written' : '⚠️ Not written') : '❌ Failed'}`);
   console.log(`Verify Backfill: ${backfillResp ? (backfillResp.ok ? '✅ OK' : '⚠️ Failed') : '❌ Failed'}`);
   console.log(`Debug Keys: ${debugResp ? '✅ OK' : '❌ Failed'}`);
+  console.log(`HRN Parsing Test 1: ${hrnTests?.test1?.ok ? '✅ OK' : '❌ Failed'}`);
+  console.log(`HRN Parsing Test 2: ${hrnTests?.test2?.ok ? '✅ OK' : '❌ Failed'}`);
   console.log('\n=== Smoke Test Complete ===\n');
 }
 
