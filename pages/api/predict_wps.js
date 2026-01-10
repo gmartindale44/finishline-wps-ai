@@ -1016,6 +1016,41 @@ export default async function handler(req, res) {
       try {
         const { setex } = await import('../../lib/redis.js');
         const snapshotKey = predsnapDebug.predsnapKey;
+    // Option A: high-signal only - only write snapshots when allowAny OR confidenceHigh
+    // Track snapshot debug info for response
+    const snapshotDebug = {
+      enablePredSnapshots: process.env.ENABLE_PRED_SNAPSHOTS === 'true',
+      redisConfigured: Boolean(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN),
+      snapshotAttempted: false,
+      snapshotKey: null,
+      snapshotWriteOk: null,
+      snapshotWriteError: null,
+      shouldSnapshot: false,
+      allowAny: false,
+      confidenceHigh: false
+    };
+    
+    const enablePredSnapshots = snapshotDebug.enablePredSnapshots;
+    const redisConfigured = snapshotDebug.redisConfigured;
+    
+    // Determine if this prediction qualifies for snapshot (high-signal only)
+    const allow = shadowDecision?.allow || {};
+    const allowAny = !!(allow?.win || allow?.place || allow?.show);
+    const confidenceHigh = (typeof calibratedResponse.confidence === 'number' ? calibratedResponse.confidence : 0) >= 80;
+    const shouldSnapshot = !!(enablePredSnapshots && redisConfigured && raceId && (allowAny || confidenceHigh));
+    
+    // Update debug fields (force booleans, no nulls)
+    snapshotDebug.shouldSnapshot = shouldSnapshot;
+    snapshotDebug.allowAny = allowAny;
+    snapshotDebug.confidenceHigh = confidenceHigh;
+    snapshotDebug.snapshotAttempted = shouldSnapshot;
+    
+    if (shouldSnapshot) {
+      snapshotDebug.snapshotKey = `fl:predsnap:${raceId}:${asOf}`;
+      
+      try {
+        const { setex } = await import('../../lib/redis.js');
+        const snapshotKey = snapshotDebug.snapshotKey;
         
         // Store minimal snapshot payload (enough for verification)
         const snapshotPayload = {
@@ -1047,6 +1082,13 @@ export default async function handler(req, res) {
     } else {
       // Not attempted, so not written
       predsnapDebug.predsnapWritten = false;
+        snapshotDebug.snapshotWriteOk = true;
+      } catch (err) {
+        // Non-fatal: log but don't block response (fail-open)
+        snapshotDebug.snapshotWriteOk = false;
+        snapshotDebug.snapshotWriteError = err?.message || String(err);
+        console.warn('[predict_wps] Snapshot write failed (non-fatal):', snapshotDebug.snapshotWriteError);
+      }
     }
 
     return res.status(200).json({
@@ -1060,6 +1102,8 @@ export default async function handler(req, res) {
       predmeta_debug: predmetaDebug,
       // ADDITIVE: Snapshot debug info (explicit fields as requested, non-sensitive)
       predsnap_debug: predsnapDebug,
+      // ADDITIVE: Snapshot debug info (non-sensitive)
+      snapshot_debug: snapshotDebug,
     });
   } catch (err) {
     console.error('[predict_wps] Error:', err);

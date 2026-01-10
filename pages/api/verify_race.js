@@ -486,6 +486,7 @@ async function logVerifyResult(result) {
       logPayload.debug.redisFingerprint = fingerprint;
       logPayload.debug.redisClientType = "REST API (lib/redis.js)";
     } catch {}
+    logPayload.debug.verifyLogKey = logKey;
     
     // Use REST client setex for verify logs (90 days TTL = 7776000 seconds)
     try {
@@ -1931,6 +1932,23 @@ export default async function handler(req, res) {
     bypassedPayGate = true;
     internalBypassAuthorized = true;
     console.log('[verify_race] Internal request detected with valid secret - PayGate bypassed');
+  // Server-side PayGate check (non-blocking in monitor mode)
+  try {
+    const { checkPayGateAccess } = await import('../../lib/paygate-server.js');
+    const accessCheck = checkPayGateAccess(req);
+    if (!accessCheck.allowed) {
+      return res.status(403).json({
+        ok: false,
+        error: 'PayGate locked',
+        message: 'Premium access required. Please unlock to continue.',
+        code: 'paygate_locked',
+        reason: accessCheck.reason,
+        step: 'verify_race_error'
+      });
+    }
+  } catch (paygateErr) {
+    // Non-fatal: log but allow request (fail-open for safety)
+    console.warn('[verify_race] PayGate check failed (non-fatal):', paygateErr?.message);
   }
   // We NEVER throw from this handler. All errors are reported in the JSON body.
   try {
@@ -1988,6 +2006,23 @@ export default async function handler(req, res) {
     let canonicalDateIso = canonicalizeDateFromClient(uiDateRaw);
     
     // Note: PayGate check already performed at top of handler - bypassedPayGate flag is set there
+    // Server-side PayGate check (non-blocking in monitor mode)
+    try {
+      const { checkPayGateAccess } = await import('../../lib/paygate-server.js');
+      const accessCheck = checkPayGateAccess(req);
+      if (!accessCheck.allowed) {
+        return res.status(403).json({
+          ok: false,
+          error: 'PayGate locked',
+          message: 'Premium access required. Please unlock to continue.',
+          code: 'paygate_locked',
+          reason: accessCheck.reason
+        });
+      }
+    } catch (paygateErr) {
+      // Non-fatal: log but allow request (fail-open for safety)
+      console.warn('[verify_race] PayGate check failed (non-fatal):', paygateErr?.message);
+    }
 
     // Extract raceNo early - needed for error responses and manual verify branch
     const raceNo = (body.raceNo || body.race || "").toString().trim() || "";
