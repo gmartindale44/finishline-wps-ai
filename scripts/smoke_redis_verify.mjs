@@ -573,6 +573,150 @@ async function testHrnParsing() {
   return { test1, test2, test1Pass, test2Pass };
 }
 
+async function testRedisConsistency() {
+  console.log('\n=== REDIS CONSISTENCY TEST ===');
+  console.log('Testing that verify_race writes match what debug_redis_keys reads');
+  
+  const track = "Fair Grounds";
+  const date = "2026-01-10";
+  const raceNo = "5";
+  
+  // Step 1: Call verify_race
+  console.log(`\n--- Step 1: POST /api/verify_race (${track} ${date} R${raceNo}) ---`);
+  const verifyResp = await testVerifyRace(track, date, raceNo);
+  
+  if (!verifyResp || verifyResp.status !== 200) {
+    console.log('❌ FAIL: verify_race call failed');
+    return { passed: false, reason: 'verify_race call failed' };
+  }
+  
+  const verifyOk = verifyResp.json?.ok;
+  const verifyOutcome = verifyResp.json?.outcome || {};
+  const verifyDebug = verifyResp.json?.debug || {};
+  
+  console.log(`verify_race response: ok=${verifyOk}`);
+  console.log(`  Outcome: Win="${verifyOutcome.win || ''}", Place="${verifyOutcome.place || ''}", Show="${verifyOutcome.show || ''}"`);
+  console.log(`  Debug fields:`);
+  console.log(`    verifyRaceId: ${verifyDebug.verifyRaceId || 'null'}`);
+  console.log(`    verifyKey: ${verifyDebug.verifyKey || 'null'}`);
+  console.log(`    wroteToRedis: ${verifyDebug.wroteToRedis !== undefined ? verifyDebug.wroteToRedis : 'null'}`);
+  console.log(`    writeResult: ${verifyDebug.writeResult ? JSON.stringify(verifyDebug.writeResult) : 'null'}`);
+  console.log(`    redisClientType: ${verifyDebug.redisClientType || 'null'}`);
+  
+  // Assert verify_race includes Redis write debug fields
+  let consistencyPass = true;
+  const issues = [];
+  
+  if (!verifyDebug.verifyRaceId) {
+    issues.push('verify_race response missing debug.verifyRaceId');
+    consistencyPass = false;
+  }
+  if (!verifyDebug.verifyKey) {
+    issues.push('verify_race response missing debug.verifyKey');
+    consistencyPass = false;
+  }
+  if (verifyDebug.wroteToRedis === undefined) {
+    issues.push('verify_race response missing debug.wroteToRedis');
+    consistencyPass = false;
+  }
+  
+  // Wait a moment for async Redis write to complete
+  console.log('\n--- Step 2: Waiting 2 seconds for Redis write to complete ---');
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  
+  // Step 2: Call debug_redis_keys
+  console.log(`\n--- Step 3: GET /api/debug_redis_keys (${track} ${date} R${raceNo}) ---`);
+  const debugUrl = `${BASE_URL}/api/debug_redis_keys?track=${encodeURIComponent(track)}&date=${encodeURIComponent(date)}&raceNo=${encodeURIComponent(raceNo)}`;
+  const { status: debugStatus, json: debugJson, error: debugError } = await fetchJSON(debugUrl);
+  
+  if (debugError || debugStatus !== 200) {
+    console.log(`❌ FAIL: debug_redis_keys call failed: ${debugError || `HTTP ${debugStatus}`}`);
+    return { passed: false, reason: 'debug_redis_keys call failed', verifyResp };
+  }
+  
+  console.log(`debug_redis_keys response:`);
+  console.log(`  verifyKey: ${debugJson.verifyKey || 'null'}`);
+  console.log(`  verifyKeyExists: ${debugJson.verifyKeyExists}`);
+  console.log(`  verifyKeyValuePreview: ${debugJson.verifyKeyValuePreview ? JSON.stringify(debugJson.verifyKeyValuePreview, null, 2) : 'null'}`);
+  
+  // Step 3: Assert consistency
+  console.log('\n--- Step 4: Asserting consistency ---');
+  
+  // Assert keys match
+  if (verifyDebug.verifyKey && debugJson.verifyKey) {
+    if (verifyDebug.verifyKey !== debugJson.verifyKey) {
+      issues.push(`Key mismatch: verify_race wrote to "${verifyDebug.verifyKey}" but debug_redis_keys checked "${debugJson.verifyKey}"`);
+      consistencyPass = false;
+    } else {
+      console.log(`✅ Keys match: ${verifyDebug.verifyKey}`);
+    }
+  }
+  
+  // Assert Redis key exists if write succeeded
+  if (verifyDebug.wroteToRedis === true) {
+    if (!debugJson.verifyKeyExists) {
+      issues.push('verify_race wrote to Redis (wroteToRedis=true) but debug_redis_keys says key does not exist');
+      consistencyPass = false;
+    } else {
+      console.log(`✅ Key exists in Redis (as expected from successful write)`);
+    }
+  }
+  
+  // Assert stored value matches verify_race response
+  if (debugJson.verifyKeyValuePreview && debugJson.verifyKeyValuePreview.parsedOk === true) {
+    const storedOk = debugJson.verifyKeyValuePreview.ok;
+    const storedStep = debugJson.verifyKeyValuePreview.step;
+    const storedOutcome = debugJson.verifyKeyValuePreview.outcome || {};
+    
+    if (storedOk !== verifyOk) {
+      issues.push(`Stored ok (${storedOk}) does not match verify_race ok (${verifyOk})`);
+      consistencyPass = false;
+    } else {
+      console.log(`✅ Stored ok matches verify_race ok: ${verifyOk}`);
+    }
+    
+    // Check that stored outcome matches (if both have outcomes)
+    if (verifyOk === true && verifyOutcome.win && verifyOutcome.place && verifyOutcome.show) {
+      if (storedOutcome.win !== verifyOutcome.win || 
+          storedOutcome.place !== verifyOutcome.place || 
+          storedOutcome.show !== verifyOutcome.show) {
+        issues.push(`Stored outcome differs from verify_race outcome`);
+        issues.push(`  verify_race: Win="${verifyOutcome.win}", Place="${verifyOutcome.place}", Show="${verifyOutcome.show}"`);
+        issues.push(`  stored: Win="${storedOutcome.win || ''}", Place="${storedOutcome.place || ''}", Show="${storedOutcome.show || ''}"`);
+        consistencyPass = false;
+      } else {
+        console.log(`✅ Stored outcome matches verify_race outcome`);
+      }
+    }
+    
+    // Check step consistency (allow some variation, but shouldn't be "verify_race_full_fallback" if we got valid outcome)
+    if (verifyOk === true && storedStep === "verify_race_full_fallback") {
+      issues.push(`Stored step is "verify_race_full_fallback" but verify_race returned ok=true with valid outcome`);
+      consistencyPass = false;
+    }
+  } else if (debugJson.verifyKeyExists && !debugJson.verifyKeyValuePreview) {
+    issues.push('Key exists in Redis but verifyKeyValuePreview is null/empty');
+    consistencyPass = false;
+  } else if (verifyDebug.wroteToRedis === true && !debugJson.verifyKeyExists) {
+    issues.push('verify_race reported successful write but debug_redis_keys says key does not exist');
+    consistencyPass = false;
+  }
+  
+  if (consistencyPass && issues.length === 0) {
+    console.log('\n✅ REDIS CONSISTENCY TEST PASSED');
+  } else {
+    console.log('\n❌ REDIS CONSISTENCY TEST FAILED:');
+    issues.forEach(issue => console.log(`  - ${issue}`));
+  }
+  
+  return { 
+    passed: consistencyPass, 
+    issues,
+    verifyResp,
+    debugResp: { status: debugStatus, json: debugJson },
+  };
+}
+
 async function runSmokeTest() {
   console.log(`\n=== Redis/Verify End-to-End Smoke Test ===`);
   console.log(`Testing against: ${BASE_URL}\n`);
@@ -582,16 +726,18 @@ async function runSmokeTest() {
   const backfillResp = await testVerifyBackfill();
   const debugResp = await testDebugRedisKeys();
   const hrnTests = await testHrnParsing();
+  const consistencyTest = await testRedisConsistency();
   
   await compareFingerprints(predictResp, verifyResp, backfillResp);
   
   console.log('\n=== SUMMARY ===');
   console.log(`Predict WPS: ${predictResp ? (predictResp.predsnap_debug?.predsnapWritten ? '✅ Written' : '⚠️ Not written') : '❌ Failed'}`);
-  console.log(`Verify Race: ${verifyResp ? (verifyResp.debug?.verifyWriteOk ? '✅ Written' : '⚠️ Not written') : '❌ Failed'}`);
+  console.log(`Verify Race: ${verifyResp ? (verifyResp.debug?.wroteToRedis ? '✅ Written' : '⚠️ Not written') : '❌ Failed'}`);
   console.log(`Verify Backfill: ${backfillResp ? (backfillResp.ok ? '✅ OK' : '⚠️ Failed') : '❌ Failed'}`);
   console.log(`Debug Keys: ${debugResp ? '✅ OK' : '❌ Failed'}`);
   console.log(`HRN Parsing Test 1: ${hrnTests?.test1Pass ? '✅ PASS (no garbage)' : '❌ FAIL (garbage detected)'}`);
   console.log(`HRN Parsing Test 2: ${hrnTests?.test2Pass ? '✅ PASS' : hrnTests?.test2?.ok ? '✅ OK' : '⚠️ No outcome'}`);
+  console.log(`Redis Consistency: ${consistencyTest?.passed ? '✅ PASS' : '❌ FAIL'}`);
   console.log('\n=== Smoke Test Complete ===\n');
 }
 

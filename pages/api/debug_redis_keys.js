@@ -5,7 +5,6 @@
  * Usage: GET /api/debug_redis_keys?track=<track>&date=<date>&raceNo=<raceNo>&surface=<surface>
  */
 import { buildVerifyRaceId, normalizeTrack, normalizeDateToIso, normalizeRaceNo, normalizeSurface } from "../../lib/verify_normalize.js";
-import { buildVerifyKey } from "../../utils/finishline/backfill_helpers.js";
 import { getRedis } from "../../utils/finishline/backfill_helpers.js";
 import { getRedisEnv } from "../../lib/redis.js";
 import { getRedisFingerprint } from "../../lib/redis_fingerprint.js";
@@ -83,10 +82,11 @@ export default async function handler(req, res) {
       result.predsnapPattern = `fl:predsnap:${result.predsnapRaceId}:*`;
     }
 
-    // Compute verify raceId (dash format)
+    // Compute verify raceId (dash format) - use same normalization as verify_race.js
     if (trackSlug && normalizedDate && raceNoNormalized) {
       result.verifyRaceId = buildVerifyRaceId(trackIn, dateIn, raceNoIn, surfaceIn || "unknown");
-      result.verifyKey = buildVerifyKey(result.verifyRaceId);
+      // Use same key format as verify_race.js: VERIFY_PREFIX + raceId
+      result.verifyKey = `fl:verify:${result.verifyRaceId}`;
     }
 
     // Check existence in Redis (if configured)

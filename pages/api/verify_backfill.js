@@ -509,6 +509,19 @@ export default async function handler(req, res) {
                 }
                 existingVerifySnippet = rawValue ? String(rawValue).slice(0, 160) : null;
                 
+                // CRITICAL: Build structured preview NOW (matching debug_redis_keys format)
+                // This will be used for both skipped and non-skipped races
+                verifiedRedisKeyValuePreview = {
+                  parsedOk: true,
+                  ok: parsedValue.ok ?? null,
+                  step: parsedValue.step ?? null,
+                  date: parsedValue.date ?? null,
+                  track: parsedValue.track ?? null,
+                  raceNo: parsedValue.raceNo ?? null,
+                  outcome: parsedValue.outcome ?? null,
+                  hits: parsedValue.hits ?? null,
+                };
+                
                 // Only skip if parsed successfully AND ok === true
                 // If parse fails or ok !== true, we should re-verify
                 if (existingVerifyOkField && !forceOverride) {
@@ -522,7 +535,18 @@ export default async function handler(req, res) {
                 existingVerifyOkField = null;
                 if (rawValue) {
                   existingVerifySnippet = String(rawValue).slice(0, 160);
+                  // Build structured preview for unparseable value
+                  verifiedRedisKeyValuePreview = {
+                    parsedOk: false,
+                    rawSnippet: existingVerifySnippet,
+                  };
                   console.warn('[verify_backfill] Stored value not valid JSON or not an object, will re-verify. Raw snippet:', existingVerifySnippet);
+                } else {
+                  // No raw value available
+                  verifiedRedisKeyValuePreview = {
+                    parsedOk: false,
+                    rawSnippet: null,
+                  };
                 }
               }
             }
@@ -539,26 +563,7 @@ export default async function handler(req, res) {
 
       if (shouldSkip) {
         // Skip calling /api/verify_race - race already verified (ok === true in stored value)
-        // Build structured preview for verifyKeyValuePreview (matching debug_redis_keys format)
-        let structuredPreview = null;
-        if (existingVerifyParsed && typeof existingVerifyParsed === "object") {
-          // Use the parsed object to build structured preview
-          structuredPreview = {
-            parsedOk: true,
-            ok: existingVerifyParsed.ok ?? null,
-            step: existingVerifyParsed.step ?? null,
-            date: existingVerifyParsed.date ?? null,
-            track: existingVerifyParsed.track ?? null,
-            raceNo: existingVerifyParsed.raceNo ?? null,
-            outcome: existingVerifyParsed.outcome ?? null,
-            hits: existingVerifyParsed.hits ?? null,
-          };
-        } else if (existingVerifySnippet) {
-          structuredPreview = {
-            parsedOk: false,
-            rawSnippet: existingVerifySnippet,
-          };
-        }
+        // verifiedRedisKeyValuePreview should already be built above when we parsed the value
         
         results.push({
           race,
@@ -573,9 +578,8 @@ export default async function handler(req, res) {
           // Debug fields for skip verification (explicit fields as requested, safe to expose - no secrets)
           verifyKeyChecked: verifiedRedisKeyChecked || null, // Exact key checked (for auditability)
           verifyKeyExists: verifiedRedisKeyExists, // Boolean
-          verifyKeyValuePreview: structuredPreview || verifiedRedisKeyValuePreview || null, // Structured preview (matching debug_redis_keys format)
+          verifyKeyValuePreview: verifiedRedisKeyValuePreview || null, // Structured preview (already built above, matching debug_redis_keys format)
           raceIdDerived: raceIdDerived || null, // Race ID portion (without prefix)
-          skipReason: skipReason || null, // String enum: "already_verified_in_redis" or null
           // Additional context
           verifiedRedisKeyType: verifiedRedisKeyType || "none",
           redisNamespacePrefixUsed: "fl:verify:",

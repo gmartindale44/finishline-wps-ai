@@ -474,10 +474,16 @@ async function logVerifyResult(result) {
 
     const logKey = `${VERIFY_PREFIX}${raceId}`;
     
-    // ADDITIVE: Add verify log key name to debug for diagnostics
+    // ADDITIVE: Add verify log key name to debug for diagnostics (in both logPayload and result.debug)
     if (!logPayload.debug) logPayload.debug = {};
     logPayload.debug.verifyLogKey = logKey; // Exact key written (for auditability)
     logPayload.debug.raceId = raceId; // Race ID portion (without prefix)
+    
+    // CRITICAL: Also add to result.debug so it appears in the API response
+    if (!result.debug) result.debug = {};
+    result.debug.verifyRaceId = raceId; // Race ID portion (without prefix)
+    result.debug.verifyKey = logKey; // Full Redis key that will be written
+    result.debug.wroteToRedis = false; // Will be set to true if write succeeds
     
     // Add Redis fingerprint for diagnostics (safe, no secrets)
     try {
@@ -485,19 +491,44 @@ async function logVerifyResult(result) {
       const fingerprint = getRedisFingerprint();
       logPayload.debug.redisFingerprint = fingerprint;
       logPayload.debug.redisClientType = "REST API (lib/redis.js)";
+      // Also add to result.debug
+      result.debug.redisFingerprint = fingerprint;
+      result.debug.redisClientType = "REST API (lib/redis.js)";
     } catch {}
-    logPayload.debug.verifyLogKey = logKey;
     
     // Use REST client setex for verify logs (90 days TTL = 7776000 seconds)
+    // CRITICAL: Always write to Redis (log all responses including ok:false for analytics)
+    // But ensure we ALWAYS overwrite when ok=true AND outcome has win/place/show
+    const hasCompleteOutcome = result.ok === true && 
+                               result.outcome && 
+                               result.outcome.win && 
+                               result.outcome.place && 
+                               result.outcome.show;
+    
+    // Always write (per requirement: log ALL verify responses for analytics)
+    // This ensures ok:true results overwrite stale ok:false records
     try {
       const { setex } = await import('../../lib/redis.js');
       await setex(logKey, 7776000, JSON.stringify(logPayload));
       logPayload.debug.verifyWriteOk = true;
       logPayload.debug.verifyWriteError = null;
+      // CRITICAL: Update result.debug so it appears in API response
+      if (!result.debug) result.debug = {};
+      result.debug.wroteToRedis = true;
+      result.debug.writeResult = { success: true, key: logKey, hasCompleteOutcome };
     } catch (writeErr) {
       // Track verify write error but don't break user flow
       logPayload.debug.verifyWriteOk = false;
       logPayload.debug.verifyWriteError = writeErr?.message || String(writeErr);
+      // CRITICAL: Update result.debug so it appears in API response
+      if (!result.debug) result.debug = {};
+      result.debug.wroteToRedis = false;
+      result.debug.writeResult = { 
+        success: false, 
+        key: logKey, 
+        hasCompleteOutcome,
+        error: writeErr?.message || String(writeErr) 
+      };
       console.error("[verify-log] Failed to log verify result", writeErr);
     }
   } catch (err) {
