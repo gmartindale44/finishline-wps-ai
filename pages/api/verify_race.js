@@ -976,12 +976,10 @@ async function tryHrnFallback(track, dateIso, raceNo, baseDebug = {}) {
     const html = await res.text();
     const { outcome, debug: hrnDebug } = extractOutcomeFromHrnHtml(html, raceNo);
     
-    // Merge HRN debug fields into debugExtras
-    if (hrnDebug) {
-      if (hrnDebug.hrnParsedBy) debugExtras.hrnParsedBy = hrnDebug.hrnParsedBy;
-      if (hrnDebug.hrnOutcomeRaw) debugExtras.hrnOutcomeRaw = hrnDebug.hrnOutcomeRaw;
-      if (hrnDebug.hrnOutcomeNormalized) debugExtras.hrnOutcomeNormalized = hrnDebug.hrnOutcomeNormalized;
-      if (hrnDebug.hrnFoundMarkers) debugExtras.hrnFoundMarkers = hrnDebug.hrnFoundMarkers;
+    // Merge ALL HRN debug fields into debugExtras (not just selective ones)
+    if (hrnDebug && typeof hrnDebug === 'object') {
+      // Merge all fields from hrnDebug into debugExtras
+      Object.assign(debugExtras, hrnDebug);
     }
     
     if (!outcome || (!outcome.win && !outcome.place && !outcome.show)) {
@@ -1966,7 +1964,7 @@ function extractOutcomeFromGoogleHtml(html) {
  * This is the default behavior when VERIFY_RACE_MODE is not set to "full"
  * Now enhanced to fetch and parse Google HTML for Win/Place/Show
  */
-async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
+async function buildStubResponse({ track, date, raceNo, predicted = {}, uiDateRaw = null }) {
   // CRITICAL: date should already be canonical ISO from handler
   // Use it as-is - no fallback to today, no re-normalization
   // If date is missing, that's an upstream bug - log warning but use empty string
@@ -2047,8 +2045,11 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
 
   // ALWAYS try HRN fallback if we have track, date, and Google didn't find all three
   // This ensures HRN is attempted even if Google fetch fails or doesn't contain results
+  let hrnAttempted = false;
+  let hrnHttpStatus = null;
   if (!outcome.win || !outcome.place || !outcome.show) {
     if (safeTrack && usingDate) {
+      hrnAttempted = true; // Mark that we attempted HRN
       try {
         // First try to extract HRN URL from Google HTML (if we have it)
         if (googleHtml) {
@@ -2071,13 +2072,15 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
               },
             });
             
+            hrnHttpStatus = hrnRes ? hrnRes.status : null;
+            
             if (hrnRes && hrnRes.ok) {
               const hrnHtml = await hrnRes.text();
               const hrnResult = extractOutcomeFromHrnHtml(hrnHtml, raceNoStr);
               hrnOutcome = hrnResult.outcome;
-              // Store HRN debug fields to merge into debug later
+              // Store ALL HRN debug fields to merge into debug later
               if (hrnResult.debug) {
-                hrnDebugFields = hrnResult.debug;
+                hrnDebugFields = { ...hrnResult.debug }; // Copy all fields
               }
               
               // If HRN parsing found at least one result, use it
@@ -2094,7 +2097,7 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
                 // HRN failed - no Equibase fallback in stub mode
               }
             } else {
-              hrnParseError = `HTTP ${hrnRes ? hrnRes.status : "unknown"}`;
+              hrnParseError = `HTTP ${hrnHttpStatus || "unknown"}`;
               // HRN fetch failed - no Equibase fallback in stub mode
             }
           } catch (hrnErr) {
@@ -2185,7 +2188,7 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
   const hasOutcome = !!(outcome.win || outcome.place || outcome.show);
   const ok = hasOutcome || step === "verify_race_fallback_hrn" || step === "verify_race_fallback_hrn_partial";
   
-  // Build debug object - only lightweight fields
+  // Build debug object - start with base fields
   const debug = {
     googleUrl,
     backendVersion: BACKEND_VERSION,
@@ -2193,22 +2196,29 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
     canonicalDateIso: usingDate,
   };
   
-  // Include HRN debug info if we attempted it (lightweight fields only)
-  // Note: hrnRaceNo will be added by tryHrnFallback if called from full mode
-  if (hrnUrl) {
-    debug.hrnUrl = hrnUrl;
+  // Add uiDateRaw if provided
+  if (uiDateRaw !== null && uiDateRaw !== undefined) {
+    debug.uiDateRaw = uiDateRaw;
   }
   
-  if (hrnParseError) {
-    debug.hrnParseError = hrnParseError;
-  }
-  
-  // Merge HRN debug fields if available
-  if (hrnDebugFields) {
-    if (hrnDebugFields.hrnParsedBy) debug.hrnParsedBy = hrnDebugFields.hrnParsedBy;
-    if (hrnDebugFields.hrnOutcomeRaw) debug.hrnOutcomeRaw = hrnDebugFields.hrnOutcomeRaw;
-    if (hrnDebugFields.hrnOutcomeNormalized) debug.hrnOutcomeNormalized = hrnDebugFields.hrnOutcomeNormalized;
-    if (hrnDebugFields.hrnFoundMarkers) debug.hrnFoundMarkers = hrnDebugFields.hrnFoundMarkers;
+  // Merge ALL HRN debug fields if HRN was attempted
+  if (hrnAttempted) {
+    debug.hrnAttempted = true;
+    if (hrnUrl) {
+      debug.hrnUrl = hrnUrl;
+    }
+    if (hrnHttpStatus !== null) {
+      debug.hrnHttpStatus = hrnHttpStatus;
+    }
+    if (hrnParseError) {
+      debug.hrnParseError = hrnParseError;
+    }
+    
+    // Merge ALL fields from hrnDebugFields (not just selective ones)
+    if (hrnDebugFields && typeof hrnDebugFields === 'object') {
+      // Merge all fields from hrnDebugFields into debug
+      Object.assign(debug, hrnDebugFields);
+    }
   }
   
   // Store googleHtml in debug for potential future use (but don't send it in response to avoid bloat)
@@ -2597,7 +2607,18 @@ export default async function handler(req, res) {
 
     // If not in full mode, immediately return stub
     if (mode !== "full") {
-      const stub = await buildStubResponse(ctx);
+      const stub = await buildStubResponse({
+        ...ctx,
+        uiDateRaw: ctx.dateRaw || uiDateRaw, // Pass uiDateRaw to buildStubResponse
+      });
+      // Set source based on step to indicate where outcome came from
+      if (stub.debug && !stub.debug.source) {
+        if (stub.step && stub.step.includes("hrn")) {
+          stub.debug.source = "hrn";
+        } else if (stub.step && stub.step.includes("google")) {
+          stub.debug.source = "google";
+        }
+      }
       // Add GreenZone (safe, never throws)
       await addGreenZoneToResponse(stub);
       await logVerifyResult(stub);

@@ -414,7 +414,13 @@ async function testHrnParsing() {
   let test1Pass = true;
   const issues1 = [];
   
-  // Check for garbage in outcome
+  // REQUIRED: Assert outcome.win does NOT match garbage patterns
+  if (outcome1.win && /dow\.dataLayer|^THIS$|^place$/i.test(outcome1.win)) {
+    issues1.push(`Win matches garbage pattern: "${outcome1.win}" (should not match /dow\\.dataLayer|^THIS$|^place$/i)`);
+    test1Pass = false;
+  }
+  
+  // Check for garbage in outcome (comprehensive)
   if (isGarbageHorseName(outcome1.win)) {
     issues1.push(`Win contains garbage: "${outcome1.win}"`);
     test1Pass = false;
@@ -425,6 +431,24 @@ async function testHrnParsing() {
   }
   if (isGarbageHorseName(outcome1.show)) {
     issues1.push(`Show contains garbage: "${outcome1.show}"`);
+    test1Pass = false;
+  }
+  
+  // REQUIRED: Assert hrnAttempted === true
+  if (hd1.hrnAttempted !== true) {
+    issues1.push(`hrnAttempted is not true (got: ${hd1.hrnAttempted})`);
+    test1Pass = false;
+  }
+  
+  // REQUIRED: Assert hrnParsedBy is defined (even if "none")
+  if (hd1.hrnParsedBy === undefined || hd1.hrnParsedBy === null) {
+    issues1.push(`hrnParsedBy is not defined (got: ${hd1.hrnParsedBy})`);
+    test1Pass = false;
+  }
+  
+  // REQUIRED: Assert hrnUrl is defined when hrnAttempted=true
+  if (hd1.hrnAttempted === true && !hd1.hrnUrl) {
+    issues1.push(`hrnAttempted=true but hrnUrl is not defined`);
     test1Pass = false;
   }
   
@@ -466,21 +490,45 @@ async function testHrnParsing() {
   // Summary for Test 2 (known good case)
   console.log('\n=== Test 2 Summary (2026-01-09 R5) ===');
   const hd2 = test2?.debug || {};
+  console.log(`hrnAttempted: ${hd2.hrnAttempted}`);
   console.log(`hrnParsedBy: ${hd2.hrnParsedBy || 'null'}`);
+  console.log(`hrnUrl: ${hd2.hrnUrl || 'null'}`);
   const outcome2 = test2?.outcome || {};
   console.log(`Outcome - Win: "${outcome2.win || ''}", Place: "${outcome2.place || ''}", Show: "${outcome2.show || ''}"`);
   
   let test2Pass = true;
+  const issues2 = [];
+  
+  // REQUIRED: Assert hrnParsedBy is defined (even if "none")
+  if (hd2.hrnParsedBy === undefined || hd2.hrnParsedBy === null) {
+    issues2.push(`hrnParsedBy is not defined (got: ${hd2.hrnParsedBy})`);
+    test2Pass = false;
+  }
+  
   if (test2.ok && (outcome2.win || outcome2.place || outcome2.show)) {
-    // Should have valid horse names
+    // Should have valid horse names (expected outcome)
     if (isGarbageHorseName(outcome2.win) || isGarbageHorseName(outcome2.place) || isGarbageHorseName(outcome2.show)) {
-      console.log('❌ Test 2 FAILED: Contains garbage in known good case!');
+      issues2.push('Contains garbage in known good case!');
       test2Pass = false;
+    }
+    
+    // Assert we got expected outcome
+    if (!outcome2.win && !outcome2.place && !outcome2.show) {
+      issues2.push('ok=true but outcome is empty');
+      test2Pass = false;
+    }
+    
+    if (test2Pass && issues2.length === 0) {
+      console.log('✅ Test 2 PASSED: Known good case still works with expected outcome');
     } else {
-      console.log('✅ Test 2 PASSED: Known good case still works');
+      console.log('❌ Test 2 FAILED:');
+      issues2.forEach(issue => console.log(`  - ${issue}`));
     }
   } else {
     console.log('⚠️ Test 2: ok=false or empty outcome (may be expected if race not yet finished)');
+    if (hd2.hrnParsedBy !== undefined && hd2.hrnParsedBy !== null) {
+      console.log('  (But hrnParsedBy is defined, which is correct)');
+    }
   }
   
   console.log('\n=== HRN Parsing Summary ===');
