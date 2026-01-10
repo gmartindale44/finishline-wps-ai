@@ -130,32 +130,37 @@ async function testVerifyRace(track = TEST_RACE.track, date = TEST_RACE.date, ra
     console.log(`  verifyWriteOk: ${json.debug.verifyWriteOk !== undefined ? json.debug.verifyWriteOk : 'N/A'}`);
     console.log(`  verifyWriteError: ${json.debug.verifyWriteError || 'null'}`);
     
-    // HRN-specific debug fields
-    if (json.debug.hrnParsedBy !== undefined) {
+    // HRN-specific debug fields - check if HRN was attempted (hrnAttempted or hrnParsedBy exists)
+    if (json.debug.hrnAttempted === true || json.debug.hrnParsedBy !== undefined) {
       console.log(`\nHRN Parsing Debug:`);
-      console.log(`  hrnParsedBy: ${json.debug.hrnParsedBy}`);
+      console.log(`  hrnAttempted: ${json.debug.hrnAttempted !== undefined ? json.debug.hrnAttempted : 'null'}`);
+      console.log(`  hrnUrl: ${json.debug.hrnUrl || 'null'}`);
+      console.log(`  hrnHttpStatus: ${json.debug.hrnHttpStatus || 'null'}`);
+      console.log(`  hrnParsedBy: ${json.debug.hrnParsedBy || 'null'}`);
       console.log(`  hrnRegionFound: ${json.debug.hrnRegionFound !== undefined ? json.debug.hrnRegionFound : 'null'}`);
       if (json.debug.hrnRegionSnippet) {
         console.log(`  hrnRegionSnippet: ${json.debug.hrnRegionSnippet.substring(0, 200)}...`);
       }
       if (json.debug.hrnFoundMarkers) {
-        console.log(`  hrnFoundMarkers:`, json.debug.hrnFoundMarkers);
+        console.log(`  hrnFoundMarkers:`, JSON.stringify(json.debug.hrnFoundMarkers));
       }
       if (json.debug.hrnOutcomeRaw) {
-        console.log(`  hrnOutcomeRaw:`, json.debug.hrnOutcomeRaw);
+        console.log(`  hrnOutcomeRaw:`, JSON.stringify(json.debug.hrnOutcomeRaw));
       }
       if (json.debug.hrnOutcomeNormalized) {
-        console.log(`  hrnOutcomeNormalized:`, json.debug.hrnOutcomeNormalized);
+        console.log(`  hrnOutcomeNormalized:`, JSON.stringify(json.debug.hrnOutcomeNormalized));
       }
       if (json.debug.hrnCandidateRejectedReasons && json.debug.hrnCandidateRejectedReasons.length > 0) {
-        console.log(`  hrnCandidateRejectedReasons:`, json.debug.hrnCandidateRejectedReasons);
+        console.log(`  hrnCandidateRejectedReasons:`, JSON.stringify(json.debug.hrnCandidateRejectedReasons));
       }
-    }
-    if (json.debug.hrnParseError) {
-      console.log(`  hrnParseError: ${json.debug.hrnParseError}`);
-    }
-    if (json.debug.hrnUrl) {
-      console.log(`  hrnUrl: ${json.debug.hrnUrl}`);
+      if (json.debug.hrnParseError) {
+        console.log(`  hrnParseError: ${json.debug.hrnParseError}`);
+      }
+    } else if (json.debug.source === 'hrn') {
+      // If source is HRN but debug fields are missing, this is a bug
+      console.log(`\n⚠️ WARNING: debug.source='hrn' but HRN debug fields are missing!`);
+      console.log(`  This indicates debug fields were lost/overwritten.`);
+      console.log(`  Available debug fields:`, Object.keys(json.debug || {}));
     }
     
     if (json.debug.redisFingerprint) {
@@ -488,21 +493,37 @@ async function testHrnParsing() {
   }
   
   // Summary for Test 2 (known good case)
-  console.log('\n=== Test 2 Summary (2026-01-09 R5) ===');
+  console.log('\n=== Test 2 Assertions (2026-01-09 R5) ===');
   const hd2 = test2?.debug || {};
   console.log(`hrnAttempted: ${hd2.hrnAttempted}`);
   console.log(`hrnParsedBy: ${hd2.hrnParsedBy || 'null'}`);
   console.log(`hrnUrl: ${hd2.hrnUrl || 'null'}`);
+  console.log(`hrnHttpStatus: ${hd2.hrnHttpStatus || 'null'}`);
+  if (hd2.hrnFoundMarkers) {
+    console.log(`hrnFoundMarkers: ${JSON.stringify(hd2.hrnFoundMarkers)}`);
+  }
   const outcome2 = test2?.outcome || {};
   console.log(`Outcome - Win: "${outcome2.win || ''}", Place: "${outcome2.place || ''}", Show: "${outcome2.show || ''}"`);
   
   let test2Pass = true;
   const issues2 = [];
   
-  // REQUIRED: Assert hrnParsedBy is defined (even if "none")
-  if (hd2.hrnParsedBy === undefined || hd2.hrnParsedBy === null) {
-    issues2.push(`hrnParsedBy is not defined (got: ${hd2.hrnParsedBy})`);
-    test2Pass = false;
+  // REQUIRED: Assert hrnParsedBy is defined (even if "none") when outcome exists or ok=true
+  // Note: If Google parsing succeeded, hrnAttempted might be false, which is fine
+  if (test2.ok || (outcome2.win || outcome2.place || outcome2.show)) {
+    // If we have outcome, HRN was likely attempted, so check debug fields
+    if (hd2.hrnAttempted === true) {
+      // REQUIRED: If hrnAttempted=true, hrnParsedBy must be defined
+      if (hd2.hrnParsedBy === undefined || hd2.hrnParsedBy === null) {
+        issues2.push(`hrnAttempted=true but hrnParsedBy is not defined`);
+        test2Pass = false;
+      }
+      // REQUIRED: If hrnAttempted=true, hrnUrl must be defined
+      if (!hd2.hrnUrl) {
+        issues2.push(`hrnAttempted=true but hrnUrl is not defined`);
+        test2Pass = false;
+      }
+    }
   }
   
   if (test2.ok && (outcome2.win || outcome2.place || outcome2.show)) {
@@ -512,22 +533,36 @@ async function testHrnParsing() {
       test2Pass = false;
     }
     
-    // Assert we got expected outcome
-    if (!outcome2.win && !outcome2.place && !outcome2.show) {
-      issues2.push('ok=true but outcome is empty');
+    // Assert we got expected outcome - all three should be present for ok=true
+    if (!outcome2.win || !outcome2.place || !outcome2.show) {
+      issues2.push(`ok=true but outcome is incomplete (win:${!!outcome2.win}, place:${!!outcome2.place}, show:${!!outcome2.show})`);
       test2Pass = false;
     }
     
     if (test2Pass && issues2.length === 0) {
-      console.log('✅ Test 2 PASSED: Known good case still works with expected outcome');
+      console.log('✅ Test 2 PASSED: Known good case still works with expected outcome and debug fields');
     } else {
       console.log('❌ Test 2 FAILED:');
       issues2.forEach(issue => console.log(`  - ${issue}`));
     }
   } else {
     console.log('⚠️ Test 2: ok=false or empty outcome (may be expected if race not yet finished)');
-    if (hd2.hrnParsedBy !== undefined && hd2.hrnParsedBy !== null) {
-      console.log('  (But hrnParsedBy is defined, which is correct)');
+    if (hd2.hrnAttempted === true) {
+      // If HRN was attempted, ensure debug fields are present
+      if (hd2.hrnParsedBy === undefined || hd2.hrnParsedBy === null) {
+        issues2.push('hrnAttempted=true but hrnParsedBy is not defined');
+        test2Pass = false;
+      }
+      if (!hd2.hrnUrl) {
+        issues2.push('hrnAttempted=true but hrnUrl is not defined');
+        test2Pass = false;
+      }
+      if (issues2.length > 0) {
+        console.log('❌ Test 2 FAILED (debug fields missing):');
+        issues2.forEach(issue => console.log(`  - ${issue}`));
+      } else {
+        console.log('  (hrnParsedBy is defined, which is correct)');
+      }
     }
   }
   
