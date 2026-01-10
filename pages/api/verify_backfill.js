@@ -195,6 +195,20 @@ async function callVerifyRace(baseUrl, race) {
     dateRaw: race.dateRaw,
   };
 
+  // Get internal job secret for server-to-server PayGate bypass
+  const internalSecret = process.env.INTERNAL_JOB_SECRET || '';
+  const headers = {
+    "Content-Type": "application/json",
+    "x-finishline-internal": "true", // System flag to bypass PayGate for internal batch jobs
+  };
+
+  // Only include secret header if env var is set (otherwise PayGate will be enforced)
+  if (internalSecret) {
+    headers["x-finishline-internal-secret"] = internalSecret;
+  } else {
+    console.warn('[verify_backfill] INTERNAL_JOB_SECRET not set - PayGate will be enforced for verify_race calls');
+  }
+
   let responseJson = null;
   let httpStatus = 0;
   let networkError = null;
@@ -203,10 +217,7 @@ async function callVerifyRace(baseUrl, race) {
   try {
     const res = await fetch(url, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-finishline-internal": "true", // System flag to bypass PayGate for internal batch jobs
-      },
+      headers,
       body: JSON.stringify(payload),
     });
 

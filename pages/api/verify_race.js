@@ -1894,18 +1894,30 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
     responseMeta: {
       handlerFile: HANDLER_FILE,
       backendVersion: BACKEND_VERSION,
+      internalBypassAuthorized: false, // buildStubResponse is used in error cases, so bypass is false
     },
   };
 }
 
 export default async function handler(req, res) {
   // Check for internal/system flag to bypass PayGate (for verify_backfill batch jobs)
-  const isInternalRequest = req.headers['x-finishline-internal'] === 'true';
+  // Require BOTH internal header AND secret to prevent spoofing
+  const internalHeader = req.headers['x-finishline-internal'] === 'true';
+  const internalSecret = String(req.headers['x-finishline-internal-secret'] || '').trim();
+  const expectedSecret = process.env.INTERNAL_JOB_SECRET || '';
+  const secretOk = !!expectedSecret && internalSecret === expectedSecret;
+  const isInternalRequest = internalHeader && secretOk;
   let bypassedPayGate = false;
+  let internalBypassAuthorized = false;
 
   // Server-side PayGate check (non-blocking in monitor mode)
-  // Skip PayGate if this is an internal system request (e.g., from verify_backfill)
+  // Skip PayGate ONLY if this is an internal system request with valid secret (e.g., from verify_backfill)
   if (!isInternalRequest) {
+    // If header present but secret missing/mismatch, log for security monitoring
+    if (internalHeader && !secretOk) {
+      console.warn('[verify_race] Internal header present but secret missing/mismatch - enforcing PayGate');
+    }
+    
     try {
       const { checkPayGateAccess } = await import('../../lib/paygate-server.js');
       const accessCheck = checkPayGateAccess(req);
@@ -1917,7 +1929,12 @@ export default async function handler(req, res) {
           code: 'paygate_locked',
           reason: accessCheck.reason,
           step: 'verify_race_error',
-          bypassedPayGate: false
+          bypassedPayGate: false,
+          responseMeta: {
+            handlerFile: HANDLER_FILE,
+            backendVersion: BACKEND_VERSION,
+            internalBypassAuthorized: false
+          }
         });
       }
     } catch (paygateErr) {
@@ -1925,9 +1942,10 @@ export default async function handler(req, res) {
       console.warn('[verify_race] PayGate check failed (non-fatal):', paygateErr?.message);
     }
   } else {
-    // Internal request - bypass PayGate
+    // Internal request with valid secret - bypass PayGate
     bypassedPayGate = true;
-    console.log('[verify_race] Internal request detected - PayGate bypassed');
+    internalBypassAuthorized = true;
+    console.log('[verify_race] Internal request detected with valid secret - PayGate bypassed');
   }
   // We NEVER throw from this handler. All errors are reported in the JSON body.
   try {
@@ -2020,6 +2038,7 @@ export default async function handler(req, res) {
         responseMeta: {
           handlerFile: HANDLER_FILE,
           backendVersion: BACKEND_VERSION,
+          internalBypassAuthorized: internalBypassAuthorized,
         },
       });
     }
@@ -2157,7 +2176,16 @@ export default async function handler(req, res) {
         // Add GreenZone (safe, never throws)
         await addGreenZoneToResponse(result);
 
-        return res.status(200).json(result);
+        return res.status(200).json({
+          ...result,
+          bypassedPayGate: bypassedPayGate,
+          responseMeta: {
+            handlerFile: HANDLER_FILE,
+            backendVersion: BACKEND_VERSION,
+            bypassedPayGate: bypassedPayGate,
+            internalBypassAuthorized: internalBypassAuthorized,
+          }
+        });
       } catch (error) {
         console.error("[verify_race] Manual verify error:", error);
         // Return error response (still 200 to match never-500 policy)
@@ -2259,9 +2287,12 @@ export default async function handler(req, res) {
         await logVerifyResult(errorResponse).catch(() => {}); // Ignore logging errors
         return res.status(200).json({
           ...errorResponse,
+          bypassedPayGate: bypassedPayGate,
           responseMeta: {
             handlerFile: HANDLER_FILE,
             backendVersion: BACKEND_VERSION,
+            bypassedPayGate: bypassedPayGate,
+            internalBypassAuthorized: internalBypassAuthorized,
           },
         });
       }
@@ -2378,7 +2409,8 @@ export default async function handler(req, res) {
           bypassedPayGate: bypassedPayGate,
           responseMeta: {
             ...validatedResult.responseMeta,
-            bypassedPayGate: bypassedPayGate
+            bypassedPayGate: bypassedPayGate,
+            internalBypassAuthorized: internalBypassAuthorized
           }
         });
       }
@@ -2431,9 +2463,12 @@ export default async function handler(req, res) {
               },
               summary: `HRN fetch blocked (HTTP ${hrnHttpStatus}). Results unavailable.`,
               debug: fallbackResult.debug,
+              bypassedPayGate: bypassedPayGate,
               responseMeta: {
                 handlerFile: HANDLER_FILE,
                 backendVersion: BACKEND_VERSION,
+                bypassedPayGate: bypassedPayGate,
+                internalBypassAuthorized: internalBypassAuthorized,
               },
             });
           }
@@ -2624,6 +2659,7 @@ export default async function handler(req, res) {
             handlerFile: HANDLER_FILE,
             backendVersion: BACKEND_VERSION,
             bypassedPayGate: bypassedPayGate,
+            internalBypassAuthorized: internalBypassAuthorized,
           },
         });
       }
@@ -2684,9 +2720,12 @@ export default async function handler(req, res) {
             },
             summary: `HRN fetch blocked (HTTP ${hrnHttpStatus}). Results unavailable.`,
             debug: fallbackStub.debug,
+            bypassedPayGate: bypassedPayGate,
             responseMeta: {
               handlerFile: HANDLER_FILE,
               backendVersion: BACKEND_VERSION,
+              bypassedPayGate: bypassedPayGate,
+              internalBypassAuthorized: internalBypassAuthorized,
             },
           });
         }
@@ -2770,6 +2809,7 @@ export default async function handler(req, res) {
           handlerFile: HANDLER_FILE,
           backendVersion: BACKEND_VERSION,
           bypassedPayGate: bypassedPayGate,
+          internalBypassAuthorized: internalBypassAuthorized,
         },
       });
     } catch (fullError) {
@@ -2836,9 +2876,12 @@ export default async function handler(req, res) {
             },
             summary: `HRN fetch blocked (HTTP ${hrnHttpStatus}). Results unavailable.`,
             debug: errorStub.debug,
+            bypassedPayGate: bypassedPayGate,
             responseMeta: {
               handlerFile: HANDLER_FILE,
               backendVersion: BACKEND_VERSION,
+              bypassedPayGate: bypassedPayGate,
+              internalBypassAuthorized: internalBypassAuthorized,
             },
           });
         }
@@ -2925,6 +2968,7 @@ export default async function handler(req, res) {
           handlerFile: HANDLER_FILE,
           backendVersion: BACKEND_VERSION,
           bypassedPayGate: bypassedPayGate,
+          internalBypassAuthorized: internalBypassAuthorized,
         },
       });
     }
