@@ -378,6 +378,7 @@ export default async function handler(req, res) {
       let existingVerifyParsedOk = false;
       let existingVerifyOkField = null;
       let existingVerifySnippet = null;
+      let existingVerifyParsed = null; // Store full parsed object for structured preview
 
       try {
         // Store input values for debug
@@ -492,15 +493,21 @@ export default async function handler(req, res) {
                 }
               }
               
-              if (rawValue) {
-                // Store snippet (first 160 chars for safety)
-                existingVerifySnippet = String(rawValue).slice(0, 160);
-              }
-              
-              if (parsedValue && typeof parsedValue === "object") {
+              if (parsedValue && typeof parsedValue === "object" && !Array.isArray(parsedValue)) {
                 // Successfully parsed (or already was an object)
                 existingVerifyParsedOk = true;
+                existingVerifyParsed = parsedValue; // Store full parsed object
                 existingVerifyOkField = parsedValue.ok === true;
+                
+                // Ensure rawValue/snippet is set for debug output
+                if (!rawValue) {
+                  try {
+                    rawValue = JSON.stringify(parsedValue);
+                  } catch {
+                    rawValue = String(parsedValue);
+                  }
+                }
+                existingVerifySnippet = rawValue ? String(rawValue).slice(0, 160) : null;
                 
                 // Only skip if parsed successfully AND ok === true
                 // If parse fails or ok !== true, we should re-verify
@@ -511,8 +518,10 @@ export default async function handler(req, res) {
               } else {
                 // Parse failed or value was not an object - treat as not verified, proceed with verification
                 existingVerifyParsedOk = false;
+                existingVerifyParsed = null;
                 existingVerifyOkField = null;
                 if (rawValue) {
+                  existingVerifySnippet = String(rawValue).slice(0, 160);
                   console.warn('[verify_backfill] Stored value not valid JSON or not an object, will re-verify. Raw snippet:', existingVerifySnippet);
                 }
               }
@@ -530,6 +539,27 @@ export default async function handler(req, res) {
 
       if (shouldSkip) {
         // Skip calling /api/verify_race - race already verified (ok === true in stored value)
+        // Build structured preview for verifyKeyValuePreview (matching debug_redis_keys format)
+        let structuredPreview = null;
+        if (existingVerifyParsed && typeof existingVerifyParsed === "object") {
+          // Use the parsed object to build structured preview
+          structuredPreview = {
+            parsedOk: true,
+            ok: existingVerifyParsed.ok ?? null,
+            step: existingVerifyParsed.step ?? null,
+            date: existingVerifyParsed.date ?? null,
+            track: existingVerifyParsed.track ?? null,
+            raceNo: existingVerifyParsed.raceNo ?? null,
+            outcome: existingVerifyParsed.outcome ?? null,
+            hits: existingVerifyParsed.hits ?? null,
+          };
+        } else if (existingVerifySnippet) {
+          structuredPreview = {
+            parsedOk: false,
+            rawSnippet: existingVerifySnippet,
+          };
+        }
+        
         results.push({
           race,
           ok: true,
@@ -543,7 +573,7 @@ export default async function handler(req, res) {
           // Debug fields for skip verification (explicit fields as requested, safe to expose - no secrets)
           verifyKeyChecked: verifiedRedisKeyChecked || null, // Exact key checked (for auditability)
           verifyKeyExists: verifiedRedisKeyExists, // Boolean
-          verifyKeyValuePreview: verifiedRedisKeyValuePreview || null, // Truncated value preview (max 80 chars, safe)
+          verifyKeyValuePreview: structuredPreview || verifiedRedisKeyValuePreview || null, // Structured preview (matching debug_redis_keys format)
           raceIdDerived: raceIdDerived || null, // Race ID portion (without prefix)
           skipReason: skipReason || null, // String enum: "already_verified_in_redis" or null
           // Additional context
