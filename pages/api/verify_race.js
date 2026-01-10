@@ -1164,29 +1164,92 @@ function extractOutcomeFromHrnHtml(html, raceNo = null) {
       Place: false,
       Show: false,
     },
+    hrnRegionFound: false,
+    hrnRegionSnippet: null,
+    hrnCandidateRejectedReasons: [],
   };
   
   if (!html || typeof html !== "string") {
+    debug.hrnParsedBy = "none";
     return { outcome, debug };
   }
   
   try {
-    // Check for markers in HTML (Results=True, Finish=True, Win=True, Place=True, Show=True)
+    // STEP 1: Strip script/style/comment blocks BEFORE any parsing to avoid matching JS code
+    let sanitizedHtml = html
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, " ") // Remove all <script> blocks
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, " ") // Remove all <style> blocks
+      .replace(/<!--[\s\S]*?-->/g, " ") // Remove HTML comments
+      .replace(/<noscript[^>]*>[\s\S]*?<\/noscript>/gi, " ") // Remove noscript blocks
+      .replace(/\s+/g, " "); // Normalize whitespace
+    
+    // Check for markers in sanitized HTML (Results=True, Finish=True, Win=True, Place=True, Show=True)
     const markersPattern = /(Results|Finish|Win|Place|Show)\s*=\s*True/gi;
     let markerMatch;
-    while ((markerMatch = markersPattern.exec(html)) !== null) {
+    while ((markerMatch = markersPattern.exec(sanitizedHtml)) !== null) {
       const markerName = markerMatch[1];
       if (markerName) {
         debug.hrnFoundMarkers[markerName] = true;
       }
     }
     
-    // If raceNo is provided, try to find the matching race block
-    let targetHtml = html;
+    // STEP 2: Isolate "results region" - find section most likely to contain finish results
+    let resultsRegion = null;
+    const regionPatterns = [
+      // Pattern 1: Look for explicit "Results" or "Race Results" headings
+      /(?:<h[1-6][^>]*>[\s\S]*?(?:Results?|Finish|Payout)[\s\S]*?<\/h[1-6]>[\s\S]{0,5000})/i,
+      // Pattern 2: Look for containers with "results" class/id
+      /<[^>]*(?:class|id)=["'][^"']*(?:results?|finish|payout)[^"']*["'][^>]*>([\s\S]{500,8000})<\/[^>]+>/i,
+      // Pattern 3: Look for table with "results" or "payout" in class/id
+      /<table[^>]*(?:class|id)=["'][^"']*(?:results?|finish|payout|table-payouts)[^"']*["'][^>]*>([\s\S]{500,10000})<\/table>/i,
+      // Pattern 4: Look for section between "Race" and "Results" keywords (within reasonable distance)
+      /Race[\s\S]{0,2000}?(?:Results?|Finish)[\s\S]{0,5000}/i,
+    ];
+    
+    for (const pattern of regionPatterns) {
+      const match = sanitizedHtml.match(pattern);
+      if (match && match[0] && match[0].length > 500) {
+        resultsRegion = match[0];
+        break;
+      }
+    }
+    
+    // Fallback: If no specific region found, but markers exist, use a larger context around markers
+    if (!resultsRegion && (debug.hrnFoundMarkers.Results || debug.hrnFoundMarkers.Finish)) {
+      const markerPos = sanitizedHtml.search(/(?:Results|Finish)\s*=\s*True/i);
+      if (markerPos > -1) {
+        const start = Math.max(0, markerPos - 2000);
+        const end = Math.min(sanitizedHtml.length, markerPos + 5000);
+        resultsRegion = sanitizedHtml.slice(start, end);
+      }
+    }
+    
+    // If still no region found, try to find any table with "payout" or "results" in it
+    if (!resultsRegion) {
+      const tableMatch = sanitizedHtml.match(/<table[^>]*>[\s\S]{500,10000}?<\/table>/gi);
+      if (tableMatch) {
+        // Use the largest table (likely to be results table)
+        resultsRegion = tableMatch.reduce((largest, current) => 
+          current.length > (largest?.length || 0) ? current : largest, null);
+      }
+    }
+    
+    // If no results region found, return early with no outcome
+    if (!resultsRegion) {
+      debug.hrnParsedBy = "none";
+      debug.hrnRegionFound = false;
+      return { outcome, debug };
+    }
+    
+    debug.hrnRegionFound = true;
+    debug.hrnRegionSnippet = resultsRegion.slice(0, 200).replace(/\s+/g, " "); // First 200 chars for debugging
+    
+    // If raceNo is provided, try to find the matching race block within results region
+    let targetHtml = resultsRegion;
     if (raceNo !== null && raceNo !== undefined) {
       const raceNoStr = String(raceNo || "").trim();
       if (raceNoStr) {
-        const blocks = splitHrnHtmlIntoRaceBlocks(html);
+        const blocks = splitHrnHtmlIntoRaceBlocks(resultsRegion);
         
         // Find the block matching the requested race
         const matchingBlock = blocks.find(b => String(b.raceNo) === raceNoStr);
@@ -1196,7 +1259,7 @@ function extractOutcomeFromHrnHtml(html, raceNo = null) {
           const tablePattern = /<table[^>]*table-payouts[^>]*>[\s\S]*?<\/table>/gi;
           const allTables = [];
           let tableMatch;
-          while ((tableMatch = tablePattern.exec(html)) !== null) {
+          while ((tableMatch = tablePattern.exec(resultsRegion)) !== null) {
             allTables.push({ index: tableMatch.index, html: tableMatch[0] });
           }
           
@@ -1204,7 +1267,6 @@ function extractOutcomeFromHrnHtml(html, raceNo = null) {
             targetHtml = allTables[matchingBlock.tableIndex].html;
           }
         }
-        // If no matching block found, fall back to parsing all tables (original behavior)
       }
     }
     
@@ -1251,20 +1313,106 @@ function extractOutcomeFromHrnHtml(html, raceNo = null) {
       return normalized;
     };
     
-    // Helper to validate horse name
-    const isValid = (name) => {
-      if (!name || name.length === 0) return false;
-      if (name.length > 50) return false;
-      if (!/[A-Za-z]/.test(name)) return false;
-      // Reject if it looks like HTML or code
-      if (name.includes("<") || name.includes(">") || name.includes("function")) return false;
+    // Strict validation helper that rejects JS tokens, generic words, and invalid patterns
+    // Returns { valid: boolean, reason: string | null }
+    const validateHorseName = (name, debugReasons = null) => {
+      if (!name || name.length === 0) {
+        if (debugReasons) debugReasons.push("empty_name");
+        return { valid: false, reason: "empty_name" };
+      }
+      
+      // Reject if too short (must be at least 3 chars)
+      if (name.length < 3) {
+        if (debugReasons) debugReasons.push(`too_short_${name.length}`);
+        return { valid: false, reason: "too_short" };
+      }
+      
+      if (name.length > 50) {
+        if (debugReasons) debugReasons.push(`too_long_${name.length}`);
+        return { valid: false, reason: "too_long" };
+      }
+      
+      // Must contain at least one letter
+      if (!/[A-Za-z]/.test(name)) {
+        if (debugReasons) debugReasons.push("no_letters");
+        return { valid: false, reason: "no_letters" };
+      }
+      
+      // Reject if contains dots (likely JS property access like "dow.dataLayer")
+      if (name.includes(".")) {
+        if (debugReasons) debugReasons.push(`contains_dot:${name}`);
+        return { valid: false, reason: "contains_dot" };
+      }
+      
+      // Reject if contains HTML angle brackets or "=" (likely HTML/JS code)
+      if (name.includes("<") || name.includes(">") || name.includes("=")) {
+        if (debugReasons) debugReasons.push(`contains_html:${name}`);
+        return { valid: false, reason: "contains_html" };
+      }
+      
+      // Reject JavaScript identifiers and keywords
+      const jsKeywords = [
+        "datalayer", "dow", "window", "document", "function", "var", "let", "const",
+        "this", "place", "win", "show", "true", "false", "null", "undefined",
+        "return", "if", "else", "for", "while", "prototype", "call", "apply",
+        "splice", "push", "pop", "slice", "split", "replace", "match", "exec",
+        "test", "parse", "stringify", "object", "array", "number", "string",
+      ];
+      const nameLower = name.toLowerCase().trim();
+      for (const keyword of jsKeywords) {
+        if (nameLower === keyword || nameLower === `"${keyword}"` || nameLower === `'${keyword}'`) {
+          if (debugReasons) debugReasons.push(`js_keyword:${keyword}`);
+          return { valid: false, reason: `js_keyword:${keyword}` };
+        }
+      }
+      
+      // Reject generic tokens that are too short or common words
+      const genericTokens = ["this", "place", "win", "show", "the", "a", "an", "is", "are", "was", "were"];
+      if (genericTokens.includes(nameLower)) {
+        if (debugReasons) debugReasons.push(`generic_token:${nameLower}`);
+        return { valid: false, reason: `generic_token:${nameLower}` };
+      }
+      
+      // Reject if looks like HTML or code
+      if (name.includes("function") || name.includes("=>") || name.includes("()")) {
+        if (debugReasons) debugReasons.push(`contains_code:${name}`);
+        return { valid: false, reason: "contains_code" };
+      }
+      
       // Reject common non-horse-name patterns
-      if (/^\d+$/.test(name)) return false; // Just numbers
-      if (name.toLowerCase().includes("finish") || name.toLowerCase().includes("position")) return false;
-      if (name.toLowerCase().includes("win:") || name.toLowerCase().includes("place:") || name.toLowerCase().includes("show:")) return false;
+      if (/^\d+$/.test(name)) {
+        if (debugReasons) debugReasons.push(`pure_numbers:${name}`);
+        return { valid: false, reason: "pure_numbers" };
+      }
+      
+      if (name.toLowerCase().includes("finish") || name.toLowerCase().includes("position")) {
+        if (debugReasons) debugReasons.push(`contains_finish_position:${name}`);
+        return { valid: false, reason: "contains_finish_position" };
+      }
+      
+      if (name.toLowerCase().includes("win:") || name.toLowerCase().includes("place:") || name.toLowerCase().includes("show:")) {
+        if (debugReasons) debugReasons.push(`contains_label:${name}`);
+        return { valid: false, reason: "contains_label" };
+      }
+      
       // Reject if it's just currency/payout info
-      if (/^\$?[\d,]+\.?\d*$/.test(name)) return false;
-      return true;
+      if (/^\$?[\d,]+\.?\d*$/.test(name)) {
+        if (debugReasons) debugReasons.push(`currency_only:${name}`);
+        return { valid: false, reason: "currency_only" };
+      }
+      
+      // Reject if contains suspicious JS patterns
+      if (/[{}()=>]/.test(name) || /^[A-Z],/.test(name)) {
+        if (debugReasons) debugReasons.push(`js_pattern:${name}`);
+        return { valid: false, reason: "js_pattern" };
+      }
+      
+      return { valid: true, reason: null };
+    };
+    
+    // Helper for backward compatibility (used in some places)
+    const isValid = (name) => {
+      return validateHorseName(name).valid;
     };
     
     // STRATEGY 1: Look for Results/Finish table sections and parse first three finishers
@@ -1337,7 +1485,8 @@ function extractOutcomeFromHrnHtml(html, raceNo = null) {
               for (let j = i + 1; j < Math.min(i + 4, cells.length); j++) {
                 const nextCell = cells[j].trim();
                 const normalized = normalizeHorseName(nextCell);
-                if (isValid(normalized) && !/^\d+$/.test(normalized) && !normalized.match(/^\$?[\d,]+\.?\d*$/)) {
+                const validation = validateHorseName(normalized, debug.hrnCandidateRejectedReasons);
+                if (validation.valid) {
                   horseNameRaw = nextCell;
                   break;
                 }
@@ -1350,10 +1499,8 @@ function extractOutcomeFromHrnHtml(html, raceNo = null) {
           if (!position && !horseNameRaw && cells.length > 0) {
             for (const cell of cells.slice(0, 5)) {
               const normalized = normalizeHorseName(cell);
-              if (isValid(normalized) && 
-                  !/^\d+$/.test(normalized) && 
-                  !normalized.match(/^\$?[\d,]+\.?\d*$/) &&
-                  normalized.length >= 2) {
+              const validation = validateHorseName(normalized, debug.hrnCandidateRejectedReasons);
+              if (validation.valid) {
                 horseNameRaw = cell;
                 // Assume row order: 1st row = win, 2nd = place, 3rd = show
                 position = rowIndex + 1;
@@ -1364,7 +1511,8 @@ function extractOutcomeFromHrnHtml(html, raceNo = null) {
           
           if (horseNameRaw) {
             const horseName = normalizeHorseName(horseNameRaw);
-            if (isValid(horseName)) {
+            const validation = validateHorseName(horseName, debug.hrnCandidateRejectedReasons);
+            if (validation.valid) {
               tableRows.push({ position: position || (rowIndex + 1), horseName, raw: horseNameRaw });
               rowIndex++;
             }
@@ -1407,21 +1555,23 @@ function extractOutcomeFromHrnHtml(html, raceNo = null) {
     }
     
     // STRATEGY 2: Look for explicit "Win / Place / Show" labels and parse adjacent horse names
-    if (!outcome.win || !outcome.place || !outcome.show) {
+    // Only search within results region (targetHtml) to avoid matching JS code
+    if ((!outcome.win || !outcome.place || !outcome.show) && targetHtml && targetHtml.length > 100) {
       // Pattern: "Win:" or "Win" followed by horse name (case insensitive)
+      // Updated patterns to be more restrictive - require at least 3 chars, avoid dots
       const winLabelPatterns = [
-        /(?:^|\s|>|:)\s*Win\s*[:–—\-]?\s*([A-Za-z][A-Za-z0-9\s'\-\.]{2,30}?)(?:\s|$|,|;|<|\(|\[)/i,
-        /Win\s+Payout[^:]*:\s*\$?[\d,]+\.?\d*\s+([A-Za-z][A-Za-z0-9\s'\-\.]{2,30}?)(?:\s|$|,|;|<)/i,
+        /(?:^|\s|>|:)\s*Win\s*[:–—\-]?\s*([A-Za-z][A-Za-z0-9\s'\-]{2,30}?)(?:\s|$|,|;|<|\(|\[|\$)/i,
+        /Win\s+Payout[^:]*:\s*\$?[\d,]+\.?\d*\s+([A-Za-z][A-Za-z0-9\s'\-]{2,30}?)(?:\s|$|,|;|<|\(|\[)/i,
       ];
       
       const placeLabelPatterns = [
-        /(?:^|\s|>|:)\s*Place\s*[:–—\-]?\s*([A-Za-z][A-Za-z0-9\s'\-\.]{2,30}?)(?:\s|$|,|;|<|\(|\[)/i,
-        /Place\s+Payout[^:]*:\s*\$?[\d,]+\.?\d*\s+([A-Za-z][A-Za-z0-9\s'\-\.]{2,30}?)(?:\s|$|,|;|<)/i,
+        /(?:^|\s|>|:)\s*Place\s*[:–—\-]?\s*([A-Za-z][A-Za-z0-9\s'\-]{2,30}?)(?:\s|$|,|;|<|\(|\[|\$)/i,
+        /Place\s+Payout[^:]*:\s*\$?[\d,]+\.?\d*\s+([A-Za-z][A-Za-z0-9\s'\-]{2,30}?)(?:\s|$|,|;|<|\(|\[)/i,
       ];
       
       const showLabelPatterns = [
-        /(?:^|\s|>|:)\s*Show\s*[:–—\-]?\s*([A-Za-z][A-Za-z0-9\s'\-\.]{2,30}?)(?:\s|$|,|;|<|\(|\[)/i,
-        /Show\s+Payout[^:]*:\s*\$?[\d,]+\.?\d*\s+([A-Za-z][A-Za-z0-9\s'\-\.]{2,30}?)(?:\s|$|,|;|<)/i,
+        /(?:^|\s|>|:)\s*Show\s*[:–—\-]?\s*([A-Za-z][A-Za-z0-9\s'\-]{2,30}?)(?:\s|$|,|;|<|\(|\[|\$)/i,
+        /Show\s+Payout[^:]*:\s*\$?[\d,]+\.?\d*\s+([A-Za-z][A-Za-z0-9\s'\-]{2,30}?)(?:\s|$|,|;|<|\(|\[)/i,
       ];
       
       for (const pattern of winLabelPatterns) {
@@ -1429,7 +1579,8 @@ function extractOutcomeFromHrnHtml(html, raceNo = null) {
         if (match && match[1] && !outcome.win) {
           const raw = match[1].trim();
           const normalized = normalizeHorseName(raw);
-          if (isValid(normalized)) {
+          const validation = validateHorseName(normalized, debug.hrnCandidateRejectedReasons);
+          if (validation.valid) {
             outcome.win = normalized;
             debug.hrnOutcomeRaw.win = raw;
             if (!debug.hrnParsedBy) debug.hrnParsedBy = "labels";
@@ -1443,7 +1594,8 @@ function extractOutcomeFromHrnHtml(html, raceNo = null) {
         if (match && match[1] && !outcome.place) {
           const raw = match[1].trim();
           const normalized = normalizeHorseName(raw);
-          if (isValid(normalized)) {
+          const validation = validateHorseName(normalized, debug.hrnCandidateRejectedReasons);
+          if (validation.valid) {
             outcome.place = normalized;
             debug.hrnOutcomeRaw.place = raw;
             if (!debug.hrnParsedBy) debug.hrnParsedBy = "labels";
@@ -1457,7 +1609,8 @@ function extractOutcomeFromHrnHtml(html, raceNo = null) {
         if (match && match[1] && !outcome.show) {
           const raw = match[1].trim();
           const normalized = normalizeHorseName(raw);
-          if (isValid(normalized)) {
+          const validation = validateHorseName(normalized, debug.hrnCandidateRejectedReasons);
+          if (validation.valid) {
             outcome.show = normalized;
             debug.hrnOutcomeRaw.show = raw;
             if (!debug.hrnParsedBy) debug.hrnParsedBy = "labels";
@@ -1468,18 +1621,20 @@ function extractOutcomeFromHrnHtml(html, raceNo = null) {
     }
     
     // STRATEGY 3: Regex fallbacks - capture patterns like "Win" followed by horse name
-    // More aggressive patterns that look for horse names near W/P/S keywords
-    if (!outcome.win || !outcome.place || !outcome.show) {
+    // Only search within results region (targetHtml) to avoid matching JS code
+    // More restrictive patterns - no dots allowed, must be at least 3 chars
+    if ((!outcome.win || !outcome.place || !outcome.show) && targetHtml && targetHtml.length > 100) {
       // Pattern: Look for sequences like "Win [horse name]", avoiding odds/payout numbers
+      // Updated: removed dots from character class, require at least 3 chars
       const regexPatterns = [
-        // Pattern: "Win" followed by optional punctuation, then horse name (more flexible - allows numbers, doesn't require capital start)
-        { key: "win", regex: /Win\s*[:\-—–]?\s*([A-Za-z0-9][A-Za-z0-9\s'\-\.]{1,30}?)(?:\s|$|,|;|<|\(|\[|\$|(?:\d+\.[\d,]+)|Win|Place|Show)/i },
-        { key: "place", regex: /Place\s*[:\-—–]?\s*([A-Za-z0-9][A-Za-z0-9\s'\-\.]{1,30}?)(?:\s|$|,|;|<|\(|\[|\$|(?:\d+\.[\d,]+)|Win|Place|Show)/i },
-        { key: "show", regex: /Show\s*[:\-—–]?\s*([A-Za-z0-9][A-Za-z0-9\s'\-\.]{1,30}?)(?:\s|$|,|;|<|\(|\[|\$|(?:\d+\.[\d,]+)|Win|Place|Show)/i },
+        // Pattern: "Win" followed by optional punctuation, then horse name (no dots!)
+        { key: "win", regex: /Win\s*[:\-—–]?\s*([A-Za-z][A-Za-z0-9\s'\-]{2,30}?)(?:\s|$|,|;|<|\(|\[|\$|(?:\d+\.[\d,]+)|Win|Place|Show)/i },
+        { key: "place", regex: /Place\s*[:\-—–]?\s*([A-Za-z][A-Za-z0-9\s'\-]{2,30}?)(?:\s|$|,|;|<|\(|\[|\$|(?:\d+\.[\d,]+)|Win|Place|Show)/i },
+        { key: "show", regex: /Show\s*[:\-—–]?\s*([A-Za-z][A-Za-z0-9\s'\-]{2,30}?)(?:\s|$|,|;|<|\(|\[|\$|(?:\d+\.[\d,]+)|Win|Place|Show)/i },
         // Alternative: Look for position numbers (1st, 2nd, 3rd) followed by horse name
-        { key: "win", regex: /(?:1st|First|1\s+st)\s+([A-Za-z0-9][A-Za-z0-9\s'\-\.]{1,30}?)(?:\s|$|,|;|<|\(|\[)/i },
-        { key: "place", regex: /(?:2nd|Second|2\s+nd)\s+([A-Za-z0-9][A-Za-z0-9\s'\-\.]{1,30}?)(?:\s|$|,|;|<|\(|\[)/i },
-        { key: "show", regex: /(?:3rd|Third|3\s+rd)\s+([A-Za-z0-9][A-Za-z0-9\s'\-\.]{1,30}?)(?:\s|$|,|;|<|\(|\[)/i },
+        { key: "win", regex: /(?:1st|First|1\s+st)\s+([A-Za-z][A-Za-z0-9\s'\-]{2,30}?)(?:\s|$|,|;|<|\(|\[)/i },
+        { key: "place", regex: /(?:2nd|Second|2\s+nd)\s+([A-Za-z][A-Za-z0-9\s'\-]{2,30}?)(?:\s|$|,|;|<|\(|\[)/i },
+        { key: "show", regex: /(?:3rd|Third|3\s+rd)\s+([A-Za-z][A-Za-z0-9\s'\-]{2,30}?)(?:\s|$|,|;|<|\(|\[)/i },
       ];
       
       for (const { key, regex } of regexPatterns) {
@@ -1491,7 +1646,8 @@ function extractOutcomeFromHrnHtml(html, raceNo = null) {
         if (match && match[1]) {
           const raw = match[1].trim();
           const normalized = normalizeHorseName(raw);
-          if (isValid(normalized)) {
+          const validation = validateHorseName(normalized, debug.hrnCandidateRejectedReasons);
+          if (validation.valid) {
             if (key === "win" && !outcome.win) {
               outcome.win = normalized;
               debug.hrnOutcomeRaw.win = raw;
@@ -1510,20 +1666,26 @@ function extractOutcomeFromHrnHtml(html, raceNo = null) {
       }
     }
     
-    // Final normalization and validation
+    // Final normalization and strict validation
     outcome.win = normalizeHorseName(outcome.win);
     outcome.place = normalizeHorseName(outcome.place);
     outcome.show = normalizeHorseName(outcome.show);
     
-    if (!isValid(outcome.win)) {
+    // Final validation with strict rules - reject any invalid candidates
+    const winValidation = validateHorseName(outcome.win, debug.hrnCandidateRejectedReasons);
+    if (!winValidation.valid) {
       outcome.win = "";
       debug.hrnOutcomeRaw.win = "";
     }
-    if (!isValid(outcome.place)) {
+    
+    const placeValidation = validateHorseName(outcome.place, debug.hrnCandidateRejectedReasons);
+    if (!placeValidation.valid) {
       outcome.place = "";
       debug.hrnOutcomeRaw.place = "";
     }
-    if (!isValid(outcome.show)) {
+    
+    const showValidation = validateHorseName(outcome.show, debug.hrnCandidateRejectedReasons);
+    if (!showValidation.valid) {
       outcome.show = "";
       debug.hrnOutcomeRaw.show = "";
     }
@@ -1535,11 +1697,12 @@ function extractOutcomeFromHrnHtml(html, raceNo = null) {
       show: outcome.show,
     };
     
-    // If no strategy succeeded, mark as unknown
-    if (!debug.hrnParsedBy && (outcome.win || outcome.place || outcome.show)) {
-      debug.hrnParsedBy = "partial";
-    } else if (!debug.hrnParsedBy) {
+    // If no valid outcome found, mark as "none" (don't return false positives)
+    if (!outcome.win && !outcome.place && !outcome.show) {
       debug.hrnParsedBy = "none";
+    } else if (!debug.hrnParsedBy) {
+      // Partial results found but strategy not recorded (shouldn't happen, but handle it)
+      debug.hrnParsedBy = "partial";
     }
     
   } catch (err) {

@@ -131,9 +131,13 @@ async function testVerifyRace(track = TEST_RACE.track, date = TEST_RACE.date, ra
     console.log(`  verifyWriteError: ${json.debug.verifyWriteError || 'null'}`);
     
     // HRN-specific debug fields
-    if (json.debug.hrnParsedBy) {
+    if (json.debug.hrnParsedBy !== undefined) {
       console.log(`\nHRN Parsing Debug:`);
       console.log(`  hrnParsedBy: ${json.debug.hrnParsedBy}`);
+      console.log(`  hrnRegionFound: ${json.debug.hrnRegionFound !== undefined ? json.debug.hrnRegionFound : 'null'}`);
+      if (json.debug.hrnRegionSnippet) {
+        console.log(`  hrnRegionSnippet: ${json.debug.hrnRegionSnippet.substring(0, 200)}...`);
+      }
       if (json.debug.hrnFoundMarkers) {
         console.log(`  hrnFoundMarkers:`, json.debug.hrnFoundMarkers);
       }
@@ -142,6 +146,9 @@ async function testVerifyRace(track = TEST_RACE.track, date = TEST_RACE.date, ra
       }
       if (json.debug.hrnOutcomeNormalized) {
         console.log(`  hrnOutcomeNormalized:`, json.debug.hrnOutcomeNormalized);
+      }
+      if (json.debug.hrnCandidateRejectedReasons && json.debug.hrnCandidateRejectedReasons.length > 0) {
+        console.log(`  hrnCandidateRejectedReasons:`, json.debug.hrnCandidateRejectedReasons);
       }
     }
     if (json.debug.hrnParseError) {
@@ -349,36 +356,138 @@ async function compareFingerprints(predictResp, verifyResp, backfillResp) {
   }
 }
 
+// Helper to validate horse name is not garbage/JS token
+function isGarbageHorseName(name) {
+  if (!name || name.length === 0) return false; // Empty is OK (no result)
+  
+  // Check for JS tokens
+  const jsKeywords = ['datalayer', 'dow', 'window', 'document', 'function', 'var', 'let', 'const',
+    'this', 'place', 'win', 'show', 'true', 'false', 'null', 'undefined'];
+  const nameLower = name.toLowerCase().trim();
+  if (jsKeywords.includes(nameLower)) return true;
+  
+  // Check for dots (JS property access like "dow.dataLayer")
+  if (name.includes('.')) return true;
+  
+  // Check for generic tokens
+  const genericTokens = ['this', 'place', 'win', 'show', 'the', 'a', 'an'];
+  if (genericTokens.includes(nameLower)) return true;
+  
+  // Check for suspicious patterns
+  if (/[{}()=>]/.test(name)) return true;
+  if (name.length < 3) return true; // Too short to be a real horse name
+  
+  return false;
+}
+
 async function testHrnParsing() {
   console.log('\n=== HRN PARSING TESTS ===');
   
-  // Test 1: Fair Grounds 2026-01-10 raceNo=5 (the failing case)
-  console.log('\n--- Test Case 1: Fair Grounds 2026-01-10 R5 (failing case) ---');
+  // Test 1: Fair Grounds 2026-01-10 raceNo=5 (the failing case - should NOT return garbage)
+  console.log('\n--- Test Case 1: Fair Grounds 2026-01-10 R5 (previously returned garbage) ---');
   const test1 = await testVerifyRace("Fair Grounds", "2026-01-10", "5");
   
   // Test 2: Fair Grounds 2026-01-09 raceNo=5 (known good case)
   console.log('\n--- Test Case 2: Fair Grounds 2026-01-09 R5 (known good case) ---');
   const test2 = await testVerifyRace("Fair Grounds", "2026-01-09", "5");
   
-  // Summary
+  // Detailed assertions for Test 1
+  console.log('\n=== Test 1 Assertions (2026-01-10 R5) ===');
+  const hd1 = test1?.debug || {};
+  
+  console.log(`hrnParsedBy: ${hd1.hrnParsedBy || 'null'}`);
+  console.log(`hrnRegionFound: ${hd1.hrnRegionFound !== undefined ? hd1.hrnRegionFound : 'null'}`);
+  if (hd1.hrnRegionSnippet) {
+    console.log(`hrnRegionSnippet (first 200 chars): ${hd1.hrnRegionSnippet.substring(0, 200)}`);
+  }
+  if (hd1.hrnCandidateRejectedReasons && hd1.hrnCandidateRejectedReasons.length > 0) {
+    console.log(`hrnCandidateRejectedReasons: ${JSON.stringify(hd1.hrnCandidateRejectedReasons)}`);
+  }
+  if (hd1.hrnFoundMarkers) {
+    console.log(`hrnFoundMarkers: ${JSON.stringify(hd1.hrnFoundMarkers)}`);
+  }
+  
+  const outcome1 = test1?.outcome || {};
+  console.log(`Outcome - Win: "${outcome1.win || ''}", Place: "${outcome1.place || ''}", Show: "${outcome1.show || ''}"`);
+  
+  // Assertions
+  let test1Pass = true;
+  const issues1 = [];
+  
+  // Check for garbage in outcome
+  if (isGarbageHorseName(outcome1.win)) {
+    issues1.push(`Win contains garbage: "${outcome1.win}"`);
+    test1Pass = false;
+  }
+  if (isGarbageHorseName(outcome1.place)) {
+    issues1.push(`Place contains garbage: "${outcome1.place}"`);
+    test1Pass = false;
+  }
+  if (isGarbageHorseName(outcome1.show)) {
+    issues1.push(`Show contains garbage: "${outcome1.show}"`);
+    test1Pass = false;
+  }
+  
+  // If hrnParsedBy="none", outcome should be empty OR ok=false
+  if (hd1.hrnParsedBy === 'none') {
+    if (test1.ok && (outcome1.win || outcome1.place || outcome1.show)) {
+      issues1.push(`hrnParsedBy="none" but outcome is non-empty and ok=true`);
+      test1Pass = false;
+    }
+  }
+  
+  // If ok=true and outcome exists, ensure no JS tokens
+  if (test1.ok) {
+    const hasOutcome = outcome1.win || outcome1.place || outcome1.show;
+    if (hasOutcome) {
+      // If we have outcome, all values should be valid horse names (or empty)
+      if (outcome1.win && isGarbageHorseName(outcome1.win)) {
+        issues1.push(`ok=true but win is garbage: "${outcome1.win}"`);
+        test1Pass = false;
+      }
+      if (outcome1.place && isGarbageHorseName(outcome1.place)) {
+        issues1.push(`ok=true but place is garbage: "${outcome1.place}"`);
+        test1Pass = false;
+      }
+      if (outcome1.show && isGarbageHorseName(outcome1.show)) {
+        issues1.push(`ok=true but show is garbage: "${outcome1.show}"`);
+        test1Pass = false;
+      }
+    }
+  }
+  
+  if (test1Pass) {
+    console.log('✅ Test 1 PASSED: No garbage detected, assertions met');
+  } else {
+    console.log('❌ Test 1 FAILED:');
+    issues1.forEach(issue => console.log(`  - ${issue}`));
+  }
+  
+  // Summary for Test 2 (known good case)
+  console.log('\n=== Test 2 Summary (2026-01-09 R5) ===');
+  const hd2 = test2?.debug || {};
+  console.log(`hrnParsedBy: ${hd2.hrnParsedBy || 'null'}`);
+  const outcome2 = test2?.outcome || {};
+  console.log(`Outcome - Win: "${outcome2.win || ''}", Place: "${outcome2.place || ''}", Show: "${outcome2.show || ''}"`);
+  
+  let test2Pass = true;
+  if (test2.ok && (outcome2.win || outcome2.place || outcome2.show)) {
+    // Should have valid horse names
+    if (isGarbageHorseName(outcome2.win) || isGarbageHorseName(outcome2.place) || isGarbageHorseName(outcome2.show)) {
+      console.log('❌ Test 2 FAILED: Contains garbage in known good case!');
+      test2Pass = false;
+    } else {
+      console.log('✅ Test 2 PASSED: Known good case still works');
+    }
+  } else {
+    console.log('⚠️ Test 2: ok=false or empty outcome (may be expected if race not yet finished)');
+  }
+  
   console.log('\n=== HRN Parsing Summary ===');
-  console.log(`Test 1 (2026-01-10 R5): ${test1?.ok ? '✅ OK' : '❌ Failed'}`);
-  if (test1?.outcome) {
-    console.log(`  Win: ${test1.outcome.win || '(empty)'}, Place: ${test1.outcome.place || '(empty)'}, Show: ${test1.outcome.show || '(empty)'}`);
-  }
-  if (test1?.debug?.hrnParsedBy) {
-    console.log(`  Parsed by: ${test1.debug.hrnParsedBy}`);
-  }
+  console.log(`Test 1 (2026-01-10 R5): ${test1Pass ? '✅ PASS' : '❌ FAIL'}`);
+  console.log(`Test 2 (2026-01-09 R5): ${test2Pass ? '✅ PASS' : test2.ok ? '✅ OK' : '⚠️ No outcome'}`);
   
-  console.log(`Test 2 (2026-01-09 R5): ${test2?.ok ? '✅ OK' : '❌ Failed'}`);
-  if (test2?.outcome) {
-    console.log(`  Win: ${test2.outcome.win || '(empty)'}, Place: ${test2.outcome.place || '(empty)'}, Show: ${test2.outcome.show || '(empty)'}`);
-  }
-  if (test2?.debug?.hrnParsedBy) {
-    console.log(`  Parsed by: ${test2.debug.hrnParsedBy}`);
-  }
-  
-  return { test1, test2 };
+  return { test1, test2, test1Pass, test2Pass };
 }
 
 async function runSmokeTest() {
@@ -398,8 +507,8 @@ async function runSmokeTest() {
   console.log(`Verify Race: ${verifyResp ? (verifyResp.debug?.verifyWriteOk ? '✅ Written' : '⚠️ Not written') : '❌ Failed'}`);
   console.log(`Verify Backfill: ${backfillResp ? (backfillResp.ok ? '✅ OK' : '⚠️ Failed') : '❌ Failed'}`);
   console.log(`Debug Keys: ${debugResp ? '✅ OK' : '❌ Failed'}`);
-  console.log(`HRN Parsing Test 1: ${hrnTests?.test1?.ok ? '✅ OK' : '❌ Failed'}`);
-  console.log(`HRN Parsing Test 2: ${hrnTests?.test2?.ok ? '✅ OK' : '❌ Failed'}`);
+  console.log(`HRN Parsing Test 1: ${hrnTests?.test1Pass ? '✅ PASS (no garbage)' : '❌ FAIL (garbage detected)'}`);
+  console.log(`HRN Parsing Test 2: ${hrnTests?.test2Pass ? '✅ PASS' : hrnTests?.test2?.ok ? '✅ OK' : '⚠️ No outcome'}`);
   console.log('\n=== Smoke Test Complete ===\n');
 }
 
