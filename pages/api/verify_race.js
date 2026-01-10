@@ -1985,11 +1985,6 @@ export default async function handler(req, res) {
     let canonicalDateIso = canonicalizeDateFromClient(uiDateRaw);
     
     // Note: PayGate check already performed at top of handler - bypassedPayGate flag is set there
-    } else {
-      // Internal request - bypass PayGate
-      bypassedPayGate = true;
-      console.log('[verify_race] Internal request detected - PayGate bypassed');
-    }
 
     // Extract raceNo early - needed for error responses and manual verify branch
     const raceNo = (body.raceNo || body.race || "").toString().trim() || "";
