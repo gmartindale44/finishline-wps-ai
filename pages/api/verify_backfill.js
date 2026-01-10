@@ -14,7 +14,7 @@ export const config = {
 };
 
 // Import Redis helpers for skip logic
-import { verifyLogExists } from "../../utils/finishline/backfill_helpers.js";
+import { verifyLogExists, buildRaceId, buildVerifyKey } from "../../utils/finishline/backfill_helpers.js";
 
 const DEFAULT_MAX_RACES = 10;
 const HARD_MAX_RACES = 50;
@@ -360,20 +360,68 @@ export default async function handler(req, res) {
       });
     }
   } else {
+    // Helper to normalize date to YYYY-MM-DD format (matches buildRaceId in backfill_helpers.js)
+    function normalizeDateToIso(dateStr) {
+      if (!dateStr) return "";
+      const s = String(dateStr).trim();
+      
+      // Already ISO (YYYY-MM-DD)
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+        return s;
+      }
+      
+      // MM/DD/YYYY -> YYYY-MM-DD
+      const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (m) {
+        const mm = m[1].padStart(2, "0");
+        const dd = m[2].padStart(2, "0");
+        const yyyy = m[3];
+        return `${yyyy}-${mm}-${dd}`;
+      }
+      
+      // Try parsing as Date (last resort, but be defensive)
+      try {
+        const parsed = new Date(s);
+        if (!isNaN(parsed.getTime())) {
+          return parsed.toISOString().slice(0, 10);
+        }
+      } catch {}
+      
+      // If we can't normalize, return empty string (will cause buildRaceId to handle it)
+      return "";
+    }
+
     // Check Redis for existing verify logs before calling /api/verify_race
     for (const race of races) {
       let shouldSkip = false;
       let skipReason = null;
+      let verifiedRedisKeyChecked = null;
+      let verifiedRedisKeyExists = false;
+      let raceIdDerived = null;
 
       try {
+        // Normalize date to YYYY-MM-DD format (CRITICAL: must match buildRaceId normalization)
+        const normalizedDate = normalizeDateToIso(race.dateIso || race.date);
+        
+        // Build raceId using the same logic as verify_race.js buildVerifyRaceId
+        // This ensures exact same normalization as verify_race uses when writing keys
+        raceIdDerived = buildRaceId(race.track, normalizedDate, race.raceNo);
+        
+        // Build the Redis key (format: fl:verify:{raceId})
+        // raceId format: track-date-unknown-r{raceNo} (includes raceNo to prevent collisions)
+        verifiedRedisKeyChecked = buildVerifyKey(raceIdDerived);
+        
         // Check if this race already has a verify log in Redis
+        // IMPORTANT: Pass normalized date to ensure key matches exactly
         const exists = await verifyLogExists({
           track: race.track,
-          date: race.dateIso || race.date,
-          dateIso: race.dateIso || race.date,
+          date: normalizedDate, // Use normalized date
+          dateIso: normalizedDate,
           dateRaw: race.dateRaw,
           raceNo: race.raceNo,
         });
+        
+        verifiedRedisKeyExists = exists;
 
         if (exists) {
           shouldSkip = true;
@@ -397,12 +445,22 @@ export default async function handler(req, res) {
           outcome: null,
           hits: null,
           networkError: null,
+          // Debug fields for skip verification (safe to expose)
+          verifiedRedisKeyChecked: verifiedRedisKeyChecked || null,
+          verifiedRedisKeyExists: verifiedRedisKeyExists,
+          raceIdDerived: raceIdDerived || null,
         });
       } else {
         // Call /api/verify_race as normal (it will write to Redis)
         // Wrap in try/catch to ensure one race failure doesn't break the batch
         try {
           const result = await callVerifyRace(baseUrl, race);
+          // Add debug fields even for non-skipped results (for troubleshooting)
+          if (raceIdDerived || verifiedRedisKeyChecked) {
+            result.raceIdDerived = raceIdDerived || null;
+            result.verifiedRedisKeyChecked = verifiedRedisKeyChecked || null;
+            result.verifiedRedisKeyExists = verifiedRedisKeyExists;
+          }
           results.push(result);
         } catch (err) {
           // If callVerifyRace itself throws (shouldn't happen, but be defensive), log and continue
@@ -452,6 +510,10 @@ export default async function handler(req, res) {
     error: r.error || null, // Include structured error from verify_race
     bypassedPayGate: r.bypassedPayGate || false,
     verifyRaceOk: r.verifyRaceOk !== undefined ? r.verifyRaceOk : null, // Debug: verify_race.ok value
+    // Debug fields for skip verification (safe to expose - no secrets)
+    verifiedRedisKeyChecked: r.verifiedRedisKeyChecked || null,
+    verifiedRedisKeyExists: r.verifiedRedisKeyExists !== undefined ? r.verifiedRedisKeyExists : null,
+    raceIdDerived: r.raceIdDerived || null,
   }));
 
   // Check if any race bypassed PayGate (for debug visibility)

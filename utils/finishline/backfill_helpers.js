@@ -65,7 +65,34 @@ export function buildRaceId(track, date, raceNo) {
  * @returns {string} - Race ID matching verify_race format
  */
 export function buildVerifyRaceIdFromContext(ctx) {
-  const date = ctx.date || ctx.dateIso || ctx.dateRaw || "";
+  // Normalize date to YYYY-MM-DD format (matches buildRaceId expectation)
+  // This ensures keys match exactly between verify_race and verify_backfill
+  let date = ctx.date || ctx.dateIso || ctx.dateRaw || "";
+  
+  // If date is not in YYYY-MM-DD format, try to normalize it
+  if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    // Try MM/DD/YYYY -> YYYY-MM-DD
+    const m = String(date).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (m) {
+      const mm = m[1].padStart(2, "0");
+      const dd = m[2].padStart(2, "0");
+      const yyyy = m[3];
+      date = `${yyyy}-${mm}-${dd}`;
+    } else {
+      // Try parsing as Date (last resort)
+      try {
+        const parsed = new Date(date);
+        if (!isNaN(parsed.getTime())) {
+          date = parsed.toISOString().slice(0, 10);
+        } else {
+          date = ""; // Invalid date - buildRaceId will handle it
+        }
+      } catch {
+        date = ""; // Parse error - buildRaceId will handle it
+      }
+    }
+  }
+  
   return buildRaceId(ctx.track, date, ctx.raceNo);
 }
 
@@ -189,9 +216,13 @@ export async function fetchTrackDays(track) {
  * Check if a verify result already exists in Redis
  * Accepts either a context object or individual track/date/raceNo parameters
  * @param {object|string} ctxOrRaceId - Context object {track, date/dateIso/dateRaw, raceNo} OR a raceId string
- * @param {string} [date] - Date (if ctxOrRaceId is track string)
+ * @param {string} [date] - Date (if ctxOrRaceId is track string) - should be YYYY-MM-DD format
  * @param {string} [raceNo] - Race number (if ctxOrRaceId is track string)
  * @returns {Promise<boolean>} - true if verify log exists, false otherwise
+ * 
+ * IMPORTANT: The date parameter (or ctx.date/dateIso) must be in YYYY-MM-DD format.
+ * If not normalized, it will be normalized to empty string by buildRaceId, causing key collisions.
+ * RaceNo is ALWAYS included in the key format: track-date-unknown-r{raceNo}
  */
 export async function verifyLogExists(ctxOrRaceId, date, raceNo) {
   const redis = getRedis();
@@ -204,13 +235,35 @@ export async function verifyLogExists(ctxOrRaceId, date, raceNo) {
     // If first param is a string, treat it as raceId (or track if date/raceNo provided)
     if (date && raceNo) {
       // ctxOrRaceId is track, date and raceNo are separate params
-      raceId = buildRaceId(ctxOrRaceId, date, raceNo);
+      // Normalize date if not already YYYY-MM-DD
+      let normalizedDate = date;
+      if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        const m = String(date).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+        if (m) {
+          const mm = m[1].padStart(2, "0");
+          const dd = m[2].padStart(2, "0");
+          const yyyy = m[3];
+          normalizedDate = `${yyyy}-${mm}-${dd}`;
+        } else {
+          try {
+            const parsed = new Date(date);
+            if (!isNaN(parsed.getTime())) {
+              normalizedDate = parsed.toISOString().slice(0, 10);
+            } else {
+              normalizedDate = ""; // Invalid - buildRaceId will handle it
+            }
+          } catch {
+            normalizedDate = "";
+          }
+        }
+      }
+      raceId = buildRaceId(ctxOrRaceId, normalizedDate, raceNo);
     } else {
       // ctxOrRaceId is already a raceId
       raceId = ctxOrRaceId;
     }
   } else if (ctxOrRaceId && typeof ctxOrRaceId === "object") {
-    // ctxOrRaceId is a context object
+    // ctxOrRaceId is a context object - buildVerifyRaceIdFromContext handles date normalization
     raceId = buildVerifyRaceIdFromContext(ctxOrRaceId);
   } else {
     return false;
