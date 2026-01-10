@@ -875,14 +875,90 @@ async function tryEquibaseFallback(track, dateIso, raceNo, baseDebug = {}) {
 }
 
 /**
+ * Fetch with retry logic and browser-like headers (for anti-bot evasion)
+ * @param {string} url - URL to fetch
+ * @param {object} options - Fetch options
+ * @param {number} maxRetries - Maximum retry attempts (default: 3)
+ * @returns {Promise<Response>}
+ */
+async function fetchWithRetry(url, options = {}, maxRetries = 3) {
+  const retryableStatuses = [403, 429, 503, 502, 504];
+  const backoffs = [500, 1500, 3000]; // ms delays
+  
+  // Browser-like headers to avoid anti-bot detection
+  const browserHeaders = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Referer": "https://www.google.com/",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "cross-site",
+    "Sec-Fetch-User": "?1",
+    "Upgrade-Insecure-Requests": "1",
+    ...options.headers,
+  };
+
+  let lastError = null;
+  let lastResponse = null;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers: browserHeaders,
+      });
+
+      // If successful or non-retryable error, return immediately
+      if (response.ok || !retryableStatuses.includes(response.status)) {
+        return response;
+      }
+
+      // Store response for retryable errors
+      lastResponse = response;
+
+      // If this is the last attempt, return the failed response
+      if (attempt === maxRetries - 1) {
+        return response;
+      }
+
+      // Wait before retrying (exponential backoff)
+      const delay = backoffs[Math.min(attempt, backoffs.length - 1)];
+      await new Promise(resolve => setTimeout(resolve, delay));
+
+    } catch (err) {
+      lastError = err;
+
+      // If this is the last attempt, re-throw
+      if (attempt === maxRetries - 1) {
+        throw err;
+      }
+
+      // Wait before retrying
+      const delay = backoffs[Math.min(attempt, backoffs.length - 1)];
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+
+  // Should never reach here, but handle edge case
+  if (lastResponse) return lastResponse;
+  if (lastError) throw lastError;
+  throw new Error("fetchWithRetry: unexpected state");
+}
+
+/**
  * Try HRN fallback - attempts to fetch and parse HRN entries-results page
  * @param {string} track - Track name
  * @param {string} dateIso - ISO date (YYYY-MM-DD)
  * @param {object} baseDebug - Existing debug object (may contain googleHtml)
- * @returns {{ outcome: object|null, debugExtras: object }}
+ * @returns {{ outcome: object|null, debugExtras: object, httpStatus: number|null }}
  */
 async function tryHrnFallback(track, dateIso, raceNo, baseDebug = {}) {
   const debugExtras = {};
+  let httpStatus = null;
+  let urlAttempted = null;
+  
   try {
     debugExtras.hrnAttempted = true;
     debugExtras.hrnRaceNo = (raceNo !== null && raceNo !== undefined) ? String(raceNo || "").trim() : null;
@@ -890,24 +966,25 @@ async function tryHrnFallback(track, dateIso, raceNo, baseDebug = {}) {
     const hrnUrlFromGoogle = baseDebug.googleHtml ? extractHrnUrlFromGoogleHtml(baseDebug.googleHtml) : null;
     const hrnUrl = hrnUrlFromGoogle || buildHrnUrl(track, dateIso);
     debugExtras.hrnUrl = hrnUrl || null;
+    urlAttempted = hrnUrl;
 
     if (!hrnUrl) {
       debugExtras.hrnParseError = "No HRN URL available";
-      return { outcome: null, debugExtras };
+      return { outcome: null, debugExtras, httpStatus: null };
     }
 
-    const res = await fetch(hrnUrl, {
+    // Use fetchWithRetry with browser-like headers and retry logic
+    const res = await fetchWithRetry(hrnUrl, {
       method: "GET",
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (compatible; FinishLineBot/1.0; +https://finishline-wps-ai.vercel.app)",
-        "Accept-Language": "en-US,en;q=0.9",
-      },
-    });
+    }, 3);
+
+    httpStatus = res.status;
+    debugExtras.hrnHttpStatus = httpStatus;
 
     if (!res.ok) {
-      debugExtras.hrnParseError = `HTTP ${res.status}`;
-      return { outcome: null, debugExtras };
+      const statusText = res.statusText || "";
+      debugExtras.hrnParseError = `HTTP ${httpStatus}${statusText ? ` ${statusText}` : ""} from HRN (blocked or unavailable)`;
+      return { outcome: null, debugExtras, httpStatus, urlAttempted };
     }
 
     const html = await res.text();
@@ -915,13 +992,14 @@ async function tryHrnFallback(track, dateIso, raceNo, baseDebug = {}) {
     
     if (!outcome || (!outcome.win && !outcome.place && !outcome.show)) {
       debugExtras.hrnParseError = "No outcome parsed from HRN HTML";
-      return { outcome: null, debugExtras };
+      return { outcome: null, debugExtras, httpStatus, urlAttempted };
     }
 
-    return { outcome, debugExtras };
+    return { outcome, debugExtras, httpStatus: 200, urlAttempted };
   } catch (err) {
-    debugExtras.hrnParseError = String(err && err.message ? err.message : err);
-    return { outcome: null, debugExtras };
+    const errorMsg = err && typeof err.message === "string" ? err.message : String(err || "Unknown error");
+    debugExtras.hrnParseError = `Fetch error: ${errorMsg}`;
+    return { outcome: null, debugExtras, httpStatus, urlAttempted };
   }
 }
 
@@ -2324,8 +2402,38 @@ export default async function handler(req, res) {
         // Try HRN fallback if we have track and date
         if (track && canonicalDateIso) {
           const canonicalRaceNo = String(raceNo || "").trim();
-          const { outcome: hrnOutcome, debugExtras: hrnDebug } = await tryHrnFallback(track, canonicalDateIso, canonicalRaceNo, fallbackResult.debug);
+          const { outcome: hrnOutcome, debugExtras: hrnDebug, httpStatus: hrnHttpStatus, urlAttempted: hrnUrlAttempted } = await tryHrnFallback(track, canonicalDateIso, canonicalRaceNo, fallbackResult.debug);
           fallbackResult.debug = { ...fallbackResult.debug, ...hrnDebug };
+
+          // If HRN fetch was blocked (403/429), return structured error
+          if (hrnHttpStatus === 403 || hrnHttpStatus === 429) {
+            return res.status(200).json({
+              ok: false,
+              step: "fetch_results",
+              httpStatus: hrnHttpStatus,
+              error: `${hrnHttpStatus} from HRN (blocked)`,
+              urlAttempted: hrnUrlAttempted || hrnDebug?.hrnUrl || null,
+              date: canonicalDateIso,
+              track: track || "",
+              raceNo: canonicalRaceNo || "",
+              query: fallbackResult.query || "",
+              top: null,
+              outcome: { win: "", place: "", show: "" },
+              predicted: fallbackResult.predicted || predictedFromClient,
+              hits: {
+                winHit: false,
+                placeHit: false,
+                showHit: false,
+                top3Hit: false,
+              },
+              summary: `HRN fetch blocked (HTTP ${hrnHttpStatus}). Results unavailable.`,
+              debug: fallbackResult.debug,
+              responseMeta: {
+                handlerFile: HANDLER_FILE,
+                backendVersion: BACKEND_VERSION,
+              },
+            });
+          }
 
           if (hrnOutcome) {
             // Check for mismatch before accepting HRN outcome
@@ -2537,8 +2645,46 @@ export default async function handler(req, res) {
       // Try HRN fallback if we have track and date
       if (track && canonicalDateIso) {
         const canonicalRaceNo = String(raceNo || "").trim();
-        const { outcome: hrnOutcome, debugExtras: hrnDebug } = await tryHrnFallback(track, canonicalDateIso, canonicalRaceNo, fallbackStub.debug);
+        const { outcome: hrnOutcome, debugExtras: hrnDebug, httpStatus: hrnHttpStatus, urlAttempted: hrnUrlAttempted } = await tryHrnFallback(track, canonicalDateIso, canonicalRaceNo, fallbackStub.debug);
         fallbackStub.debug = { ...fallbackStub.debug, ...hrnDebug };
+
+        // If HRN fetch was blocked (403/429), return structured error
+        if (hrnHttpStatus === 403 || hrnHttpStatus === 429) {
+          await logVerifyResult({
+            ...fallbackStub,
+            ok: false,
+            step: "fetch_results",
+            httpStatus: hrnHttpStatus,
+            error: `${hrnHttpStatus} from HRN (blocked)`,
+            urlAttempted: hrnUrlAttempted || hrnDebug?.hrnUrl || null,
+          });
+          return res.status(200).json({
+            ok: false,
+            step: "fetch_results",
+            httpStatus: hrnHttpStatus,
+            error: `${hrnHttpStatus} from HRN (blocked)`,
+            urlAttempted: hrnUrlAttempted || hrnDebug?.hrnUrl || null,
+            date: canonicalDateIso,
+            track: track || "",
+            raceNo: canonicalRaceNo || "",
+            query: fallbackStub.query || "",
+            top: null,
+            outcome: { win: "", place: "", show: "" },
+            predicted: fallbackStub.predicted || predictedFromClient,
+            hits: {
+              winHit: false,
+              placeHit: false,
+              showHit: false,
+              top3Hit: false,
+            },
+            summary: `HRN fetch blocked (HTTP ${hrnHttpStatus}). Results unavailable.`,
+            debug: fallbackStub.debug,
+            responseMeta: {
+              handlerFile: HANDLER_FILE,
+              backendVersion: BACKEND_VERSION,
+            },
+          });
+        }
 
         if (hrnOutcome) {
           fallbackStub.outcome = hrnOutcome;
@@ -2649,8 +2795,46 @@ export default async function handler(req, res) {
       // Try HRN fallback if we have track and date
       if (track && canonicalDateIso) {
         const canonicalRaceNo = String(raceNo || "").trim();
-        const { outcome: hrnOutcome, debugExtras: hrnDebug } = await tryHrnFallback(track, canonicalDateIso, canonicalRaceNo, errorStub.debug);
+        const { outcome: hrnOutcome, debugExtras: hrnDebug, httpStatus: hrnHttpStatus, urlAttempted: hrnUrlAttempted } = await tryHrnFallback(track, canonicalDateIso, canonicalRaceNo, errorStub.debug);
         errorStub.debug = { ...errorStub.debug, ...hrnDebug };
+
+        // If HRN fetch was blocked (403/429), return structured error
+        if (hrnHttpStatus === 403 || hrnHttpStatus === 429) {
+          await logVerifyResult({
+            ...errorStub,
+            ok: false,
+            step: "fetch_results",
+            httpStatus: hrnHttpStatus,
+            error: `${hrnHttpStatus} from HRN (blocked)`,
+            urlAttempted: hrnUrlAttempted || hrnDebug?.hrnUrl || null,
+          });
+          return res.status(200).json({
+            ok: false,
+            step: "fetch_results",
+            httpStatus: hrnHttpStatus,
+            error: `${hrnHttpStatus} from HRN (blocked)`,
+            urlAttempted: hrnUrlAttempted || hrnDebug?.hrnUrl || null,
+            date: canonicalDateIso,
+            track: track || "",
+            raceNo: canonicalRaceNo || "",
+            query: errorStub.query || "",
+            top: null,
+            outcome: { win: "", place: "", show: "" },
+            predicted: errorStub.predicted || predictedFromClient,
+            hits: {
+              winHit: false,
+              placeHit: false,
+              showHit: false,
+              top3Hit: false,
+            },
+            summary: `HRN fetch blocked (HTTP ${hrnHttpStatus}). Results unavailable.`,
+            debug: errorStub.debug,
+            responseMeta: {
+              handlerFile: HANDLER_FILE,
+              backendVersion: BACKEND_VERSION,
+            },
+          });
+        }
 
         if (hrnOutcome) {
           errorStub.outcome = hrnOutcome;

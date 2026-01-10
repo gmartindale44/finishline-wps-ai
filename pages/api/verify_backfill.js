@@ -198,6 +198,7 @@ async function callVerifyRace(baseUrl, race) {
   let responseJson = null;
   let httpStatus = 0;
   let networkError = null;
+  let error = null;
 
   try {
     const res = await fetch(url, {
@@ -212,6 +213,14 @@ async function callVerifyRace(baseUrl, race) {
 
     try {
       responseJson = await res.json();
+      // Extract error details from response JSON (even if httpStatus is 200, responseJson.ok might be false)
+      if (responseJson && typeof responseJson === "object") {
+        error = responseJson.error || responseJson.message || null;
+        // If response has httpStatus field (e.g., from HRN 403), use that for visibility
+        if (typeof responseJson.httpStatus === "number") {
+          httpStatus = responseJson.httpStatus;
+        }
+      }
     } catch {
       responseJson = null;
     }
@@ -234,6 +243,7 @@ async function callVerifyRace(baseUrl, race) {
     ok,
     httpStatus,
     networkError,
+    error: error || networkError || null,
     step: responseJson?.step || null,
     outcome: responseJson?.outcome || null,
     hits: responseJson?.hits || null,
@@ -373,8 +383,25 @@ export default async function handler(req, res) {
         });
       } else {
         // Call /api/verify_race as normal (it will write to Redis)
-        const result = await callVerifyRace(baseUrl, race);
-        results.push(result);
+        // Wrap in try/catch to ensure one race failure doesn't break the batch
+        try {
+          const result = await callVerifyRace(baseUrl, race);
+          results.push(result);
+        } catch (err) {
+          // If callVerifyRace itself throws (shouldn't happen, but be defensive), log and continue
+          console.error(`[verify_backfill] Error calling verify_race for race ${race.track} ${race.dateIso} ${race.raceNo}:`, err);
+          results.push({
+            race,
+            ok: false,
+            httpStatus: 0,
+            networkError: err?.message || String(err || "Unknown error"),
+            error: err?.message || String(err || "Unknown error"),
+            step: "verify_backfill_error",
+            outcome: null,
+            hits: null,
+            raw: null,
+          });
+        }
       }
     }
   }
@@ -399,8 +426,12 @@ export default async function handler(req, res) {
     outcome: r.outcome,
     hits: r.hits,
     networkError: r.networkError || null,
+    error: r.error || null, // Include structured error from verify_race
   }));
 
+  // Always return HTTP 200 (never hard-fail the batch)
+  // Let UI decide based on ok flag and failures count
+  // ok = true if all races succeeded, false if any failed (but still return 200)
   return res.status(200).json({
     ok: failures === 0 && networkFailures === 0,
     step: "verify_backfill",
@@ -414,5 +445,7 @@ export default async function handler(req, res) {
     processed,
     sampleLimit: sampleSize,
     results: sample,
+    // Include first failure details for UI error display
+    firstFailure: failures > 0 || networkFailures > 0 ? (results.find(r => !r.ok && !r.skipped) || null) : null,
   });
 }

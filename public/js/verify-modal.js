@@ -1119,13 +1119,40 @@ async function refreshGreenZone(host, ctx) {
 
           console.log("[verify_backfill] response", json);
           
-          // Optional: show summary in console or UI
+          // Show summary in console or UI with real error details
           if (json.ok && json.count > 0) {
-            console.log(`[verify_backfill] Completed for ${json.count} race(s)`);
+            console.log(`[verify_backfill] Completed for ${json.count} race(s): ${json.successes} succeeded, ${json.failures} failed, ${json.networkFailures} network errors`);
           } else if (!json.ok) {
-            console.warn("[verify_backfill] Failed:", json.message || "Unknown error");
-            if (json.debug) {
-              console.warn("[verify_backfill] Debug:", json.debug);
+            // Extract error details from first failure
+            const firstFailure = json.firstFailure || json.results?.[0];
+            const errorMsg = firstFailure?.error || firstFailure?.networkError || json.message || "Unknown error";
+            const httpStatus = firstFailure?.httpStatus || null;
+            const step = firstFailure?.step || json.step || "unknown";
+            
+            const fullErrorMsg = httpStatus 
+              ? `Backfill failed (HTTP ${httpStatus}) at ${step}: ${errorMsg}`
+              : `Backfill failed at ${step}: ${errorMsg}`;
+            
+            console.warn("[verify_backfill] Failed:", {
+              ok: json.ok,
+              count: json.count,
+              successes: json.successes,
+              failures: json.failures,
+              networkFailures: json.networkFailures,
+              firstFailure: firstFailure,
+              error: errorMsg,
+              httpStatus: httpStatus,
+              step: step,
+            });
+            
+            // Show error message to user (try showToast, fallback to alert)
+            if (typeof showToast === 'function') {
+              showToast(fullErrorMsg, 'error');
+            } else if (typeof window !== 'undefined' && typeof window.showToast === 'function') {
+              window.showToast(fullErrorMsg, 'error');
+            } else {
+              // Fallback to alert or console
+              alert(fullErrorMsg);
             }
           }
           
