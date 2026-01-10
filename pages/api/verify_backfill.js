@@ -246,13 +246,58 @@ async function callVerifyRace(baseUrl, race) {
   // Success criteria: verify_race returned ok === true
   // Hits (winHit/placeHit/showHit), outcome accuracy, ROI, etc. are analytics only and do NOT affect success/failure
   // A verification is successful if the API call succeeded (HTTP 200) AND verify_race.ok === true
-  const verifyRaceOk = responseJson && typeof responseJson === "object" && responseJson.ok === true;
+  
+  // CRITICAL: Defensively coerce ok to boolean to prevent type corruption bugs
+  // If responseJson.ok is not boolean (e.g., corrupted to string), treat as failure and log error
+  let responseOk = null;
+  let okTypeError = null;
+  
+  if (responseJson && typeof responseJson === "object") {
+    const rawOk = responseJson.ok;
+    if (typeof rawOk === "boolean") {
+      responseOk = rawOk;
+    } else if (rawOk === "true" || rawOk === true || rawOk === 1) {
+      // Coerce truthy string/number to boolean true
+      responseOk = true;
+      okTypeError = `ok was coerced from ${typeof rawOk} to boolean (value: ${JSON.stringify(rawOk)})`;
+      console.warn(`[verify_backfill] Type corruption detected: responseJson.ok is ${typeof rawOk} (${JSON.stringify(rawOk)}), coercing to boolean`);
+    } else if (rawOk === "false" || rawOk === false || rawOk === 0 || rawOk === null || rawOk === undefined) {
+      // Coerce falsy string/number/null/undefined to boolean false
+      responseOk = false;
+      okTypeError = `ok was coerced from ${typeof rawOk} to boolean (value: ${JSON.stringify(rawOk)})`;
+      if (typeof rawOk !== "boolean") {
+        console.warn(`[verify_backfill] Type corruption detected: responseJson.ok is ${typeof rawOk} (${JSON.stringify(rawOk)}), coercing to boolean false`);
+      }
+    } else {
+      // Unexpected type (e.g., string like "Flamingproposition") - treat as failure
+      responseOk = false;
+      okTypeError = `ok is invalid type ${typeof rawOk} with value ${JSON.stringify(rawOk)} - treating as false`;
+      console.error(`[verify_backfill] CRITICAL: responseJson.ok is corrupted to ${typeof rawOk} with value ${JSON.stringify(rawOk)} - treating as false`);
+    }
+  }
+  
+  const verifyRaceOk = responseOk === true;
   const ok = !networkError && httpStatus === 200 && verifyRaceOk;
   
   // For visibility: include responseJson.httpStatus if present (e.g., HRN 403), but don't use for success check
   const responseHttpStatus = (responseJson && typeof responseJson === "object" && typeof responseJson.httpStatus === "number") 
     ? responseJson.httpStatus 
     : null;
+  
+  // CRITICAL: Sanitize raw responseJson to ensure ok is boolean (prevent corruption in raw field)
+  let sanitizedRaw = null;
+  if (responseJson && typeof responseJson === "object") {
+    sanitizedRaw = { ...responseJson };
+    // Force ok to be boolean in sanitized copy
+    sanitizedRaw.ok = responseOk !== null ? responseOk : false;
+    if (okTypeError) {
+      // Add debug field to show type corruption was detected
+      if (!sanitizedRaw.debug) sanitizedRaw.debug = {};
+      sanitizedRaw.debug.okTypeError = okTypeError;
+      sanitizedRaw.debug.okOriginalType = typeof responseJson.ok;
+      sanitizedRaw.debug.okOriginalValue = responseJson.ok;
+    }
+  }
 
   return {
     race,
@@ -260,13 +305,14 @@ async function callVerifyRace(baseUrl, race) {
     httpStatus, // Actual HTTP status from fetch response (preserved for success check)
     responseHttpStatus, // Optional: responseJson.httpStatus for visibility (e.g., HRN 403) - analytics only
     networkError,
-    error: error || networkError || null,
+    error: error || networkError || (okTypeError ? `ok_not_boolean: ${okTypeError}` : null) || null,
     step: responseJson?.step || null,
     outcome: responseJson?.outcome || null,
     hits: responseJson?.hits || null, // Analytics only - do NOT use for success/failure
-    raw: responseJson || null,
+    raw: sanitizedRaw || responseJson || null, // Use sanitized copy with boolean ok
     bypassedPayGate: responseJson?.bypassedPayGate || responseJson?.responseMeta?.bypassedPayGate || false,
     verifyRaceOk: verifyRaceOk, // Explicit flag: verify_race.ok === true (for debugging)
+    okTypeError: okTypeError || null, // Debug: type corruption detected
   };
 }
 

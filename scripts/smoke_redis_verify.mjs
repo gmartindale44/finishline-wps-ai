@@ -112,9 +112,15 @@ async function testVerifyRace(track = TEST_RACE.track, date = TEST_RACE.date, ra
   }
 
   console.log(`HTTP ${status}`);
-  console.log(`OK: ${json?.ok}`);
+  console.log(`OK: ${json?.ok} (type: ${typeof json?.ok})`);
   console.log(`Step: ${json?.step || 'N/A'}`);
   console.log(`Source: ${json?.debug?.source || 'N/A'}`);
+  
+  // CRITICAL: Assert ok is always boolean (regression test for type corruption bug)
+  if (json && typeof json.ok !== 'boolean') {
+    console.error(`❌ CRITICAL TYPE CORRUPTION: ok is ${typeof json.ok} (value: ${JSON.stringify(json.ok)}) - should be boolean!`);
+    return { ...json, _typeError: `ok is ${typeof json.ok} instead of boolean` };
+  }
   
   if (json?.outcome) {
     console.log('\nOutcome:');
@@ -200,10 +206,28 @@ async function testVerifyBackfill() {
   }
 
   console.log(`HTTP ${status}`);
-  console.log(`OK: ${json?.ok}`);
+  console.log(`OK: ${json?.ok} (type: ${typeof json?.ok})`);
   console.log(`Successes: ${json?.successes || 0}`);
   console.log(`Failures: ${json?.failures || 0}`);
   console.log(`Skipped: ${json?.skipped || 0}`);
+  
+  // CRITICAL: Assert ok is always boolean (regression test for type corruption bug)
+  if (json && typeof json.ok !== 'boolean') {
+    console.error(`❌ CRITICAL TYPE CORRUPTION: verify_backfill ok is ${typeof json.ok} (value: ${JSON.stringify(json.ok)}) - should be boolean!`);
+  }
+  
+  // CRITICAL: Check firstFailure.raw.ok if it exists (this is where the bug was reported)
+  if (json?.firstFailure?.raw?.ok !== undefined) {
+    const rawOk = json.firstFailure.raw.ok;
+    const rawOkType = typeof rawOk;
+    console.log(`\nFirst Failure Raw OK: ${JSON.stringify(rawOk)} (type: ${rawOkType})`);
+    if (rawOkType !== 'boolean') {
+      console.error(`❌ CRITICAL TYPE CORRUPTION: firstFailure.raw.ok is ${rawOkType} (value: ${JSON.stringify(rawOk)}) - should be boolean!`);
+      console.error(`   This is the exact bug reported: ok corrupted to string "${rawOk}"`);
+    } else {
+      console.log(`✅ firstFailure.raw.ok is correctly boolean`);
+    }
+  }
   
   if (json?.debug) {
     console.log('\nTop-Level Debug:');
@@ -226,7 +250,11 @@ async function testVerifyBackfill() {
   if (json?.results && json.results.length > 0) {
     const r = json.results[0];
     console.log('\nFirst Result:');
-    console.log(`  OK: ${r.ok}`);
+    console.log(`  OK: ${r.ok} (type: ${typeof r.ok})`);
+    // CRITICAL: Assert result ok is always boolean
+    if (typeof r.ok !== 'boolean') {
+      console.error(`❌ CRITICAL TYPE CORRUPTION: result.ok is ${typeof r.ok} (value: ${JSON.stringify(r.ok)}) - should be boolean!`);
+    }
     console.log(`  Skipped: ${r.skipped || false}`);
     console.log(`  verifyKeyChecked: ${r.verifyKeyChecked || 'null'}`);
     console.log(`  verifyKeyExists: ${r.verifyKeyExists !== undefined ? r.verifyKeyExists : 'null'}`);

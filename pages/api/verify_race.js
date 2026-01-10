@@ -1995,6 +1995,25 @@ function extractOutcomeFromGoogleHtml(html) {
  * This is the default behavior when VERIFY_RACE_MODE is not set to "full"
  * Now enhanced to fetch and parse Google HTML for Win/Place/Show
  */
+/**
+ * Sanitize response object to ensure ok is always boolean
+ * CRITICAL: Prevents type corruption bugs where ok might be string or other type
+ */
+function sanitizeResponse(response) {
+  if (!response || typeof response !== "object") return response;
+  
+  const sanitized = { ...response };
+  if (typeof sanitized.ok !== "boolean") {
+    console.error(`[verify_race] CRITICAL: ok is not boolean (type: ${typeof sanitized.ok}, value: ${JSON.stringify(sanitized.ok)}) - coercing to boolean`);
+    sanitized.ok = sanitized.ok === true || sanitized.ok === "true" || sanitized.ok === 1;
+    if (!sanitized.debug) sanitized.debug = {};
+    sanitized.debug.okTypeError = `ok was coerced from ${typeof response.ok} to boolean`;
+    sanitized.debug.okOriginalType = typeof response.ok;
+    sanitized.debug.okOriginalValue = response.ok;
+  }
+  return sanitized;
+}
+
 async function buildStubResponse({ track, date, raceNo, predicted = {}, uiDateRaw = null }) {
   // CRITICAL: date should already be canonical ISO from handler
   // Use it as-is - no fallback to today, no re-normalization
@@ -2479,9 +2498,10 @@ export default async function handler(req, res) {
         raceNo: null,
       });
       res.setHeader('X-Handler-Identity', 'VERIFY_RACE_STUB');
+      // CRITICAL: Ensure ok is always boolean (defensive check against type corruption)
+      const sanitizedStub = sanitizeResponse({ ...stub, ok: false });
       return res.status(200).json({
-        ...stub,
-        ok: false,
+        ...sanitizedStub,
         step: "verify_race_stub",
         error: "METHOD_NOT_ALLOWED",
         message: `Expected POST, received ${req.method}`,
@@ -2716,8 +2736,11 @@ export default async function handler(req, res) {
         // Add GreenZone (safe, never throws)
         await addGreenZoneToResponse(result);
 
+        // CRITICAL: Ensure ok is always boolean (defensive check against type corruption)
+        const sanitizedResult = sanitizeResponse(result);
+        
         return res.status(200).json({
-          ...result,
+          ...sanitizedResult,
           bypassedPayGate: bypassedPayGate,
           responseMeta: {
             handlerFile: HANDLER_FILE,
@@ -3011,8 +3034,10 @@ export default async function handler(req, res) {
         await addGreenZoneToResponse(validatedResult);
         
         await logVerifyResult(validatedResult);
+        // CRITICAL: Ensure ok is always boolean (defensive check against type corruption)
+        const sanitizedValidated = sanitizeResponse(validatedResult);
         return res.status(200).json({
-          ...validatedResult,
+          ...sanitizedValidated,
           bypassedPayGate: bypassedPayGate,
           responseMeta: {
             ...validatedResult.responseMeta,
@@ -3301,8 +3326,10 @@ export default async function handler(req, res) {
         }
 
         await logVerifyResult(fallbackResult);
+        // CRITICAL: Ensure ok is always boolean (defensive check against type corruption)
+        const sanitizedFallback = sanitizeResponse(fallbackResult);
         return res.status(200).json({
-          ...fallbackResult,
+          ...sanitizedFallback,
           bypassedPayGate: bypassedPayGate,
           responseMeta: {
             handlerFile: HANDLER_FILE,
@@ -3494,8 +3521,10 @@ export default async function handler(req, res) {
       }
 
       await logVerifyResult(fallbackStub);
+      // CRITICAL: Ensure ok is always boolean (defensive check against type corruption)
+      const sanitizedFallbackStub = sanitizeResponse(fallbackStub);
       return res.status(200).json({
-        ...fallbackStub,
+        ...sanitizedFallbackStub,
         bypassedPayGate: bypassedPayGate,
         responseMeta: {
           handlerFile: HANDLER_FILE,
@@ -3696,8 +3725,10 @@ export default async function handler(req, res) {
       await addGreenZoneToResponse(errorStub);
       
       await logVerifyResult(errorStub);
+      // CRITICAL: Ensure ok is always boolean (defensive check against type corruption)
+      const sanitizedErrorStub = sanitizeResponse(errorStub);
       return res.status(200).json({
-        ...errorStub,
+        ...sanitizedErrorStub,
         bypassedPayGate: bypassedPayGate,
         responseMeta: {
           handlerFile: HANDLER_FILE,
@@ -3758,6 +3789,8 @@ export default async function handler(req, res) {
     // Add GreenZone (safe, never throws) - even for error cases
     await addGreenZoneToResponse(errorStub);
     // Don't log error cases (ok: false)
-    return res.status(200).json(errorStub);
+    // CRITICAL: Ensure ok is always boolean (defensive check against type corruption)
+    const sanitizedErrorStub = sanitizeResponse(errorStub);
+    return res.status(200).json(sanitizedErrorStub);
   }
 }
