@@ -1,0 +1,278 @@
+﻿{
+    "ok":  true,
+    "picks":  [
+                  {
+                      "slot":  "Win",
+                      "name":  "Lightning Bolt",
+                      "odds":  "5/2",
+                      "reasons":  [
+                                      "odds rank inv +0.50",
+                                      "speedFig z +0.53",
+                                      "dist adj",
+                                      "surf adj",
+                                      "post adj"
+                                  ],
+                      "prob":  37
+                  },
+                  {
+                      "slot":  "Place",
+                      "name":  "Thunder Strike",
+                      "odds":  "3/1",
+                      "reasons":  [
+                                      "odds rank inv +0.17",
+                                      "speedFig z +1.31",
+                                      "dist adj",
+                                      "surf adj",
+                                      "post adj"
+                                  ],
+                      "prob":  14
+                  },
+                  {
+                      "slot":  "Show",
+                      "name":  "Silver Star",
+                      "odds":  "7/2",
+                      "reasons":  [
+                                      "odds rank inv -0.17",
+                                      "speedFig z -0.53",
+                                      "dist adj",
+                                      "surf adj",
+                                      "post adj"
+                                  ],
+                      "prob":  5
+                  }
+              ],
+    "confidence":  55,
+    "ranking":  [
+                    {
+                        "name":  "Lightning Bolt",
+                        "post":  5,
+                        "odds":  "5/2",
+                        "comp":  0.7525225731438892,
+                        "prob":  0.37476223762145866,
+                        "reasons":  [
+                                        "odds rank inv +0.50",
+                                        "speedFig z +0.53",
+                                        "dist adj",
+                                        "surf adj",
+                                        "post adj"
+                                    ],
+                        "prob_win":  0.37476223762145866,
+                        "prob_place":  0.36948780699422595,
+                        "prob_show":  0.9157705018072156
+                    },
+                    {
+                        "name":  "Thunder Strike",
+                        "post":  3,
+                        "odds":  "3/1",
+                        "comp":  0.7019730995263893,
+                        "prob":  0.3495881969752934,
+                        "reasons":  [
+                                        "odds rank inv +0.17",
+                                        "speedFig z +1.31",
+                                        "dist adj",
+                                        "surf adj",
+                                        "post adj"
+                                    ],
+                        "prob_win":  0.3495881969752934,
+                        "prob_place":  0.34586849360085986,
+                        "prob_show":  0.9050677829608619
+                    },
+                    {
+                        "name":  "Silver Star",
+                        "post":  2,
+                        "odds":  "7/2",
+                        "comp":  0.3848107601894443,
+                        "prob":  0.19163882479553995,
+                        "reasons":  [
+                                        "odds rank inv -0.17",
+                                        "speedFig z -0.53",
+                                        "dist adj",
+                                        "surf adj",
+                                        "post adj"
+                                    ],
+                        "prob_win":  0.19163882479553995,
+                        "prob_place":  0.19538508274643088,
+                        "prob_show":  0.7655721630052027
+                    },
+                    {
+                        "name":  "Dark Moon",
+                        "post":  7,
+                        "odds":  "4/1",
+                        "comp":  0.16869356714027745,
+                        "prob":  0.08401074060770787,
+                        "reasons":  [
+                                        "odds rank inv -0.50",
+                                        "speedFig z -1.31",
+                                        "dist adj",
+                                        "surf adj",
+                                        "post adj"
+                                    ],
+                        "prob_win":  0.08401074060770787,
+                        "prob_place":  0.0892586166584831,
+                        "prob_show":  0.41358955222671945
+                    }
+                ],
+    "tickets":  {
+                    "trifecta":  [
+                                     {
+                                         "text":  "Lightning Bolt / Thunder Strike / Silver Star,Dark Moon",
+                                         "confidence":  0.026975898009164622
+                                     },
+                                     {
+                                         "text":  "BOX Lightning Bolt,Thunder Strike,Silver Star",
+                                         "confidence":  0.3437891877611585
+                                     }
+                                 ],
+                    "superfecta":  [
+                                       {
+                                           "text":  "Lightning Bolt / Thunder Strike / Silver Star,Dark Moon / Silver Star,Dark Moon",
+                                           "confidence":  0.01
+                                       },
+                                       {
+                                           "text":  "Lightning Bolt / Lightning Bolt,Thunder Strike / Thunder Strike,Silver Star,Dark Moon / Silver Star,Dark Moon",
+                                           "confidence":  0.01
+                                       }
+                                   ],
+                    "superHighFive":  [
+                                          {
+                                              "text":  "Lightning Bolt / Thunder Strike / Silver Star / Dark Moon / Dark Moon",
+                                              "confidence":  0.01
+                                          }
+                                      ]
+                },
+    "strategy":  {
+                     "recommended":  "Across The Board",
+                     "rationale":  [
+                                       "Top-3 mass 92%",
+                                       "Two-horse finish likely among Top 3"
+                                   ],
+                     "betTypesTable":  [
+                                           {
+                                               "type":  "Trifecta Box (AI Top 3)",
+                                               "icon":  "🔥",
+                                               "bestFor":  "Max profit",
+                                               "desc":  "Leverages AI\u0027s strength at identifying the 3 right horses even if order flips."
+                                           },
+                                           {
+                                               "type":  "Across the Board",
+                                               "icon":  "🛡️",
+                                               "bestFor":  "Consistency",
+                                               "desc":  "Always collects if top pick finishes top 3. Ideal for low variance bankroll play."
+                                           },
+                                           {
+                                               "type":  "Win Only",
+                                               "icon":  "🎯",
+                                               "bestFor":  "Confidence plays",
+                                               "desc":  "When AI confidence \u003e 68%, Win-only yields clean edge."
+                                           },
+                                           {
+                                               "type":  "Exacta Box (Top 3)",
+                                               "icon":  "⚖️",
+                                               "bestFor":  "Middle ground",
+                                               "desc":  "Works when AI has correct pair but misses trifecta."
+                                           }
+                                       ],
+                     "metrics":  {
+                                     "confidence":  0.6438423673127304,
+                                     "top3Mass":  0.915989259392292,
+                                     "gap12":  0.02517404064616524,
+                                     "gap23":  0.15794937217975347,
+                                     "top":  [
+                                                 {
+                                                     "name":  "Lightning Bolt",
+                                                     "prob":  0.37476223762145866,
+                                                     "comp":  0.7525225731438892
+                                                 },
+                                                 {
+                                                     "name":  "Thunder Strike",
+                                                     "prob":  0.3495881969752934,
+                                                     "comp":  0.7019730995263893
+                                                 },
+                                                 {
+                                                     "name":  "Silver Star",
+                                                     "prob":  0.19163882479553995,
+                                                     "comp":  0.3848107601894443
+                                                 },
+                                                 {
+                                                     "name":  "Dark Moon",
+                                                     "prob":  0.08401074060770787,
+                                                     "comp":  0.16869356714027745
+                                                 }
+                                             ]
+                                 },
+                     "band":  "60-64",
+                     "policy_stats":  {
+                                          "across the board":  {
+                                                                   "n":  0,
+                                                                   "avg_roi":  -999
+                                                               },
+                                          "exacta box":  {
+                                                             "n":  0,
+                                                             "avg_roi":  -999
+                                                         },
+                                          "trifecta box":  {
+                                                               "n":  0,
+                                                               "avg_roi":  -999
+                                                           }
+                                      }
+                 },
+    "meta":  {
+                 "track":  "Gulfstream Park",
+                 "surface":  "dirt",
+                 "distance_mi":  0.75,
+                 "distance_furlongs":  6,
+                 "distance_meters":  1207,
+                 "asOf":  "2026-01-07T21:42:05.179Z",
+                 "raceId":  "2026-01-06|gulfstream park|8",
+                 "calibrated":  true,
+                 "model":  "calib-v1"
+             },
+    "probs_win":  [
+                      0.3495881969752934,
+                      0.37476223762145866,
+                      0.19163882479553995,
+                      0.08401074060770787
+                  ],
+    "probs_place":  [
+                        0.34586849360085986,
+                        0.36948780699422595,
+                        0.19538508274643088,
+                        0.0892586166584831
+                    ],
+    "probs_show":  [
+                       0.9050677829608619,
+                       0.9157705018072156,
+                       0.7655721630052027,
+                       0.41358955222671945
+                   ],
+    "top3_mass":  56,
+    "top3_mass_raw":  92,
+    "top3_mass_calibrated":  56,
+    "top3_mass_method":  "raw_sum",
+    "shadowDecision":  {
+                           "strategyName":  "v1_shadow_only",
+                           "version":  1,
+                           "fieldSize":  4,
+                           "confidences":  {
+                                               "win":  null,
+                                               "place":  null,
+                                               "show":  null
+                                           },
+                           "allow":  {
+                                         "win":  false,
+                                         "place":  false,
+                                         "show":  false
+                                     }
+                       },
+    "calibrationThresholds":  {
+                                  "strategyName":  "v1_shadow_only",
+                                  "version":  1
+                              },
+    "predmeta_debug":  {
+                           "enabled":  true,
+                           "mode":  "permanent",
+                           "key":  "fl:predmeta:2026-01-06|gulfstream park|8",
+                           "written":  true,
+                           "error":  null
+                       }
+}

@@ -3,33 +3,55 @@
 **Date:** 2026-01-07  
 **PR #157:** https://github.com/gmartindale44/finishline-wps-ai/pull/157  
 **Branch:** `feat/paygate-server-enforcement`  
-**Test Type:** End-to-End Verification
+**Test Type:** End-to-End Verification  
+**Status:** ⏳ Awaiting Preview URL to execute tests
 
 ---
 
-## Test Objectives
+## Code References
 
-1. ✅ Verify Vercel Preview environment variables are correctly set
-2. ✅ Verify `/api/predict_wps` writes snapshots to Upstash
-3. ✅ Verify snapshot keys exist in Upstash with correct format and TTL
-4. ✅ Verify `/api/verify_race` writes verify logs to Upstash
-5. ✅ Verify verify log keys exist and contain snapshot lookup debug info
+### Snapshot Write Implementation
+- **File:** `pages/api/predict_wps.js`
+- **Lines:** 525-566 (deriveRaceId function)
+- **Lines:** 937-983 (snapshot write logic)
+- **Key Format:** `fl:predsnap:${raceId}:${asOf}` (line 955)
+- **TTL:** 604800 seconds / 7 days (line 975)
+- **Env Var Check:** `ENABLE_PRED_SNAPSHOTS === 'true'` (line 939)
+- **Redis Check:** `UPSTASH_REDIS_REST_URL && UPSTASH_REDIS_REST_TOKEN` (line 940)
+
+### Verify Log Write Implementation
+- **File:** `pages/api/verify_race.js`
+- **Line:** 17 (`VERIFY_PREFIX = "fl:verify:"`)
+- **Lines:** 100-205 (snapshot lookup logic)
+- **Lines:** 500-507 (verify log write)
+- **Key Format:** `fl:verify:${raceId}` (line 500)
+- **TTL:** 7776000 seconds / 90 days (line 503)
+
+### Redis Diagnostic
+- **File:** `pages/api/redis_diag.js`
+- **Lines:** 9-77 (full implementation)
+- **Returns:** Non-sensitive Redis connectivity info
 
 ---
 
-## Test Execution
+## Test Execution Plan
 
-### Prerequisites
+### Step 1: Get Preview URL
 
-**Preview URL Required:**
-- Get from Vercel Dashboard: https://vercel.com/hired-hive/finishline-wps-ai
-- Or from PR #157 comments (Vercel bot posts Preview URL)
-- Or from PR #157 checks tab → Vercel deployment
+**Method 1 - Vercel Dashboard:**
+1. Visit: https://vercel.com/hired-hive/finishline-wps-ai
+2. Navigate to Deployments
+3. Find latest Preview deployment for branch `feat/paygate-server-enforcement`
+4. Copy Preview URL (format: `https://finishline-wps-ai-xxx.vercel.app`)
 
-**Test Script:**
-```powershell
-.\scripts\qa_test_preview.ps1 -PreviewUrl "https://finishline-wps-ai-xxx.vercel.app"
-```
+**Method 2 - PR Comments:**
+1. Visit: https://github.com/gmartindale44/finishline-wps-ai/pull/157
+2. Look for Vercel bot comment with Preview URL
+
+**Method 3 - PR Checks:**
+1. Visit: https://github.com/gmartindale44/finishline-wps-ai/pull/157/checks
+2. Find Vercel deployment check
+3. Click "Details" to see deployment URL
 
 ---
 
@@ -37,7 +59,11 @@
 
 ### Test 1.1: Redis Diagnostic Endpoint
 
-**Endpoint:** `GET /api/redis_diag`
+**Command:**
+```powershell
+# Replace <preview-url> with actual Preview URL
+Invoke-RestMethod -Uri "https://<preview-url>/api/redis_diag" -Method GET | ConvertTo-Json
+```
 
 **Code Reference:** `pages/api/redis_diag.js:9-77`
 
@@ -57,17 +83,16 @@
 
 **Actual Result:**
 ```
-[PENDING: Run test and paste actual response here]
+[PENDING: Run command and paste actual response]
 ```
 
 **Findings:**
-- [ ] `ENABLE_PRED_SNAPSHOTS=true` confirmed via `redisConfigured: true` + successful write/read
-- [ ] `UPSTASH_REDIS_REST_URL` exists (hostname shown in `urlHost`)
+- [ ] `ENABLE_PRED_SNAPSHOTS=true` confirmed (via `redisConfigured: true` + write/read success)
+- [ ] `UPSTASH_REDIS_REST_URL` exists (shown in `urlHost`)
 - [ ] `UPSTASH_REDIS_REST_TOKEN` exists (confirmed by `canWrite: true`)
 - [ ] No conflicting env vars detected
 
-**Issues:**
-- None / [List any issues found]
+**Issues:** None / [List issues]
 
 ---
 
@@ -75,61 +100,60 @@
 
 ### Test 2.1: Predict with Snapshot Write
 
-**Endpoint:** `POST /api/predict_wps`
+**Command:**
+```powershell
+$body = @{
+    track = "Gulfstream Park"
+    date = "2026-01-07"
+    raceNo = "8"
+    surface = "Dirt"
+    distance_input = "6f"
+    horses = @(
+        @{name = "Thunder Strike"; odds = "3/1"; post = 3}
+        @{name = "Lightning Bolt"; odds = "5/2"; post = 5}
+        @{name = "Silver Star"; odds = "7/2"; post = 2}
+        @{name = "Dark Moon"; odds = "4/1"; post = 7}
+        @{name = "Wind Runner"; odds = "6/1"; post = 1}
+        @{name = "Fire Storm"; odds = "8/1"; post = 4}
+    )
+    speedFigs = @{
+        "Thunder Strike" = 95
+        "Lightning Bolt" = 92
+        "Silver Star" = 88
+        "Dark Moon" = 85
+        "Wind Runner" = 83
+        "Fire Storm" = 80
+    }
+} | ConvertTo-Json -Depth 10
 
-**Code Reference:** `pages/api/predict_wps.js:936-983`
-
-**Request Body:**
-```json
-{
-  "track": "Gulfstream Park",
-  "date": "2026-01-07",
-  "raceNo": "8",
-  "surface": "Dirt",
-  "distance_input": "6f",
-  "horses": [
-    {"name": "Thunder Strike", "odds": "3/1", "post": 3},
-    {"name": "Lightning Bolt", "odds": "5/2", "post": 5},
-    {"name": "Silver Star", "odds": "7/2", "post": 2},
-    {"name": "Dark Moon", "odds": "4/1", "post": 7},
-    {"name": "Wind Runner", "odds": "6/1", "post": 1},
-    {"name": "Fire Storm", "odds": "8/1", "post": 4}
-  ],
-  "speedFigs": {
-    "Thunder Strike": 95,
-    "Lightning Bolt": 92,
-    "Silver Star": 88,
-    "Dark Moon": 85,
-    "Wind Runner": 83,
-    "Fire Storm": 80
-  }
-}
+$response = Invoke-RestMethod -Uri "https://<preview-url>/api/predict_wps" -Method POST -ContentType 'application/json' -Body $body
+$response.meta.raceId
+$response.snapshot_debug | ConvertTo-Json
 ```
+
+**Code Reference:** `pages/api/predict_wps.js:525-566` (deriveRaceId), `937-983` (snapshot write)
 
 **Expected raceId Format:**
 - Pattern: `YYYY-MM-DD|normalized track|raceNo`
 - Example: `2026-01-07|gulfstream park|8`
-- Normalization: lowercase, trim, collapse spaces, remove non-alphanumeric
+- Normalization: lowercase, trim, collapse spaces, remove non-alphanumeric (lines 533-541)
 
-**Code Reference:** `pages/api/predict_wps.js:525-566` (deriveRaceId function)
-
-**Actual Response `snapshot_debug`:**
+**Actual Response:**
 ```
-[PENDING: Paste actual snapshot_debug object here]
+meta.raceId: [PENDING: Paste actual value]
+snapshot_debug: [PENDING: Paste actual JSON]
 ```
 
-**Verification Checklist:**
-- [ ] `meta.raceId` exists and matches pattern: `^\d{4}-\d{2}-\d{2}\|[^|]+\|\d+$`
-- [ ] `meta.raceId` value: `[paste actual value]`
+**Verification:**
+- [ ] `meta.raceId` matches pattern: `^\d{4}-\d{2}-\d{2}\|[^|]+\|\d+$`
 - [ ] `snapshot_debug.enablePredSnapshots` = `true`
 - [ ] `snapshot_debug.redisConfigured` = `true`
 - [ ] `snapshot_debug.snapshotAttempted` = `true`
 - [ ] `snapshot_debug.snapshotWriteOk` = `true`
-- [ ] `snapshot_debug.snapshotKey` exists and format: `fl:predsnap:{raceId}:{asOf}`
-- [ ] `snapshot_debug.snapshotWriteError` = `null` (or absent)
+- [ ] `snapshot_debug.snapshotKey` format: `fl:predsnap:{raceId}:{asOf}`
+- [ ] `snapshot_debug.snapshotWriteError` = `null`
 
-**Issues:**
-- None / [List any issues found]
+**Issues:** None / [List issues]
 
 ---
 
@@ -137,52 +161,50 @@
 
 ### Test 3.1: Verify Snapshot Keys Exist
 
-**Method:** Query Upstash REST API with same credentials as Preview deployment
+**Prerequisites:**
+- Get `UPSTASH_REDIS_REST_URL` from Vercel Preview environment
+- Get `UPSTASH_REDIS_REST_TOKEN` from Vercel Preview environment
 
-**Code Reference:** `pages/api/predict_wps.js:955,975` (snapshot key format)
+**Code Reference:** `pages/api/predict_wps.js:955,975` (key format and TTL)
 
-**Key Format:**
-- Pattern: `fl:predsnap:${raceId}:${asOf}`
-- Example: `fl:predsnap:2026-01-07|gulfstream park|8:2026-01-07T22:30:00.000Z`
-- TTL: 604800 seconds (7 days)
-
-**Upstash Query Commands:**
+**Upstash Query Script:**
 ```bash
-# Set env vars from Vercel Preview deployment
+# Set env vars from Vercel Preview
 export UPSTASH_REDIS_REST_URL="<from-vercel>"
 export UPSTASH_REDIS_REST_TOKEN="<from-vercel>"
 
-# Search for snapshot keys
+# Search for all snapshot keys
 curl -X GET "${UPSTASH_REDIS_REST_URL}/KEYS/fl:predsnap:*" \
   -H "Authorization: Bearer ${UPSTASH_REDIS_REST_TOKEN}"
 
-# Search for specific race
+# Search for specific race (use raceId from Test 2.1)
 curl -X GET "${UPSTASH_REDIS_REST_URL}/KEYS/fl:predsnap:2026-01-07|gulfstream park|8:*" \
   -H "Authorization: Bearer ${UPSTASH_REDIS_REST_TOKEN}"
 
-# Get specific snapshot key
-curl -X GET "${UPSTASH_REDIS_REST_URL}/GET/${snapshotKey}" \
+# Get specific snapshot key (use snapshotKey from Test 2.1)
+curl -X GET "${UPSTASH_REDIS_REST_URL}/GET/fl:predsnap:2026-01-07|gulfstream park|8:2026-01-07T..." \
   -H "Authorization: Bearer ${UPSTASH_REDIS_REST_TOKEN}"
 
 # Check TTL
-curl -X GET "${UPSTASH_REDIS_REST_URL}/TTL/${snapshotKey}" \
+curl -X GET "${UPSTASH_REDIS_REST_URL}/TTL/fl:predsnap:2026-01-07|gulfstream park|8:2026-01-07T..." \
   -H "Authorization: Bearer ${UPSTASH_REDIS_REST_TOKEN}"
 ```
 
 **Actual Results:**
 ```
-[PENDING: Paste Upstash query results here]
+fl:predsnap:* keys count: [PENDING]
+Specific snapshot key exists: [PENDING: yes/no]
+Snapshot key: [PENDING: paste key name]
+TTL: [PENDING: paste TTL value]
 ```
 
-**Verification Checklist:**
-- [ ] Keys matching `fl:predsnap:*` found: `[count]`
-- [ ] Specific snapshot key exists: `[yes/no]`
-- [ ] Snapshot key: `[paste key name]`
-- [ ] TTL > 0 and <= 604800 (7 days): `[TTL value]`
-- [ ] Snapshot payload contains expected fields: `picks`, `ranking`, `confidence`, `top3_mass`, `meta.asOf`, `meta.raceId`
+**Verification:**
+- [ ] Keys matching `fl:predsnap:*` found
+- [ ] Specific snapshot key exists
+- [ ] TTL > 0 and <= 604800 (7 days)
+- [ ] Snapshot payload contains: `picks`, `ranking`, `confidence`, `top3_mass`, `meta.asOf`, `meta.raceId`
 
-**Issues:**
-- None / [List any issues found]
+**Issues:** None / [List issues]
 
 ---
 
@@ -190,32 +212,42 @@ curl -X GET "${UPSTASH_REDIS_REST_URL}/TTL/${snapshotKey}" \
 
 ### Test 4.1: Verify Race Endpoint
 
-**Endpoint:** `POST /api/verify_race`
+**Command:**
+```powershell
+$verifyBody = @{
+    track = "Gulfstream Park"
+    date = "2026-01-07"
+    raceNo = "8"
+    mode = "manual"
+    outcome = @{
+        win = "Thunder Strike"
+        place = "Lightning Bolt"
+        show = "Silver Star"
+    }
+} | ConvertTo-Json -Depth 10
 
-**Code Reference:** `pages/api/verify_race.js:17,500-507` (VERIFY_PREFIX and log write)
-
-**Request Body:**
-```json
-{
-  "track": "Gulfstream Park",
-  "date": "2026-01-07",
-  "raceNo": "8",
-  "mode": "manual",
-  "outcome": {
-    "win": "Thunder Strike",
-    "place": "Lightning Bolt",
-    "show": "Silver Star"
-  }
-}
+Invoke-RestMethod -Uri "https://<preview-url>/api/verify_race" -Method POST -ContentType 'application/json' -Body $verifyBody
 ```
 
-**Verify Log Key Format:**
-- Prefix: `fl:verify:` (from `pages/api/verify_race.js:17`)
-- Pattern: `fl:verify:${raceId}`
-- Example: `fl:verify:2026-01-07|gulfstream park|8`
-- TTL: 7776000 seconds (90 days)
+**Code Reference:** `pages/api/verify_race.js:17` (VERIFY_PREFIX), `500-507` (log write)
 
-**Expected Debug Fields in Verify Log:**
+**Verify Log Key Format:**
+- Prefix: `fl:verify:` (line 17)
+- Pattern: `fl:verify:${raceId}` (line 500)
+- TTL: 7776000 seconds / 90 days (line 503)
+
+**Upstash Query:**
+```bash
+# Search for verify keys
+curl -X GET "${UPSTASH_REDIS_REST_URL}/KEYS/fl:verify:*" \
+  -H "Authorization: Bearer ${UPSTASH_REDIS_REST_TOKEN}"
+
+# Get specific verify log (use raceId from Test 2.1)
+curl -X GET "${UPSTASH_REDIS_REST_URL}/GET/fl:verify:2026-01-07|gulfstream park|8" \
+  -H "Authorization: Bearer ${UPSTASH_REDIS_REST_TOKEN}" | jq
+```
+
+**Expected Verify Log Structure:**
 ```json
 {
   "debug": {
@@ -231,109 +263,75 @@ curl -X GET "${UPSTASH_REDIS_REST_URL}/TTL/${snapshotKey}" \
 }
 ```
 
-**Actual Response:**
+**Actual Results:**
 ```
-[PENDING: Paste actual verify response here]
-```
-
-**Upstash Query for Verify Log:**
-```bash
-# Search for verify keys
-curl -X GET "${UPSTASH_REDIS_REST_URL}/KEYS/fl:verify:*" \
-  -H "Authorization: Bearer ${UPSTASH_REDIS_REST_TOKEN}"
-
-# Get specific verify log
-curl -X GET "${UPSTASH_REDIS_REST_URL}/GET/fl:verify:2026-01-07|gulfstream park|8" \
-  -H "Authorization: Bearer ${UPSTASH_REDIS_REST_TOKEN}"
+Verify response: [PENDING: Paste actual response]
+Verify log exists: [PENDING: yes/no]
+Verify log key: [PENDING: paste key name]
+Verify log debug fields: [PENDING: Paste debug object from verify log]
 ```
 
-**Actual Upstash Results:**
-```
-[PENDING: Paste Upstash query results here]
-```
-
-**Verification Checklist:**
+**Verification:**
 - [ ] Verify log key exists: `fl:verify:2026-01-07|gulfstream park|8`
 - [ ] `debug.verifyLogKey` matches expected prefix `fl:verify:`
 - [ ] `debug.snapshotPattern` is correct
 - [ ] `debug.snapshotKeysFoundCount` > 0 (if snapshot existed)
-- [ ] `debug.snapshotSelectedKey` matches snapshot key from predict
+- [ ] `debug.snapshotSelectedKey` matches snapshot key from Test 2.1
 - [ ] `debug.verifyWriteOk` = `true`
 - [ ] `predsnap_asOf` exists in verify log (if snapshot was used)
 
-**Issues:**
-- None / [List any issues found]
+**Issues:** None / [List issues]
 
 ---
 
 ## Summary
 
-### Test Results Summary
+### Test Execution Status
 
-| Test | Status | Notes |
-|------|--------|-------|
-| Redis Diagnostic | ⏳ Pending | |
-| Predict Snapshot Write | ⏳ Pending | |
-| Upstash Snapshot Keys | ⏳ Pending | |
-| Verify Log Write | ⏳ Pending | |
-| Upstash Verify Keys | ⏳ Pending | |
+| Test | Status | Evidence |
+|------|--------|----------|
+| 1.1 Redis Diagnostic | ⏳ Pending | Preview URL required |
+| 2.1 Predict Snapshot | ⏳ Pending | Preview URL required |
+| 3.1 Upstash Snapshot Keys | ⏳ Pending | Preview URL + Upstash credentials required |
+| 4.1 Verify Log Write | ⏳ Pending | Preview URL required |
+| 4.2 Upstash Verify Keys | ⏳ Pending | Preview URL + Upstash credentials required |
 
-### Key Findings
+### Key Code References
 
-**Environment Variables:**
-- `ENABLE_PRED_SNAPSHOTS`: [Not verified / Verified = true]
-- `UPSTASH_REDIS_REST_URL`: [Not verified / Verified]
-- `UPSTASH_REDIS_REST_TOKEN`: [Not verified / Verified]
+**Snapshot Write:**
+- `pages/api/predict_wps.js:937-983` - Snapshot write logic with debug tracking
+- `pages/api/predict_wps.js:525-566` - Race ID derivation and normalization
 
-**Snapshot Functionality:**
-- Snapshot writes: [Not verified / Working / Failed]
-- Snapshot key format: [Not verified / Correct / Incorrect]
-- Snapshot TTL: [Not verified / Correct / Incorrect]
+**Verify Log Write:**
+- `pages/api/verify_race.js:17` - VERIFY_PREFIX constant
+- `pages/api/verify_race.js:500-507` - Verify log write with debug tracking
+- `pages/api/verify_race.js:100-205` - Snapshot lookup logic
 
-**Verify Functionality:**
-- Verify log writes: [Not verified / Working / Failed]
-- Verify log key format: [Not verified / Correct / Incorrect]
-- Snapshot lookup in verify: [Not verified / Working / Failed]
+**Diagnostic:**
+- `pages/api/redis_diag.js:9-77` - Redis connectivity diagnostic
 
-### Issues Found
+### Next Steps
 
-1. **None** / [List issues]
+1. **Obtain Preview URL:**
+   - Vercel Dashboard: https://vercel.com/hired-hive/finishline-wps-ai
+   - PR #157: https://github.com/gmartindale44/finishline-wps-ai/pull/157
 
-### Recommendations
+2. **Run Test Script:**
+   ```powershell
+   .\scripts\qa_test_preview.ps1 -PreviewUrl "<preview-url>"
+   ```
 
-1. [None / List recommendations]
+3. **Query Upstash:**
+   - Use Preview environment variables to query keys directly
+   - Verify snapshot keys and verify log keys exist
 
----
-
-## Test Execution Instructions
-
-### Step 1: Get Preview URL
-
-```bash
-# Option 1: From Vercel Dashboard
-# Visit: https://vercel.com/hired-hive/finishline-wps-ai
-# Find latest Preview deployment for feat/paygate-server-enforcement
-
-# Option 2: From PR comments
-# Visit: https://github.com/gmartindale44/finishline-wps-ai/pull/157
-# Look for Vercel bot comment with Preview URL
-```
-
-### Step 2: Run Test Script
-
-```powershell
-.\scripts\qa_test_preview.ps1 -PreviewUrl "<preview-url>"
-```
-
-### Step 3: Query Upstash
-
-Use the same `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` from Vercel Preview environment to query keys directly.
-
-### Step 4: Fill in Results
-
-Update this document with actual test results in the `[PENDING]` sections above.
+4. **Update This Report:**
+   - Fill in all `[PENDING]` sections with actual results
+   - Document any issues found
+   - Provide recommendations
 
 ---
 
-**Document Status:** ⏳ Pending test execution  
-**Next Update:** After Preview URL is obtained and tests are run
+**Document Created:** 2026-01-07  
+**Last Updated:** 2026-01-07  
+**Status:** ⏳ Awaiting test execution with Preview URL

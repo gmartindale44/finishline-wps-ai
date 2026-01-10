@@ -493,6 +493,12 @@ async function testHrnParsing() {
     }
   }
   
+  // CRITICAL REGRESSION TEST: Assert ok is boolean (never a string like "Beleout")
+  if (typeof test1.ok !== 'boolean') {
+    issues1.push(`CRITICAL: ok is ${typeof test1.ok} (value: ${JSON.stringify(test1.ok)}) - should be boolean! This is the exact bug reported.`);
+    test1Pass = false;
+  }
+  
   // If ok=true and outcome exists, ensure no JS tokens
   if (test1.ok) {
     const hasOutcome = outcome1.win || outcome1.place || outcome1.show;
@@ -510,6 +516,26 @@ async function testHrnParsing() {
         issues1.push(`ok=true but show is garbage: "${outcome1.show}"`);
         test1Pass = false;
       }
+    }
+    
+    // CRITICAL: If ok=true, outcome.show should NOT equal ok (prevent corruption bug)
+    if (test1.ok === true && typeof test1.ok === 'boolean') {
+      // This is already checked above, but explicit check for the corruption bug
+      if (test1.ok === outcome1.show || test1.ok === outcome1.place || test1.ok === outcome1.win) {
+        issues1.push(`CRITICAL: ok value matches outcome property! ok=${JSON.stringify(test1.ok)}, outcome.show=${JSON.stringify(outcome1.show)}`);
+        test1Pass = false;
+      }
+    }
+  }
+  
+  // Check for okTypeError in debug (indicates corruption was detected and fixed)
+  if (test1?.debug?.okTypeError) {
+    console.log(`⚠️ okTypeError detected: ${test1.debug.okTypeError}`);
+    console.log(`   Original value: ${JSON.stringify(test1.debug.okOriginalValue)}`);
+    console.log(`   Original type: ${test1.debug.okOriginalType}`);
+    if (test1.debug.okOriginalValue === outcome1.show) {
+      issues1.push(`CRITICAL: ok was corrupted to outcome.show="${test1.debug.okOriginalValue}" - root cause still exists but was fixed by sanitizeResponse`);
+      test1Pass = false; // Even though it's fixed, root cause exists
     }
   }
   
@@ -613,14 +639,21 @@ async function testRedisConsistency() {
   console.log(`\n--- Step 1: POST /api/verify_race (${track} ${date} R${raceNo}) ---`);
   const verifyResp = await testVerifyRace(track, date, raceNo);
   
-  if (!verifyResp || verifyResp.status !== 200) {
-    console.log('❌ FAIL: verify_race call failed');
-    return { passed: false, reason: 'verify_race call failed' };
+  if (!verifyResp) {
+    console.log('❌ FAIL: verify_race call failed (no response)');
+    return { passed: false, reason: 'verify_race call failed (no response)' };
   }
   
-  const verifyOk = verifyResp.json?.ok;
-  const verifyOutcome = verifyResp.json?.outcome || {};
-  const verifyDebug = verifyResp.json?.debug || {};
+  // CRITICAL REGRESSION TEST: Assert ok is boolean (never a string like "Beleout")
+  if (typeof verifyResp.ok !== 'boolean') {
+    console.error(`❌ CRITICAL TYPE CORRUPTION: verify_race.ok is ${typeof verifyResp.ok} (value: ${JSON.stringify(verifyResp.ok)}) - should be boolean!`);
+    console.error(`   This is the exact bug reported: ok corrupted to "${verifyResp.ok}"`);
+    return { passed: false, reason: `ok is ${typeof verifyResp.ok} instead of boolean`, verifyResp };
+  }
+  
+  const verifyOk = verifyResp.ok;
+  const verifyOutcome = verifyResp.outcome || {};
+  const verifyDebug = verifyResp.debug || {};
   
   console.log(`verify_race response: ok=${verifyOk}`);
   console.log(`  Outcome: Win="${verifyOutcome.win || ''}", Place="${verifyOutcome.place || ''}", Show="${verifyOutcome.show || ''}"`);
@@ -701,6 +734,12 @@ async function testRedisConsistency() {
       consistencyPass = false;
     } else {
       console.log(`✅ Stored ok matches verify_race ok: ${verifyOk}`);
+    }
+    
+    // CRITICAL: Assert stored ok is boolean (regression test)
+    if (typeof storedOk !== 'boolean') {
+      issues.push(`CRITICAL: Stored ok is ${typeof storedOk} (value: ${JSON.stringify(storedOk)}) - should be boolean!`);
+      consistencyPass = false;
     }
     
     // Check that stored outcome matches (if both have outcomes)

@@ -1,0 +1,74 @@
+## Summary
+
+Fixes verify_backfill failing with HTTP 403 from HorseRacingNation and improves error visibility in the UI.
+
+## What was failing
+
+- verify_backfill was returning `ok:false` when a single race failed with HRN 403
+- Frontend showed generic "Unknown error" message
+- HRN anti-bot was blocking serverless fetch requests
+- Batch processing would stop on first failure
+
+## Changes Made
+
+### Backend Robustness (verify_backfill.js)
+- ✅ Always returns HTTP 200 (never hard-fails batch)
+- ✅ Wraps each verify_race call in try/catch
+- ✅ Extracts error details from verify_race responses
+- ✅ Includes firstFailure object for easy UI access
+
+### HRN 403 Handling (verify_race.js)
+- ✅ Added fetchWithRetry() helper with:
+  - 3 retry attempts with exponential backoff (500ms → 1500ms → 3000ms)
+  - Browser-like headers to evade anti-bot detection
+- ✅ Returns structured error when HRN fetch fails (403/429):
+  ```json
+  {
+    "ok": false,
+    "step": "fetch_results",
+    "httpStatus": 403,
+    "error": "403 from HRN (blocked)",
+    "urlAttempted": "..."
+  }
+  ```
+
+### Frontend Error Display (verify-modal.js)
+- ✅ Shows real error details (httpStatus, step, error message)
+- ✅ Format: "Backfill failed (HTTP 403) at fetch_results: 403 from HRN (blocked)"
+- ✅ Logs structured error object to console
+
+### Testing
+- ✅ Added smoke test script (test-verify-smoke.js)
+
+## How to Test
+
+1. Deploy to Preview and run smoke test:
+   ```bash
+   node test-verify-smoke.js
+   ```
+
+2. Or test manually in browser console:
+   ```javascript
+   fetch('/api/verify_backfill', {
+     method: 'POST',
+     headers: { 'Content-Type': 'application/json' },
+     body: JSON.stringify({
+       track: 'Laurel Park',
+       date: '2025-01-15',
+       raceNo: '8'
+     })
+   }).then(r => r.json()).then(console.log);
+   ```
+
+## Expected New Behavior
+
+- ✅ verify_backfill always returns HTTP 200 (even if some races fail)
+- ✅ UI shows actual error messages instead of "Unknown error"
+- ✅ Batch processing continues even if one race fails
+- ✅ HRN 403s are retried with better headers before failing
+- ✅ Structured error responses include httpStatus, step, and urlAttempted
+
+## Related
+
+- Fixes: verify_backfill error handling and HRN 403 visibility
+- Builds on: PR #157 (additive intelligence upgrades)

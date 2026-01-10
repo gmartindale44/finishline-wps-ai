@@ -1738,10 +1738,30 @@ function extractOutcomeFromHrnHtml(html, raceNo = null) {
     console.error("[extractOutcomeFromHrnHtml] Parse error:", err.message || err);
     debug.hrnParsedBy = "error";
     // Return empty outcome on error - never throw
-    return { outcome: { win: "", place: "", show: "" }, debug };
+    // CRITICAL: Ensure outcome has no ok property
+    const cleanErrorOutcome = { win: "", place: "", show: "" };
+    delete cleanErrorOutcome.ok;
+    return { outcome: cleanErrorOutcome, debug };
   }
   
-  return { outcome, debug };
+  // CRITICAL: Clean outcome before returning - ensure no ok property exists
+  // This prevents any contamination from object mutations or property assignments
+  const cleanReturnOutcome = {
+    win: (outcome.win && typeof outcome.win === 'string') ? outcome.win : "",
+    place: (outcome.place && typeof outcome.place === 'string') ? outcome.place : "",
+    show: (outcome.show && typeof outcome.show === 'string') ? outcome.show : "",
+  };
+  // Explicitly delete ok if it exists (defensive cleanup)
+  delete cleanReturnOutcome.ok;
+  
+  // CRITICAL: If outcome somehow got an ok property, log it for debugging
+  if ('ok' in outcome && outcome.ok !== undefined) {
+    console.error(`[extractOutcomeFromHrnHtml] CRITICAL: outcome has unexpected ok property (value: ${JSON.stringify(outcome.ok)})`);
+    console.error(`[extractOutcomeFromHrnHtml] Stack:`, new Error().stack);
+    console.error(`[extractOutcomeFromHrnHtml] Outcome object:`, JSON.stringify(outcome));
+  }
+  
+  return { outcome: cleanReturnOutcome, debug };
 }
 
 /**
@@ -2002,16 +2022,39 @@ function extractOutcomeFromGoogleHtml(html) {
 function sanitizeResponse(response) {
   if (!response || typeof response !== "object") return response;
   
-  const sanitized = { ...response };
-  if (typeof sanitized.ok !== "boolean") {
-    console.error(`[verify_race] CRITICAL: ok is not boolean (type: ${typeof sanitized.ok}, value: ${JSON.stringify(sanitized.ok)}) - coercing to boolean`);
-    sanitized.ok = sanitized.ok === true || sanitized.ok === "true" || sanitized.ok === 1;
-    if (!sanitized.debug) sanitized.debug = {};
-    sanitized.debug.okTypeError = `ok was coerced from ${typeof response.ok} to boolean`;
-    sanitized.debug.okOriginalType = typeof response.ok;
-    sanitized.debug.okOriginalValue = response.ok;
+  // CRITICAL: Defensively clean outcome before spreading to prevent ok property contamination
+  const cleanResponse = { ...response };
+  
+  // Ensure outcome has no ok property (defensive cleanup)
+  if (cleanResponse.outcome && typeof cleanResponse.outcome === 'object') {
+    const cleanOutcome = {
+      win: cleanResponse.outcome.win || "",
+      place: cleanResponse.outcome.place || "",
+      show: cleanResponse.outcome.show || "",
+    };
+    delete cleanOutcome.ok;
+    cleanResponse.outcome = cleanOutcome;
   }
-  return sanitized;
+  
+  // CRITICAL: Ensure ok is boolean - compute from outcome validation if corrupted
+  if (typeof cleanResponse.ok !== "boolean") {
+    console.error(`[verify_race] CRITICAL: ok is not boolean (type: ${typeof cleanResponse.ok}, value: ${JSON.stringify(cleanResponse.ok)}) - coercing to boolean`);
+    console.error(`[verify_race] Stack:`, new Error().stack);
+    console.error(`[verify_race] Response context:`, JSON.stringify({ step: cleanResponse.step, outcome: cleanResponse.outcome }));
+    
+    // Compute ok from outcome validation if corrupted
+    const outcome = cleanResponse.outcome || {};
+    const hasValidOutcome = outcome.win && outcome.place && outcome.show;
+    cleanResponse.ok = Boolean(hasValidOutcome);
+    
+    if (!cleanResponse.debug) cleanResponse.debug = {};
+    cleanResponse.debug.okTypeError = `ok was coerced from ${typeof response.ok} to boolean`;
+    cleanResponse.debug.okOriginalType = typeof response.ok;
+    cleanResponse.debug.okOriginalValue = response.ok;
+    cleanResponse.debug.okComputedFromOutcome = hasValidOutcome;
+  }
+  
+  return cleanResponse;
 }
 
 async function buildStubResponse({ track, date, raceNo, predicted = {}, uiDateRaw = null }) {
@@ -2142,11 +2185,19 @@ async function buildStubResponse({ track, date, raceNo, predicted = {}, uiDateRa
               
               // If HRN parsing found at least one result, use it
               // Note: We'll validate later in the function before setting ok=true
+              // CRITICAL: Only copy win/place/show properties - never spread entire object which might contain ok
               if (hrnOutcome && (hrnOutcome.win || hrnOutcome.place || hrnOutcome.show)) {
-                outcome = hrnOutcome;
+                // Defensively copy only the properties we want - prevent any accidental ok property
+                outcome = {
+                  win: hrnOutcome.win || "",
+                  place: hrnOutcome.place || "",
+                  show: hrnOutcome.show || "",
+                };
+                // Ensure no ok property exists in outcome (defensive)
+                delete outcome.ok;
                 // Mark as HRN fallback if we got all three, otherwise keep as partial
                 // Note: Final ok status will be determined by validation
-                if (hrnOutcome.win && hrnOutcome.place && hrnOutcome.show) {
+                if (outcome.win && outcome.place && outcome.show) {
                   step = "verify_race_fallback_hrn";
                 } else {
                   step = "verify_race_fallback_hrn_partial";
@@ -2315,9 +2366,15 @@ async function buildStubResponse({ track, date, raceNo, predicted = {}, uiDateRa
     validationFailed = true;
   }
   
+  // CRITICAL: Ensure outcome never has an ok property (defensive cleanup before computing ok)
+  if (outcome && typeof outcome === 'object') {
+    delete outcome.ok;
+  }
+  
   // STRICT OK: ok=true ONLY if we have ALL THREE non-empty AND validated W/P/S
+  // Compute ok in exactly one place based on validated outcome - never from object properties
   const hasAllValidOutcome = winValid.valid && placeValid.valid && showValid.valid && outcome.win && outcome.place && outcome.show;
-  const ok = hasAllValidOutcome;
+  const ok = Boolean(hasAllValidOutcome); // Explicitly coerce to boolean - never trust implicit conversion
   
   // If validation failed or missing W/P/S, update hrnDebugFields if HRN was attempted
   // CRITICAL: Ensure hrnDebugFields exists if hrnAttempted is true
@@ -2412,8 +2469,62 @@ async function buildStubResponse({ track, date, raceNo, predicted = {}, uiDateRa
   // Store googleHtml in debug for potential future use (but don't send it in response to avoid bloat)
   // We'll just keep it for internal reference if needed
   
+  // CRITICAL: Final defensive cleanup - ensure outcome has no ok property and ok is boolean
+  const cleanOutcome = {
+    win: (outcome && typeof outcome.win === 'string') ? outcome.win : "",
+    place: (outcome && typeof outcome.place === 'string') ? outcome.place : "",
+    show: (outcome && typeof outcome.show === 'string') ? outcome.show : "",
+  };
+  // Explicitly ensure no ok property exists
+  delete cleanOutcome.ok;
+  
+  // CRITICAL: Final recomputation of ok from cleaned outcome - NEVER trust existing ok variable
+  // This prevents any corruption from object spreads, destructuring, or variable shadowing
+  const finalOk = Boolean(
+    cleanOutcome.win && 
+    cleanOutcome.place && 
+    cleanOutcome.show &&
+    winValid.valid && 
+    placeValid.valid && 
+    showValid.valid
+  );
+  
+  // CRITICAL: Assert ok is boolean before returning (debug guard)
+  if (typeof finalOk !== 'boolean') {
+    console.error(`[verify_race] CRITICAL BUG: finalOk is ${typeof finalOk} (value: ${JSON.stringify(finalOk)}) in buildStubResponse return`);
+    console.error(`[verify_race] Stack:`, new Error().stack);
+    console.error(`[verify_race] Context: cleanOutcome=${JSON.stringify(cleanOutcome)}, validations: win=${winValid.valid}, place=${placeValid.valid}, show=${showValid.valid}`);
+    // Force to false if assertion fails
+    const forcedOk = false;
+    return {
+      ok: forcedOk,
+      step,
+      date: usingDate,
+      track: safeTrack,
+      raceNo: raceNoStr,
+      query,
+      top: {
+        title: `Google search: ${query}`,
+        link: googleUrl,
+      },
+      outcome: cleanOutcome,
+      predicted: predictedNormalized,
+      hits,
+      summary: summary,
+      debug: {
+        ...debug,
+        okComputationError: `finalOk was ${typeof finalOk}, forced to false`,
+      },
+      responseMeta: {
+        handlerFile: HANDLER_FILE,
+        backendVersion: BACKEND_VERSION,
+        internalBypassAuthorized: false,
+      },
+    };
+  }
+  
   return {
-    ok,
+    ok: finalOk, // Use recomputed value - never trust the original ok variable
     step,
     date: usingDate,
     track: safeTrack,
@@ -2423,11 +2534,7 @@ async function buildStubResponse({ track, date, raceNo, predicted = {}, uiDateRa
       title: `Google search: ${query}`,
       link: googleUrl,
     },
-    outcome: {
-      win: outcome.win || "",
-      place: outcome.place || "",
-      show: outcome.show || "",
-    },
+    outcome: cleanOutcome, // Use cleaned outcome with no ok property
     predicted: predictedNormalized,
     hits,
     summary: summary,
@@ -2619,11 +2726,15 @@ export default async function handler(req, res) {
     // Manual verify branch - handle manual outcome entry
     if (body.mode === "manual" && body.outcome) {
       try {
+        // CRITICAL: Clean outcome from body - only copy win/place/show, explicitly delete ok if present
+        const bodyOutcome = body.outcome || {};
         const outcome = {
-          win: (body.outcome.win || "").trim(),
-          place: (body.outcome.place || "").trim(),
-          show: (body.outcome.show || "").trim(),
+          win: (bodyOutcome.win || "").trim(),
+          place: (bodyOutcome.place || "").trim(),
+          show: (bodyOutcome.show || "").trim(),
         };
+        // Defensive cleanup - ensure no ok property exists
+        delete outcome.ok;
 
         // Get predictions from body or fetch from Redis
         let predicted = predictedFromClient;
@@ -2706,15 +2817,31 @@ export default async function handler(req, res) {
         // Build raceId
         const raceId = buildVerifyRaceId(track, canonicalDateIso, raceNo);
 
+        // CRITICAL: Recompute ok from outcome - NEVER hardcode ok:true
+        // Clean outcome again to ensure no ok property contamination
+        const cleanManualOutcome = {
+          win: (outcome.win && typeof outcome.win === 'string') ? outcome.win : "",
+          place: (outcome.place && typeof outcome.place === 'string') ? outcome.place : "",
+          show: (outcome.show && typeof outcome.show === 'string') ? outcome.show : "",
+        };
+        delete cleanManualOutcome.ok; // Defensive cleanup
+        
+        // Recompute ok from cleaned outcome - this is the ONLY source of truth
+        const manualOk = Boolean(
+          cleanManualOutcome.win && 
+          cleanManualOutcome.place && 
+          cleanManualOutcome.show
+        );
+        
         // Build result object
         const result = {
-          ok: true,
+          ok: manualOk, // Recomputed from cleaned outcome - never hardcode true
           step: "manual_verify",
           track,
           date: canonicalDateIso,
           raceNo,
           raceId,
-          outcome,
+          outcome: cleanManualOutcome, // Use cleaned outcome with no ok property
           predicted: predictedNormalized,
           hits,
           summary,
@@ -2736,8 +2863,44 @@ export default async function handler(req, res) {
         // Add GreenZone (safe, never throws)
         await addGreenZoneToResponse(result);
 
+        // CRITICAL: result.ok should already be correctly computed above, but defensive check
+        // Clean outcome again to ensure no ok property contamination (defensive)
+        const resultOutcome = result.outcome || { win: "", place: "", show: "" };
+        const cleanResultOutcome = {
+          win: (resultOutcome.win && typeof resultOutcome.win === 'string') ? resultOutcome.win : "",
+          place: (resultOutcome.place && typeof resultOutcome.place === 'string') ? resultOutcome.place : "",
+          show: (resultOutcome.show && typeof resultOutcome.show === 'string') ? resultOutcome.show : "",
+        };
+        delete cleanResultOutcome.ok; // Defensive cleanup
+        
+        // Recompute ok from cleaned outcome - this is the ONLY source of truth
+        const resultHasValidOutcome = Boolean(
+          cleanResultOutcome.win && 
+          cleanResultOutcome.place && 
+          cleanResultOutcome.show
+        );
+        
+        // CRITICAL: Create final result with recomputed ok - don't trust existing result.ok
+        const finalResult = {
+          ...result,
+          ok: resultHasValidOutcome, // Recomputed from cleaned outcome - overwrite any existing value
+          outcome: cleanResultOutcome, // Use cleaned outcome
+        };
+        
+        // CRITICAL: Assert ok is boolean before proceeding (debug guard)
+        if (typeof finalResult.ok !== 'boolean') {
+          console.error(`[verify_race] CRITICAL BUG: finalResult.ok is ${typeof finalResult.ok} (value: ${JSON.stringify(finalResult.ok)}) after recomputation`);
+          console.error(`[verify_race] Stack:`, new Error().stack);
+          console.error(`[verify_race] Context:`, JSON.stringify({ step: finalResult.step, outcome: cleanResultOutcome, resultHasValidOutcome }));
+          console.error(`[verify_race] Original result.ok:`, typeof result.ok, JSON.stringify(result.ok));
+          // Force to boolean based on outcome
+          finalResult.ok = Boolean(resultHasValidOutcome);
+          if (!finalResult.debug) finalResult.debug = {};
+          finalResult.debug.okComputationError = `finalResult.ok was ${typeof finalResult.ok} (original: ${typeof result.ok}, value: ${JSON.stringify(result.ok)}), forced to ${finalResult.ok}`;
+        }
+        
         // CRITICAL: Ensure ok is always boolean (defensive check against type corruption)
-        const sanitizedResult = sanitizeResponse(result);
+        const sanitizedResult = sanitizeResponse(finalResult);
         
         return res.status(200).json({
           ...sanitizedResult,
@@ -3055,9 +3218,33 @@ export default async function handler(req, res) {
           query: fullResult.query,
         });
         // Use full result but ensure date field is canonical
+        // CRITICAL: Do NOT spread fullResult directly - it may have corrupted ok. Explicitly construct.
+        // CRITICAL: Clean outcome to remove any ok property contamination
+        const fullResultOutcome = fullResult.outcome || { win: "", place: "", show: "" };
+        const cleanFullResultOutcome = {
+          win: (fullResultOutcome.win && typeof fullResultOutcome.win === 'string') ? fullResultOutcome.win : "",
+          place: (fullResultOutcome.place && typeof fullResultOutcome.place === 'string') ? fullResultOutcome.place : "",
+          show: (fullResultOutcome.show && typeof fullResultOutcome.show === 'string') ? fullResultOutcome.show : "",
+        };
+        // Explicitly delete ok if it exists (defensive)
+        delete cleanFullResultOutcome.ok;
+        
+        // CRITICAL: Recompute ok from cleaned outcome - NEVER use fullResult.ok
+        const fallbackResultOk = Boolean(
+          cleanFullResultOutcome.win && 
+          cleanFullResultOutcome.place && 
+          cleanFullResultOutcome.show
+        );
+        
         const fallbackResult = {
-          ...fullResult,
+          ok: fallbackResultOk, // Recomputed from cleaned outcome - never trust fullResult.ok
+          step: fullResult.step || "verify_race_fallback",
           date: fullResult.date || canonicalDateIso, // Ensure canonical date
+          track: fullResult.track || track || "",
+          raceNo: fullResult.raceNo || raceNo || "",
+          query: fullResult.query || "",
+          top: fullResult.top || null,
+          outcome: cleanFullResultOutcome, // Use cleaned outcome with no ok property
           predicted: fullResult.predicted || predictedFromClient,
           debug: {
             ...(fullResult.debug || {}),
@@ -3177,9 +3364,16 @@ export default async function handler(req, res) {
               const showValid = validateHorseName(hrnOutcome.show);
               
               // Only accept if ALL THREE are validated
+              // CRITICAL: Only copy win/place/show properties - never spread entire object which might contain ok
               if (winValid && placeValid && showValid && hrnOutcome.win && hrnOutcome.place && hrnOutcome.show) {
-                fallbackResult.outcome = hrnOutcome;
-                fallbackResult.ok = true;
+                fallbackResult.outcome = {
+                  win: hrnOutcome.win || "",
+                  place: hrnOutcome.place || "",
+                  show: hrnOutcome.show || "",
+                };
+                // Defensive cleanup - ensure no ok property
+                delete fallbackResult.outcome.ok;
+                fallbackResult.ok = Boolean(true); // Explicitly boolean
                 fallbackResult.step = "verify_race_fallback_hrn";
               } else {
                 // Validation failed - clear invalid outcomes and set ok=false
@@ -3188,7 +3382,9 @@ export default async function handler(req, res) {
                   place: placeValid && hrnOutcome.place ? hrnOutcome.place : "",
                   show: showValid && hrnOutcome.show ? hrnOutcome.show : "",
                 };
-                fallbackResult.ok = false;
+                // Defensive cleanup - ensure no ok property
+                delete fallbackResult.outcome.ok;
+                fallbackResult.ok = Boolean(false); // Explicitly boolean
                 fallbackResult.step = "verify_race_fallback_hrn_validation_failed";
                 // Update debug to reflect validation failure
                 if (fallbackResult.debug && hrnDebug) {
@@ -3276,8 +3472,15 @@ export default async function handler(req, res) {
                 }
               } else {
                 // Accept Equibase outcome - no mismatch
-                fallbackResult.outcome = equibaseOutcome;
-                fallbackResult.ok = true;
+                // CRITICAL: Only copy win/place/show properties - never spread entire object which might contain ok
+                fallbackResult.outcome = {
+                  win: equibaseOutcome?.win || "",
+                  place: equibaseOutcome?.place || "",
+                  show: equibaseOutcome?.show || "",
+                };
+                // Defensive cleanup - ensure no ok property
+                delete fallbackResult.outcome.ok;
+                fallbackResult.ok = Boolean(true); // Explicitly boolean
                 fallbackResult.step = "verify_race_fallback_equibase";
                 
                 // Recompute hits if we have predicted values
@@ -3325,9 +3528,43 @@ export default async function handler(req, res) {
           }
         }
 
-        await logVerifyResult(fallbackResult);
+        // CRITICAL: Final recomputation of ok from outcome - NEVER trust existing fallbackResult.ok
+        // This must happen AFTER all outcome assignments but BEFORE logging/returning
+        const finalFallbackOutcome = fallbackResult.outcome || { win: "", place: "", show: "" };
+        const cleanFinalOutcome = {
+          win: (finalFallbackOutcome.win && typeof finalFallbackOutcome.win === 'string') ? finalFallbackOutcome.win : "",
+          place: (finalFallbackOutcome.place && typeof finalFallbackOutcome.place === 'string') ? finalFallbackOutcome.place : "",
+          show: (finalFallbackOutcome.show && typeof finalFallbackOutcome.show === 'string') ? finalFallbackOutcome.show : "",
+        };
+        delete cleanFinalOutcome.ok; // Defensive cleanup
+        
+        // Recompute ok from cleaned outcome - this is the ONLY source of truth
+        const finalFallbackOk = Boolean(
+          cleanFinalOutcome.win && 
+          cleanFinalOutcome.place && 
+          cleanFinalOutcome.show
+        );
+        
+        // CRITICAL: Create final object with recomputed ok - don't mutate existing fallbackResult
+        const finalFallbackForLog = {
+          ...fallbackResult,
+          ok: finalFallbackOk, // Recomputed from cleaned outcome
+          outcome: cleanFinalOutcome, // Use cleaned outcome
+        };
+        
+        // CRITICAL: Assert ok is boolean (debug guard)
+        if (typeof finalFallbackForLog.ok !== 'boolean') {
+          console.error(`[verify_race] CRITICAL BUG: finalFallbackForLog.ok is ${typeof finalFallbackForLog.ok} (value: ${JSON.stringify(finalFallbackForLog.ok)})`);
+          console.error(`[verify_race] Stack:`, new Error().stack);
+          console.error(`[verify_race] Context:`, JSON.stringify({ step: finalFallbackForLog.step, outcome: cleanFinalOutcome }));
+          finalFallbackForLog.ok = Boolean(finalFallbackOk);
+          if (!finalFallbackForLog.debug) finalFallbackForLog.debug = {};
+          finalFallbackForLog.debug.okComputationError = `ok was ${typeof finalFallbackForLog.ok}, forced to ${finalFallbackForLog.ok}`;
+        }
+        
+        await logVerifyResult(finalFallbackForLog);
         // CRITICAL: Ensure ok is always boolean (defensive check against type corruption)
-        const sanitizedFallback = sanitizeResponse(fallbackResult);
+        const sanitizedFallback = sanitizeResponse(finalFallbackForLog);
         return res.status(200).json({
           ...sanitizedFallback,
           bypassedPayGate: bypassedPayGate,
@@ -3426,9 +3663,16 @@ export default async function handler(req, res) {
           const showValid = validateHorseName(hrnOutcome.show);
           
           // Only accept if ALL THREE are validated
+          // CRITICAL: Only copy win/place/show properties - never spread entire object which might contain ok
           if (winValid && placeValid && showValid && hrnOutcome.win && hrnOutcome.place && hrnOutcome.show) {
-            fallbackStub.outcome = hrnOutcome;
-            fallbackStub.ok = true;
+            fallbackStub.outcome = {
+              win: hrnOutcome.win || "",
+              place: hrnOutcome.place || "",
+              show: hrnOutcome.show || "",
+            };
+            // Defensive cleanup - ensure no ok property
+            delete fallbackStub.outcome.ok;
+            fallbackStub.ok = Boolean(true); // Explicitly boolean
             fallbackStub.step = "verify_race_fallback_hrn";
           } else {
             // Validation failed - clear invalid outcomes and set ok=false
@@ -3437,7 +3681,9 @@ export default async function handler(req, res) {
               place: placeValid && hrnOutcome.place ? hrnOutcome.place : "",
               show: showValid && hrnOutcome.show ? hrnOutcome.show : "",
             };
-            fallbackStub.ok = false;
+            // Defensive cleanup - ensure no ok property
+            delete fallbackStub.outcome.ok;
+            fallbackStub.ok = Boolean(false); // Explicitly boolean
             fallbackStub.step = "verify_race_fallback_hrn_validation_failed";
             // Update debug to reflect validation failure
             if (fallbackStub.debug && hrnDebug) {
@@ -3472,8 +3718,15 @@ export default async function handler(req, res) {
           fallbackStub.debug = { ...fallbackStub.debug, ...equibaseDebug };
 
           if (equibaseOutcome) {
-            fallbackStub.outcome = equibaseOutcome;
-            fallbackStub.ok = true;
+            // CRITICAL: Only copy win/place/show properties - never spread entire object which might contain ok
+            fallbackStub.outcome = {
+              win: equibaseOutcome?.win || "",
+              place: equibaseOutcome?.place || "",
+              show: equibaseOutcome?.show || "",
+            };
+            // Defensive cleanup - ensure no ok property
+            delete fallbackStub.outcome.ok;
+            fallbackStub.ok = Boolean(true); // Explicitly boolean
             fallbackStub.step = "verify_race_fallback_equibase";
             
             // Recompute hits if we have predicted values
@@ -3520,9 +3773,45 @@ export default async function handler(req, res) {
         }
       }
 
-      await logVerifyResult(fallbackStub);
+      // CRITICAL: Recompute ok from outcome - NEVER trust existing fallbackStub.ok value
+      // Clean outcome first to remove any ok property contamination
+      const finalOutcome = fallbackStub.outcome || { win: "", place: "", show: "" };
+      const cleanFallbackOutcome = {
+        win: (finalOutcome.win && typeof finalOutcome.win === 'string') ? finalOutcome.win : "",
+        place: (finalOutcome.place && typeof finalOutcome.place === 'string') ? finalOutcome.place : "",
+        show: (finalOutcome.show && typeof finalOutcome.show === 'string') ? finalOutcome.show : "",
+      };
+      // Explicitly delete ok if it exists
+      delete cleanFallbackOutcome.ok;
+      
+      // Recompute ok from cleaned outcome - this is the ONLY source of truth
+      const hasValidOutcome = Boolean(
+        cleanFallbackOutcome.win && 
+        cleanFallbackOutcome.place && 
+        cleanFallbackOutcome.show
+      );
+      
+      // CRITICAL: Create new fallbackStub object with recomputed ok - don't mutate existing
+      const finalFallbackStub = {
+        ...fallbackStub,
+        ok: hasValidOutcome, // Recomputed from cleaned outcome
+        outcome: cleanFallbackOutcome, // Use cleaned outcome
+      };
+      
+      // CRITICAL: Assert ok is boolean before proceeding (debug guard)
+      if (typeof finalFallbackStub.ok !== 'boolean') {
+        console.error(`[verify_race] CRITICAL BUG: finalFallbackStub.ok is ${typeof finalFallbackStub.ok} (value: ${JSON.stringify(finalFallbackStub.ok)}) after recomputation`);
+        console.error(`[verify_race] Stack:`, new Error().stack);
+        console.error(`[verify_race] Context:`, JSON.stringify({ step: finalFallbackStub.step, outcome: cleanFallbackOutcome, hasValidOutcome }));
+        // Force to boolean based on outcome
+        finalFallbackStub.ok = Boolean(hasValidOutcome);
+        if (!finalFallbackStub.debug) finalFallbackStub.debug = {};
+        finalFallbackStub.debug.okComputationError = `finalFallbackStub.ok was ${typeof finalFallbackStub.ok}, forced to ${finalFallbackStub.ok}`;
+      }
+      
+      await logVerifyResult(finalFallbackStub);
       // CRITICAL: Ensure ok is always boolean (defensive check against type corruption)
-      const sanitizedFallbackStub = sanitizeResponse(fallbackStub);
+      const sanitizedFallbackStub = sanitizeResponse(finalFallbackStub);
       return res.status(200).json({
         ...sanitizedFallbackStub,
         bypassedPayGate: bypassedPayGate,
@@ -3627,9 +3916,16 @@ export default async function handler(req, res) {
           const showValid = validateHorseName(hrnOutcome.show);
           
           // Only accept if ALL THREE are validated
+          // CRITICAL: Only copy win/place/show properties - never spread entire object which might contain ok
           if (winValid && placeValid && showValid && hrnOutcome.win && hrnOutcome.place && hrnOutcome.show) {
-            errorStub.outcome = hrnOutcome;
-            errorStub.ok = true;
+            errorStub.outcome = {
+              win: hrnOutcome.win || "",
+              place: hrnOutcome.place || "",
+              show: hrnOutcome.show || "",
+            };
+            // Defensive cleanup - ensure no ok property
+            delete errorStub.outcome.ok;
+            errorStub.ok = Boolean(true); // Explicitly boolean
             errorStub.step = "verify_race_fallback_hrn";
           } else {
             // Validation failed - clear invalid outcomes and set ok=false
@@ -3638,7 +3934,9 @@ export default async function handler(req, res) {
               place: placeValid && hrnOutcome.place ? hrnOutcome.place : "",
               show: showValid && hrnOutcome.show ? hrnOutcome.show : "",
             };
-            errorStub.ok = false;
+            // Defensive cleanup - ensure no ok property
+            delete errorStub.outcome.ok;
+            errorStub.ok = Boolean(false); // Explicitly boolean
             errorStub.step = "verify_race_fallback_hrn_validation_failed";
             // Update debug to reflect validation failure
             if (errorStub.debug && hrnDebug) {
@@ -3673,8 +3971,15 @@ export default async function handler(req, res) {
           errorStub.debug = { ...errorStub.debug, ...equibaseDebug };
 
           if (equibaseOutcome) {
-            errorStub.outcome = equibaseOutcome;
-            errorStub.ok = true;
+            // CRITICAL: Only copy win/place/show properties - never spread entire object which might contain ok
+            errorStub.outcome = {
+              win: equibaseOutcome?.win || "",
+              place: equibaseOutcome?.place || "",
+              show: equibaseOutcome?.show || "",
+            };
+            // Defensive cleanup - ensure no ok property
+            delete errorStub.outcome.ok;
+            errorStub.ok = Boolean(true); // Explicitly boolean
             errorStub.step = "verify_race_fallback_equibase";
             
             // Recompute hits if we have predicted values
