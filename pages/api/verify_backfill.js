@@ -14,7 +14,9 @@ export const config = {
 };
 
 // Import Redis helpers for skip logic
-import { verifyLogExists } from "../../utils/finishline/backfill_helpers.js";
+import { verifyLogExists, buildVerifyKey, getRedis } from "../../utils/finishline/backfill_helpers.js";
+// Import centralized normalization (ensures exact match with verify_race.js)
+import { buildVerifyRaceId, normalizeTrack, normalizeRaceNo, normalizeDateToIso, normalizeSurface } from "../../lib/verify_normalize.js";
 
 const DEFAULT_MAX_RACES = 10;
 const HARD_MAX_RACES = 50;
@@ -195,16 +197,29 @@ async function callVerifyRace(baseUrl, race) {
     dateRaw: race.dateRaw,
   };
 
+  // Get internal job secret for server-to-server PayGate bypass
+  const internalSecret = process.env.INTERNAL_JOB_SECRET || '';
+  const headers = {
+    "Content-Type": "application/json",
+    "x-finishline-internal": "true", // System flag to bypass PayGate for internal batch jobs
+  };
+
+  // Only include secret header if env var is set (otherwise PayGate will be enforced)
+  if (internalSecret) {
+    headers["x-finishline-internal-secret"] = internalSecret;
+  } else {
+    console.warn('[verify_backfill] INTERNAL_JOB_SECRET not set - PayGate will be enforced for verify_race calls');
+  }
+
   let responseJson = null;
   let httpStatus = 0;
   let networkError = null;
+  let error = null;
 
   try {
     const res = await fetch(url, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers,
       body: JSON.stringify(payload),
     });
 
@@ -212,6 +227,12 @@ async function callVerifyRace(baseUrl, race) {
 
     try {
       responseJson = await res.json();
+      // Extract error details from response JSON (even if httpStatus is 200, responseJson.ok might be false)
+      if (responseJson && typeof responseJson === "object") {
+        error = responseJson.error || responseJson.message || null;
+        // Note: responseJson.httpStatus (e.g., HRN 403) is for informational visibility only
+        // Do NOT override actual HTTP status - preserve it for success determination
+      }
     } catch {
       responseJson = null;
     }
@@ -222,26 +243,37 @@ async function callVerifyRace(baseUrl, race) {
         : String(err || "Unknown error");
   }
 
-  const ok =
-    !networkError &&
-    httpStatus === 200 &&
-    responseJson &&
-    typeof responseJson === "object" &&
-    responseJson.ok === true;
+  // Success criteria: verify_race returned ok === true
+  // Hits (winHit/placeHit/showHit), outcome accuracy, ROI, etc. are analytics only and do NOT affect success/failure
+  // A verification is successful if the API call succeeded (HTTP 200) AND verify_race.ok === true
+  const verifyRaceOk = responseJson && typeof responseJson === "object" && responseJson.ok === true;
+  const ok = !networkError && httpStatus === 200 && verifyRaceOk;
+  
+  // For visibility: include responseJson.httpStatus if present (e.g., HRN 403), but don't use for success check
+  const responseHttpStatus = (responseJson && typeof responseJson === "object" && typeof responseJson.httpStatus === "number") 
+    ? responseJson.httpStatus 
+    : null;
 
   return {
     race,
-    ok,
-    httpStatus,
+    ok, // Based solely on verify_race.ok === true (hits are analytics only)
+    httpStatus, // Actual HTTP status from fetch response (preserved for success check)
+    responseHttpStatus, // Optional: responseJson.httpStatus for visibility (e.g., HRN 403) - analytics only
     networkError,
+    error: error || networkError || null,
     step: responseJson?.step || null,
     outcome: responseJson?.outcome || null,
-    hits: responseJson?.hits || null,
+    hits: responseJson?.hits || null, // Analytics only - do NOT use for success/failure
     raw: responseJson || null,
+    bypassedPayGate: responseJson?.bypassedPayGate || responseJson?.responseMeta?.bypassedPayGate || false,
+    verifyRaceOk: verifyRaceOk, // Explicit flag: verify_race.ok === true (for debugging)
   };
 }
 
 export default async function handler(req, res) {
+  // Check for force override query param (testing only - bypasses skip check)
+  const forceOverride = req.query?.force === '1' || req.query?.force === 'true' || req.query?.force === true;
+  
   // Server-side PayGate check (non-blocking in monitor mode)
   try {
     const { checkPayGateAccess } = await import('../../lib/paygate-server.js');
@@ -337,29 +369,197 @@ export default async function handler(req, res) {
     for (const race of races) {
       let shouldSkip = false;
       let skipReason = null;
+      let verifiedRedisKeyChecked = null;
+      let verifiedRedisKeyExists = false;
+      let verifiedRedisKeyType = null;
+      let verifiedRedisKeyValuePreview = null;
+      let raceIdDerived = null;
+      let normalization = null;
+      let existingVerifyParsedOk = false;
+      let existingVerifyOkField = null;
+      let existingVerifySnippet = null;
+      let existingVerifyParsed = null; // Store full parsed object for structured preview
 
       try {
-        // Check if this race already has a verify log in Redis
-        const exists = await verifyLogExists({
-          track: race.track,
-          date: race.dateIso || race.date,
-          dateIso: race.dateIso || race.date,
+        // Store input values for debug
+        const trackIn = race.track || "";
+        const raceNoIn = race.raceNo || "";
+        const dateIn = race.dateIso || race.date || "";
+        const surfaceIn = race.surface || null;
+        
+        // Normalize using centralized helpers (CRITICAL: must match verify_race.js exactly)
+        const normalizedDate = normalizeDateToIso(dateIn);
+        const trackSlug = normalizeTrack(trackIn);
+        const raceNoNormalized = normalizeRaceNo(raceNoIn);
+        const surfaceSlug = normalizeSurface(surfaceIn || "unknown");
+        
+        // Build raceId using centralized function (same as verify_race.js)
+        raceIdDerived = buildVerifyRaceId(trackIn, dateIn, raceNoIn, surfaceIn || "unknown");
+        
+        // Build the Redis key (format: fl:verify:{raceId})
+        verifiedRedisKeyChecked = buildVerifyKey(raceIdDerived);
+        
+        // Normalization debug object (always included)
+        normalization = {
+          trackIn,
+          trackSlug,
+          raceNoIn,
+          raceNoNormalized,
+          dateIn,
+          dateIso: normalizedDate,
+          surfaceIn: surfaceIn || null,
+          surfaceSlug,
+        };
+        
+        // Check if this race already has a verify log in Redis (EXACT key lookup, no wildcards)
+        const checkResult = await verifyLogExists({
+          track: trackIn,
+          date: dateIn, // verifyLogExists will normalize internally using same helpers
+          dateIso: normalizedDate,
           dateRaw: race.dateRaw,
-          raceNo: race.raceNo,
+          raceNo: raceNoIn,
+          surface: surfaceIn,
         });
-
-        if (exists) {
-          shouldSkip = true;
-          skipReason = "already_verified_in_redis";
+        
+        verifiedRedisKeyExists = checkResult.exists || false;
+        verifiedRedisKeyType = checkResult.type || null;
+        
+        // If checkResult.key differs from our computed key, use the one from checkResult (for debugging)
+        if (checkResult.key && checkResult.key !== verifiedRedisKeyChecked) {
+          console.warn(`[verify_backfill] Key mismatch: computed=${verifiedRedisKeyChecked}, checkResult=${checkResult.key}`);
+          verifiedRedisKeyChecked = checkResult.key; // Use the actual key that was checked
+        }
+        
+        // Read the stored value and check if it's a valid verified result (ok === true)
+        if (verifiedRedisKeyExists && verifiedRedisKeyChecked) {
+          try {
+            const redis = getRedis();
+            if (redis) {
+              const actualType = await redis.type(verifiedRedisKeyChecked);
+              verifiedRedisKeyType = actualType || null;
+              
+              let rawValue = null;
+              let parsedValue = null;
+              
+              if (actualType === "string") {
+                const value = await redis.get(verifiedRedisKeyChecked);
+                // Upstash SDK may auto-parse JSON, so check if it's already an object
+                if (value != null) {
+                  if (typeof value === "object" && !Array.isArray(value) && value.constructor === Object) {
+                    // Already parsed object - use directly
+                    parsedValue = value;
+                    try {
+                      rawValue = JSON.stringify(value);
+                    } catch {
+                      rawValue = String(value);
+                    }
+                  } else if (typeof value === "string") {
+                    // Still a string - need to parse
+                    rawValue = value;
+                    try {
+                      parsedValue = JSON.parse(value);
+                    } catch {
+                      // Not valid JSON - will treat as unparseable
+                    }
+                  } else {
+                    // Other type (number, boolean, etc.) - stringify for snippet
+                    rawValue = String(value);
+                  }
+                }
+              } else if (actualType === "hash") {
+                // For hash type, convert to JSON string for parsing
+                const hash = await redis.hgetall(verifiedRedisKeyChecked);
+                if (hash && Object.keys(hash).length > 0) {
+                  rawValue = JSON.stringify(hash);
+                  // Try to reconstruct object from hash fields
+                  try {
+                    const reconstructed = {};
+                    for (const [k, v] of Object.entries(hash)) {
+                      if (typeof v === "string" && (v.startsWith("{") || v.startsWith("["))) {
+                        try {
+                          reconstructed[k] = JSON.parse(v);
+                        } catch {
+                          reconstructed[k] = v;
+                        }
+                      } else {
+                        reconstructed[k] = v;
+                      }
+                    }
+                    parsedValue = reconstructed;
+                  } catch {
+                    // Use hash as-is
+                    parsedValue = hash;
+                  }
+                }
+              }
+              
+              if (parsedValue && typeof parsedValue === "object" && !Array.isArray(parsedValue)) {
+                // Successfully parsed (or already was an object)
+                existingVerifyParsedOk = true;
+                existingVerifyParsed = parsedValue; // Store full parsed object
+                existingVerifyOkField = parsedValue.ok === true;
+                
+                // Ensure rawValue/snippet is set for debug output
+                if (!rawValue) {
+                  try {
+                    rawValue = JSON.stringify(parsedValue);
+                  } catch {
+                    rawValue = String(parsedValue);
+                  }
+                }
+                existingVerifySnippet = rawValue ? String(rawValue).slice(0, 160) : null;
+                
+                // Only skip if parsed successfully AND ok === true
+                // If parse fails or ok !== true, we should re-verify
+                if (existingVerifyOkField && !forceOverride) {
+                  shouldSkip = true;
+                  skipReason = "already_verified_in_redis";
+                }
+              } else {
+                // Parse failed or value was not an object - treat as not verified, proceed with verification
+                existingVerifyParsedOk = false;
+                existingVerifyParsed = null;
+                existingVerifyOkField = null;
+                if (rawValue) {
+                  existingVerifySnippet = String(rawValue).slice(0, 160);
+                  console.warn('[verify_backfill] Stored value not valid JSON or not an object, will re-verify. Raw snippet:', existingVerifySnippet);
+                }
+              }
+            }
+          } catch (readErr) {
+            // Non-fatal: just log, don't expose error, proceed with verification
+            console.warn('[verify_backfill] Failed to read Redis value, will re-verify:', readErr?.message);
+          }
         }
       } catch (err) {
         // If Redis check fails, log warning but proceed with verify call
         console.warn("[verify_backfill] Redis check failed, proceeding without skip:", err.message);
-        // Continue to call verify_race as normal
+        // Continue to call verify_race as normal (normalization still populated for debug)
       }
 
       if (shouldSkip) {
-        // Skip calling /api/verify_race - race already verified
+        // Skip calling /api/verify_race - race already verified (ok === true in stored value)
+        // Build structured preview for verifyKeyValuePreview (matching debug_redis_keys format)
+        let structuredPreview = null;
+        if (existingVerifyParsed && typeof existingVerifyParsed === "object") {
+          // Use the parsed object to build structured preview
+          structuredPreview = {
+            parsedOk: true,
+            ok: existingVerifyParsed.ok ?? null,
+            step: existingVerifyParsed.step ?? null,
+            date: existingVerifyParsed.date ?? null,
+            track: existingVerifyParsed.track ?? null,
+            raceNo: existingVerifyParsed.raceNo ?? null,
+            outcome: existingVerifyParsed.outcome ?? null,
+            hits: existingVerifyParsed.hits ?? null,
+          };
+        } else if (existingVerifySnippet) {
+          structuredPreview = {
+            parsedOk: false,
+            rawSnippet: existingVerifySnippet,
+          };
+        }
+        
         results.push({
           race,
           ok: true,
@@ -370,16 +570,78 @@ export default async function handler(req, res) {
           outcome: null,
           hits: null,
           networkError: null,
+          // Debug fields for skip verification (explicit fields as requested, safe to expose - no secrets)
+          verifyKeyChecked: verifiedRedisKeyChecked || null, // Exact key checked (for auditability)
+          verifyKeyExists: verifiedRedisKeyExists, // Boolean
+          verifyKeyValuePreview: structuredPreview || verifiedRedisKeyValuePreview || null, // Structured preview (matching debug_redis_keys format)
+          raceIdDerived: raceIdDerived || null, // Race ID portion (without prefix)
+          skipReason: skipReason || null, // String enum: "already_verified_in_redis" or null
+          // Additional context
+          verifiedRedisKeyType: verifiedRedisKeyType || "none",
+          redisNamespacePrefixUsed: "fl:verify:",
+          normalization: normalization || null,
+          // New debug fields for parsed verify value
+          existingVerifyParsedOk: existingVerifyParsedOk,
+          existingVerifyOkField: existingVerifyOkField,
+          existingVerifySnippet: existingVerifySnippet,
         });
       } else {
         // Call /api/verify_race as normal (it will write to Redis)
-        const result = await callVerifyRace(baseUrl, race);
-        results.push(result);
+        // Wrap in try/catch to ensure one race failure doesn't break the batch
+        try {
+          const result = await callVerifyRace(baseUrl, race);
+          // Add explicit debug fields for all results (for auditability)
+          result.verifyKeyChecked = verifiedRedisKeyChecked || null; // Exact key checked
+          result.verifyKeyExists = verifiedRedisKeyExists; // Boolean
+          result.verifyKeyValuePreview = verifiedRedisKeyValuePreview || null; // Truncated preview (safe)
+          result.raceIdDerived = raceIdDerived || null; // Race ID portion
+          result.skipReason = null; // Not skipped, so null
+          // Additional context
+          result.verifiedRedisKeyType = verifiedRedisKeyType || "none";
+          result.redisNamespacePrefixUsed = "fl:verify:";
+          result.normalization = normalization || null;
+          // New debug fields for parsed verify value (even if not skipped)
+          result.existingVerifyParsedOk = existingVerifyParsedOk;
+          result.existingVerifyOkField = existingVerifyOkField;
+          result.existingVerifySnippet = existingVerifySnippet;
+          results.push(result);
+        } catch (err) {
+          // If callVerifyRace itself throws (shouldn't happen, but be defensive), log and continue
+          console.error(`[verify_backfill] Error calling verify_race for race ${race.track} ${race.dateIso} ${race.raceNo}:`, err);
+          results.push({
+            race,
+            ok: false,
+            httpStatus: 0,
+            networkError: err?.message || String(err || "Unknown error"),
+            error: err?.message || String(err || "Unknown error"),
+            step: "verify_backfill_error",
+            outcome: null,
+            hits: null,
+            raw: null,
+            // Explicit debug fields even for errors (for auditability)
+            verifyKeyChecked: verifiedRedisKeyChecked || null, // Exact key that would have been checked
+            verifyKeyExists: verifiedRedisKeyExists || false, // Boolean (if check was attempted)
+            verifyKeyValuePreview: verifiedRedisKeyValuePreview || null, // Truncated preview if available
+            raceIdDerived: raceIdDerived || null, // Race ID portion
+            skipReason: null, // Error case, so not skipped
+            // Additional context
+            verifiedRedisKeyType: verifiedRedisKeyType || "none",
+            redisNamespacePrefixUsed: "fl:verify:",
+            normalization: normalization || null,
+            // New debug fields for parsed verify value (if check was attempted)
+            existingVerifyParsedOk: existingVerifyParsedOk || false,
+            existingVerifyOkField: existingVerifyOkField || null,
+            existingVerifySnippet: existingVerifySnippet || null,
+          });
+        }
       }
     }
   }
 
+  // Success = verify_race returned ok === true (hits are analytics only, not failure conditions)
+  // A race is successful if the verify_race API call succeeded and returned ok: true
   const successes = results.filter((r) => r.ok && !r.skipped).length;
+  // Failures = verify_race call failed OR returned ok !== true (excluding network errors and skipped)
   const failures = results.filter(
     (r) => !r.ok && !r.skipped && !r.networkError
   ).length;
@@ -388,19 +650,51 @@ export default async function handler(req, res) {
   const processed = results.filter((r) => !r.skipped || r.dryRun).length;
 
   // Keep the response payload modest; include a small sample of raw results.
+  // Note: hits, outcome, ROI are included for analytics but do NOT affect ok/success determination
+  // Success is based solely on verify_race.ok === true
   const sampleSize = 10;
   const sample = results.slice(0, sampleSize).map((r) => ({
     race: r.race,
-    ok: r.ok,
+    ok: r.ok, // Based solely on verify_race.ok === true (hits are analytics only)
     skipped: !!r.skipped,
     skipReason: r.skipReason || null,
-    httpStatus: r.httpStatus,
+    httpStatus: r.httpStatus, // Actual HTTP status from fetch
+    responseHttpStatus: r.responseHttpStatus || null, // Optional: responseJson.httpStatus for visibility
     step: r.step,
-    outcome: r.outcome,
-    hits: r.hits,
+    outcome: r.outcome, // Analytics only
+    hits: r.hits, // Analytics only - do NOT use for success/failure
     networkError: r.networkError || null,
+    error: r.error || null, // Include structured error from verify_race
+    bypassedPayGate: r.bypassedPayGate || false,
+    verifyRaceOk: r.verifyRaceOk !== undefined ? r.verifyRaceOk : null, // Debug: verify_race.ok value
+    // Explicit debug fields as requested (safe to expose - no secrets, no full values)
+    verifyKeyChecked: r.verifyKeyChecked || r.verifiedRedisKeyChecked || null, // Exact key checked
+    verifyKeyExists: r.verifyKeyExists !== undefined ? r.verifyKeyExists : (r.verifiedRedisKeyExists !== undefined ? r.verifiedRedisKeyExists : null), // Boolean
+    verifyKeyValuePreview: r.verifyKeyValuePreview || r.verifiedRedisKeyValuePreview || null, // Truncated preview (max 80 chars, safe)
+    raceIdDerived: r.raceIdDerived || null, // Race ID portion
+    skipReason: r.skipReason || null, // String enum or null
+    // Additional context
+    verifiedRedisKeyType: r.verifiedRedisKeyType || "none",
+    redisNamespacePrefixUsed: r.redisNamespacePrefixUsed || "fl:verify:",
+    normalization: r.normalization || null,
   }));
 
+  // Check if any race bypassed PayGate (for debug visibility)
+  const anyBypassedPayGate = results.some(r => r.bypassedPayGate === true);
+
+  // Check Redis configuration (for top-level debug)
+  const redisConfigured = Boolean(getRedis());
+  
+  // Get safe Redis fingerprint (no secrets)
+  let redisFingerprint = null;
+  try {
+    const { getRedisFingerprint } = await import('../../lib/redis_fingerprint.js');
+    redisFingerprint = getRedisFingerprint();
+  } catch {}
+  
+  // Always return HTTP 200 (never hard-fail the batch)
+  // Let UI decide based on ok flag and failures count
+  // ok = true if all races succeeded, false if any failed (but still return 200)
   return res.status(200).json({
     ok: failures === 0 && networkFailures === 0,
     step: "verify_backfill",
@@ -414,5 +708,21 @@ export default async function handler(req, res) {
     processed,
     sampleLimit: sampleSize,
     results: sample,
+    // Include first failure details for UI error display
+    firstFailure: failures > 0 || networkFailures > 0 ? (results.find(r => !r.ok && !r.skipped) || null) : null,
+    // Debug: show if PayGate was bypassed for internal batch jobs
+    bypassedPayGate: anyBypassedPayGate,
+    // Top-level debug fields (safe to expose - no secrets)
+    debug: {
+      usedDeployment: process.env.VERCEL_GIT_COMMIT_SHA || null,
+      usedEnv: process.env.VERCEL_ENV || null,
+      baseUrl: baseUrl,
+      redisConfigured: redisConfigured,
+      redisFingerprint: redisFingerprint, // Complete fingerprint (url, token hash, env) - safe, no secrets
+      forceOverride: forceOverride, // Show if force=1 was used
+      redisVerifyPrefix: "fl:verify:",
+      // CRITICAL: Show which Redis client type is used (for diagnosing mismatches)
+      redisClientType: "@upstash/redis SDK (via backfill_helpers.getRedis)",
+    },
   });
 }

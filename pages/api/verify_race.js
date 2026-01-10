@@ -13,41 +13,11 @@ import { computeGreenZoneForRace } from "../../lib/greenzone/greenzone_v1.js";
 // Normalize helpers for prediction lookup
 import { slugRaceId } from "../../lib/normalize.js";
 import { hgetall } from "../../lib/redis.js";
+// Centralized verify normalization (ensures key consistency)
+import { buildVerifyRaceId } from "../../lib/verify_normalize.js";
 
 const VERIFY_PREFIX = "fl:verify:";
 const PRED_PREFIX = "fl:pred:";
-
-/**
- * Build a race ID for verify logs (similar to prediction logs but without postTime)
- * This creates a key that can be used to store/retrieve verify logs
- * The calibration script joins on track|date|raceNo, so the key format doesn't matter
- * but we use a consistent slug format for readability
- */
-function buildVerifyRaceId(track, date, raceNo) {
-  // Normalize track: lowercase, collapse spaces, replace non-alphanum with '-', remove dup '-'
-  const slugTrack = (track || "")
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, " ")
-    .replace(/[^a-z0-9\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
-
-  // Normalize date: use YYYY-MM-DD format
-  let slugDate = date || "";
-  if (!slugDate || !/^\d{4}-\d{2}-\d{2}$/.test(slugDate)) {
-    // If date is invalid, use empty string (calibration script will handle it)
-    slugDate = "";
-  }
-
-  // Normalize race number
-  const slugRaceNo = String(raceNo || "").trim() || "0";
-
-  // Build: track-date-unknown-r{raceNo} (using "unknown" for postTime to match prediction pattern)
-  const parts = [slugTrack, slugDate, "unknown", `r${slugRaceNo}`].filter(Boolean);
-  return parts.join("-");
-}
 
 /**
  * Log verify result to Upstash Redis
@@ -104,6 +74,8 @@ async function logVerifyResult(result) {
         try {
           const joinKey = `${normDate}|${normTrack}|${normRaceNo}`;
           const { keys: redisKeys, get: redisGet } = await import('../../lib/redis.js');
+          const { getRedisFingerprint } = await import('../../lib/redis_fingerprint.js');
+          const redisFingerprint = getRedisFingerprint();
           
           // Find all snapshots for this race
           const snapshotPattern = `fl:predsnap:${joinKey}:*`;
@@ -112,6 +84,9 @@ async function logVerifyResult(result) {
           if (!predmeta) predmeta = {};
           if (!predmeta.debug) predmeta.debug = {};
           predmeta.debug.snapshotPattern = snapshotPattern;
+          predmeta.debug.redisFingerprint = redisFingerprint; // Safe fingerprint for diagnostics
+          predmeta.debug.redisClientType = "REST API (lib/redis.js)"; // For diagnostics
+          predmeta.debug.joinKey = joinKey; // Show exact key format used
           
           const snapshotKeys = await redisKeys(snapshotPattern);
           
@@ -501,6 +476,16 @@ async function logVerifyResult(result) {
     
     // ADDITIVE: Add verify log key name to debug for diagnostics
     if (!logPayload.debug) logPayload.debug = {};
+    logPayload.debug.verifyLogKey = logKey; // Exact key written (for auditability)
+    logPayload.debug.raceId = raceId; // Race ID portion (without prefix)
+    
+    // Add Redis fingerprint for diagnostics (safe, no secrets)
+    try {
+      const { getRedisFingerprint } = await import('../../lib/redis_fingerprint.js');
+      const fingerprint = getRedisFingerprint();
+      logPayload.debug.redisFingerprint = fingerprint;
+      logPayload.debug.redisClientType = "REST API (lib/redis.js)";
+    } catch {}
     logPayload.debug.verifyLogKey = logKey;
     
     // Use REST client setex for verify logs (90 days TTL = 7776000 seconds)
@@ -508,6 +493,7 @@ async function logVerifyResult(result) {
       const { setex } = await import('../../lib/redis.js');
       await setex(logKey, 7776000, JSON.stringify(logPayload));
       logPayload.debug.verifyWriteOk = true;
+      logPayload.debug.verifyWriteError = null;
     } catch (writeErr) {
       // Track verify write error but don't break user flow
       logPayload.debug.verifyWriteOk = false;
@@ -875,14 +861,90 @@ async function tryEquibaseFallback(track, dateIso, raceNo, baseDebug = {}) {
 }
 
 /**
+ * Fetch with retry logic and browser-like headers (for anti-bot evasion)
+ * @param {string} url - URL to fetch
+ * @param {object} options - Fetch options
+ * @param {number} maxRetries - Maximum retry attempts (default: 3)
+ * @returns {Promise<Response>}
+ */
+async function fetchWithRetry(url, options = {}, maxRetries = 3) {
+  const retryableStatuses = [403, 429, 503, 502, 504];
+  const backoffs = [500, 1500, 3000]; // ms delays
+  
+  // Browser-like headers to avoid anti-bot detection
+  const browserHeaders = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Referer": "https://www.google.com/",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "cross-site",
+    "Sec-Fetch-User": "?1",
+    "Upgrade-Insecure-Requests": "1",
+    ...options.headers,
+  };
+
+  let lastError = null;
+  let lastResponse = null;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers: browserHeaders,
+      });
+
+      // If successful or non-retryable error, return immediately
+      if (response.ok || !retryableStatuses.includes(response.status)) {
+        return response;
+      }
+
+      // Store response for retryable errors
+      lastResponse = response;
+
+      // If this is the last attempt, return the failed response
+      if (attempt === maxRetries - 1) {
+        return response;
+      }
+
+      // Wait before retrying (exponential backoff)
+      const delay = backoffs[Math.min(attempt, backoffs.length - 1)];
+      await new Promise(resolve => setTimeout(resolve, delay));
+
+    } catch (err) {
+      lastError = err;
+
+      // If this is the last attempt, re-throw
+      if (attempt === maxRetries - 1) {
+        throw err;
+      }
+
+      // Wait before retrying
+      const delay = backoffs[Math.min(attempt, backoffs.length - 1)];
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+
+  // Should never reach here, but handle edge case
+  if (lastResponse) return lastResponse;
+  if (lastError) throw lastError;
+  throw new Error("fetchWithRetry: unexpected state");
+}
+
+/**
  * Try HRN fallback - attempts to fetch and parse HRN entries-results page
  * @param {string} track - Track name
  * @param {string} dateIso - ISO date (YYYY-MM-DD)
  * @param {object} baseDebug - Existing debug object (may contain googleHtml)
- * @returns {{ outcome: object|null, debugExtras: object }}
+ * @returns {{ outcome: object|null, debugExtras: object, httpStatus: number|null }}
  */
 async function tryHrnFallback(track, dateIso, raceNo, baseDebug = {}) {
   const debugExtras = {};
+  let httpStatus = null;
+  let urlAttempted = null;
+  
   try {
     debugExtras.hrnAttempted = true;
     debugExtras.hrnRaceNo = (raceNo !== null && raceNo !== undefined) ? String(raceNo || "").trim() : null;
@@ -890,38 +952,46 @@ async function tryHrnFallback(track, dateIso, raceNo, baseDebug = {}) {
     const hrnUrlFromGoogle = baseDebug.googleHtml ? extractHrnUrlFromGoogleHtml(baseDebug.googleHtml) : null;
     const hrnUrl = hrnUrlFromGoogle || buildHrnUrl(track, dateIso);
     debugExtras.hrnUrl = hrnUrl || null;
+    urlAttempted = hrnUrl;
 
     if (!hrnUrl) {
       debugExtras.hrnParseError = "No HRN URL available";
-      return { outcome: null, debugExtras };
+      return { outcome: null, debugExtras, httpStatus: null };
     }
 
-    const res = await fetch(hrnUrl, {
+    // Use fetchWithRetry with browser-like headers and retry logic
+    const res = await fetchWithRetry(hrnUrl, {
       method: "GET",
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (compatible; FinishLineBot/1.0; +https://finishline-wps-ai.vercel.app)",
-        "Accept-Language": "en-US,en;q=0.9",
-      },
-    });
+    }, 3);
+
+    httpStatus = res.status;
+    debugExtras.hrnHttpStatus = httpStatus;
 
     if (!res.ok) {
-      debugExtras.hrnParseError = `HTTP ${res.status}`;
-      return { outcome: null, debugExtras };
+      const statusText = res.statusText || "";
+      debugExtras.hrnParseError = `HTTP ${httpStatus}${statusText ? ` ${statusText}` : ""} from HRN (blocked or unavailable)`;
+      return { outcome: null, debugExtras, httpStatus, urlAttempted };
     }
 
     const html = await res.text();
-    const outcome = extractOutcomeFromHrnHtml(html, raceNo);
+    const { outcome, debug: hrnDebug } = extractOutcomeFromHrnHtml(html, raceNo);
+    
+    // Merge ALL HRN debug fields into debugExtras (not just selective ones)
+    if (hrnDebug && typeof hrnDebug === 'object') {
+      // Merge all fields from hrnDebug into debugExtras
+      Object.assign(debugExtras, hrnDebug);
+    }
     
     if (!outcome || (!outcome.win && !outcome.place && !outcome.show)) {
       debugExtras.hrnParseError = "No outcome parsed from HRN HTML";
-      return { outcome: null, debugExtras };
+      return { outcome: null, debugExtras, httpStatus, urlAttempted };
     }
 
-    return { outcome, debugExtras };
+    return { outcome, debugExtras, httpStatus: 200, urlAttempted };
   } catch (err) {
-    debugExtras.hrnParseError = String(err && err.message ? err.message : err);
-    return { outcome: null, debugExtras };
+    const errorMsg = err && typeof err.message === "string" ? err.message : String(err || "Unknown error");
+    debugExtras.hrnParseError = `Fetch error: ${errorMsg}`;
+    return { outcome: null, debugExtras, httpStatus, urlAttempted };
   }
 }
 
@@ -1074,24 +1144,110 @@ function splitHrnHtmlIntoRaceBlocks(html) {
 /**
  * Extract Win/Place/Show from HRN entries-results HTML
  * Parses the finish order table to find horses in positions 1, 2, 3
+ * Uses multiple fallback strategies for robust extraction
  * @param {string} html - HRN page HTML
  * @param {string|number} raceNo - Race number to target (optional, defaults to first table)
- * @returns {{ win: string, place: string, show: string }}
+ * @returns {{ outcome: { win: string, place: string, show: string }, debug: object }}
  */
 function extractOutcomeFromHrnHtml(html, raceNo = null) {
   const outcome = { win: "", place: "", show: "" };
+  const debug = {
+    hrnParsedBy: null,
+    hrnOutcomeRaw: { win: "", place: "", show: "" },
+    hrnOutcomeNormalized: { win: "", place: "", show: "" },
+    hrnFoundMarkers: {
+      Results: false,
+      Finish: false,
+      Win: false,
+      Place: false,
+      Show: false,
+    },
+    hrnRegionFound: false,
+    hrnRegionSnippet: null,
+    hrnCandidateRejectedReasons: [],
+  };
   
   if (!html || typeof html !== "string") {
-    return outcome;
+    debug.hrnParsedBy = "none";
+    return { outcome, debug };
   }
   
   try {
-    // If raceNo is provided, try to find the matching race block
-    let targetHtml = html;
+    // STEP 1: Strip script/style/comment blocks BEFORE any parsing to avoid matching JS code
+    let sanitizedHtml = html
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, " ") // Remove all <script> blocks
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, " ") // Remove all <style> blocks
+      .replace(/<!--[\s\S]*?-->/g, " ") // Remove HTML comments
+      .replace(/<noscript[^>]*>[\s\S]*?<\/noscript>/gi, " ") // Remove noscript blocks
+      .replace(/\s+/g, " "); // Normalize whitespace
+    
+    // Check for markers in sanitized HTML (Results=True, Finish=True, Win=True, Place=True, Show=True)
+    const markersPattern = /(Results|Finish|Win|Place|Show)\s*=\s*True/gi;
+    let markerMatch;
+    while ((markerMatch = markersPattern.exec(sanitizedHtml)) !== null) {
+      const markerName = markerMatch[1];
+      if (markerName) {
+        debug.hrnFoundMarkers[markerName] = true;
+      }
+    }
+    
+    // STEP 2: Isolate "results region" - find section most likely to contain finish results
+    let resultsRegion = null;
+    const regionPatterns = [
+      // Pattern 1: Look for explicit "Results" or "Race Results" headings
+      /(?:<h[1-6][^>]*>[\s\S]*?(?:Results?|Finish|Payout)[\s\S]*?<\/h[1-6]>[\s\S]{0,5000})/i,
+      // Pattern 2: Look for containers with "results" class/id
+      /<[^>]*(?:class|id)=["'][^"']*(?:results?|finish|payout)[^"']*["'][^>]*>([\s\S]{500,8000})<\/[^>]+>/i,
+      // Pattern 3: Look for table with "results" or "payout" in class/id
+      /<table[^>]*(?:class|id)=["'][^"']*(?:results?|finish|payout|table-payouts)[^"']*["'][^>]*>([\s\S]{500,10000})<\/table>/i,
+      // Pattern 4: Look for section between "Race" and "Results" keywords (within reasonable distance)
+      /Race[\s\S]{0,2000}?(?:Results?|Finish)[\s\S]{0,5000}/i,
+    ];
+    
+    for (const pattern of regionPatterns) {
+      const match = sanitizedHtml.match(pattern);
+      if (match && match[0] && match[0].length > 500) {
+        resultsRegion = match[0];
+        break;
+      }
+    }
+    
+    // Fallback: If no specific region found, but markers exist, use a larger context around markers
+    if (!resultsRegion && (debug.hrnFoundMarkers.Results || debug.hrnFoundMarkers.Finish)) {
+      const markerPos = sanitizedHtml.search(/(?:Results|Finish)\s*=\s*True/i);
+      if (markerPos > -1) {
+        const start = Math.max(0, markerPos - 2000);
+        const end = Math.min(sanitizedHtml.length, markerPos + 5000);
+        resultsRegion = sanitizedHtml.slice(start, end);
+      }
+    }
+    
+    // If still no region found, try to find any table with "payout" or "results" in it
+    if (!resultsRegion) {
+      const tableMatch = sanitizedHtml.match(/<table[^>]*>[\s\S]{500,10000}?<\/table>/gi);
+      if (tableMatch) {
+        // Use the largest table (likely to be results table)
+        resultsRegion = tableMatch.reduce((largest, current) => 
+          current.length > (largest?.length || 0) ? current : largest, null);
+      }
+    }
+    
+    // If no results region found, return early with no outcome
+    if (!resultsRegion) {
+      debug.hrnParsedBy = "none";
+      debug.hrnRegionFound = false;
+      return { outcome, debug };
+    }
+    
+    debug.hrnRegionFound = true;
+    debug.hrnRegionSnippet = resultsRegion.slice(0, 200).replace(/\s+/g, " "); // First 200 chars for debugging
+    
+    // If raceNo is provided, try to find the matching race block within results region
+    let targetHtml = resultsRegion;
     if (raceNo !== null && raceNo !== undefined) {
       const raceNoStr = String(raceNo || "").trim();
       if (raceNoStr) {
-        const blocks = splitHrnHtmlIntoRaceBlocks(html);
+        const blocks = splitHrnHtmlIntoRaceBlocks(resultsRegion);
         
         // Find the block matching the requested race
         const matchingBlock = blocks.find(b => String(b.raceNo) === raceNoStr);
@@ -1101,7 +1257,7 @@ function extractOutcomeFromHrnHtml(html, raceNo = null) {
           const tablePattern = /<table[^>]*table-payouts[^>]*>[\s\S]*?<\/table>/gi;
           const allTables = [];
           let tableMatch;
-          while ((tableMatch = tablePattern.exec(html)) !== null) {
+          while ((tableMatch = tablePattern.exec(resultsRegion)) !== null) {
             allTables.push({ index: tableMatch.index, html: tableMatch[0] });
           }
           
@@ -1109,203 +1265,452 @@ function extractOutcomeFromHrnHtml(html, raceNo = null) {
             targetHtml = allTables[matchingBlock.tableIndex].html;
           }
         }
-        // If no matching block found, fall back to parsing all tables (original behavior)
       }
     }
-    // Helper to decode HTML entities
+    
+    // Enhanced helper to decode HTML entities
     const decodeEntity = (str) => {
       if (!str) return "";
       return str
         .replace(/&amp;/g, "&")
         .replace(/&quot;/g, '"')
         .replace(/&#39;/g, "'")
+        .replace(/&#x27;/g, "'")
+        .replace(/&apos;/g, "'")
         .replace(/&lt;/g, "<")
         .replace(/&gt;/g, ">")
         .replace(/&nbsp;/g, " ")
         .replace(/&#160;/g, " ")
+        .replace(/&mdash;/g, "—")
+        .replace(/&ndash;/g, "–")
         .trim();
     };
     
-    // Helper to validate horse name
-    const isValid = (name) => {
-      if (!name || name.length === 0) return false;
-      if (name.length > 50) return false;
-      if (!/[A-Za-z]/.test(name)) return false;
-      // Reject if it looks like HTML or code
-      if (name.includes("<") || name.includes(">") || name.includes("function")) return false;
-      // Reject common non-horse-name patterns
-      if (/^\d+$/.test(name)) return false; // Just numbers
-      if (name.toLowerCase().includes("finish") || name.toLowerCase().includes("position")) return false;
-      return true;
+    // Enhanced normalization: trim, decode entities, remove extra punctuation, preserve apostrophes/hyphens
+    const normalizeHorseName = (name) => {
+      if (!name) return "";
+      
+      // Decode HTML entities
+      let normalized = decodeEntity(name);
+      
+      // Remove HTML tags if any remain
+      normalized = normalized.replace(/<[^>]+>/g, "");
+      
+      // Remove speed figures in parentheses like "(92*)", "(89*)", etc.
+      normalized = normalized.replace(/\s*\([^)]*\)\s*$/, "");
+      
+      // Remove extra punctuation at start/end (but preserve apostrophes and hyphens inside)
+      normalized = normalized.replace(/^[^\w'-]+/, "").replace(/[^\w'-]+$/, "");
+      
+      // Collapse multiple spaces
+      normalized = normalized.replace(/\s+/g, " ");
+      
+      // Trim
+      normalized = normalized.trim();
+      
+      return normalized;
     };
     
-    // Strategy: Look for HRN payout tables with Win/Place/Show columns
-    // HRN uses table-payouts tables where:
-    // - First row with Win payout ($X.XX, not "-") = WINNER
-    // - Second row = PLACE
-    // - Third row = SHOW
-    // Horse names are in format: "Horse Name (Speed)" in the first <td>
-    
-    // Pattern 1: Look for table-payouts tables and extract first 3 rows
-    // HRN structure: <td>Horse Name (Speed)</td><td><img></td><td>Win</td><td>Place</td><td>Show</td>
-    const payoutTablePattern = /<table[^>]*table-payouts[^>]*>[\s\S]*?<tbody>([\s\S]*?)<\/tbody>/gi;
-    let tableMatch;
-    while ((tableMatch = payoutTablePattern.exec(targetHtml)) !== null) {
-      const tbody = tableMatch[1];
+    // Strict validation helper that rejects JS tokens, generic words, and invalid patterns
+    // Returns { valid: boolean, reason: string | null }
+    const validateHorseName = (name, debugReasons = null) => {
+      if (!name || name.length === 0) {
+        if (debugReasons) debugReasons.push("empty_name");
+        return { valid: false, reason: "empty_name" };
+      }
       
-      // Extract all TRs and parse TDs more generically
-      const trPattern = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
-      const rows = [];
-      let trMatch;
-      while ((trMatch = trPattern.exec(tbody)) !== null && rows.length < 5) {
-        const rowHtml = trMatch[1];
+      // Reject if too short (must be at least 3 chars)
+      if (name.length < 3) {
+        if (debugReasons) debugReasons.push(`too_short_${name.length}`);
+        return { valid: false, reason: "too_short" };
+      }
+      
+      if (name.length > 50) {
+        if (debugReasons) debugReasons.push(`too_long_${name.length}`);
+        return { valid: false, reason: "too_long" };
+      }
+      
+      // Must contain at least one letter
+      if (!/[A-Za-z]/.test(name)) {
+        if (debugReasons) debugReasons.push("no_letters");
+        return { valid: false, reason: "no_letters" };
+      }
+      
+      // Reject if contains dots (likely JS property access like "dow.dataLayer")
+      if (name.includes(".")) {
+        if (debugReasons) debugReasons.push(`contains_dot:${name}`);
+        return { valid: false, reason: "contains_dot" };
+      }
+      
+      // Reject if contains HTML angle brackets or "=" (likely HTML/JS code)
+      if (name.includes("<") || name.includes(">") || name.includes("=")) {
+        if (debugReasons) debugReasons.push(`contains_html:${name}`);
+        return { valid: false, reason: "contains_html" };
+      }
+      
+      // Reject JavaScript identifiers and keywords
+      const jsKeywords = [
+        "datalayer", "dow", "window", "document", "function", "var", "let", "const",
+        "this", "place", "win", "show", "true", "false", "null", "undefined",
+        "return", "if", "else", "for", "while", "prototype", "call", "apply",
+        "splice", "push", "pop", "slice", "split", "replace", "match", "exec",
+        "test", "parse", "stringify", "object", "array", "number", "string",
+      ];
+      const nameLower = name.toLowerCase().trim();
+      for (const keyword of jsKeywords) {
+        if (nameLower === keyword || nameLower === `"${keyword}"` || nameLower === `'${keyword}'`) {
+          if (debugReasons) debugReasons.push(`js_keyword:${keyword}`);
+          return { valid: false, reason: `js_keyword:${keyword}` };
+        }
+      }
+      
+      // Reject generic tokens that are too short or common words
+      const genericTokens = ["this", "place", "win", "show", "the", "a", "an", "is", "are", "was", "were"];
+      if (genericTokens.includes(nameLower)) {
+        if (debugReasons) debugReasons.push(`generic_token:${nameLower}`);
+        return { valid: false, reason: `generic_token:${nameLower}` };
+      }
+      
+      // Reject if looks like HTML or code
+      if (name.includes("function") || name.includes("=>") || name.includes("()")) {
+        if (debugReasons) debugReasons.push(`contains_code:${name}`);
+        return { valid: false, reason: "contains_code" };
+      }
+      
+      // Reject common non-horse-name patterns
+      if (/^\d+$/.test(name)) {
+        if (debugReasons) debugReasons.push(`pure_numbers:${name}`);
+        return { valid: false, reason: "pure_numbers" };
+      }
+      
+      if (name.toLowerCase().includes("finish") || name.toLowerCase().includes("position")) {
+        if (debugReasons) debugReasons.push(`contains_finish_position:${name}`);
+        return { valid: false, reason: "contains_finish_position" };
+      }
+      
+      if (name.toLowerCase().includes("win:") || name.toLowerCase().includes("place:") || name.toLowerCase().includes("show:")) {
+        if (debugReasons) debugReasons.push(`contains_label:${name}`);
+        return { valid: false, reason: "contains_label" };
+      }
+      
+      // Reject if it's just currency/payout info
+      if (/^\$?[\d,]+\.?\d*$/.test(name)) {
+        if (debugReasons) debugReasons.push(`currency_only:${name}`);
+        return { valid: false, reason: "currency_only" };
+      }
+      
+      // Reject if contains suspicious JS patterns
+      if (/[{}()=>]/.test(name) || /^[A-Z],/.test(name)) {
+        if (debugReasons) debugReasons.push(`js_pattern:${name}`);
+        return { valid: false, reason: "js_pattern" };
+      }
+      
+      return { valid: true, reason: null };
+    };
+    
+    // Helper for backward compatibility (used in some places)
+    const isValid = (name) => {
+      return validateHorseName(name).valid;
+    };
+    
+    // STRATEGY 1: Look for Results/Finish table sections and parse first three finishers
+    // This is the most reliable for entries-results pages
+    // Try multiple table patterns to handle different HRN structures
+    const tablePatterns = [
+      // Pattern 1: Standard table with tbody
+      /<table[^>]*(?:results|finish|payout|table-payouts)[^>]*>[\s\S]*?<tbody>([\s\S]*?)<\/tbody>[\s\S]*?<\/table>/gi,
+      // Pattern 2: Table without explicit tbody (rows directly in table)
+      /<table[^>]*(?:results|finish|payout)[^>]*>([\s\S]*?)<\/table>/gi,
+      // Pattern 3: Any table that might contain results
+      /<table[^>]*>([\s\S]{500,10000}?)<\/table>/gi, // Limit size to avoid matching entire page
+    ];
+    
+    const rows = [];
+    let foundTable = false;
+    
+    for (const tablePattern of tablePatterns) {
+      tablePattern.lastIndex = 0; // Reset regex
+      let tableMatch;
+      
+      while ((tableMatch = tablePattern.exec(targetHtml)) !== null && !foundTable) {
+        const tableContent = tableMatch[1];
+        if (!tableContent || tableContent.length < 100) continue; // Skip tiny tables
         
-        // Extract all TDs in this row
-        const tdPattern = /<td[^>]*>([\s\S]*?)<\/td>/gi;
-        const cells = [];
-        let tdMatch;
-        while ((tdMatch = tdPattern.exec(rowHtml)) !== null) {
-          // Remove all HTML tags and decode entities
-          const cellContent = tdMatch[1]
-            .replace(/<[^>]+>/g, "")
-            .replace(/&amp;/g, "&")
-            .replace(/&quot;/g, '"')
-            .replace(/&#39;/g, "'")
-            .replace(/&nbsp;/g, " ")
-            .trim();
-          cells.push(cellContent);
+        // Extract all TRs from table content
+        const trPattern = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+        let trMatch;
+        let rowIndex = 0;
+        const tableRows = [];
+        
+        while ((trMatch = trPattern.exec(tableContent)) !== null && rowIndex < 15) {
+          const rowHtml = trMatch[1];
+          
+          // Skip header rows (contain <th> or text like "Finish", "Position", "Horse")
+          if (rowHtml.match(/<th[^>]*>/i) || 
+              /finish|position|horse\s*name|win|place|show/i.test(rowHtml) && rowIndex === 0) {
+            continue;
+          }
+          
+          // Extract all TDs in this row
+          const tdPattern = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+          const cells = [];
+          let tdMatch;
+          
+          while ((tdMatch = tdPattern.exec(rowHtml)) !== null) {
+            // Remove all HTML tags first, then decode
+            let cellContent = tdMatch[1]
+              .replace(/<[^>]+>/g, " ")
+              .replace(/\s+/g, " ")
+              .trim();
+            // Decode entities
+            cellContent = decodeEntity(cellContent);
+            if (cellContent && cellContent.length > 0) {
+              cells.push(cellContent);
+            }
+          }
+          
+          // Try to find horse name and position
+          let horseNameRaw = null;
+          let position = null;
+          
+          // Strategy: Look for position number (1, 2, 3) in any cell, then horse name in adjacent cell
+          for (let i = 0; i < cells.length; i++) {
+            const cell = cells[i].trim();
+            // Check if this cell is a position number
+            if (/^\s*[123]\s*$/.test(cell)) {
+              position = parseInt(cell, 10);
+              // Horse name is likely in the next non-empty cell
+              for (let j = i + 1; j < Math.min(i + 4, cells.length); j++) {
+                const nextCell = cells[j].trim();
+                const normalized = normalizeHorseName(nextCell);
+                const validation = validateHorseName(normalized, debug.hrnCandidateRejectedReasons);
+                if (validation.valid) {
+                  horseNameRaw = nextCell;
+                  break;
+                }
+              }
+              if (horseNameRaw) break;
+            }
+          }
+          
+          // Fallback: If no position found, try to find horse name in first few cells
+          if (!position && !horseNameRaw && cells.length > 0) {
+            for (const cell of cells.slice(0, 5)) {
+              const normalized = normalizeHorseName(cell);
+              const validation = validateHorseName(normalized, debug.hrnCandidateRejectedReasons);
+              if (validation.valid) {
+                horseNameRaw = cell;
+                // Assume row order: 1st row = win, 2nd = place, 3rd = show
+                position = rowIndex + 1;
+                break;
+              }
+            }
+          }
+          
+          if (horseNameRaw) {
+            const horseName = normalizeHorseName(horseNameRaw);
+            const validation = validateHorseName(horseName, debug.hrnCandidateRejectedReasons);
+            if (validation.valid) {
+              tableRows.push({ position: position || (rowIndex + 1), horseName, raw: horseNameRaw });
+              rowIndex++;
+            }
+          }
         }
         
-        // HRN structure: [0] = Horse Name (Speed), [1] = empty/image, [2] = Win, [3] = Place, [4] = Show
-        if (cells.length >= 5) {
-          const horseNameRaw = cells[0];
-          // Extract horse name (remove speed figure in parentheses like "(92*)" or "(89*)")
-          const horseName = horseNameRaw.replace(/\s*\([^)]+\)\s*$/, "").trim();
-          const winPayout = (cells[2] || "").trim();
-          const placePayout = (cells[3] || "").trim();
-          const showPayout = (cells[4] || "").trim();
-          
-          if (isValid(horseName)) {
-            rows.push({ horseName, winPayout, placePayout, showPayout });
+        // If we found at least 3 valid rows, use this table
+        if (tableRows.length >= 3) {
+          rows.push(...tableRows);
+          foundTable = true;
+          break;
+        } else if (tableRows.length > 0) {
+          // Store partial results but keep looking
+          rows.push(...tableRows);
+        }
+      }
+      
+      if (foundTable) break;
+    }
+    
+    // Extract Win/Place/Show from collected rows
+    if (rows.length >= 1 && !outcome.win) {
+      const winner = rows.find(r => r.position === 1) || rows[0];
+      outcome.win = winner.horseName;
+      debug.hrnOutcomeRaw.win = winner.raw || "";
+    }
+    if (rows.length >= 2 && !outcome.place) {
+      const place = rows.find(r => r.position === 2) || rows[1];
+      outcome.place = place.horseName;
+      debug.hrnOutcomeRaw.place = place.raw || "";
+    }
+    if (rows.length >= 3 && !outcome.show) {
+      const show = rows.find(r => r.position === 3) || rows[2];
+      outcome.show = show.horseName;
+      debug.hrnOutcomeRaw.show = show.raw || "";
+    }
+    
+    if (outcome.win && outcome.place && outcome.show) {
+      debug.hrnParsedBy = "table";
+    }
+    
+    // STRATEGY 2: Look for explicit "Win / Place / Show" labels and parse adjacent horse names
+    // Only search within results region (targetHtml) to avoid matching JS code
+    if ((!outcome.win || !outcome.place || !outcome.show) && targetHtml && targetHtml.length > 100) {
+      // Pattern: "Win:" or "Win" followed by horse name (case insensitive)
+      // Updated patterns to be more restrictive - require at least 3 chars, avoid dots
+      const winLabelPatterns = [
+        /(?:^|\s|>|:)\s*Win\s*[:–—\-]?\s*([A-Za-z][A-Za-z0-9\s'\-]{2,30}?)(?:\s|$|,|;|<|\(|\[|\$)/i,
+        /Win\s+Payout[^:]*:\s*\$?[\d,]+\.?\d*\s+([A-Za-z][A-Za-z0-9\s'\-]{2,30}?)(?:\s|$|,|;|<|\(|\[)/i,
+      ];
+      
+      const placeLabelPatterns = [
+        /(?:^|\s|>|:)\s*Place\s*[:–—\-]?\s*([A-Za-z][A-Za-z0-9\s'\-]{2,30}?)(?:\s|$|,|;|<|\(|\[|\$)/i,
+        /Place\s+Payout[^:]*:\s*\$?[\d,]+\.?\d*\s+([A-Za-z][A-Za-z0-9\s'\-]{2,30}?)(?:\s|$|,|;|<|\(|\[)/i,
+      ];
+      
+      const showLabelPatterns = [
+        /(?:^|\s|>|:)\s*Show\s*[:–—\-]?\s*([A-Za-z][A-Za-z0-9\s'\-]{2,30}?)(?:\s|$|,|;|<|\(|\[|\$)/i,
+        /Show\s+Payout[^:]*:\s*\$?[\d,]+\.?\d*\s+([A-Za-z][A-Za-z0-9\s'\-]{2,30}?)(?:\s|$|,|;|<|\(|\[)/i,
+      ];
+      
+      for (const pattern of winLabelPatterns) {
+        const match = targetHtml.match(pattern);
+        if (match && match[1] && !outcome.win) {
+          const raw = match[1].trim();
+          const normalized = normalizeHorseName(raw);
+          const validation = validateHorseName(normalized, debug.hrnCandidateRejectedReasons);
+          if (validation.valid) {
+            outcome.win = normalized;
+            debug.hrnOutcomeRaw.win = raw;
+            if (!debug.hrnParsedBy) debug.hrnParsedBy = "labels";
+            break;
           }
         }
       }
       
-      // First row with Win payout (not "-" or "--" and not empty) is the winner
-      // Second row is place, third row is show
-      // Check if first row has a valid win payout (starts with $ or is a number)
-      const firstRowHasWin = rows.length >= 1 && 
-        rows[0].winPayout && 
-        rows[0].winPayout !== "-" && 
-        rows[0].winPayout !== "--" &&
-        rows[0].winPayout.trim() !== "" &&
-        (rows[0].winPayout.startsWith("$") || /^\d/.test(rows[0].winPayout));
-      
-      if (firstRowHasWin && !outcome.win) {
-        outcome.win = rows[0].horseName;
-      }
-      // Place is always the second row (even if win payout is "-")
-      if (rows.length >= 2 && !outcome.place) {
-        outcome.place = rows[1].horseName;
-      }
-      // Show is always the third row
-      if (rows.length >= 3 && !outcome.show) {
-        outcome.show = rows[2].horseName;
-      }
-      
-      // If we found all three, break
-      if (outcome.win && outcome.place && outcome.show) {
-        break;
-      }
-    }
-    
-    // Pattern 2: Look for table rows with finish position in a <td> followed by horse name
-    // This handles: <tr><td>1</td><td>Horse Name</td>...</tr>
-    if (!outcome.win || !outcome.place || !outcome.show) {
-      const tableRowPattern = /<tr[^>]*>[\s\S]*?<td[^>]*>\s*(\d+)\s*<\/td>[\s\S]*?<td[^>]*>([^<]+)<\/td>/gi;
-      const finishMap = {};
-      
-      let match;
-      while ((match = tableRowPattern.exec(html)) !== null) {
-        const position = parseInt(match[1], 10);
-        const horseName = decodeEntity(match[2]).replace(/\s*\([^)]+\)\s*$/, "").trim();
-        
-        if (position >= 1 && position <= 3 && isValid(horseName)) {
-          if (position === 1 && !finishMap[1]) finishMap[1] = horseName;
-          if (position === 2 && !finishMap[2]) finishMap[2] = horseName;
-          if (position === 3 && !finishMap[3]) finishMap[3] = horseName;
-        }
-      }
-      
-      if (!outcome.win && finishMap[1]) outcome.win = finishMap[1];
-      if (!outcome.place && finishMap[2]) outcome.place = finishMap[2];
-      if (!outcome.show && finishMap[3]) outcome.show = finishMap[3];
-    }
-    
-    // Pattern 2: Look for "Finish" or "Pos" column headers, then extract rows
-    // This handles tables with explicit Finish/Position columns
-    if (!outcome.win || !outcome.place || !outcome.show) {
-      // Try to find a results table section
-      const tableSectionMatch = targetHtml.match(/<table[^>]*>[\s\S]{0,5000}?<\/table>/i);
-      if (tableSectionMatch) {
-        const tableHtml = tableSectionMatch[0];
-        
-        // Look for rows with finish positions 1, 2, 3
-        const finishRowPattern = /<tr[^>]*>[\s\S]*?(?:finish|pos|position)[^>]*>\s*(\d+)\s*[^<]*<[\s\S]*?<td[^>]*>([^<]+)<\/td>/gi;
-        const finishMap2 = {};
-        
-        let match2;
-        while ((match2 = finishRowPattern.exec(tableHtml)) !== null) {
-          const position = parseInt(match2[1], 10);
-          const horseName = decodeEntity(match2[2]);
-          
-          if (position >= 1 && position <= 3 && isValid(horseName)) {
-            if (position === 1 && !finishMap2[1]) finishMap2[1] = horseName;
-            if (position === 2 && !finishMap2[2]) finishMap2[2] = horseName;
-            if (position === 3 && !finishMap2[3]) finishMap2[3] = horseName;
+      for (const pattern of placeLabelPatterns) {
+        const match = targetHtml.match(pattern);
+        if (match && match[1] && !outcome.place) {
+          const raw = match[1].trim();
+          const normalized = normalizeHorseName(raw);
+          const validation = validateHorseName(normalized, debug.hrnCandidateRejectedReasons);
+          if (validation.valid) {
+            outcome.place = normalized;
+            debug.hrnOutcomeRaw.place = raw;
+            if (!debug.hrnParsedBy) debug.hrnParsedBy = "labels";
+            break;
           }
         }
-        
-        if (!outcome.win && finishMap2[1]) outcome.win = finishMap2[1];
-        if (!outcome.place && finishMap2[2]) outcome.place = finishMap2[2];
-        if (!outcome.show && finishMap2[3]) outcome.show = finishMap2[3];
       }
-    }
-    
-    // Pattern 3: Look for "Win:", "Place:", "Show:" text patterns in payout sections
-    if (!outcome.win || !outcome.place || !outcome.show) {
-      // Look for payout table or results summary
-      const payoutSection = targetHtml.match(/(?:payout|results|finish)[\s\S]{0,2000}?(?:win|place|show)[\s\S]{0,2000}?/i);
-      if (payoutSection) {
-        const section = payoutSection[0];
-        
-        // Try to find horse names after Win/Place/Show labels
-        const winMatch = section.match(/win[:\s]+([A-Za-z0-9\s'\-\.]+?)(?:\s|$|,|;|<\/)/i);
-        const placeMatch = section.match(/place[:\s]+([A-Za-z0-9\s'\-\.]+?)(?:\s|$|,|;|<\/)/i);
-        const showMatch = section.match(/show[:\s]+([A-Za-z0-9\s'\-\.]+?)(?:\s|$|,|;|<\/)/i);
-        
-        if (winMatch && winMatch[1] && !outcome.win && isValid(winMatch[1].trim())) {
-          outcome.win = decodeEntity(winMatch[1].trim());
-        }
-        if (placeMatch && placeMatch[1] && !outcome.place && isValid(placeMatch[1].trim())) {
-          outcome.place = decodeEntity(placeMatch[1].trim());
-        }
-        if (showMatch && showMatch[1] && !outcome.show && isValid(showMatch[1].trim())) {
-          outcome.show = decodeEntity(showMatch[1].trim());
+      
+      for (const pattern of showLabelPatterns) {
+        const match = targetHtml.match(pattern);
+        if (match && match[1] && !outcome.show) {
+          const raw = match[1].trim();
+          const normalized = normalizeHorseName(raw);
+          const validation = validateHorseName(normalized, debug.hrnCandidateRejectedReasons);
+          if (validation.valid) {
+            outcome.show = normalized;
+            debug.hrnOutcomeRaw.show = raw;
+            if (!debug.hrnParsedBy) debug.hrnParsedBy = "labels";
+            break;
+          }
         }
       }
     }
     
-    // Final validation
-    if (!isValid(outcome.win)) outcome.win = "";
-    if (!isValid(outcome.place)) outcome.place = "";
-    if (!isValid(outcome.show)) outcome.show = "";
+    // STRATEGY 3: Regex fallbacks - capture patterns like "Win" followed by horse name
+    // Only search within results region (targetHtml) to avoid matching JS code
+    // More restrictive patterns - no dots allowed, must be at least 3 chars
+    if ((!outcome.win || !outcome.place || !outcome.show) && targetHtml && targetHtml.length > 100) {
+      // Pattern: Look for sequences like "Win [horse name]", avoiding odds/payout numbers
+      // Updated: removed dots from character class, require at least 3 chars
+      const regexPatterns = [
+        // Pattern: "Win" followed by optional punctuation, then horse name (no dots!)
+        { key: "win", regex: /Win\s*[:\-—–]?\s*([A-Za-z][A-Za-z0-9\s'\-]{2,30}?)(?:\s|$|,|;|<|\(|\[|\$|(?:\d+\.[\d,]+)|Win|Place|Show)/i },
+        { key: "place", regex: /Place\s*[:\-—–]?\s*([A-Za-z][A-Za-z0-9\s'\-]{2,30}?)(?:\s|$|,|;|<|\(|\[|\$|(?:\d+\.[\d,]+)|Win|Place|Show)/i },
+        { key: "show", regex: /Show\s*[:\-—–]?\s*([A-Za-z][A-Za-z0-9\s'\-]{2,30}?)(?:\s|$|,|;|<|\(|\[|\$|(?:\d+\.[\d,]+)|Win|Place|Show)/i },
+        // Alternative: Look for position numbers (1st, 2nd, 3rd) followed by horse name
+        { key: "win", regex: /(?:1st|First|1\s+st)\s+([A-Za-z][A-Za-z0-9\s'\-]{2,30}?)(?:\s|$|,|;|<|\(|\[)/i },
+        { key: "place", regex: /(?:2nd|Second|2\s+nd)\s+([A-Za-z][A-Za-z0-9\s'\-]{2,30}?)(?:\s|$|,|;|<|\(|\[)/i },
+        { key: "show", regex: /(?:3rd|Third|3\s+rd)\s+([A-Za-z][A-Za-z0-9\s'\-]{2,30}?)(?:\s|$|,|;|<|\(|\[)/i },
+      ];
+      
+      for (const { key, regex } of regexPatterns) {
+        if ((key === "win" && outcome.win) || (key === "place" && outcome.place) || (key === "show" && outcome.show)) {
+          continue; // Already found
+        }
+        
+        const match = targetHtml.match(regex);
+        if (match && match[1]) {
+          const raw = match[1].trim();
+          const normalized = normalizeHorseName(raw);
+          const validation = validateHorseName(normalized, debug.hrnCandidateRejectedReasons);
+          if (validation.valid) {
+            if (key === "win" && !outcome.win) {
+              outcome.win = normalized;
+              debug.hrnOutcomeRaw.win = raw;
+              if (!debug.hrnParsedBy) debug.hrnParsedBy = "regex";
+            } else if (key === "place" && !outcome.place) {
+              outcome.place = normalized;
+              debug.hrnOutcomeRaw.place = raw;
+              if (!debug.hrnParsedBy) debug.hrnParsedBy = "regex";
+            } else if (key === "show" && !outcome.show) {
+              outcome.show = normalized;
+              debug.hrnOutcomeRaw.show = raw;
+              if (!debug.hrnParsedBy) debug.hrnParsedBy = "regex";
+            }
+          }
+        }
+      }
+    }
+    
+    // Final normalization and strict validation
+    outcome.win = normalizeHorseName(outcome.win);
+    outcome.place = normalizeHorseName(outcome.place);
+    outcome.show = normalizeHorseName(outcome.show);
+    
+    // Final validation with strict rules - reject any invalid candidates
+    const winValidation = validateHorseName(outcome.win, debug.hrnCandidateRejectedReasons);
+    if (!winValidation.valid) {
+      outcome.win = "";
+      debug.hrnOutcomeRaw.win = "";
+    }
+    
+    const placeValidation = validateHorseName(outcome.place, debug.hrnCandidateRejectedReasons);
+    if (!placeValidation.valid) {
+      outcome.place = "";
+      debug.hrnOutcomeRaw.place = "";
+    }
+    
+    const showValidation = validateHorseName(outcome.show, debug.hrnCandidateRejectedReasons);
+    if (!showValidation.valid) {
+      outcome.show = "";
+      debug.hrnOutcomeRaw.show = "";
+    }
+    
+    // Store normalized values in debug
+    debug.hrnOutcomeNormalized = {
+      win: outcome.win,
+      place: outcome.place,
+      show: outcome.show,
+    };
+    
+    // If no valid outcome found, mark as "none" (don't return false positives)
+    if (!outcome.win && !outcome.place && !outcome.show) {
+      debug.hrnParsedBy = "none";
+    } else if (!debug.hrnParsedBy) {
+      // Partial results found but strategy not recorded (shouldn't happen, but handle it)
+      debug.hrnParsedBy = "partial";
+    }
     
   } catch (err) {
     console.error("[extractOutcomeFromHrnHtml] Parse error:", err.message || err);
+    debug.hrnParsedBy = "error";
     // Return empty outcome on error - never throw
-    return { win: "", place: "", show: "" };
+    return { outcome: { win: "", place: "", show: "" }, debug };
   }
+  
+  return { outcome, debug };
 }
 
 /**
@@ -1559,7 +1964,7 @@ function extractOutcomeFromGoogleHtml(html) {
  * This is the default behavior when VERIFY_RACE_MODE is not set to "full"
  * Now enhanced to fetch and parse Google HTML for Win/Place/Show
  */
-async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
+async function buildStubResponse({ track, date, raceNo, predicted = {}, uiDateRaw = null }) {
   // CRITICAL: date should already be canonical ISO from handler
   // Use it as-is - no fallback to today, no re-normalization
   // If date is missing, that's an upstream bug - log warning but use empty string
@@ -1611,6 +2016,7 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
   let hrnUrl = null;
   let hrnOutcome = null;
   let hrnParseError = null;
+  let hrnDebugFields = null; // Store HRN debug fields to merge into debug later
   
   try {
     const res = await fetch(googleUrl, {
@@ -1639,8 +2045,11 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
 
   // ALWAYS try HRN fallback if we have track, date, and Google didn't find all three
   // This ensures HRN is attempted even if Google fetch fails or doesn't contain results
+  let hrnAttempted = false;
+  let hrnHttpStatus = null;
   if (!outcome.win || !outcome.place || !outcome.show) {
     if (safeTrack && usingDate) {
+      hrnAttempted = true; // Mark that we attempted HRN
       try {
         // First try to extract HRN URL from Google HTML (if we have it)
         if (googleHtml) {
@@ -1663,9 +2072,16 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
               },
             });
             
+            hrnHttpStatus = hrnRes ? hrnRes.status : null;
+            
             if (hrnRes && hrnRes.ok) {
               const hrnHtml = await hrnRes.text();
-              hrnOutcome = extractOutcomeFromHrnHtml(hrnHtml, raceNoStr);
+              const hrnResult = extractOutcomeFromHrnHtml(hrnHtml, raceNoStr);
+              hrnOutcome = hrnResult.outcome;
+              // Store ALL HRN debug fields to merge into debug later
+              if (hrnResult.debug) {
+                hrnDebugFields = { ...hrnResult.debug }; // Copy all fields
+              }
               
               // If HRN parsing found at least one result, use it
               if (hrnOutcome && (hrnOutcome.win || hrnOutcome.place || hrnOutcome.show)) {
@@ -1681,7 +2097,7 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
                 // HRN failed - no Equibase fallback in stub mode
               }
             } else {
-              hrnParseError = `HTTP ${hrnRes ? hrnRes.status : "unknown"}`;
+              hrnParseError = `HTTP ${hrnHttpStatus || "unknown"}`;
               // HRN fetch failed - no Equibase fallback in stub mode
             }
           } catch (hrnErr) {
@@ -1772,7 +2188,7 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
   const hasOutcome = !!(outcome.win || outcome.place || outcome.show);
   const ok = hasOutcome || step === "verify_race_fallback_hrn" || step === "verify_race_fallback_hrn_partial";
   
-  // Build debug object - only lightweight fields
+  // Build debug object - start with base fields
   const debug = {
     googleUrl,
     backendVersion: BACKEND_VERSION,
@@ -1780,14 +2196,29 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
     canonicalDateIso: usingDate,
   };
   
-  // Include HRN debug info if we attempted it (lightweight fields only)
-  // Note: hrnRaceNo will be added by tryHrnFallback if called from full mode
-  if (hrnUrl) {
-    debug.hrnUrl = hrnUrl;
+  // Add uiDateRaw if provided
+  if (uiDateRaw !== null && uiDateRaw !== undefined) {
+    debug.uiDateRaw = uiDateRaw;
   }
   
-  if (hrnParseError) {
-    debug.hrnParseError = hrnParseError;
+  // Merge ALL HRN debug fields if HRN was attempted
+  if (hrnAttempted) {
+    debug.hrnAttempted = true;
+    if (hrnUrl) {
+      debug.hrnUrl = hrnUrl;
+    }
+    if (hrnHttpStatus !== null) {
+      debug.hrnHttpStatus = hrnHttpStatus;
+    }
+    if (hrnParseError) {
+      debug.hrnParseError = hrnParseError;
+    }
+    
+    // Merge ALL fields from hrnDebugFields (not just selective ones)
+    if (hrnDebugFields && typeof hrnDebugFields === 'object') {
+      // Merge all fields from hrnDebugFields into debug
+      Object.assign(debug, hrnDebugFields);
+    }
   }
   
   // Store googleHtml in debug for potential future use (but don't send it in response to avoid bloat)
@@ -1816,29 +2247,60 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
     responseMeta: {
       handlerFile: HANDLER_FILE,
       backendVersion: BACKEND_VERSION,
+      internalBypassAuthorized: false, // buildStubResponse is used in error cases, so bypass is false
     },
   };
 }
 
 export default async function handler(req, res) {
+  // Check for internal/system flag to bypass PayGate (for verify_backfill batch jobs)
+  // Require BOTH internal header AND secret to prevent spoofing
+  const internalHeader = req.headers['x-finishline-internal'] === 'true';
+  const internalSecret = String(req.headers['x-finishline-internal-secret'] || '').trim();
+  const expectedSecret = process.env.INTERNAL_JOB_SECRET || '';
+  const secretOk = !!expectedSecret && internalSecret === expectedSecret;
+  const isInternalRequest = internalHeader && secretOk;
+  let bypassedPayGate = false;
+  let internalBypassAuthorized = false;
+
   // Server-side PayGate check (non-blocking in monitor mode)
-  try {
-    const { checkPayGateAccess } = await import('../../lib/paygate-server.js');
-    const accessCheck = checkPayGateAccess(req);
-    if (!accessCheck.allowed) {
-      return res.status(403).json({
-        ok: false,
-        error: 'PayGate locked',
-        message: 'Premium access required. Please unlock to continue.',
-        code: 'paygate_locked',
-        reason: accessCheck.reason,
-        step: 'verify_race_error'
-      });
+  // Skip PayGate ONLY if this is an internal system request with valid secret (e.g., from verify_backfill)
+  if (!isInternalRequest) {
+    // If header present but secret missing/mismatch, log for security monitoring
+    if (internalHeader && !secretOk) {
+      console.warn('[verify_race] Internal header present but secret missing/mismatch - enforcing PayGate');
     }
-  } catch (paygateErr) {
-    // Non-fatal: log but allow request (fail-open for safety)
-    console.warn('[verify_race] PayGate check failed (non-fatal):', paygateErr?.message);
+    
+    try {
+      const { checkPayGateAccess } = await import('../../lib/paygate-server.js');
+      const accessCheck = checkPayGateAccess(req);
+      if (!accessCheck.allowed) {
+        return res.status(403).json({
+          ok: false,
+          error: 'PayGate locked',
+          message: 'Premium access required. Please unlock to continue.',
+          code: 'paygate_locked',
+          reason: accessCheck.reason,
+          step: 'verify_race_error',
+          bypassedPayGate: false,
+          responseMeta: {
+            handlerFile: HANDLER_FILE,
+            backendVersion: BACKEND_VERSION,
+            internalBypassAuthorized: false
+          }
+        });
+      }
+    } catch (paygateErr) {
+      // Non-fatal: log but allow request (fail-open for safety)
+      console.warn('[verify_race] PayGate check failed (non-fatal):', paygateErr?.message);
+    }
+  } else {
+    // Internal request with valid secret - bypass PayGate
+    bypassedPayGate = true;
+    internalBypassAuthorized = true;
+    console.log('[verify_race] Internal request detected with valid secret - PayGate bypassed');
   }
+
   // We NEVER throw from this handler. All errors are reported in the JSON body.
   try {
     if (req.method !== "POST") {
@@ -1894,6 +2356,7 @@ export default async function handler(req, res) {
 
     let canonicalDateIso = canonicalizeDateFromClient(uiDateRaw);
     
+    // Note: PayGate check already performed at top of handler - bypassedPayGate flag is set there
     // Server-side PayGate check (non-blocking in monitor mode)
     try {
       const { checkPayGateAccess } = await import('../../lib/paygate-server.js');
@@ -1946,6 +2409,7 @@ export default async function handler(req, res) {
         responseMeta: {
           handlerFile: HANDLER_FILE,
           backendVersion: BACKEND_VERSION,
+          internalBypassAuthorized: internalBypassAuthorized,
         },
       });
     }
@@ -2083,7 +2547,16 @@ export default async function handler(req, res) {
         // Add GreenZone (safe, never throws)
         await addGreenZoneToResponse(result);
 
-        return res.status(200).json(result);
+        return res.status(200).json({
+          ...result,
+          bypassedPayGate: bypassedPayGate,
+          responseMeta: {
+            handlerFile: HANDLER_FILE,
+            backendVersion: BACKEND_VERSION,
+            bypassedPayGate: bypassedPayGate,
+            internalBypassAuthorized: internalBypassAuthorized,
+          }
+        });
       } catch (error) {
         console.error("[verify_race] Manual verify error:", error);
         // Return error response (still 200 to match never-500 policy)
@@ -2107,6 +2580,13 @@ export default async function handler(req, res) {
             source: "manual",
           },
           greenZone: { enabled: false, reason: "error" },
+          bypassedPayGate: bypassedPayGate,
+          responseMeta: {
+            handlerFile: HANDLER_FILE,
+            backendVersion: BACKEND_VERSION,
+            bypassedPayGate: bypassedPayGate,
+            internalBypassAuthorized: internalBypassAuthorized,
+          },
         });
       }
     }
@@ -2127,11 +2607,30 @@ export default async function handler(req, res) {
 
     // If not in full mode, immediately return stub
     if (mode !== "full") {
-      const stub = await buildStubResponse(ctx);
+      const stub = await buildStubResponse({
+        ...ctx,
+        uiDateRaw: ctx.dateRaw || uiDateRaw, // Pass uiDateRaw to buildStubResponse
+      });
+      // Set source based on step to indicate where outcome came from
+      if (stub.debug && !stub.debug.source) {
+        if (stub.step && stub.step.includes("hrn")) {
+          stub.debug.source = "hrn";
+        } else if (stub.step && stub.step.includes("google")) {
+          stub.debug.source = "google";
+        }
+      }
       // Add GreenZone (safe, never throws)
       await addGreenZoneToResponse(stub);
       await logVerifyResult(stub);
-      return res.status(200).json(stub);
+      return res.status(200).json({
+        ...stub,
+        bypassedPayGate: bypassedPayGate,
+        responseMeta: {
+          ...stub.responseMeta,
+          bypassedPayGate: bypassedPayGate,
+          internalBypassAuthorized: internalBypassAuthorized,
+        }
+      });
     }
 
     // Full mode: attempt to use the full parser
@@ -2185,9 +2684,12 @@ export default async function handler(req, res) {
         await logVerifyResult(errorResponse).catch(() => {}); // Ignore logging errors
         return res.status(200).json({
           ...errorResponse,
+          bypassedPayGate: bypassedPayGate,
           responseMeta: {
             handlerFile: HANDLER_FILE,
             backendVersion: BACKEND_VERSION,
+            bypassedPayGate: bypassedPayGate,
+            internalBypassAuthorized: internalBypassAuthorized,
           },
         });
       }
@@ -2299,7 +2801,15 @@ export default async function handler(req, res) {
         await addGreenZoneToResponse(validatedResult);
         
         await logVerifyResult(validatedResult);
-        return res.status(200).json(validatedResult);
+        return res.status(200).json({
+          ...validatedResult,
+          bypassedPayGate: bypassedPayGate,
+          responseMeta: {
+            ...validatedResult.responseMeta,
+            bypassedPayGate: bypassedPayGate,
+            internalBypassAuthorized: internalBypassAuthorized
+          }
+        });
       }
 
       // If step is "verify_race_full_fallback", use full result but ensure date is canonical
@@ -2324,8 +2834,41 @@ export default async function handler(req, res) {
         // Try HRN fallback if we have track and date
         if (track && canonicalDateIso) {
           const canonicalRaceNo = String(raceNo || "").trim();
-          const { outcome: hrnOutcome, debugExtras: hrnDebug } = await tryHrnFallback(track, canonicalDateIso, canonicalRaceNo, fallbackResult.debug);
+          const { outcome: hrnOutcome, debugExtras: hrnDebug, httpStatus: hrnHttpStatus, urlAttempted: hrnUrlAttempted } = await tryHrnFallback(track, canonicalDateIso, canonicalRaceNo, fallbackResult.debug);
           fallbackResult.debug = { ...fallbackResult.debug, ...hrnDebug };
+
+          // If HRN fetch was blocked (403/429), return structured error
+          if (hrnHttpStatus === 403 || hrnHttpStatus === 429) {
+            return res.status(200).json({
+              ok: false,
+              step: "fetch_results",
+              httpStatus: hrnHttpStatus,
+              error: `${hrnHttpStatus} from HRN (blocked)`,
+              urlAttempted: hrnUrlAttempted || hrnDebug?.hrnUrl || null,
+              date: canonicalDateIso,
+              track: track || "",
+              raceNo: canonicalRaceNo || "",
+              query: fallbackResult.query || "",
+              top: null,
+              outcome: { win: "", place: "", show: "" },
+              predicted: fallbackResult.predicted || predictedFromClient,
+              hits: {
+                winHit: false,
+                placeHit: false,
+                showHit: false,
+                top3Hit: false,
+              },
+              summary: `HRN fetch blocked (HTTP ${hrnHttpStatus}). Results unavailable.`,
+              debug: fallbackResult.debug,
+              bypassedPayGate: bypassedPayGate,
+              responseMeta: {
+                handlerFile: HANDLER_FILE,
+                backendVersion: BACKEND_VERSION,
+                bypassedPayGate: bypassedPayGate,
+                internalBypassAuthorized: internalBypassAuthorized,
+              },
+            });
+          }
 
           if (hrnOutcome) {
             // Check for mismatch before accepting HRN outcome
@@ -2508,9 +3051,12 @@ export default async function handler(req, res) {
         await logVerifyResult(fallbackResult);
         return res.status(200).json({
           ...fallbackResult,
+          bypassedPayGate: bypassedPayGate,
           responseMeta: {
             handlerFile: HANDLER_FILE,
             backendVersion: BACKEND_VERSION,
+            bypassedPayGate: bypassedPayGate,
+            internalBypassAuthorized: internalBypassAuthorized,
           },
         });
       }
@@ -2537,8 +3083,49 @@ export default async function handler(req, res) {
       // Try HRN fallback if we have track and date
       if (track && canonicalDateIso) {
         const canonicalRaceNo = String(raceNo || "").trim();
-        const { outcome: hrnOutcome, debugExtras: hrnDebug } = await tryHrnFallback(track, canonicalDateIso, canonicalRaceNo, fallbackStub.debug);
+        const { outcome: hrnOutcome, debugExtras: hrnDebug, httpStatus: hrnHttpStatus, urlAttempted: hrnUrlAttempted } = await tryHrnFallback(track, canonicalDateIso, canonicalRaceNo, fallbackStub.debug);
         fallbackStub.debug = { ...fallbackStub.debug, ...hrnDebug };
+
+        // If HRN fetch was blocked (403/429), return structured error
+        if (hrnHttpStatus === 403 || hrnHttpStatus === 429) {
+          await logVerifyResult({
+            ...fallbackStub,
+            ok: false,
+            step: "fetch_results",
+            httpStatus: hrnHttpStatus,
+            error: `${hrnHttpStatus} from HRN (blocked)`,
+            urlAttempted: hrnUrlAttempted || hrnDebug?.hrnUrl || null,
+          });
+          return res.status(200).json({
+            ok: false,
+            step: "fetch_results",
+            httpStatus: hrnHttpStatus,
+            error: `${hrnHttpStatus} from HRN (blocked)`,
+            urlAttempted: hrnUrlAttempted || hrnDebug?.hrnUrl || null,
+            date: canonicalDateIso,
+            track: track || "",
+            raceNo: canonicalRaceNo || "",
+            query: fallbackStub.query || "",
+            top: null,
+            outcome: { win: "", place: "", show: "" },
+            predicted: fallbackStub.predicted || predictedFromClient,
+            hits: {
+              winHit: false,
+              placeHit: false,
+              showHit: false,
+              top3Hit: false,
+            },
+            summary: `HRN fetch blocked (HTTP ${hrnHttpStatus}). Results unavailable.`,
+            debug: fallbackStub.debug,
+            bypassedPayGate: bypassedPayGate,
+            responseMeta: {
+              handlerFile: HANDLER_FILE,
+              backendVersion: BACKEND_VERSION,
+              bypassedPayGate: bypassedPayGate,
+              internalBypassAuthorized: internalBypassAuthorized,
+            },
+          });
+        }
 
         if (hrnOutcome) {
           fallbackStub.outcome = hrnOutcome;
@@ -2614,9 +3201,12 @@ export default async function handler(req, res) {
       await logVerifyResult(fallbackStub);
       return res.status(200).json({
         ...fallbackStub,
+        bypassedPayGate: bypassedPayGate,
         responseMeta: {
           handlerFile: HANDLER_FILE,
           backendVersion: BACKEND_VERSION,
+          bypassedPayGate: bypassedPayGate,
+          internalBypassAuthorized: internalBypassAuthorized,
         },
       });
     } catch (fullError) {
@@ -2649,8 +3239,49 @@ export default async function handler(req, res) {
       // Try HRN fallback if we have track and date
       if (track && canonicalDateIso) {
         const canonicalRaceNo = String(raceNo || "").trim();
-        const { outcome: hrnOutcome, debugExtras: hrnDebug } = await tryHrnFallback(track, canonicalDateIso, canonicalRaceNo, errorStub.debug);
+        const { outcome: hrnOutcome, debugExtras: hrnDebug, httpStatus: hrnHttpStatus, urlAttempted: hrnUrlAttempted } = await tryHrnFallback(track, canonicalDateIso, canonicalRaceNo, errorStub.debug);
         errorStub.debug = { ...errorStub.debug, ...hrnDebug };
+
+        // If HRN fetch was blocked (403/429), return structured error
+        if (hrnHttpStatus === 403 || hrnHttpStatus === 429) {
+          await logVerifyResult({
+            ...errorStub,
+            ok: false,
+            step: "fetch_results",
+            httpStatus: hrnHttpStatus,
+            error: `${hrnHttpStatus} from HRN (blocked)`,
+            urlAttempted: hrnUrlAttempted || hrnDebug?.hrnUrl || null,
+          });
+          return res.status(200).json({
+            ok: false,
+            step: "fetch_results",
+            httpStatus: hrnHttpStatus,
+            error: `${hrnHttpStatus} from HRN (blocked)`,
+            urlAttempted: hrnUrlAttempted || hrnDebug?.hrnUrl || null,
+            date: canonicalDateIso,
+            track: track || "",
+            raceNo: canonicalRaceNo || "",
+            query: errorStub.query || "",
+            top: null,
+            outcome: { win: "", place: "", show: "" },
+            predicted: errorStub.predicted || predictedFromClient,
+            hits: {
+              winHit: false,
+              placeHit: false,
+              showHit: false,
+              top3Hit: false,
+            },
+            summary: `HRN fetch blocked (HTTP ${hrnHttpStatus}). Results unavailable.`,
+            debug: errorStub.debug,
+            bypassedPayGate: bypassedPayGate,
+            responseMeta: {
+              handlerFile: HANDLER_FILE,
+              backendVersion: BACKEND_VERSION,
+              bypassedPayGate: bypassedPayGate,
+              internalBypassAuthorized: internalBypassAuthorized,
+            },
+          });
+        }
 
         if (hrnOutcome) {
           errorStub.outcome = hrnOutcome;
@@ -2729,9 +3360,12 @@ export default async function handler(req, res) {
       await logVerifyResult(errorStub);
       return res.status(200).json({
         ...errorStub,
+        bypassedPayGate: bypassedPayGate,
         responseMeta: {
           handlerFile: HANDLER_FILE,
           backendVersion: BACKEND_VERSION,
+          bypassedPayGate: bypassedPayGate,
+          internalBypassAuthorized: internalBypassAuthorized,
         },
       });
     }
