@@ -15,7 +15,7 @@ const VERIFY_LOG_PREFIX = "fl:verify:log:";
 
 let redisClient = null;
 
-function getRedis() {
+export function getRedis() {
   if (!redisClient) {
     try {
       redisClient = Redis.fromEnv();

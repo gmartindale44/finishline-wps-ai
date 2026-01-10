@@ -14,7 +14,7 @@ export const config = {
 };
 
 // Import Redis helpers for skip logic
-import { verifyLogExists, buildRaceId, buildVerifyKey } from "../../utils/finishline/backfill_helpers.js";
+import { verifyLogExists, buildRaceId, buildVerifyKey, getRedis } from "../../utils/finishline/backfill_helpers.js";
 
 const DEFAULT_MAX_RACES = 10;
 const HARD_MAX_RACES = 50;
@@ -269,6 +269,9 @@ async function callVerifyRace(baseUrl, race) {
 }
 
 export default async function handler(req, res) {
+  // Check for force override query param (testing only - bypasses skip check)
+  const forceOverride = req.query?.force === '1' || req.query?.force === 'true' || req.query?.force === true;
+  
   // Server-side PayGate check (non-blocking in monitor mode)
   try {
     const { checkPayGateAccess } = await import('../../lib/paygate-server.js');
@@ -422,8 +425,37 @@ export default async function handler(req, res) {
         });
         
         verifiedRedisKeyExists = exists;
+        
+        // Read the stored value (truncated for safety) if key exists
+        let verifiedRedisKeyValuePreview = null;
+        if (exists && verifiedRedisKeyChecked) {
+          try {
+            const redis = getRedis();
+            if (redis) {
+              const type = await redis.type(verifiedRedisKeyChecked);
+              if (type === "string") {
+                const value = await redis.get(verifiedRedisKeyChecked);
+                if (value) {
+                  // Truncate to 50 chars max for safety (don't expose full payloads)
+                  verifiedRedisKeyValuePreview = String(value).slice(0, 50);
+                }
+              } else if (type === "hash") {
+                // For hash type, get a few fields (safe preview)
+                const hash = await redis.hgetall(verifiedRedisKeyChecked);
+                if (hash && Object.keys(hash).length > 0) {
+                  const preview = JSON.stringify(hash).slice(0, 50);
+                  verifiedRedisKeyValuePreview = preview;
+                }
+              }
+            }
+          } catch (readErr) {
+            // Non-fatal: just log, don't expose error
+            console.warn('[verify_backfill] Failed to read Redis value preview:', readErr?.message);
+          }
+        }
 
-        if (exists) {
+        // Skip only if key exists AND force override is not enabled
+        if (exists && !forceOverride) {
           shouldSkip = true;
           skipReason = "already_verified_in_redis";
         }
@@ -445,10 +477,12 @@ export default async function handler(req, res) {
           outcome: null,
           hits: null,
           networkError: null,
-          // Debug fields for skip verification (safe to expose)
+          // Debug fields for skip verification (safe to expose - no secrets)
           verifiedRedisKeyChecked: verifiedRedisKeyChecked || null,
           verifiedRedisKeyExists: verifiedRedisKeyExists,
+          verifiedRedisKeyValuePreview: verifiedRedisKeyValuePreview || null, // Truncated value preview (max 50 chars)
           raceIdDerived: raceIdDerived || null,
+          redisNamespacePrefixUsed: "fl:verify:", // Prefix used for verify keys
         });
       } else {
         // Call /api/verify_race as normal (it will write to Redis)
@@ -460,6 +494,8 @@ export default async function handler(req, res) {
             result.raceIdDerived = raceIdDerived || null;
             result.verifiedRedisKeyChecked = verifiedRedisKeyChecked || null;
             result.verifiedRedisKeyExists = verifiedRedisKeyExists;
+            result.verifiedRedisKeyValuePreview = verifiedRedisKeyValuePreview || null;
+            result.redisNamespacePrefixUsed = "fl:verify:";
           }
           results.push(result);
         } catch (err) {
@@ -475,6 +511,12 @@ export default async function handler(req, res) {
             outcome: null,
             hits: null,
             raw: null,
+            // Debug fields even for errors
+            raceIdDerived: raceIdDerived || null,
+            verifiedRedisKeyChecked: verifiedRedisKeyChecked || null,
+            verifiedRedisKeyExists: verifiedRedisKeyExists || false,
+            verifiedRedisKeyValuePreview: null,
+            redisNamespacePrefixUsed: "fl:verify:",
           });
         }
       }
@@ -510,15 +552,20 @@ export default async function handler(req, res) {
     error: r.error || null, // Include structured error from verify_race
     bypassedPayGate: r.bypassedPayGate || false,
     verifyRaceOk: r.verifyRaceOk !== undefined ? r.verifyRaceOk : null, // Debug: verify_race.ok value
-    // Debug fields for skip verification (safe to expose - no secrets)
+    // Debug fields for skip verification (safe to expose - no secrets, no full values)
     verifiedRedisKeyChecked: r.verifiedRedisKeyChecked || null,
     verifiedRedisKeyExists: r.verifiedRedisKeyExists !== undefined ? r.verifiedRedisKeyExists : null,
+    verifiedRedisKeyValuePreview: r.verifiedRedisKeyValuePreview || null, // Truncated preview (max 50 chars)
     raceIdDerived: r.raceIdDerived || null,
+    redisNamespacePrefixUsed: r.redisNamespacePrefixUsed || "fl:verify:",
   }));
 
   // Check if any race bypassed PayGate (for debug visibility)
   const anyBypassedPayGate = results.some(r => r.bypassedPayGate === true);
 
+  // Check Redis configuration (for top-level debug)
+  const redisConfigured = Boolean(getRedis());
+  
   // Always return HTTP 200 (never hard-fail the batch)
   // Let UI decide based on ok flag and failures count
   // ok = true if all races succeeded, false if any failed (but still return 200)
@@ -539,5 +586,13 @@ export default async function handler(req, res) {
     firstFailure: failures > 0 || networkFailures > 0 ? (results.find(r => !r.ok && !r.skipped) || null) : null,
     // Debug: show if PayGate was bypassed for internal batch jobs
     bypassedPayGate: anyBypassedPayGate,
+    // Top-level debug fields (safe to expose)
+    debug: {
+      usedDeployment: process.env.VERCEL_GIT_COMMIT_SHA || null,
+      usedEnv: process.env.VERCEL_ENV || null,
+      redisConfigured: redisConfigured,
+      forceOverride: forceOverride, // Show if force=1 was used
+      redisNamespacePrefixUsed: "fl:verify:",
+    },
   });
 }
