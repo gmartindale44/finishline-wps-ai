@@ -375,6 +375,9 @@ export default async function handler(req, res) {
       let verifiedRedisKeyValuePreview = null;
       let raceIdDerived = null;
       let normalization = null;
+      let existingVerifyParsedOk = false;
+      let existingVerifyOkField = null;
+      let existingVerifySnippet = null;
 
       try {
         // Store input values for debug
@@ -426,7 +429,7 @@ export default async function handler(req, res) {
           verifiedRedisKeyChecked = checkResult.key; // Use the actual key that was checked
         }
         
-        // Read the stored value (truncated for safety) if key exists
+        // Read the stored value and check if it's a valid verified result (ok === true)
         if (verifiedRedisKeyExists && verifiedRedisKeyChecked) {
           try {
             const redis = getRedis();
@@ -434,31 +437,45 @@ export default async function handler(req, res) {
               const actualType = await redis.type(verifiedRedisKeyChecked);
               verifiedRedisKeyType = actualType || null;
               
+              let rawValue = null;
               if (actualType === "string") {
-                const value = await redis.get(verifiedRedisKeyChecked);
-                if (value) {
-                  // Truncate to 80 chars max for safety (don't expose full payloads)
-                  verifiedRedisKeyValuePreview = String(value).slice(0, 80);
-                }
+                rawValue = await redis.get(verifiedRedisKeyChecked);
               } else if (actualType === "hash") {
-                // For hash type, get a few fields (safe preview)
+                // For hash type, convert to JSON string for parsing
                 const hash = await redis.hgetall(verifiedRedisKeyChecked);
                 if (hash && Object.keys(hash).length > 0) {
-                  const preview = JSON.stringify(hash).slice(0, 80);
-                  verifiedRedisKeyValuePreview = preview;
+                  rawValue = JSON.stringify(hash);
+                }
+              }
+              
+              if (rawValue) {
+                // Store snippet (first 160 chars for safety)
+                existingVerifySnippet = String(rawValue).slice(0, 160);
+                
+                // Attempt to parse as JSON
+                try {
+                  const parsed = JSON.parse(rawValue);
+                  existingVerifyParsedOk = true;
+                  existingVerifyOkField = parsed.ok === true;
+                  
+                  // Only skip if parsed successfully AND ok === true
+                  // If parse fails or ok !== true, we should re-verify
+                  if (existingVerifyOkField && !forceOverride) {
+                    shouldSkip = true;
+                    skipReason = "already_verified_in_redis";
+                  }
+                } catch (parseErr) {
+                  // Parse failed - treat as not verified, proceed with verification
+                  existingVerifyParsedOk = false;
+                  existingVerifyOkField = null;
+                  console.warn('[verify_backfill] Stored value not valid JSON, will re-verify:', parseErr?.message);
                 }
               }
             }
           } catch (readErr) {
-            // Non-fatal: just log, don't expose error
-            console.warn('[verify_backfill] Failed to read Redis value preview:', readErr?.message);
+            // Non-fatal: just log, don't expose error, proceed with verification
+            console.warn('[verify_backfill] Failed to read Redis value, will re-verify:', readErr?.message);
           }
-        }
-
-        // Skip only if key exists AND force override is not enabled
-        if (verifiedRedisKeyExists && !forceOverride) {
-          shouldSkip = true;
-          skipReason = "already_verified_in_redis";
         }
       } catch (err) {
         // If Redis check fails, log warning but proceed with verify call
@@ -467,7 +484,7 @@ export default async function handler(req, res) {
       }
 
       if (shouldSkip) {
-        // Skip calling /api/verify_race - race already verified
+        // Skip calling /api/verify_race - race already verified (ok === true in stored value)
         results.push({
           race,
           ok: true,
@@ -488,6 +505,10 @@ export default async function handler(req, res) {
           verifiedRedisKeyType: verifiedRedisKeyType || "none",
           redisNamespacePrefixUsed: "fl:verify:",
           normalization: normalization || null,
+          // New debug fields for parsed verify value
+          existingVerifyParsedOk: existingVerifyParsedOk,
+          existingVerifyOkField: existingVerifyOkField,
+          existingVerifySnippet: existingVerifySnippet,
         });
       } else {
         // Call /api/verify_race as normal (it will write to Redis)
@@ -504,6 +525,10 @@ export default async function handler(req, res) {
           result.verifiedRedisKeyType = verifiedRedisKeyType || "none";
           result.redisNamespacePrefixUsed = "fl:verify:";
           result.normalization = normalization || null;
+          // New debug fields for parsed verify value (even if not skipped)
+          result.existingVerifyParsedOk = existingVerifyParsedOk;
+          result.existingVerifyOkField = existingVerifyOkField;
+          result.existingVerifySnippet = existingVerifySnippet;
           results.push(result);
         } catch (err) {
           // If callVerifyRace itself throws (shouldn't happen, but be defensive), log and continue
@@ -528,6 +553,10 @@ export default async function handler(req, res) {
             verifiedRedisKeyType: verifiedRedisKeyType || "none",
             redisNamespacePrefixUsed: "fl:verify:",
             normalization: normalization || null,
+            // New debug fields for parsed verify value (if check was attempted)
+            existingVerifyParsedOk: existingVerifyParsedOk || false,
+            existingVerifyOkField: existingVerifyOkField || null,
+            existingVerifySnippet: existingVerifySnippet || null,
           });
         }
       }

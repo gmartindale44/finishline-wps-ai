@@ -132,17 +132,38 @@ export default async function handler(req, res) {
               result.verifyKeyType = type || "none";
 
               if (result.verifyKeyExists) {
-                // Try to read value preview (truncated for safety)
+                // Try to read value and parse as JSON for structured preview
                 try {
+                  let rawValue = null;
                   if (type === "string") {
-                    const value = await redis.get(result.verifyKey);
-                    if (value) {
-                      result.verifyKeyValuePreview = String(value).slice(0, 100);
-                    }
+                    rawValue = await redis.get(result.verifyKey);
                   } else if (type === "hash") {
                     const hash = await redis.hgetall(result.verifyKey);
                     if (hash && Object.keys(hash).length > 0) {
-                      result.verifyKeyValuePreview = JSON.stringify(hash).slice(0, 100);
+                      rawValue = JSON.stringify(hash);
+                    }
+                  }
+                  
+                  if (rawValue) {
+                    try {
+                      const parsed = JSON.parse(rawValue);
+                      // Return structured preview
+                      result.verifyKeyValuePreview = {
+                        parsedOk: true,
+                        ok: parsed.ok ?? null,
+                        step: parsed.step ?? null,
+                        date: parsed.date ?? null,
+                        track: parsed.track ?? null,
+                        raceNo: parsed.raceNo ?? null,
+                        outcome: parsed.outcome ?? null,
+                        hits: parsed.hits ?? null,
+                      };
+                    } catch (parseErr) {
+                      // Parse failed - return raw snippet
+                      result.verifyKeyValuePreview = {
+                        parsedOk: false,
+                        rawSnippet: String(rawValue).slice(0, 160),
+                      };
                     }
                   }
                 } catch (readErr) {
@@ -152,11 +173,30 @@ export default async function handler(req, res) {
             } else {
               // Try REST client
               try {
-                const value = await redisGet(result.verifyKey);
-                result.verifyKeyExists = value !== null;
-                result.verifyKeyType = value !== null ? "string" : "none";
-                if (value) {
-                  result.verifyKeyValuePreview = String(value).slice(0, 100);
+                const rawValue = await redisGet(result.verifyKey);
+                result.verifyKeyExists = rawValue !== null;
+                result.verifyKeyType = rawValue !== null ? "string" : "none";
+                if (rawValue) {
+                  try {
+                    const parsed = JSON.parse(rawValue);
+                    // Return structured preview
+                    result.verifyKeyValuePreview = {
+                      parsedOk: true,
+                      ok: parsed.ok ?? null,
+                      step: parsed.step ?? null,
+                      date: parsed.date ?? null,
+                      track: parsed.track ?? null,
+                      raceNo: parsed.raceNo ?? null,
+                      outcome: parsed.outcome ?? null,
+                      hits: parsed.hits ?? null,
+                    };
+                  } catch (parseErr) {
+                    // Parse failed - return raw snippet
+                    result.verifyKeyValuePreview = {
+                      parsedOk: false,
+                      rawSnippet: String(rawValue).slice(0, 160),
+                    };
+                  }
                 }
               } catch (restErr) {
                 result.errors.push(`verify key REST check failed: ${restErr?.message || String(restErr)}`);
