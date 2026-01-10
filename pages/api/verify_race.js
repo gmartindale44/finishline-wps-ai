@@ -1269,105 +1269,141 @@ function extractOutcomeFromHrnHtml(html, raceNo = null) {
     
     // STRATEGY 1: Look for Results/Finish table sections and parse first three finishers
     // This is the most reliable for entries-results pages
-    const resultsTablePattern = /<table[^>]*(?:results|finish|payout)[^>]*>[\s\S]*?<tbody>([\s\S]*?)<\/tbody>[\s\S]*?<\/table>/gi;
-    let tableMatch;
-    const rows = [];
+    // Try multiple table patterns to handle different HRN structures
+    const tablePatterns = [
+      // Pattern 1: Standard table with tbody
+      /<table[^>]*(?:results|finish|payout|table-payouts)[^>]*>[\s\S]*?<tbody>([\s\S]*?)<\/tbody>[\s\S]*?<\/table>/gi,
+      // Pattern 2: Table without explicit tbody (rows directly in table)
+      /<table[^>]*(?:results|finish|payout)[^>]*>([\s\S]*?)<\/table>/gi,
+      // Pattern 3: Any table that might contain results
+      /<table[^>]*>([\s\S]{500,10000}?)<\/table>/gi, // Limit size to avoid matching entire page
+    ];
     
-    while ((tableMatch = resultsTablePattern.exec(targetHtml)) !== null) {
-      const tbody = tableMatch[1];
+    const rows = [];
+    let foundTable = false;
+    
+    for (const tablePattern of tablePatterns) {
+      tablePattern.lastIndex = 0; // Reset regex
+      let tableMatch;
       
-      // Extract all TRs from tbody
-      const trPattern = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
-      let trMatch;
-      let rowIndex = 0;
-      
-      while ((trMatch = trPattern.exec(tbody)) !== null && rowIndex < 10) {
-        const rowHtml = trMatch[1];
+      while ((tableMatch = tablePattern.exec(targetHtml)) !== null && !foundTable) {
+        const tableContent = tableMatch[1];
+        if (!tableContent || tableContent.length < 100) continue; // Skip tiny tables
         
-        // Skip header rows
-        if (rowHtml.match(/<th[^>]*>/i) || rowHtml.toLowerCase().includes("finish") || rowHtml.toLowerCase().includes("position")) {
-          continue;
-        }
+        // Extract all TRs from table content
+        const trPattern = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+        let trMatch;
+        let rowIndex = 0;
+        const tableRows = [];
         
-        // Extract all TDs in this row
-        const tdPattern = /<td[^>]*>([\s\S]*?)<\/td>/gi;
-        const cells = [];
-        let tdMatch;
-        
-        while ((tdMatch = tdPattern.exec(rowHtml)) !== null) {
-          // Remove all HTML tags first, then decode
-          const cellContent = tdMatch[1]
-            .replace(/<[^>]+>/g, " ")
-            .replace(/\s+/g, " ")
-            .trim();
-          if (cellContent) {
-            cells.push(cellContent);
+        while ((trMatch = trPattern.exec(tableContent)) !== null && rowIndex < 15) {
+          const rowHtml = trMatch[1];
+          
+          // Skip header rows (contain <th> or text like "Finish", "Position", "Horse")
+          if (rowHtml.match(/<th[^>]*>/i) || 
+              /finish|position|horse\s*name|win|place|show/i.test(rowHtml) && rowIndex === 0) {
+            continue;
           }
-        }
-        
-        // Try to find horse name - could be in first, second, or third cell depending on structure
-        let horseNameRaw = null;
-        let position = null;
-        
-        // Check if first cell is a position number (1, 2, 3)
-        if (cells.length > 0 && /^\s*[123]\s*$/.test(cells[0])) {
-          position = parseInt(cells[0].trim(), 10);
-          horseNameRaw = cells[1] || cells[2] || null;
-        } else {
-          // Try to find position number in any cell
-          for (let i = 0; i < Math.min(cells.length, 3); i++) {
-            if (/^\s*[123]\s*$/.test(cells[i])) {
-              position = parseInt(cells[i].trim(), 10);
-              horseNameRaw = cells[i + 1] || cells[i + 2] || null;
-              break;
+          
+          // Extract all TDs in this row
+          const tdPattern = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+          const cells = [];
+          let tdMatch;
+          
+          while ((tdMatch = tdPattern.exec(rowHtml)) !== null) {
+            // Remove all HTML tags first, then decode
+            let cellContent = tdMatch[1]
+              .replace(/<[^>]+>/g, " ")
+              .replace(/\s+/g, " ")
+              .trim();
+            // Decode entities
+            cellContent = decodeEntity(cellContent);
+            if (cellContent && cellContent.length > 0) {
+              cells.push(cellContent);
             }
           }
-          // If no position found, assume first non-numeric cell is horse name
-          if (!position && cells.length > 0) {
-            for (const cell of cells) {
+          
+          // Try to find horse name and position
+          let horseNameRaw = null;
+          let position = null;
+          
+          // Strategy: Look for position number (1, 2, 3) in any cell, then horse name in adjacent cell
+          for (let i = 0; i < cells.length; i++) {
+            const cell = cells[i].trim();
+            // Check if this cell is a position number
+            if (/^\s*[123]\s*$/.test(cell)) {
+              position = parseInt(cell, 10);
+              // Horse name is likely in the next non-empty cell
+              for (let j = i + 1; j < Math.min(i + 4, cells.length); j++) {
+                const nextCell = cells[j].trim();
+                const normalized = normalizeHorseName(nextCell);
+                if (isValid(normalized) && !/^\d+$/.test(normalized) && !normalized.match(/^\$?[\d,]+\.?\d*$/)) {
+                  horseNameRaw = nextCell;
+                  break;
+                }
+              }
+              if (horseNameRaw) break;
+            }
+          }
+          
+          // Fallback: If no position found, try to find horse name in first few cells
+          if (!position && !horseNameRaw && cells.length > 0) {
+            for (const cell of cells.slice(0, 5)) {
               const normalized = normalizeHorseName(cell);
-              if (isValid(normalized) && !/^\d+$/.test(normalized) && !normalized.match(/^\$?[\d,]+\.?\d*$/)) {
+              if (isValid(normalized) && 
+                  !/^\d+$/.test(normalized) && 
+                  !normalized.match(/^\$?[\d,]+\.?\d*$/) &&
+                  normalized.length >= 2) {
                 horseNameRaw = cell;
+                // Assume row order: 1st row = win, 2nd = place, 3rd = show
+                position = rowIndex + 1;
                 break;
               }
             }
           }
-        }
-        
-        if (horseNameRaw) {
-          const horseName = normalizeHorseName(horseNameRaw);
-          if (isValid(horseName)) {
-            if (position) {
-              rows.push({ position, horseName, raw: horseNameRaw });
-            } else {
-              rows.push({ position: rows.length + 1, horseName, raw: horseNameRaw });
+          
+          if (horseNameRaw) {
+            const horseName = normalizeHorseName(horseNameRaw);
+            if (isValid(horseName)) {
+              tableRows.push({ position: position || (rowIndex + 1), horseName, raw: horseNameRaw });
+              rowIndex++;
             }
-            rowIndex++;
           }
         }
+        
+        // If we found at least 3 valid rows, use this table
+        if (tableRows.length >= 3) {
+          rows.push(...tableRows);
+          foundTable = true;
+          break;
+        } else if (tableRows.length > 0) {
+          // Store partial results but keep looking
+          rows.push(...tableRows);
+        }
       }
       
-      // Extract Win/Place/Show from first 3 rows
-      if (rows.length >= 1 && !outcome.win) {
-        const winner = rows.find(r => r.position === 1) || rows[0];
-        outcome.win = winner.horseName;
-        debug.hrnOutcomeRaw.win = winner.raw || "";
-      }
-      if (rows.length >= 2 && !outcome.place) {
-        const place = rows.find(r => r.position === 2) || rows[1];
-        outcome.place = place.horseName;
-        debug.hrnOutcomeRaw.place = place.raw || "";
-      }
-      if (rows.length >= 3 && !outcome.show) {
-        const show = rows.find(r => r.position === 3) || rows[2];
-        outcome.show = show.horseName;
-        debug.hrnOutcomeRaw.show = show.raw || "";
-      }
-      
-      if (outcome.win && outcome.place && outcome.show) {
-        debug.hrnParsedBy = "table";
-        break;
-      }
+      if (foundTable) break;
+    }
+    
+    // Extract Win/Place/Show from collected rows
+    if (rows.length >= 1 && !outcome.win) {
+      const winner = rows.find(r => r.position === 1) || rows[0];
+      outcome.win = winner.horseName;
+      debug.hrnOutcomeRaw.win = winner.raw || "";
+    }
+    if (rows.length >= 2 && !outcome.place) {
+      const place = rows.find(r => r.position === 2) || rows[1];
+      outcome.place = place.horseName;
+      debug.hrnOutcomeRaw.place = place.raw || "";
+    }
+    if (rows.length >= 3 && !outcome.show) {
+      const show = rows.find(r => r.position === 3) || rows[2];
+      outcome.show = show.horseName;
+      debug.hrnOutcomeRaw.show = show.raw || "";
+    }
+    
+    if (outcome.win && outcome.place && outcome.show) {
+      debug.hrnParsedBy = "table";
     }
     
     // STRATEGY 2: Look for explicit "Win / Place / Show" labels and parse adjacent horse names
@@ -1436,14 +1472,14 @@ function extractOutcomeFromHrnHtml(html, raceNo = null) {
     if (!outcome.win || !outcome.place || !outcome.show) {
       // Pattern: Look for sequences like "Win [horse name]", avoiding odds/payout numbers
       const regexPatterns = [
-        // Pattern: "Win" followed by optional punctuation, then horse name (2-30 chars, letters/numbers/spaces/hyphens/apostrophes)
-        { key: "win", regex: /Win\s*[:\-—–]?\s*([A-Z][A-Za-z0-9\s'\-\.]{1,28}[A-Za-z])(?:\s|$|,|;|<|\(|\[|\$|\d)/i },
-        { key: "place", regex: /Place\s*[:\-—–]?\s*([A-Z][A-Za-z0-9\s'\-\.]{1,28}[A-Za-z])(?:\s|$|,|;|<|\(|\[|\$|\d)/i },
-        { key: "show", regex: /Show\s*[:\-—–]?\s*([A-Z][A-Za-z0-9\s'\-\.]{1,28}[A-Za-z])(?:\s|$|,|;|<|\(|\[|\$|\d)/i },
+        // Pattern: "Win" followed by optional punctuation, then horse name (more flexible - allows numbers, doesn't require capital start)
+        { key: "win", regex: /Win\s*[:\-—–]?\s*([A-Za-z0-9][A-Za-z0-9\s'\-\.]{1,30}?)(?:\s|$|,|;|<|\(|\[|\$|(?:\d+\.[\d,]+)|Win|Place|Show)/i },
+        { key: "place", regex: /Place\s*[:\-—–]?\s*([A-Za-z0-9][A-Za-z0-9\s'\-\.]{1,30}?)(?:\s|$|,|;|<|\(|\[|\$|(?:\d+\.[\d,]+)|Win|Place|Show)/i },
+        { key: "show", regex: /Show\s*[:\-—–]?\s*([A-Za-z0-9][A-Za-z0-9\s'\-\.]{1,30}?)(?:\s|$|,|;|<|\(|\[|\$|(?:\d+\.[\d,]+)|Win|Place|Show)/i },
         // Alternative: Look for position numbers (1st, 2nd, 3rd) followed by horse name
-        { key: "win", regex: /(?:1st|First)\s+([A-Z][A-Za-z0-9\s'\-\.]{1,28}[A-Za-z])(?:\s|$|,|;|<)/i },
-        { key: "place", regex: /(?:2nd|Second)\s+([A-Z][A-Za-z0-9\s'\-\.]{1,28}[A-Za-z])(?:\s|$|,|;|<)/i },
-        { key: "show", regex: /(?:3rd|Third)\s+([A-Z][A-Za-z0-9\s'\-\.]{1,28}[A-Za-z])(?:\s|$|,|;|<)/i },
+        { key: "win", regex: /(?:1st|First|1\s+st)\s+([A-Za-z0-9][A-Za-z0-9\s'\-\.]{1,30}?)(?:\s|$|,|;|<|\(|\[)/i },
+        { key: "place", regex: /(?:2nd|Second|2\s+nd)\s+([A-Za-z0-9][A-Za-z0-9\s'\-\.]{1,30}?)(?:\s|$|,|;|<|\(|\[)/i },
+        { key: "show", regex: /(?:3rd|Third|3\s+rd)\s+([A-Za-z0-9][A-Za-z0-9\s'\-\.]{1,30}?)(?:\s|$|,|;|<|\(|\[)/i },
       ];
       
       for (const { key, regex } of regexPatterns) {
