@@ -2209,6 +2209,13 @@ export default async function handler(req, res) {
             source: "manual",
           },
           greenZone: { enabled: false, reason: "error" },
+          bypassedPayGate: bypassedPayGate,
+          responseMeta: {
+            handlerFile: HANDLER_FILE,
+            backendVersion: BACKEND_VERSION,
+            bypassedPayGate: bypassedPayGate,
+            internalBypassAuthorized: internalBypassAuthorized,
+          },
         });
       }
     }
@@ -2233,7 +2240,15 @@ export default async function handler(req, res) {
       // Add GreenZone (safe, never throws)
       await addGreenZoneToResponse(stub);
       await logVerifyResult(stub);
-      return res.status(200).json(stub);
+      return res.status(200).json({
+        ...stub,
+        bypassedPayGate: bypassedPayGate,
+        responseMeta: {
+          ...stub.responseMeta,
+          bypassedPayGate: bypassedPayGate,
+          internalBypassAuthorized: internalBypassAuthorized,
+        }
+      });
     }
 
     // Full mode: attempt to use the full parser
