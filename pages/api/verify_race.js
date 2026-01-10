@@ -74,6 +74,8 @@ async function logVerifyResult(result) {
         try {
           const joinKey = `${normDate}|${normTrack}|${normRaceNo}`;
           const { keys: redisKeys, get: redisGet } = await import('../../lib/redis.js');
+          const { getRedisFingerprint } = await import('../../lib/redis_fingerprint.js');
+          const redisFingerprint = getRedisFingerprint();
           
           // Find all snapshots for this race
           const snapshotPattern = `fl:predsnap:${joinKey}:*`;
@@ -82,6 +84,9 @@ async function logVerifyResult(result) {
           if (!predmeta) predmeta = {};
           if (!predmeta.debug) predmeta.debug = {};
           predmeta.debug.snapshotPattern = snapshotPattern;
+          predmeta.debug.redisFingerprint = redisFingerprint; // Safe fingerprint for diagnostics
+          predmeta.debug.redisClientType = "REST API (lib/redis.js)"; // For diagnostics
+          predmeta.debug.joinKey = joinKey; // Show exact key format used
           
           const snapshotKeys = await redisKeys(snapshotPattern);
           
@@ -472,6 +477,12 @@ async function logVerifyResult(result) {
     // ADDITIVE: Add verify log key name to debug for diagnostics
     if (!logPayload.debug) logPayload.debug = {};
     logPayload.debug.verifyLogKey = logKey;
+    
+    // Add Redis fingerprint for diagnostics (safe, no secrets)
+    try {
+      const { getRedisFingerprint } = await import('../../lib/redis_fingerprint.js');
+      logPayload.debug.redisFingerprint = getRedisFingerprint();
+    } catch {}
     
     // Use REST client setex for verify logs (90 days TTL = 7776000 seconds)
     try {

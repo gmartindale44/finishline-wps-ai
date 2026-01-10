@@ -936,16 +936,23 @@ export default async function handler(req, res) {
     // ADDITIVE: Store prediction snapshot in Redis (if enabled, raceId available, and qualifies)
     // Option A: high-signal only - only write snapshots when allowAny OR confidenceHigh
     // Track snapshot debug info for response
+    const { getRedisFingerprint } = await import('../../lib/redis_fingerprint.js');
+    const redisFingerprint = getRedisFingerprint();
+    
     const snapshotDebug = {
       enablePredSnapshots: process.env.ENABLE_PRED_SNAPSHOTS === 'true',
       redisConfigured: Boolean(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN),
+      redisFingerprint: redisFingerprint, // Safe fingerprint (no secrets)
+      redisClientType: "REST API (lib/redis.js)", // For diagnostics
       snapshotAttempted: false,
       snapshotKey: null,
       snapshotWriteOk: null,
       snapshotWriteError: null,
       shouldSnapshot: false,
       allowAny: false,
-      confidenceHigh: false
+      confidenceHigh: false,
+      // Debug: show why snapshot was/wasn't attempted
+      gatingReason: null, // Will be set below
     };
     
     const enablePredSnapshots = snapshotDebug.enablePredSnapshots;
@@ -962,6 +969,23 @@ export default async function handler(req, res) {
     snapshotDebug.allowAny = allowAny;
     snapshotDebug.confidenceHigh = confidenceHigh;
     snapshotDebug.snapshotAttempted = shouldSnapshot;
+    
+    // Debug: explain why snapshot was/wasn't attempted
+    if (!shouldSnapshot) {
+      if (!enablePredSnapshots) {
+        snapshotDebug.gatingReason = "ENABLE_PRED_SNAPSHOTS not true";
+      } else if (!redisConfigured) {
+        snapshotDebug.gatingReason = "Redis not configured";
+      } else if (!raceId) {
+        snapshotDebug.gatingReason = "raceId is null (missing date/raceNo/track)";
+      } else if (!allowAny && !confidenceHigh) {
+        snapshotDebug.gatingReason = "No bets allowed and confidence < 80%";
+      } else {
+        snapshotDebug.gatingReason = "Unknown (shouldSnapshot logic)";
+      }
+    } else {
+      snapshotDebug.gatingReason = allowAny ? "Bet allowed" : "Confidence >= 80%";
+    }
     
     if (shouldSnapshot) {
       snapshotDebug.snapshotKey = `fl:predsnap:${raceId}:${asOf}`;

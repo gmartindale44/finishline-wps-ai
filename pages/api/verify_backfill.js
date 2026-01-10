@@ -573,22 +573,11 @@ export default async function handler(req, res) {
   // Check Redis configuration (for top-level debug)
   const redisConfigured = Boolean(getRedis());
   
-  // Get safe Redis URL fingerprint (last 6 chars of host, no secrets)
-  let redisUrlFingerprint = null;
+  // Get safe Redis fingerprint (no secrets)
+  let redisFingerprint = null;
   try {
-    const redisModule = await import('../../lib/redis.js');
-    const getRedisEnvFunc = redisModule.getRedisEnv || redisModule.default?.getRedisEnv;
-    if (getRedisEnvFunc) {
-      const redisEnv = getRedisEnvFunc();
-      if (redisEnv && redisEnv.url) {
-        try {
-          const urlObj = new URL(redisEnv.url);
-          const host = urlObj.hostname;
-          // Use last 6 chars of host as fingerprint (safe, no secrets)
-          redisUrlFingerprint = host.length > 6 ? host.slice(-6) : host;
-        } catch {}
-      }
-    }
+    const { getRedisFingerprint } = await import('../../lib/redis_fingerprint.js');
+    redisFingerprint = getRedisFingerprint();
   } catch {}
   
   // Always return HTTP 200 (never hard-fail the batch)
@@ -617,9 +606,11 @@ export default async function handler(req, res) {
       usedEnv: process.env.VERCEL_ENV || null,
       baseUrl: baseUrl,
       redisConfigured: redisConfigured,
-      redisUrlFingerprint: redisUrlFingerprint, // Last 6 chars of host (safe)
+      redisFingerprint: redisFingerprint, // Complete fingerprint (url, token hash, env) - safe, no secrets
       forceOverride: forceOverride, // Show if force=1 was used
       redisVerifyPrefix: "fl:verify:",
+      // CRITICAL: Show which Redis client type is used (for diagnosing mismatches)
+      redisClientType: "@upstash/redis SDK (via backfill_helpers.getRedis)",
     },
   });
 }
