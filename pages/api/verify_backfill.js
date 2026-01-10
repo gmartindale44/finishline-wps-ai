@@ -228,10 +228,8 @@ async function callVerifyRace(baseUrl, race) {
       // Extract error details from response JSON (even if httpStatus is 200, responseJson.ok might be false)
       if (responseJson && typeof responseJson === "object") {
         error = responseJson.error || responseJson.message || null;
-        // If response has httpStatus field (e.g., from HRN 403), use that for visibility
-        if (typeof responseJson.httpStatus === "number") {
-          httpStatus = responseJson.httpStatus;
-        }
+        // Note: responseJson.httpStatus (e.g., HRN 403) is for informational visibility only
+        // Do NOT override actual HTTP status - preserve it for success determination
       }
     } catch {
       responseJson = null;
@@ -243,24 +241,30 @@ async function callVerifyRace(baseUrl, race) {
         : String(err || "Unknown error");
   }
 
-  const ok =
-    !networkError &&
-    httpStatus === 200 &&
-    responseJson &&
-    typeof responseJson === "object" &&
-    responseJson.ok === true;
+  // Success criteria: verify_race returned ok === true
+  // Hits (winHit/placeHit/showHit), outcome accuracy, ROI, etc. are analytics only and do NOT affect success/failure
+  // A verification is successful if the API call succeeded (HTTP 200) AND verify_race.ok === true
+  const verifyRaceOk = responseJson && typeof responseJson === "object" && responseJson.ok === true;
+  const ok = !networkError && httpStatus === 200 && verifyRaceOk;
+  
+  // For visibility: include responseJson.httpStatus if present (e.g., HRN 403), but don't use for success check
+  const responseHttpStatus = (responseJson && typeof responseJson === "object" && typeof responseJson.httpStatus === "number") 
+    ? responseJson.httpStatus 
+    : null;
 
   return {
     race,
-    ok,
-    httpStatus,
+    ok, // Based solely on verify_race.ok === true (hits are analytics only)
+    httpStatus, // Actual HTTP status from fetch response (preserved for success check)
+    responseHttpStatus, // Optional: responseJson.httpStatus for visibility (e.g., HRN 403) - analytics only
     networkError,
     error: error || networkError || null,
     step: responseJson?.step || null,
     outcome: responseJson?.outcome || null,
-    hits: responseJson?.hits || null,
+    hits: responseJson?.hits || null, // Analytics only - do NOT use for success/failure
     raw: responseJson || null,
     bypassedPayGate: responseJson?.bypassedPayGate || responseJson?.responseMeta?.bypassedPayGate || false,
+    verifyRaceOk: verifyRaceOk, // Explicit flag: verify_race.ok === true (for debugging)
   };
 }
 
@@ -419,7 +423,10 @@ export default async function handler(req, res) {
     }
   }
 
+  // Success = verify_race returned ok === true (hits are analytics only, not failure conditions)
+  // A race is successful if the verify_race API call succeeded and returned ok: true
   const successes = results.filter((r) => r.ok && !r.skipped).length;
+  // Failures = verify_race call failed OR returned ok !== true (excluding network errors and skipped)
   const failures = results.filter(
     (r) => !r.ok && !r.skipped && !r.networkError
   ).length;
@@ -428,19 +435,23 @@ export default async function handler(req, res) {
   const processed = results.filter((r) => !r.skipped || r.dryRun).length;
 
   // Keep the response payload modest; include a small sample of raw results.
+  // Note: hits, outcome, ROI are included for analytics but do NOT affect ok/success determination
+  // Success is based solely on verify_race.ok === true
   const sampleSize = 10;
   const sample = results.slice(0, sampleSize).map((r) => ({
     race: r.race,
-    ok: r.ok,
+    ok: r.ok, // Based solely on verify_race.ok === true (hits are analytics only)
     skipped: !!r.skipped,
     skipReason: r.skipReason || null,
-    httpStatus: r.httpStatus,
+    httpStatus: r.httpStatus, // Actual HTTP status from fetch
+    responseHttpStatus: r.responseHttpStatus || null, // Optional: responseJson.httpStatus for visibility
     step: r.step,
-    outcome: r.outcome,
-    hits: r.hits,
+    outcome: r.outcome, // Analytics only
+    hits: r.hits, // Analytics only - do NOT use for success/failure
     networkError: r.networkError || null,
     error: r.error || null, // Include structured error from verify_race
     bypassedPayGate: r.bypassedPayGate || false,
+    verifyRaceOk: r.verifyRaceOk !== undefined ? r.verifyRaceOk : null, // Debug: verify_race.ok value
   }));
 
   // Check if any race bypassed PayGate (for debug visibility)
