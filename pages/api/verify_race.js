@@ -476,12 +476,15 @@ async function logVerifyResult(result) {
     
     // ADDITIVE: Add verify log key name to debug for diagnostics
     if (!logPayload.debug) logPayload.debug = {};
-    logPayload.debug.verifyLogKey = logKey;
+    logPayload.debug.verifyLogKey = logKey; // Exact key written (for auditability)
+    logPayload.debug.raceId = raceId; // Race ID portion (without prefix)
     
     // Add Redis fingerprint for diagnostics (safe, no secrets)
     try {
       const { getRedisFingerprint } = await import('../../lib/redis_fingerprint.js');
-      logPayload.debug.redisFingerprint = getRedisFingerprint();
+      const fingerprint = getRedisFingerprint();
+      logPayload.debug.redisFingerprint = fingerprint;
+      logPayload.debug.redisClientType = "REST API (lib/redis.js)";
     } catch {}
     
     // Use REST client setex for verify logs (90 days TTL = 7776000 seconds)
@@ -489,6 +492,7 @@ async function logVerifyResult(result) {
       const { setex } = await import('../../lib/redis.js');
       await setex(logKey, 7776000, JSON.stringify(logPayload));
       logPayload.debug.verifyWriteOk = true;
+      logPayload.debug.verifyWriteError = null;
     } catch (writeErr) {
       // Track verify write error but don't break user flow
       logPayload.debug.verifyWriteOk = false;

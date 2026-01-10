@@ -63,25 +63,29 @@ async function testPredictWps() {
   console.log(`Status: ${status}`);
   console.log(`OK: ${json.ok}`);
   
-  if (json.snapshot_debug) {
-    const sd = json.snapshot_debug;
-    console.log('\nSnapshot Debug:');
-    console.log(`  enablePredSnapshots: ${sd.enablePredSnapshots}`);
-    console.log(`  redisConfigured: ${sd.redisConfigured}`);
-    console.log(`  shouldSnapshot: ${sd.shouldSnapshot}`);
-    console.log(`  snapshotAttempted: ${sd.snapshotAttempted}`);
-    console.log(`  snapshotWriteOk: ${sd.snapshotWriteOk}`);
-    console.log(`  allowAny: ${sd.allowAny}`);
-    console.log(`  confidenceHigh: ${sd.confidenceHigh}`);
-    console.log(`  gatingReason: ${sd.gatingReason || 'N/A'}`);
-    console.log(`  snapshotKey: ${sd.snapshotKey || 'null'}`);
-    if (sd.redisFingerprint) {
+  if (json.predsnap_debug) {
+    const pd = json.predsnap_debug;
+    console.log('\nPredSnap Debug (Explicit Fields):');
+    console.log(`  predsnapAttempted: ${pd.predsnapAttempted}`);
+    console.log(`  predsnapWritten: ${pd.predsnapWritten}`);
+    console.log(`  predsnapKey: ${pd.predsnapKey || 'null'}`);
+    console.log(`  predsnapSkipReason: ${pd.predsnapSkipReason || 'null'}`);
+    console.log(`  predsnapError: ${pd.predsnapError || 'null'}`);
+    console.log('\nPredSnap Context:');
+    console.log(`  enablePredSnapshots: ${pd.enablePredSnapshots}`);
+    console.log(`  redisConfigured: ${pd.redisConfigured}`);
+    console.log(`  allowAny: ${pd.allowAny}`);
+    console.log(`  confidenceHigh: ${pd.confidenceHigh}`);
+    console.log(`  confidenceValue: ${pd.confidenceValue || 'null'}`);
+    console.log(`  raceIdPresent: ${pd.raceIdPresent}`);
+    console.log(`  forceOverride: ${pd.forceOverride || false}`);
+    if (pd.redisFingerprint) {
       console.log(`  redisFingerprint:`);
-      console.log(`    urlFingerprint: ${sd.redisFingerprint.urlFingerprint || 'null'}`);
-      console.log(`    tokenFingerprint: ${sd.redisFingerprint.tokenFingerprint || 'null'}`);
-      console.log(`    env: ${sd.redisFingerprint.env || 'null'}`);
+      console.log(`    urlFingerprint: ${pd.redisFingerprint.urlFingerprint || 'null'}`);
+      console.log(`    tokenFingerprint: ${pd.redisFingerprint.tokenFingerprint || 'null'}`);
+      console.log(`    env: ${pd.redisFingerprint.env || 'null'}`);
     }
-    console.log(`  redisClientType: ${sd.redisClientType || 'N/A'}`);
+    console.log(`  redisClientType: ${pd.redisClientType || 'N/A'}`);
   }
   
   if (json.meta) {
@@ -138,13 +142,20 @@ async function testVerifyRace() {
     console.log(`  joinKey: ${pd.joinKey || 'N/A'}`);
   }
   
-  if (json.debug && json.debug.redisFingerprint) {
+  if (json.debug) {
     console.log('\nVerify Log Debug:');
-    const vf = json.debug.redisFingerprint;
-    console.log(`  verifyLogKey: ${json.debug.verifyLogKey || 'N/A'}`);
-    console.log(`  redisFingerprint:`);
-    console.log(`    urlFingerprint: ${vf.urlFingerprint || 'null'}`);
-    console.log(`    tokenFingerprint: ${vf.tokenFingerprint || 'null'}`);
+    console.log(`  verifyLogKey: ${json.debug.verifyLogKey || 'N/A'}`); // Exact key written
+    console.log(`  raceId: ${json.debug.raceId || 'N/A'}`); // Race ID portion
+    console.log(`  verifyWriteOk: ${json.debug.verifyWriteOk !== undefined ? json.debug.verifyWriteOk : 'N/A'}`);
+    console.log(`  verifyWriteError: ${json.debug.verifyWriteError || 'null'}`);
+    if (json.debug.redisFingerprint) {
+      const vf = json.debug.redisFingerprint;
+      console.log(`  redisFingerprint:`);
+      console.log(`    urlFingerprint: ${vf.urlFingerprint || 'null'}`);
+      console.log(`    tokenFingerprint: ${vf.tokenFingerprint || 'null'}`);
+      console.log(`    env: ${vf.env || 'null'}`);
+    }
+    console.log(`  redisClientType: ${json.debug.redisClientType || 'N/A'}`);
   }
   
   return json;
@@ -198,20 +209,21 @@ async function testVerifyBackfill() {
   
   if (json.results && json.results.length > 0) {
     const r = json.results[0];
-    console.log('\nFirst Result:');
+    console.log('\nFirst Result (Explicit Debug Fields):');
     console.log(`  OK: ${r.ok}`);
     console.log(`  Skipped: ${r.skipped || false}`);
-    if (r.verifiedRedisKeyChecked) {
-      console.log(`  verifiedRedisKeyChecked: ${r.verifiedRedisKeyChecked}`);
-      console.log(`  verifiedRedisKeyExists: ${r.verifiedRedisKeyExists}`);
-      console.log(`  verifiedRedisKeyType: ${r.verifiedRedisKeyType || 'none'}`);
-      if (r.normalization) {
-        const n = r.normalization;
-        console.log(`  normalization:`);
-        console.log(`    trackIn: ${n.trackIn}, trackSlug: ${n.trackSlug}`);
-        console.log(`    raceNoIn: ${n.raceNoIn}, raceNoNormalized: ${n.raceNoNormalized}`);
-        console.log(`    dateIn: ${n.dateIn}, dateIso: ${n.dateIso}`);
-      }
+    console.log(`  verifyKeyChecked: ${r.verifyKeyChecked || r.verifiedRedisKeyChecked || 'null'}`); // Exact key checked
+    console.log(`  verifyKeyExists: ${r.verifyKeyExists !== undefined ? r.verifyKeyExists : (r.verifiedRedisKeyExists !== undefined ? r.verifiedRedisKeyExists : 'null')}`); // Boolean
+    console.log(`  verifyKeyValuePreview: ${r.verifyKeyValuePreview || r.verifiedRedisKeyValuePreview || 'null'}`); // Truncated preview
+    console.log(`  raceIdDerived: ${r.raceIdDerived || 'null'}`); // Race ID portion
+    console.log(`  skipReason: ${r.skipReason || 'null'}`); // String enum or null
+    console.log(`  verifiedRedisKeyType: ${r.verifiedRedisKeyType || 'none'}`);
+    if (r.normalization) {
+      const n = r.normalization;
+      console.log(`  normalization:`);
+      console.log(`    trackIn: ${n.trackIn}, trackSlug: ${n.trackSlug}`);
+      console.log(`    raceNoIn: ${n.raceNoIn}, raceNoNormalized: ${n.raceNoNormalized}`);
+      console.log(`    dateIn: ${n.dateIn}, dateIso: ${n.dateIso}`);
     }
   }
   
@@ -257,10 +269,11 @@ async function compareFingerprints(predictResp, verifyResp, backfillResp) {
   
   const fingerprints = [];
   
-  if (predictResp?.snapshot_debug?.redisFingerprint) {
+  if (predictResp?.predsnap_debug?.redisFingerprint) {
     fingerprints.push({
-      endpoint: 'predict_wps',
-      fingerprint: predictResp.snapshot_debug.redisFingerprint,
+      endpoint: 'predict_wps (predsnap)',
+      fingerprint: predictResp.predsnap_debug.redisFingerprint,
+      clientType: predictResp.predsnap_debug.redisClientType || 'unknown',
     });
   }
   
@@ -268,6 +281,7 @@ async function compareFingerprints(predictResp, verifyResp, backfillResp) {
     fingerprints.push({
       endpoint: 'verify_race (predmeta)',
       fingerprint: verifyResp.predmeta.debug.redisFingerprint,
+      clientType: verifyResp.predmeta.debug.redisClientType || 'unknown',
     });
   }
   
@@ -275,6 +289,7 @@ async function compareFingerprints(predictResp, verifyResp, backfillResp) {
     fingerprints.push({
       endpoint: 'verify_race (log)',
       fingerprint: verifyResp.debug.redisFingerprint,
+      clientType: verifyResp.debug.redisClientType || 'unknown',
     });
   }
   
@@ -282,6 +297,7 @@ async function compareFingerprints(predictResp, verifyResp, backfillResp) {
     fingerprints.push({
       endpoint: 'verify_backfill',
       fingerprint: backfillResp.debug.redisFingerprint,
+      clientType: backfillResp.debug.redisClientType || 'unknown',
     });
   }
   
@@ -292,19 +308,25 @@ async function compareFingerprints(predictResp, verifyResp, backfillResp) {
   
   // Extract unique fingerprints
   const unique = new Map();
-  fingerprints.forEach(({ endpoint, fingerprint }) => {
+  fingerprints.forEach(({ endpoint, fingerprint, clientType }) => {
     const key = `${fingerprint.urlFingerprint}-${fingerprint.tokenFingerprint}`;
     if (!unique.has(key)) {
-      unique.set(key, { fingerprint, endpoints: [] });
+      unique.set(key, { fingerprint, endpoints: [], clientTypes: [] });
     }
     unique.get(key).endpoints.push(endpoint);
+    if (clientType) {
+      unique.get(key).clientTypes.push(clientType);
+    }
   });
   
   console.log(`Found ${unique.size} unique Redis fingerprint(s):\n`);
   
-  unique.forEach(({ fingerprint, endpoints }) => {
+  unique.forEach(({ fingerprint, endpoints, clientTypes }) => {
     console.log(`Fingerprint (${endpoints.length} endpoint(s)):`);
     console.log(`  Endpoints: ${endpoints.join(', ')}`);
+    if (clientTypes.length > 0) {
+      console.log(`  Client Types: ${[...new Set(clientTypes)].join(', ')}`);
+    }
     console.log(`  urlFingerprint: ${fingerprint.urlFingerprint || 'null'}`);
     console.log(`  tokenFingerprint: ${fingerprint.tokenFingerprint || 'null'}`);
     console.log(`  env: ${fingerprint.env || 'null'}`);

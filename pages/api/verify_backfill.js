@@ -478,12 +478,14 @@ export default async function handler(req, res) {
           outcome: null,
           hits: null,
           networkError: null,
-          // Debug fields for skip verification (safe to expose - no secrets)
-          verifiedRedisKeyChecked: verifiedRedisKeyChecked || null,
-          verifiedRedisKeyExists: verifiedRedisKeyExists,
+          // Debug fields for skip verification (explicit fields as requested, safe to expose - no secrets)
+          verifyKeyChecked: verifiedRedisKeyChecked || null, // Exact key checked (for auditability)
+          verifyKeyExists: verifiedRedisKeyExists, // Boolean
+          verifyKeyValuePreview: verifiedRedisKeyValuePreview || null, // Truncated value preview (max 80 chars, safe)
+          raceIdDerived: raceIdDerived || null, // Race ID portion (without prefix)
+          skipReason: skipReason || null, // String enum: "already_verified_in_redis" or null
+          // Additional context
           verifiedRedisKeyType: verifiedRedisKeyType || "none",
-          verifiedRedisKeyValuePreview: verifiedRedisKeyValuePreview || null, // Truncated value preview (max 80 chars)
-          raceIdDerived: raceIdDerived || null,
           redisNamespacePrefixUsed: "fl:verify:",
           normalization: normalization || null,
         });
@@ -492,12 +494,14 @@ export default async function handler(req, res) {
         // Wrap in try/catch to ensure one race failure doesn't break the batch
         try {
           const result = await callVerifyRace(baseUrl, race);
-          // Add debug fields even for non-skipped results (for troubleshooting)
-          result.raceIdDerived = raceIdDerived || null;
-          result.verifiedRedisKeyChecked = verifiedRedisKeyChecked || null;
-          result.verifiedRedisKeyExists = verifiedRedisKeyExists;
+          // Add explicit debug fields for all results (for auditability)
+          result.verifyKeyChecked = verifiedRedisKeyChecked || null; // Exact key checked
+          result.verifyKeyExists = verifiedRedisKeyExists; // Boolean
+          result.verifyKeyValuePreview = verifiedRedisKeyValuePreview || null; // Truncated preview (safe)
+          result.raceIdDerived = raceIdDerived || null; // Race ID portion
+          result.skipReason = null; // Not skipped, so null
+          // Additional context
           result.verifiedRedisKeyType = verifiedRedisKeyType || "none";
-          result.verifiedRedisKeyValuePreview = verifiedRedisKeyValuePreview || null;
           result.redisNamespacePrefixUsed = "fl:verify:";
           result.normalization = normalization || null;
           results.push(result);
@@ -514,12 +518,14 @@ export default async function handler(req, res) {
             outcome: null,
             hits: null,
             raw: null,
-            // Debug fields even for errors
-            raceIdDerived: raceIdDerived || null,
-            verifiedRedisKeyChecked: verifiedRedisKeyChecked || null,
-            verifiedRedisKeyExists: verifiedRedisKeyExists || false,
+            // Explicit debug fields even for errors (for auditability)
+            verifyKeyChecked: verifiedRedisKeyChecked || null, // Exact key that would have been checked
+            verifyKeyExists: verifiedRedisKeyExists || false, // Boolean (if check was attempted)
+            verifyKeyValuePreview: verifiedRedisKeyValuePreview || null, // Truncated preview if available
+            raceIdDerived: raceIdDerived || null, // Race ID portion
+            skipReason: null, // Error case, so not skipped
+            // Additional context
             verifiedRedisKeyType: verifiedRedisKeyType || "none",
-            verifiedRedisKeyValuePreview: verifiedRedisKeyValuePreview || null,
             redisNamespacePrefixUsed: "fl:verify:",
             normalization: normalization || null,
           });
@@ -557,12 +563,14 @@ export default async function handler(req, res) {
     error: r.error || null, // Include structured error from verify_race
     bypassedPayGate: r.bypassedPayGate || false,
     verifyRaceOk: r.verifyRaceOk !== undefined ? r.verifyRaceOk : null, // Debug: verify_race.ok value
-    // Debug fields for skip verification (safe to expose - no secrets, no full values)
-    verifiedRedisKeyChecked: r.verifiedRedisKeyChecked || null,
-    verifiedRedisKeyExists: r.verifiedRedisKeyExists !== undefined ? r.verifiedRedisKeyExists : null,
+    // Explicit debug fields as requested (safe to expose - no secrets, no full values)
+    verifyKeyChecked: r.verifyKeyChecked || r.verifiedRedisKeyChecked || null, // Exact key checked
+    verifyKeyExists: r.verifyKeyExists !== undefined ? r.verifyKeyExists : (r.verifiedRedisKeyExists !== undefined ? r.verifiedRedisKeyExists : null), // Boolean
+    verifyKeyValuePreview: r.verifyKeyValuePreview || r.verifiedRedisKeyValuePreview || null, // Truncated preview (max 80 chars, safe)
+    raceIdDerived: r.raceIdDerived || null, // Race ID portion
+    skipReason: r.skipReason || null, // String enum or null
+    // Additional context
     verifiedRedisKeyType: r.verifiedRedisKeyType || "none",
-    verifiedRedisKeyValuePreview: r.verifiedRedisKeyValuePreview || null, // Truncated preview (max 80 chars)
-    raceIdDerived: r.raceIdDerived || null,
     redisNamespacePrefixUsed: r.redisNamespacePrefixUsed || "fl:verify:",
     normalization: r.normalization || null,
   }));
