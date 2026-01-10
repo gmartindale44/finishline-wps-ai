@@ -135,36 +135,78 @@ export default async function handler(req, res) {
                 // Try to read value and parse as JSON for structured preview
                 try {
                   let rawValue = null;
+                  let parsedValue = null;
+                  
                   if (type === "string") {
-                    rawValue = await redis.get(result.verifyKey);
+                    const value = await redis.get(result.verifyKey);
+                    // Upstash SDK may auto-parse JSON, so check if it's already an object
+                    if (value != null) {
+                      if (typeof value === "object" && !Array.isArray(value) && value.constructor === Object) {
+                        // Already parsed object - use directly
+                        parsedValue = value;
+                        try {
+                          rawValue = JSON.stringify(value);
+                        } catch {
+                          rawValue = String(value);
+                        }
+                      } else if (typeof value === "string") {
+                        // Still a string - need to parse
+                        rawValue = value;
+                        try {
+                          parsedValue = JSON.parse(value);
+                        } catch {
+                          // Not valid JSON - will use rawValue
+                        }
+                      } else {
+                        // Other type (number, boolean, etc.) - stringify for snippet
+                        rawValue = String(value);
+                      }
+                    }
                   } else if (type === "hash") {
                     const hash = await redis.hgetall(result.verifyKey);
                     if (hash && Object.keys(hash).length > 0) {
+                      // Hash type - try to reconstruct object
                       rawValue = JSON.stringify(hash);
+                      try {
+                        // Try to parse fields that might be JSON strings
+                        const reconstructed = {};
+                        for (const [k, v] of Object.entries(hash)) {
+                          if (typeof v === "string" && (v.startsWith("{") || v.startsWith("["))) {
+                            try {
+                              reconstructed[k] = JSON.parse(v);
+                            } catch {
+                              reconstructed[k] = v;
+                            }
+                          } else {
+                            reconstructed[k] = v;
+                          }
+                        }
+                        parsedValue = reconstructed;
+                      } catch {
+                        // Use hash as-is
+                        parsedValue = hash;
+                      }
                     }
                   }
                   
-                  if (rawValue) {
-                    try {
-                      const parsed = JSON.parse(rawValue);
-                      // Return structured preview
-                      result.verifyKeyValuePreview = {
-                        parsedOk: true,
-                        ok: parsed.ok ?? null,
-                        step: parsed.step ?? null,
-                        date: parsed.date ?? null,
-                        track: parsed.track ?? null,
-                        raceNo: parsed.raceNo ?? null,
-                        outcome: parsed.outcome ?? null,
-                        hits: parsed.hits ?? null,
-                      };
-                    } catch (parseErr) {
-                      // Parse failed - return raw snippet
-                      result.verifyKeyValuePreview = {
-                        parsedOk: false,
-                        rawSnippet: String(rawValue).slice(0, 160),
-                      };
-                    }
+                  if (parsedValue && typeof parsedValue === "object") {
+                    // Successfully parsed (or already was an object)
+                    result.verifyKeyValuePreview = {
+                      parsedOk: true,
+                      ok: parsedValue.ok ?? null,
+                      step: parsedValue.step ?? null,
+                      date: parsedValue.date ?? null,
+                      track: parsedValue.track ?? null,
+                      raceNo: parsedValue.raceNo ?? null,
+                      outcome: parsedValue.outcome ?? null,
+                      hits: parsedValue.hits ?? null,
+                    };
+                  } else if (rawValue) {
+                    // Parse failed - return raw snippet
+                    result.verifyKeyValuePreview = {
+                      parsedOk: false,
+                      rawSnippet: String(rawValue).slice(0, 160),
+                    };
                   }
                 } catch (readErr) {
                   result.errors.push(`verify key read failed: ${readErr?.message || String(readErr)}`);
@@ -173,13 +215,36 @@ export default async function handler(req, res) {
             } else {
               // Try REST client
               try {
-                const rawValue = await redisGet(result.verifyKey);
-                result.verifyKeyExists = rawValue !== null;
-                result.verifyKeyType = rawValue !== null ? "string" : "none";
-                if (rawValue) {
-                  try {
-                    const parsed = JSON.parse(rawValue);
-                    // Return structured preview
+                const value = await redisGet(result.verifyKey);
+                result.verifyKeyExists = value !== null && value !== undefined;
+                result.verifyKeyType = value !== null && value !== undefined ? "string" : "none";
+                if (value != null) {
+                  let parsed = null;
+                  let rawValue = null;
+                  
+                  // REST client typically returns strings, but Upstash might auto-parse JSON
+                  if (typeof value === "string") {
+                    rawValue = value;
+                    try {
+                      parsed = JSON.parse(value);
+                    } catch {
+                      // Not valid JSON - will use rawValue
+                    }
+                  } else if (typeof value === "object" && !Array.isArray(value) && value.constructor === Object) {
+                    // Already parsed object (Upstash REST might auto-parse)
+                    parsed = value;
+                    try {
+                      rawValue = JSON.stringify(value);
+                    } catch {
+                      rawValue = String(value);
+                    }
+                  } else {
+                    // Other type - convert to string
+                    rawValue = String(value);
+                  }
+                  
+                  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+                    // Successfully parsed
                     result.verifyKeyValuePreview = {
                       parsedOk: true,
                       ok: parsed.ok ?? null,
@@ -190,8 +255,8 @@ export default async function handler(req, res) {
                       outcome: parsed.outcome ?? null,
                       hits: parsed.hits ?? null,
                     };
-                  } catch (parseErr) {
-                    // Parse failed - return raw snippet
+                  } else if (rawValue) {
+                    // Parse failed or not an object - return raw snippet
                     result.verifyKeyValuePreview = {
                       parsedOk: false,
                       rawSnippet: String(rawValue).slice(0, 160),

@@ -438,37 +438,82 @@ export default async function handler(req, res) {
               verifiedRedisKeyType = actualType || null;
               
               let rawValue = null;
+              let parsedValue = null;
+              
               if (actualType === "string") {
-                rawValue = await redis.get(verifiedRedisKeyChecked);
+                const value = await redis.get(verifiedRedisKeyChecked);
+                // Upstash SDK may auto-parse JSON, so check if it's already an object
+                if (value != null) {
+                  if (typeof value === "object" && !Array.isArray(value) && value.constructor === Object) {
+                    // Already parsed object - use directly
+                    parsedValue = value;
+                    try {
+                      rawValue = JSON.stringify(value);
+                    } catch {
+                      rawValue = String(value);
+                    }
+                  } else if (typeof value === "string") {
+                    // Still a string - need to parse
+                    rawValue = value;
+                    try {
+                      parsedValue = JSON.parse(value);
+                    } catch {
+                      // Not valid JSON - will treat as unparseable
+                    }
+                  } else {
+                    // Other type (number, boolean, etc.) - stringify for snippet
+                    rawValue = String(value);
+                  }
+                }
               } else if (actualType === "hash") {
                 // For hash type, convert to JSON string for parsing
                 const hash = await redis.hgetall(verifiedRedisKeyChecked);
                 if (hash && Object.keys(hash).length > 0) {
                   rawValue = JSON.stringify(hash);
+                  // Try to reconstruct object from hash fields
+                  try {
+                    const reconstructed = {};
+                    for (const [k, v] of Object.entries(hash)) {
+                      if (typeof v === "string" && (v.startsWith("{") || v.startsWith("["))) {
+                        try {
+                          reconstructed[k] = JSON.parse(v);
+                        } catch {
+                          reconstructed[k] = v;
+                        }
+                      } else {
+                        reconstructed[k] = v;
+                      }
+                    }
+                    parsedValue = reconstructed;
+                  } catch {
+                    // Use hash as-is
+                    parsedValue = hash;
+                  }
                 }
               }
               
               if (rawValue) {
                 // Store snippet (first 160 chars for safety)
                 existingVerifySnippet = String(rawValue).slice(0, 160);
+              }
+              
+              if (parsedValue && typeof parsedValue === "object") {
+                // Successfully parsed (or already was an object)
+                existingVerifyParsedOk = true;
+                existingVerifyOkField = parsedValue.ok === true;
                 
-                // Attempt to parse as JSON
-                try {
-                  const parsed = JSON.parse(rawValue);
-                  existingVerifyParsedOk = true;
-                  existingVerifyOkField = parsed.ok === true;
-                  
-                  // Only skip if parsed successfully AND ok === true
-                  // If parse fails or ok !== true, we should re-verify
-                  if (existingVerifyOkField && !forceOverride) {
-                    shouldSkip = true;
-                    skipReason = "already_verified_in_redis";
-                  }
-                } catch (parseErr) {
-                  // Parse failed - treat as not verified, proceed with verification
-                  existingVerifyParsedOk = false;
-                  existingVerifyOkField = null;
-                  console.warn('[verify_backfill] Stored value not valid JSON, will re-verify:', parseErr?.message);
+                // Only skip if parsed successfully AND ok === true
+                // If parse fails or ok !== true, we should re-verify
+                if (existingVerifyOkField && !forceOverride) {
+                  shouldSkip = true;
+                  skipReason = "already_verified_in_redis";
+                }
+              } else {
+                // Parse failed or value was not an object - treat as not verified, proceed with verification
+                existingVerifyParsedOk = false;
+                existingVerifyOkField = null;
+                if (rawValue) {
+                  console.warn('[verify_backfill] Stored value not valid JSON or not an object, will re-verify. Raw snippet:', existingVerifySnippet);
                 }
               }
             }
