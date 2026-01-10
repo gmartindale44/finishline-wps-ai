@@ -121,11 +121,48 @@
         return; 
       }
 
-      console.log('[Predict] submitting', horses.length, 'horses');
+      // Get date and raceNo from UI (required for snapshot persistence)
+      const raceDateEl = document.getElementById('fl-race-date');
+      const raceNoEl = document.getElementById('fl-race-number');
+      let raceDate = '';
+      let raceNo = '';
+      
+      if (raceDateEl && raceDateEl.value) {
+        raceDate = raceDateEl.value.trim(); // Already in YYYY-MM-DD format from date input
+      }
+      
+      if (raceNoEl && raceNoEl.value) {
+        raceNo = raceNoEl.value.trim();
+      }
+      
+      // Normalize date format if needed
+      if (raceDate && !/^\d{4}-\d{2}-\d{2}$/.test(raceDate)) {
+        const parsed = new Date(raceDate);
+        if (!isNaN(parsed.getTime())) {
+          raceDate = parsed.toISOString().slice(0, 10);
+        }
+      }
+      
+      // Validate raceNo is numeric (if provided)
+      if (raceNo && isNaN(Number(raceNo))) {
+        console.warn('[Predict] Race # is not numeric, skipping snapshot persistence');
+        raceNo = ''; // Clear invalid value, but don't block prediction
+      }
+
+      // Build payload with date and raceNo
+      const payload = { horses };
+      if (raceDate) {
+        payload.date = raceDate;
+      }
+      if (raceNo) {
+        payload.raceNo = raceNo;
+      }
+
+      console.log('[Predict] submitting', horses.length, 'horses', payload.date ? `date: ${payload.date}` : '', payload.raceNo ? `raceNo: ${payload.raceNo}` : '');
       const r = await fetch('/api/predict_wps', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ horses })
+        body: JSON.stringify(payload)
       });
       const j = await r.json();
       console.log('[Predict] result:', j);

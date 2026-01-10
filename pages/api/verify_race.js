@@ -97,8 +97,127 @@ async function logVerifyResult(result) {
       const normDate = normalizeDate(date);
       const normRaceNo = String(raceNo || "").trim();
       
-      // First, try permanent key
-      if (normTrack && normDate && normRaceNo) {
+      // ADDITIVE: Try to fetch best snapshot first (if enabled)
+      // Define outside if block so it's available for debug logging later
+      const enablePredSnapshots = process.env.ENABLE_PRED_SNAPSHOTS === 'true'; // default false
+      if (enablePredSnapshots && normTrack && normDate && normRaceNo) {
+        try {
+          const joinKey = `${normDate}|${normTrack}|${normRaceNo}`;
+          const { keys: redisKeys, get: redisGet } = await import('../../lib/redis.js');
+          
+          // Find all snapshots for this race
+          const snapshotPattern = `fl:predsnap:${joinKey}:*`;
+          
+          // Initialize debug info
+          if (!predmeta) predmeta = {};
+          if (!predmeta.debug) predmeta.debug = {};
+          predmeta.debug.snapshotPattern = snapshotPattern;
+          
+          const snapshotKeys = await redisKeys(snapshotPattern);
+          
+          if (snapshotKeys.length > 0) {
+            // Parse timestamps from keys: fl:predsnap:{raceId}:{asOf}
+            const snapshots = [];
+            for (const key of snapshotKeys) {
+              const match = key.match(/fl:predsnap:[^:]+:(.+)$/);
+              if (match) {
+                const asOfStr = match[1];
+                const rawValue = await redisGet(key);
+                if (rawValue) {
+                  try {
+                    const snapshot = JSON.parse(rawValue);
+                    const asOfDate = new Date(asOfStr);
+                    if (!isNaN(asOfDate.getTime())) {
+                      snapshots.push({
+                        key,
+                        asOf: asOfDate,
+                        data: snapshot,
+                      });
+                    }
+                  } catch {}
+                }
+              }
+            }
+            
+            // Sort by timestamp (newest first)
+            snapshots.sort((a, b) => b.asOf.getTime() - a.asOf.getTime());
+            
+            // Select best snapshot: latest snapshot before verification time
+            const verifyTime = new Date();
+            const bestSnapshot = snapshots.find(s => s.asOf.getTime() <= verifyTime.getTime());
+            
+            // Use best snapshot if available, otherwise use latest overall
+            if (bestSnapshot || snapshots.length > 0) {
+              const selected = bestSnapshot || snapshots[0];
+              const snapshot = selected.data;
+              
+              // Extract predmeta fields from snapshot
+              // Also extract predicted picks if available in snapshot
+              const snapshotPredicted = {};
+              if (Array.isArray(snapshot.picks) && snapshot.picks.length >= 3) {
+                snapshotPredicted.win = snapshot.picks.find(p => p.slot === 'Win')?.name || snapshot.picks[0]?.name || '';
+                snapshotPredicted.place = snapshot.picks.find(p => p.slot === 'Place')?.name || snapshot.picks[1]?.name || '';
+                snapshotPredicted.show = snapshot.picks.find(p => p.slot === 'Show')?.name || snapshot.picks[2]?.name || '';
+              } else if (Array.isArray(snapshot.ranking) && snapshot.ranking.length >= 3) {
+                snapshotPredicted.win = snapshot.ranking[0]?.name || '';
+                snapshotPredicted.place = snapshot.ranking[1]?.name || '';
+                snapshotPredicted.show = snapshot.ranking[2]?.name || '';
+              }
+              
+              predmeta = {
+                confidence_pct: typeof snapshot.confidence === 'number' 
+                  ? (snapshot.confidence <= 1 ? Math.round(snapshot.confidence * 100) : Math.round(snapshot.confidence))
+                  : null,
+                t3m_pct: typeof snapshot.top3_mass === 'number'
+                  ? (snapshot.top3_mass <= 1 ? Math.round(snapshot.top3_mass * 100) : Math.round(snapshot.top3_mass))
+                  : null,
+                top3_list: Array.isArray(snapshot.ranking) && snapshot.ranking.length >= 3
+                  ? snapshot.ranking.slice(0, 3).map(r => r.name).filter(Boolean)
+                  : Array.isArray(snapshot.picks) && snapshot.picks.length >= 3
+                    ? snapshot.picks.slice(0, 3).map(p => p.name || p.slot).filter(Boolean)
+                    : null,
+                // ADDITIVE: Store predicted picks from snapshot (for verify hit calculation)
+                predicted: snapshotPredicted,
+                // Store snapshot timestamp for logging
+                predsnap_asOf: selected.asOf.toISOString()
+              };
+              
+              // ADDITIVE: Store debug info for successful snapshot selection
+              if (!predmeta.debug) predmeta.debug = {};
+              predmeta.debug.snapshotKeysFoundCount = snapshotKeys.length;
+              predmeta.debug.snapshotSelectedAsOf = selected.asOf.toISOString();
+              predmeta.debug.snapshotSelectedKey = selected.key;
+            } else {
+              // ADDITIVE: Store debug info when no snapshot found (for diagnostics)
+              if (!predmeta) predmeta = {};
+              if (!predmeta.debug) predmeta.debug = {};
+              predmeta.debug.snapshotKeysFoundCount = 0;
+              predmeta.debug.snapshotSelectedAsOf = null;
+              predmeta.debug.snapshotSelectedKey = null;
+            }
+          } else {
+            // ADDITIVE: Store debug info when snapshot lookup not attempted (pattern match returned 0)
+            if (!predmeta) predmeta = {};
+            if (!predmeta.debug) predmeta.debug = {};
+            predmeta.debug.snapshotKeysFoundCount = 0;
+            predmeta.debug.snapshotSelectedAsOf = null;
+            predmeta.debug.snapshotSelectedKey = null;
+          }
+        } catch (snapshotErr) {
+          // Non-fatal: log but continue to predmeta lookup
+          console.warn('[verify_race] Snapshot lookup failed (non-fatal):', snapshotErr?.message || snapshotErr);
+          // ADDITIVE: Store debug info when snapshot lookup throws error
+          if (!predmeta) predmeta = {};
+          if (!predmeta.debug) predmeta.debug = {};
+          predmeta.debug.snapshotKeysFoundCount = null;
+          predmeta.debug.snapshotSelectedAsOf = null;
+          predmeta.debug.snapshotSelectedKey = null;
+          predmeta.debug.snapshotLookupError = snapshotErr?.message || String(snapshotErr);
+        }
+      }
+      
+      // First, try permanent predmeta key (if snapshot not found)
+      if (!predmeta && normTrack && normDate && normRaceNo) {
         const joinKey = `${normDate}|${normTrack}|${normRaceNo}`;
         const predmetaKey = `fl:predmeta:${joinKey}`;
         // Use REST client for get operations
@@ -363,12 +482,38 @@ async function logVerifyResult(result) {
       if (Array.isArray(predmeta.top3_list) && predmeta.top3_list.length > 0) {
         logPayload.top3_list = predmeta.top3_list;
       }
+      // ADDITIVE: Store snapshot timestamp if snapshot was used
+      if (predmeta.predsnap_asOf) {
+        logPayload.predsnap_asOf = predmeta.predsnap_asOf;
+      }
+      // ADDITIVE: Store snapshot debug fields if snapshot feature is enabled
+      if (enablePredSnapshots && predmeta.debug) {
+        if (!logPayload.debug) logPayload.debug = {};
+        logPayload.debug.snapshotKeysFoundCount = predmeta.debug.snapshotKeysFoundCount;
+        logPayload.debug.snapshotSelectedAsOf = predmeta.debug.snapshotSelectedAsOf;
+        if (predmeta.debug.snapshotLookupError) {
+          logPayload.debug.snapshotLookupError = predmeta.debug.snapshotLookupError;
+        }
+      }
     }
 
     const logKey = `${VERIFY_PREFIX}${raceId}`;
+    
+    // ADDITIVE: Add verify log key name to debug for diagnostics
+    if (!logPayload.debug) logPayload.debug = {};
+    logPayload.debug.verifyLogKey = logKey;
+    
     // Use REST client setex for verify logs (90 days TTL = 7776000 seconds)
-    const { setex } = await import('../../lib/redis.js');
-    await setex(logKey, 7776000, JSON.stringify(logPayload));
+    try {
+      const { setex } = await import('../../lib/redis.js');
+      await setex(logKey, 7776000, JSON.stringify(logPayload));
+      logPayload.debug.verifyWriteOk = true;
+    } catch (writeErr) {
+      // Track verify write error but don't break user flow
+      logPayload.debug.verifyWriteOk = false;
+      logPayload.debug.verifyWriteError = writeErr?.message || String(writeErr);
+      console.error("[verify-log] Failed to log verify result", writeErr);
+    }
   } catch (err) {
     // IMPORTANT: logging failures must NOT break the user flow
     console.error("[verify-log] Failed to log verify result", err);
@@ -1832,8 +1977,12 @@ export default async function handler(req, res) {
         let confidence = body.confidence || null;
         let top3Mass = body.top3Mass || null;
 
-        // If predictions not provided in body, try fetching from Redis
-        if (!predicted || (!predicted.win && !predicted.place && !predicted.show)) {
+        // ADDITIVE: If predmeta came from snapshot, use predicted picks from snapshot
+        if (predmeta && predmeta.predicted && (predmeta.predicted.win || predmeta.predicted.place || predmeta.predicted.show)) {
+          predicted = predmeta.predicted;
+        }
+        // If predictions not provided in body/snapshot, try fetching from Redis
+        else if (!predicted || (!predicted.win && !predicted.place && !predicted.show)) {
           const predLog = await fetchPredictionLog(track, canonicalDateIso, raceNo);
           if (predLog) {
             predicted = predLog.predicted || { win: "", place: "", show: "" };

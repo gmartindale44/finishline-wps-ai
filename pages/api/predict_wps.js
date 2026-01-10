@@ -262,6 +262,24 @@ export default async function handler(req, res) {
     const compSum = comp.reduce((a, b) => a + b, 0);
     const probs = comp.map(v => (compSum > 0 ? v / compSum : 1 / comp.length));
 
+    // ADDITIVE: Compute Harville place/show probabilities (if enabled)
+    let probs_win = null;
+    let probs_place = null;
+    let probs_show = null;
+    const enableHarville = process.env.ENABLE_HARVILLE_PROBS !== 'false'; // default true
+    if (enableHarville) {
+      try {
+        const { harvilleFromWinProbs } = await import('../../lib/harville.js');
+        const harvilleResult = harvilleFromWinProbs(probs, true); // use Stern adjustment
+        probs_win = harvilleResult.winProbs; // use returned win probs (original normalized, not Stern-adjusted)
+        probs_place = harvilleResult.placeProbs;
+        probs_show = harvilleResult.showProbs;
+      } catch (err) {
+        console.warn('[predict_wps] Harville computation failed (using null):', err?.message || err);
+        // Fail gracefully - leave probs_win/place/show as null
+      }
+    }
+
     // Build full ranking with reasons
     const ranking = fullRanking.map((o) => {
       const hs = horses[o.i] || {};
@@ -277,7 +295,7 @@ export default async function handler(req, res) {
       if (surf) reasons.push('surf adj');
       if (!Number.isNaN(Number(hs.post))) reasons.push('post adj');
 
-      return {
+      const entry = {
         name: hs.name,
         post: hs.post || null,
         odds: hs.odds || '',
@@ -285,6 +303,15 @@ export default async function handler(req, res) {
         prob: probs[o.i],
         reasons,
       };
+      
+      // ADDITIVE: Add Harville probabilities to each ranking entry (if available)
+      if (enableHarville && probs_win && probs_place && probs_show) {
+        entry.prob_win = probs_win[o.i] || 0;
+        entry.prob_place = probs_place[o.i] || 0;
+        entry.prob_show = probs_show[o.i] || 0;
+      }
+      
+      return entry;
     });
 
     // Top 3 for W/P/S picks
@@ -418,6 +445,17 @@ export default async function handler(req, res) {
     const gap12 = Math.max(0, P1 - P2);
     const gap23 = Math.max(0, P2 - P3);
     const top3Mass = P1 + P2 + P3;
+    
+    // ADDITIVE: Compute top3_mass clarity fields (if enabled)
+    const enableTop3MassClarity = process.env.ENABLE_TOP3_MASS_CLARITY !== 'false'; // default true
+    let top3_mass_raw = null;
+    let top3_mass_calibrated = null;
+    let top3_mass_method = 'legacy';
+    if (enableTop3MassClarity) {
+      // Raw top3 mass from ranking probabilities (0-1 range, convert to 0-100)
+      const rawTop3Sum = P1 + P2 + P3;
+      top3_mass_raw = Math.round(Math.max(0, Math.min(100, rawTop3Sum * 100)));
+    }
 
     // Static "bet types by profit potential" table (copy-safe for UI)
     const betTypesTable = [
@@ -483,6 +521,53 @@ export default async function handler(req, res) {
       }
     };
 
+    // ADDITIVE: Derive raceId from track/date/raceNo (same format as predmeta keys)
+    const deriveRaceId = () => {
+      const date = body.date || body.dateIso || null;
+      const raceNo = body.raceNo || body.race || null;
+      const trackName = track || null;
+      
+      if (!date || !raceNo || !trackName) return null;
+      
+      // Normalize track (same logic as predmeta write in safeWritePredmeta)
+      const normalizeTrack = (t) => {
+        if (!t) return "";
+        return String(t)
+          .toLowerCase()
+          .trim()
+          .replace(/\s+/g, " ")
+          .replace(/[^a-z0-9\s]/g, "")
+          .replace(/\s+/g, " ");
+      };
+      
+      const normalizeDate = (d) => {
+        if (!d) return "";
+        const str = String(d).trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+        try {
+          const parsed = new Date(str);
+          if (!isNaN(parsed.getTime())) {
+            return parsed.toISOString().slice(0, 10);
+          }
+        } catch {}
+        return "";
+      };
+      
+      const normTrack = normalizeTrack(trackName);
+      const normDate = normalizeDate(date);
+      const normRaceNo = String(raceNo).trim();
+      
+      if (normTrack && normDate && normRaceNo) {
+        return `${normDate}|${normTrack}|${normRaceNo}`;
+      }
+      return null;
+    };
+    
+    const raceId = deriveRaceId();
+    
+    // ADDITIVE: Generate server-side timestamp
+    const asOf = new Date().toISOString();
+
     // Calibration post-processor (gracefully no-ops if model_params.json is missing)
     let calibratedResponse = {
       picks,
@@ -495,8 +580,17 @@ export default async function handler(req, res) {
         surface, 
         distance_mi: miles,
         distance_furlongs: distance_furlongs || null,
-        distance_meters: distance_meters || null
-      }
+        distance_meters: distance_meters || null,
+        // ADDITIVE: Add asOf and raceId to meta
+        asOf,
+        raceId
+      },
+      // ADDITIVE: Add Harville probability arrays to response (if enabled)
+      ...(enableHarville && probs_win && probs_place && probs_show ? {
+        probs_win,
+        probs_place,
+        probs_show
+      } : {})
     };
     
     try {
@@ -521,11 +615,37 @@ export default async function handler(req, res) {
       const __policy = (__p.policy && __p.policy[__band]) || {};
       const __reco = __tc(__policy.recommended || finalStrategy?.recommended || 'across the board');
       
+      // ADDITIVE: Set top3_mass clarity fields after calibration
+      const enableTop3MassClarity = process.env.ENABLE_TOP3_MASS_CLARITY !== 'false'; // default true
+      let top3_mass_calibrated = null;
+      let top3_mass_method = 'legacy';
+      if (enableTop3MassClarity) {
+        top3_mass_calibrated = Math.round(__top3_mass);
+        // Determine method: if calibrated and model is calib-v1, check if calibrated differs from raw
+        const rawTop3Sum = (ranking[0]?.prob || 0) + (ranking[1]?.prob || 0) + (ranking[2]?.prob || 0);
+        const rawTop3Pct = Math.round(rawTop3Sum * 100);
+        if (__p.reliability && __p.reliability.length && calibratedResponse.meta?.model === 'calib-v1') {
+          // If calibrated differs materially (> 5 points) from raw, use "calib_template"
+          if (Math.abs(top3_mass_calibrated - rawTop3Pct) > 5) {
+            top3_mass_method = 'calib_template';
+          } else {
+            top3_mass_method = 'raw_sum';
+          }
+        } else {
+          top3_mass_method = 'raw_sum';
+        }
+      }
+      
       calibratedResponse = {
         ...calibratedResponse,
         picks: __top3,
         confidence: __perc,
         top3_mass: Math.round(__top3_mass),
+        ...(enableTop3MassClarity ? {
+          top3_mass_raw: Math.round((P1 + P2 + P3) * 100),
+          top3_mass_calibrated,
+          top3_mass_method
+        } : {}),
         strategy: {
           ...finalStrategy,
           recommended: __reco,
@@ -813,6 +933,71 @@ export default async function handler(req, res) {
       // Ignore timeout - proceed with response
     }
 
+    // ADDITIVE: Store prediction snapshot in Redis (if enabled, raceId available, and qualifies)
+    // Option A: high-signal only - only write snapshots when allowAny OR confidenceHigh
+    // Track snapshot debug info for response
+    const snapshotDebug = {
+      enablePredSnapshots: process.env.ENABLE_PRED_SNAPSHOTS === 'true',
+      redisConfigured: Boolean(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN),
+      snapshotAttempted: false,
+      snapshotKey: null,
+      snapshotWriteOk: null,
+      snapshotWriteError: null,
+      shouldSnapshot: false,
+      allowAny: false,
+      confidenceHigh: false
+    };
+    
+    const enablePredSnapshots = snapshotDebug.enablePredSnapshots;
+    const redisConfigured = snapshotDebug.redisConfigured;
+    
+    // Determine if this prediction qualifies for snapshot (high-signal only)
+    const allow = shadowDecision?.allow || {};
+    const allowAny = !!(allow?.win || allow?.place || allow?.show);
+    const confidenceHigh = (typeof calibratedResponse.confidence === 'number' ? calibratedResponse.confidence : 0) >= 80;
+    const shouldSnapshot = !!(enablePredSnapshots && redisConfigured && raceId && (allowAny || confidenceHigh));
+    
+    // Update debug fields (force booleans, no nulls)
+    snapshotDebug.shouldSnapshot = shouldSnapshot;
+    snapshotDebug.allowAny = allowAny;
+    snapshotDebug.confidenceHigh = confidenceHigh;
+    snapshotDebug.snapshotAttempted = shouldSnapshot;
+    
+    if (shouldSnapshot) {
+      snapshotDebug.snapshotKey = `fl:predsnap:${raceId}:${asOf}`;
+      
+      try {
+        const { setex } = await import('../../lib/redis.js');
+        const snapshotKey = snapshotDebug.snapshotKey;
+        
+        // Store minimal snapshot payload (enough for verification)
+        const snapshotPayload = {
+          picks: calibratedResponse.picks,
+          ranking: calibratedResponse.ranking,
+          confidence: calibratedResponse.confidence,
+          top3_mass: calibratedResponse.top3_mass,
+          meta: {
+            ...calibratedResponse.meta,
+            asOf,
+            raceId
+          },
+          strategy: calibratedResponse.strategy || null,
+          // Store top-level fields for convenience
+          snapshot_asOf: asOf,
+          snapshot_raceId: raceId
+        };
+        
+        // TTL: 7 days (604800 seconds) - await inline for reliability
+        await setex(snapshotKey, 604800, JSON.stringify(snapshotPayload));
+        snapshotDebug.snapshotWriteOk = true;
+      } catch (err) {
+        // Non-fatal: log but don't block response (fail-open)
+        snapshotDebug.snapshotWriteOk = false;
+        snapshotDebug.snapshotWriteError = err?.message || String(err);
+        console.warn('[predict_wps] Snapshot write failed (non-fatal):', snapshotDebug.snapshotWriteError);
+      }
+    }
+
     return res.status(200).json({
       ok: true,
       ...calibratedResponse,
@@ -822,6 +1007,8 @@ export default async function handler(req, res) {
         version: thresholds.version,
       },
       predmeta_debug: predmetaDebug,
+      // ADDITIVE: Snapshot debug info (non-sensitive)
+      snapshot_debug: snapshotDebug,
     });
   } catch (err) {
     console.error('[predict_wps] Error:', err);
