@@ -14,7 +14,9 @@ export const config = {
 };
 
 // Import Redis helpers for skip logic
-import { verifyLogExists, buildRaceId, buildVerifyKey, getRedis } from "../../utils/finishline/backfill_helpers.js";
+import { verifyLogExists, buildVerifyKey, getRedis } from "../../utils/finishline/backfill_helpers.js";
+// Import centralized normalization (ensures exact match with verify_race.js)
+import { buildVerifyRaceId, normalizeTrack, normalizeRaceNo, normalizeDateToIso, normalizeSurface } from "../../lib/verify_normalize.js";
 
 const DEFAULT_MAX_RACES = 10;
 const HARD_MAX_RACES = 50;
@@ -363,87 +365,86 @@ export default async function handler(req, res) {
       });
     }
   } else {
-    // Helper to normalize date to YYYY-MM-DD format (matches buildRaceId in backfill_helpers.js)
-    function normalizeDateToIso(dateStr) {
-      if (!dateStr) return "";
-      const s = String(dateStr).trim();
-      
-      // Already ISO (YYYY-MM-DD)
-      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-        return s;
-      }
-      
-      // MM/DD/YYYY -> YYYY-MM-DD
-      const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-      if (m) {
-        const mm = m[1].padStart(2, "0");
-        const dd = m[2].padStart(2, "0");
-        const yyyy = m[3];
-        return `${yyyy}-${mm}-${dd}`;
-      }
-      
-      // Try parsing as Date (last resort, but be defensive)
-      try {
-        const parsed = new Date(s);
-        if (!isNaN(parsed.getTime())) {
-          return parsed.toISOString().slice(0, 10);
-        }
-      } catch {}
-      
-      // If we can't normalize, return empty string (will cause buildRaceId to handle it)
-      return "";
-    }
-
     // Check Redis for existing verify logs before calling /api/verify_race
     for (const race of races) {
       let shouldSkip = false;
       let skipReason = null;
       let verifiedRedisKeyChecked = null;
       let verifiedRedisKeyExists = false;
+      let verifiedRedisKeyType = null;
+      let verifiedRedisKeyValuePreview = null;
       let raceIdDerived = null;
+      let normalization = null;
 
       try {
-        // Normalize date to YYYY-MM-DD format (CRITICAL: must match buildRaceId normalization)
-        const normalizedDate = normalizeDateToIso(race.dateIso || race.date);
+        // Store input values for debug
+        const trackIn = race.track || "";
+        const raceNoIn = race.raceNo || "";
+        const dateIn = race.dateIso || race.date || "";
+        const surfaceIn = race.surface || null;
         
-        // Build raceId using the same logic as verify_race.js buildVerifyRaceId
-        // This ensures exact same normalization as verify_race uses when writing keys
-        raceIdDerived = buildRaceId(race.track, normalizedDate, race.raceNo);
+        // Normalize using centralized helpers (CRITICAL: must match verify_race.js exactly)
+        const normalizedDate = normalizeDateToIso(dateIn);
+        const trackSlug = normalizeTrack(trackIn);
+        const raceNoNormalized = normalizeRaceNo(raceNoIn);
+        const surfaceSlug = normalizeSurface(surfaceIn || "unknown");
+        
+        // Build raceId using centralized function (same as verify_race.js)
+        raceIdDerived = buildVerifyRaceId(trackIn, dateIn, raceNoIn, surfaceIn || "unknown");
         
         // Build the Redis key (format: fl:verify:{raceId})
-        // raceId format: track-date-unknown-r{raceNo} (includes raceNo to prevent collisions)
         verifiedRedisKeyChecked = buildVerifyKey(raceIdDerived);
         
-        // Check if this race already has a verify log in Redis
-        // IMPORTANT: Pass normalized date to ensure key matches exactly
-        const exists = await verifyLogExists({
-          track: race.track,
-          date: normalizedDate, // Use normalized date
+        // Normalization debug object (always included)
+        normalization = {
+          trackIn,
+          trackSlug,
+          raceNoIn,
+          raceNoNormalized,
+          dateIn,
+          dateIso: normalizedDate,
+          surfaceIn: surfaceIn || null,
+          surfaceSlug,
+        };
+        
+        // Check if this race already has a verify log in Redis (EXACT key lookup, no wildcards)
+        const checkResult = await verifyLogExists({
+          track: trackIn,
+          date: dateIn, // verifyLogExists will normalize internally using same helpers
           dateIso: normalizedDate,
           dateRaw: race.dateRaw,
-          raceNo: race.raceNo,
+          raceNo: raceNoIn,
+          surface: surfaceIn,
         });
         
-        verifiedRedisKeyExists = exists;
+        verifiedRedisKeyExists = checkResult.exists || false;
+        verifiedRedisKeyType = checkResult.type || null;
+        
+        // If checkResult.key differs from our computed key, use the one from checkResult (for debugging)
+        if (checkResult.key && checkResult.key !== verifiedRedisKeyChecked) {
+          console.warn(`[verify_backfill] Key mismatch: computed=${verifiedRedisKeyChecked}, checkResult=${checkResult.key}`);
+          verifiedRedisKeyChecked = checkResult.key; // Use the actual key that was checked
+        }
         
         // Read the stored value (truncated for safety) if key exists
-        let verifiedRedisKeyValuePreview = null;
-        if (exists && verifiedRedisKeyChecked) {
+        if (verifiedRedisKeyExists && verifiedRedisKeyChecked) {
           try {
             const redis = getRedis();
             if (redis) {
-              const type = await redis.type(verifiedRedisKeyChecked);
-              if (type === "string") {
+              const actualType = await redis.type(verifiedRedisKeyChecked);
+              verifiedRedisKeyType = actualType || null;
+              
+              if (actualType === "string") {
                 const value = await redis.get(verifiedRedisKeyChecked);
                 if (value) {
-                  // Truncate to 50 chars max for safety (don't expose full payloads)
-                  verifiedRedisKeyValuePreview = String(value).slice(0, 50);
+                  // Truncate to 80 chars max for safety (don't expose full payloads)
+                  verifiedRedisKeyValuePreview = String(value).slice(0, 80);
                 }
-              } else if (type === "hash") {
+              } else if (actualType === "hash") {
                 // For hash type, get a few fields (safe preview)
                 const hash = await redis.hgetall(verifiedRedisKeyChecked);
                 if (hash && Object.keys(hash).length > 0) {
-                  const preview = JSON.stringify(hash).slice(0, 50);
+                  const preview = JSON.stringify(hash).slice(0, 80);
                   verifiedRedisKeyValuePreview = preview;
                 }
               }
@@ -455,14 +456,14 @@ export default async function handler(req, res) {
         }
 
         // Skip only if key exists AND force override is not enabled
-        if (exists && !forceOverride) {
+        if (verifiedRedisKeyExists && !forceOverride) {
           shouldSkip = true;
           skipReason = "already_verified_in_redis";
         }
       } catch (err) {
         // If Redis check fails, log warning but proceed with verify call
         console.warn("[verify_backfill] Redis check failed, proceeding without skip:", err.message);
-        // Continue to call verify_race as normal
+        // Continue to call verify_race as normal (normalization still populated for debug)
       }
 
       if (shouldSkip) {
@@ -480,9 +481,11 @@ export default async function handler(req, res) {
           // Debug fields for skip verification (safe to expose - no secrets)
           verifiedRedisKeyChecked: verifiedRedisKeyChecked || null,
           verifiedRedisKeyExists: verifiedRedisKeyExists,
-          verifiedRedisKeyValuePreview: verifiedRedisKeyValuePreview || null, // Truncated value preview (max 50 chars)
+          verifiedRedisKeyType: verifiedRedisKeyType || "none",
+          verifiedRedisKeyValuePreview: verifiedRedisKeyValuePreview || null, // Truncated value preview (max 80 chars)
           raceIdDerived: raceIdDerived || null,
-          redisNamespacePrefixUsed: "fl:verify:", // Prefix used for verify keys
+          redisNamespacePrefixUsed: "fl:verify:",
+          normalization: normalization || null,
         });
       } else {
         // Call /api/verify_race as normal (it will write to Redis)
@@ -490,13 +493,13 @@ export default async function handler(req, res) {
         try {
           const result = await callVerifyRace(baseUrl, race);
           // Add debug fields even for non-skipped results (for troubleshooting)
-          if (raceIdDerived || verifiedRedisKeyChecked) {
-            result.raceIdDerived = raceIdDerived || null;
-            result.verifiedRedisKeyChecked = verifiedRedisKeyChecked || null;
-            result.verifiedRedisKeyExists = verifiedRedisKeyExists;
-            result.verifiedRedisKeyValuePreview = verifiedRedisKeyValuePreview || null;
-            result.redisNamespacePrefixUsed = "fl:verify:";
-          }
+          result.raceIdDerived = raceIdDerived || null;
+          result.verifiedRedisKeyChecked = verifiedRedisKeyChecked || null;
+          result.verifiedRedisKeyExists = verifiedRedisKeyExists;
+          result.verifiedRedisKeyType = verifiedRedisKeyType || "none";
+          result.verifiedRedisKeyValuePreview = verifiedRedisKeyValuePreview || null;
+          result.redisNamespacePrefixUsed = "fl:verify:";
+          result.normalization = normalization || null;
           results.push(result);
         } catch (err) {
           // If callVerifyRace itself throws (shouldn't happen, but be defensive), log and continue
@@ -515,8 +518,10 @@ export default async function handler(req, res) {
             raceIdDerived: raceIdDerived || null,
             verifiedRedisKeyChecked: verifiedRedisKeyChecked || null,
             verifiedRedisKeyExists: verifiedRedisKeyExists || false,
-            verifiedRedisKeyValuePreview: null,
+            verifiedRedisKeyType: verifiedRedisKeyType || "none",
+            verifiedRedisKeyValuePreview: verifiedRedisKeyValuePreview || null,
             redisNamespacePrefixUsed: "fl:verify:",
+            normalization: normalization || null,
           });
         }
       }
@@ -555,9 +560,11 @@ export default async function handler(req, res) {
     // Debug fields for skip verification (safe to expose - no secrets, no full values)
     verifiedRedisKeyChecked: r.verifiedRedisKeyChecked || null,
     verifiedRedisKeyExists: r.verifiedRedisKeyExists !== undefined ? r.verifiedRedisKeyExists : null,
-    verifiedRedisKeyValuePreview: r.verifiedRedisKeyValuePreview || null, // Truncated preview (max 50 chars)
+    verifiedRedisKeyType: r.verifiedRedisKeyType || "none",
+    verifiedRedisKeyValuePreview: r.verifiedRedisKeyValuePreview || null, // Truncated preview (max 80 chars)
     raceIdDerived: r.raceIdDerived || null,
     redisNamespacePrefixUsed: r.redisNamespacePrefixUsed || "fl:verify:",
+    normalization: r.normalization || null,
   }));
 
   // Check if any race bypassed PayGate (for debug visibility)
@@ -565,6 +572,24 @@ export default async function handler(req, res) {
 
   // Check Redis configuration (for top-level debug)
   const redisConfigured = Boolean(getRedis());
+  
+  // Get safe Redis URL fingerprint (last 6 chars of host, no secrets)
+  let redisUrlFingerprint = null;
+  try {
+    const redisModule = await import('../../lib/redis.js');
+    const getRedisEnvFunc = redisModule.getRedisEnv || redisModule.default?.getRedisEnv;
+    if (getRedisEnvFunc) {
+      const redisEnv = getRedisEnvFunc();
+      if (redisEnv && redisEnv.url) {
+        try {
+          const urlObj = new URL(redisEnv.url);
+          const host = urlObj.hostname;
+          // Use last 6 chars of host as fingerprint (safe, no secrets)
+          redisUrlFingerprint = host.length > 6 ? host.slice(-6) : host;
+        } catch {}
+      }
+    }
+  } catch {}
   
   // Always return HTTP 200 (never hard-fail the batch)
   // Let UI decide based on ok flag and failures count
@@ -586,13 +611,15 @@ export default async function handler(req, res) {
     firstFailure: failures > 0 || networkFailures > 0 ? (results.find(r => !r.ok && !r.skipped) || null) : null,
     // Debug: show if PayGate was bypassed for internal batch jobs
     bypassedPayGate: anyBypassedPayGate,
-    // Top-level debug fields (safe to expose)
+    // Top-level debug fields (safe to expose - no secrets)
     debug: {
       usedDeployment: process.env.VERCEL_GIT_COMMIT_SHA || null,
       usedEnv: process.env.VERCEL_ENV || null,
+      baseUrl: baseUrl,
       redisConfigured: redisConfigured,
+      redisUrlFingerprint: redisUrlFingerprint, // Last 6 chars of host (safe)
       forceOverride: forceOverride, // Show if force=1 was used
-      redisNamespacePrefixUsed: "fl:verify:",
+      redisVerifyPrefix: "fl:verify:",
     },
   });
 }

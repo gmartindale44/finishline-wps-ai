@@ -13,41 +13,11 @@ import { computeGreenZoneForRace } from "../../lib/greenzone/greenzone_v1.js";
 // Normalize helpers for prediction lookup
 import { slugRaceId } from "../../lib/normalize.js";
 import { hgetall } from "../../lib/redis.js";
+// Centralized verify normalization (ensures key consistency)
+import { buildVerifyRaceId } from "../../lib/verify_normalize.js";
 
 const VERIFY_PREFIX = "fl:verify:";
 const PRED_PREFIX = "fl:pred:";
-
-/**
- * Build a race ID for verify logs (similar to prediction logs but without postTime)
- * This creates a key that can be used to store/retrieve verify logs
- * The calibration script joins on track|date|raceNo, so the key format doesn't matter
- * but we use a consistent slug format for readability
- */
-function buildVerifyRaceId(track, date, raceNo) {
-  // Normalize track: lowercase, collapse spaces, replace non-alphanum with '-', remove dup '-'
-  const slugTrack = (track || "")
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, " ")
-    .replace(/[^a-z0-9\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
-
-  // Normalize date: use YYYY-MM-DD format
-  let slugDate = date || "";
-  if (!slugDate || !/^\d{4}-\d{2}-\d{2}$/.test(slugDate)) {
-    // If date is invalid, use empty string (calibration script will handle it)
-    slugDate = "";
-  }
-
-  // Normalize race number
-  const slugRaceNo = String(raceNo || "").trim() || "0";
-
-  // Build: track-date-unknown-r{raceNo} (using "unknown" for postTime to match prediction pattern)
-  const parts = [slugTrack, slugDate, "unknown", `r${slugRaceNo}`].filter(Boolean);
-  return parts.join("-");
-}
 
 /**
  * Log verify result to Upstash Redis

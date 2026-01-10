@@ -27,73 +27,28 @@ export function getRedis() {
   return redisClient;
 }
 
+// Centralized verify normalization (ensures key consistency with verify_race.js)
+import { buildVerifyRaceId as buildVerifyRaceIdShared } from "../../lib/verify_normalize.js";
+
 /**
  * Build raceId from track, date, raceNo
- * EXACTLY matches the format used by verify_race.js buildVerifyRaceId()
- * This ensures Redis keys are consistent between verify_race and backfill operations.
+ * Uses centralized normalization to EXACTLY match verify_race.js format
+ * @deprecated Use buildVerifyRaceIdShared directly - kept for backward compatibility
  */
 export function buildRaceId(track, date, raceNo) {
-  // Normalize track: lowercase, collapse spaces, replace non-alphanum with '-', remove dup '-'
-  // This EXACTLY matches buildVerifyRaceId in pages/api/verify_race.js
-  const slugTrack = (track || "")
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, " ")
-    .replace(/[^a-z0-9\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
-
-  // Normalize date: use YYYY-MM-DD format
-  let slugDate = date || "";
-  if (!slugDate || !/^\d{4}-\d{2}-\d{2}$/.test(slugDate)) {
-    // If date is invalid, use empty string (calibration script will handle it)
-    slugDate = "";
-  }
-
-  // Normalize race number
-  const slugRaceNo = String(raceNo || "").trim() || "0";
-
-  // Build: track-date-unknown-r{raceNo} (using "unknown" for postTime to match prediction pattern)
-  const parts = [slugTrack, slugDate, "unknown", `r${slugRaceNo}`].filter(Boolean);
-  return parts.join("-");
+  return buildVerifyRaceIdShared(track, date, raceNo, "unknown");
 }
 
 /**
  * Build verify raceId from context object (for convenience)
- * @param {object} ctx - Context with track, date/dateIso/dateRaw, raceNo
+ * Uses centralized normalization to ensure exact match with verify_race.js
+ * @param {object} ctx - Context with track, date/dateIso/dateRaw, raceNo, surface (optional)
  * @returns {string} - Race ID matching verify_race format
  */
 export function buildVerifyRaceIdFromContext(ctx) {
-  // Normalize date to YYYY-MM-DD format (matches buildRaceId expectation)
-  // This ensures keys match exactly between verify_race and verify_backfill
-  let date = ctx.date || ctx.dateIso || ctx.dateRaw || "";
-  
-  // If date is not in YYYY-MM-DD format, try to normalize it
-  if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-    // Try MM/DD/YYYY -> YYYY-MM-DD
-    const m = String(date).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-    if (m) {
-      const mm = m[1].padStart(2, "0");
-      const dd = m[2].padStart(2, "0");
-      const yyyy = m[3];
-      date = `${yyyy}-${mm}-${dd}`;
-    } else {
-      // Try parsing as Date (last resort)
-      try {
-        const parsed = new Date(date);
-        if (!isNaN(parsed.getTime())) {
-          date = parsed.toISOString().slice(0, 10);
-        } else {
-          date = ""; // Invalid date - buildRaceId will handle it
-        }
-      } catch {
-        date = ""; // Parse error - buildRaceId will handle it
-      }
-    }
-  }
-  
-  return buildRaceId(ctx.track, date, ctx.raceNo);
+  const date = ctx.date || ctx.dateIso || ctx.dateRaw || "";
+  const surface = ctx.surface || "unknown";
+  return buildVerifyRaceIdShared(ctx.track, date, ctx.raceNo, surface);
 }
 
 /**
@@ -214,20 +169,22 @@ export async function fetchTrackDays(track) {
 
 /**
  * Check if a verify result already exists in Redis
+ * Uses EXACT key lookup (no wildcards) to prevent false positives
  * Accepts either a context object or individual track/date/raceNo parameters
- * @param {object|string} ctxOrRaceId - Context object {track, date/dateIso/dateRaw, raceNo} OR a raceId string
- * @param {string} [date] - Date (if ctxOrRaceId is track string) - should be YYYY-MM-DD format
- * @param {string} [raceNo] - Race number (if ctxOrRaceId is track string)
- * @returns {Promise<boolean>} - true if verify log exists, false otherwise
  * 
- * IMPORTANT: The date parameter (or ctx.date/dateIso) must be in YYYY-MM-DD format.
- * If not normalized, it will be normalized to empty string by buildRaceId, causing key collisions.
- * RaceNo is ALWAYS included in the key format: track-date-unknown-r{raceNo}
+ * @param {object|string} ctxOrRaceId - Context object {track, date/dateIso/dateRaw, raceNo} OR a raceId string
+ * @param {string} [date] - Date (if ctxOrRaceId is track string)
+ * @param {string} [raceNo] - Race number (if ctxOrRaceId is track string)
+ * @returns {Promise<{exists: boolean, key: string, type: string|null}>} - Object with exists flag, exact key checked, and Redis type
+ * 
+ * IMPORTANT: Uses centralized normalization to ensure exact match with verify_race.js write path
+ * Key format: fl:verify:{trackSlug}-{YYYY-MM-DD}-unknown-r{raceNo}
+ * This is a DETERMINISTIC exact key lookup - no wildcards, no patterns
  */
 export async function verifyLogExists(ctxOrRaceId, date, raceNo) {
   const redis = getRedis();
   if (!redis) {
-    return false;
+    return { exists: false, key: null, type: null };
   }
   
   let raceId;
@@ -235,47 +192,28 @@ export async function verifyLogExists(ctxOrRaceId, date, raceNo) {
     // If first param is a string, treat it as raceId (or track if date/raceNo provided)
     if (date && raceNo) {
       // ctxOrRaceId is track, date and raceNo are separate params
-      // Normalize date if not already YYYY-MM-DD
-      let normalizedDate = date;
-      if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-        const m = String(date).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-        if (m) {
-          const mm = m[1].padStart(2, "0");
-          const dd = m[2].padStart(2, "0");
-          const yyyy = m[3];
-          normalizedDate = `${yyyy}-${mm}-${dd}`;
-        } else {
-          try {
-            const parsed = new Date(date);
-            if (!isNaN(parsed.getTime())) {
-              normalizedDate = parsed.toISOString().slice(0, 10);
-            } else {
-              normalizedDate = ""; // Invalid - buildRaceId will handle it
-            }
-          } catch {
-            normalizedDate = "";
-          }
-        }
-      }
-      raceId = buildRaceId(ctxOrRaceId, normalizedDate, raceNo);
+      // Use centralized normalization
+      raceId = buildVerifyRaceIdShared(ctxOrRaceId, date, raceNo, "unknown");
     } else {
       // ctxOrRaceId is already a raceId
       raceId = ctxOrRaceId;
     }
   } else if (ctxOrRaceId && typeof ctxOrRaceId === "object") {
-    // ctxOrRaceId is a context object - buildVerifyRaceIdFromContext handles date normalization
+    // ctxOrRaceId is a context object - uses centralized normalization
     raceId = buildVerifyRaceIdFromContext(ctxOrRaceId);
   } else {
-    return false;
+    return { exists: false, key: null, type: null };
   }
   
   const key = buildVerifyKey(raceId);
   
   try {
     const type = await redis.type(key);
-    return type === "string" || type === "hash";
-  } catch {
-    return false;
+    const exists = type === "string" || type === "hash";
+    return { exists, key, type: type || null };
+  } catch (err) {
+    // Non-fatal: return false but include key for debugging
+    return { exists: false, key, type: null, error: err?.message || String(err) };
   }
 }
 
