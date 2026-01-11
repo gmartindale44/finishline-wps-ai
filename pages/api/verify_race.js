@@ -2942,6 +2942,17 @@ export default async function handler(req, res) {
 
         // Log to Redis and get verification result
         const redisResult = await logVerifyResult(result);
+        
+        // Build Redis fingerprint for diagnostics
+        let redisFingerprint = null;
+        try {
+          const { getRedisFingerprint } = await import('../../lib/redis_fingerprint.js');
+          redisFingerprint = getRedisFingerprint();
+        } catch {}
+        
+        // Store redis result in result for responseMeta
+        result._redisResult = redisResult;
+        result._redisFingerprint = redisFingerprint;
 
         // Add GreenZone (safe, never throws)
         await addGreenZoneToResponse(result);
