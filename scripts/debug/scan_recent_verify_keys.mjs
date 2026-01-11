@@ -84,16 +84,28 @@ async function scanTracks() {
   for (const track of targetTracks) {
     const trackNormalized = normalizeTrackForKey(track);
     
-    // Try multiple patterns
+    // Try multiple patterns (exact match first, then fallback)
     const patterns = [
-      `fl:verify:${trackNormalized}-${targetDate}*`,
-      `fl:verify:*${trackNormalized}*${targetDate}*`,
+      `fl:verify:${trackNormalized}-${targetDate}*`,  // Exact match
+      `fl:verify:*${trackNormalized}*${targetDate}*`, // Contains track and date
+      `fl:verify:*${targetDate}*${trackNormalized}*`, // Contains date and track (reversed)
     ];
     
     // Also try with spaces for charles-town -> charles town
     if (trackNormalized.includes("-")) {
       const trackSpaced = trackNormalized.replace(/-/g, " ");
       patterns.push(`fl:verify:*${trackSpaced}*${targetDate}*`);
+      patterns.push(`fl:verify:*${targetDate}*${trackSpaced}*`);
+    }
+    
+    // Additional fallback patterns for partial matches
+    // For "meadowlands" -> also try "meadow"
+    if (trackNormalized.includes("meadow")) {
+      patterns.push(`fl:verify:*${targetDate}*meadow*`);
+    }
+    // For "charles-town" or "charles" -> also try "charles"
+    if (trackNormalized.includes("charles")) {
+      patterns.push(`fl:verify:*${targetDate}*charles*`);
     }
     
     console.log(`[scan_recent] Scanning track: ${track} (patterns: ${patterns.length})`);
