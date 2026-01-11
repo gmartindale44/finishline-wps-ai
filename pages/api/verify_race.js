@@ -2741,6 +2741,10 @@ export default async function handler(req, res) {
     // Manual verify branch - handle manual outcome entry
     if (body.mode === "manual" && body.outcome) {
       try {
+        // CRITICAL: Initialize predmeta to null (manual verify doesn't fetch predmeta, but code may reference it)
+        // This prevents ReferenceError when predmeta is referenced below
+        const predmeta = null;
+        
         // CRITICAL: Clean outcome from body - only copy win/place/show, explicitly delete ok if present
         const bodyOutcome = body.outcome || {};
         const outcome = {
@@ -2757,6 +2761,7 @@ export default async function handler(req, res) {
         let top3Mass = body.top3Mass || null;
 
         // ADDITIVE: If predmeta came from snapshot, use predicted picks from snapshot
+        // Note: predmeta is always null for manual verify, so this guard will always be false (safe)
         if (predmeta && predmeta.predicted && (predmeta.predicted.win || predmeta.predicted.place || predmeta.predicted.show)) {
           predicted = predmeta.predicted;
         }
