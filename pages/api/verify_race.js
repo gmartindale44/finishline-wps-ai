@@ -3033,6 +3033,7 @@ export default async function handler(req, res) {
             internalBypassAuthorized: internalBypassAuthorized,
             redis: finalResult._redisResult || null,
             redisFingerprint: finalResult._redisFingerprint || null,
+            vercelGitCommitSha: process.env.VERCEL_GIT_COMMIT_SHA || null,
           }
         });
       } catch (error) {
