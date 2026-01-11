@@ -640,12 +640,49 @@ export default async function handler(req, res) {
         // Wrap in try/catch to ensure one race failure doesn't break the batch
         try {
           const result = await callVerifyRace(baseUrl, race);
+          
+          // CRITICAL: Explicit overwrite logic - if newResult.ok === true AND existingOk === false, overwrite Redis
+          // This ensures stale ok:false records are replaced even if verify_race write failed
+          let overwritePerformed = false;
+          let overwriteReason = null;
+          if (result.ok === true && existingVerifyOkField === false && verifiedRedisKeyChecked) {
+            try {
+              // Build payload matching verify_race format (minimal, but includes ok:true)
+              const overwritePayload = {
+                raceId: raceIdDerived,
+                track: race.track || "",
+                date: race.dateIso || "",
+                dateIso: race.dateIso || "",
+                raceNo: race.raceNo || "",
+                outcome: result.outcome || { win: "", place: "", show: "" },
+                predicted: result.raw?.predicted || { win: "", place: "", show: "" },
+                hits: result.hits || { winHit: false, placeHit: false, showHit: false, top3Hit: false },
+                summary: result.raw?.summary || "",
+                ok: true, // Explicitly boolean true
+                step: result.step || "verify_backfill_overwrite",
+                ts: Date.now(),
+              };
+              
+              // Write to Redis using same key format as verify_race
+              const { setex } = await import('../../lib/redis.js');
+              await setex(verifiedRedisKeyChecked, 7776000, JSON.stringify(overwritePayload));
+              overwritePerformed = true;
+              overwriteReason = "newOk_true_existingOk_false";
+            } catch (overwriteErr) {
+              // Non-fatal: log but don't break the result
+              console.warn(`[verify_backfill] Failed to overwrite Redis key ${verifiedRedisKeyChecked}:`, overwriteErr?.message);
+              overwriteReason = `overwrite_failed: ${overwriteErr?.message || String(overwriteErr)}`;
+            }
+          }
+          
           // Add explicit debug fields for all results (for auditability)
           result.verifyKeyChecked = verifiedRedisKeyChecked || null; // Exact key checked
           result.verifyKeyExists = verifiedRedisKeyExists; // Boolean
           result.verifyKeyValuePreview = verifiedRedisKeyValuePreview || null; // Truncated preview (safe)
           result.raceIdDerived = raceIdDerived || null; // Race ID portion
           result.skipReason = null; // Not skipped, so null
+          result.overwritePerformed = overwritePerformed; // Boolean: did we explicitly overwrite?
+          result.overwriteReason = overwriteReason; // Reason for overwrite or null
           // Additional context
           result.verifiedRedisKeyType = verifiedRedisKeyType || "none";
           result.redisNamespacePrefixUsed = "fl:verify:";

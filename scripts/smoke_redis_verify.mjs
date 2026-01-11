@@ -660,6 +660,9 @@ async function testRedisConsistency() {
   console.log(`  Debug fields:`);
   console.log(`    verifyRaceId: ${verifyDebug.verifyRaceId || 'null'}`);
   console.log(`    verifyKey: ${verifyDebug.verifyKey || 'null'}`);
+  console.log(`    verifyKeyWritten: ${verifyDebug.verifyKeyWritten || 'null'}`);
+  console.log(`    verifyWritePerformed: ${verifyDebug.verifyWritePerformed !== undefined ? verifyDebug.verifyWritePerformed : 'null'}`);
+  console.log(`    verifyWriteReason: ${verifyDebug.verifyWriteReason || 'null'}`);
   console.log(`    wroteToRedis: ${verifyDebug.wroteToRedis !== undefined ? verifyDebug.wroteToRedis : 'null'}`);
   console.log(`    writeResult: ${verifyDebug.writeResult ? JSON.stringify(verifyDebug.writeResult) : 'null'}`);
   console.log(`    redisClientType: ${verifyDebug.redisClientType || 'null'}`);
@@ -678,6 +681,19 @@ async function testRedisConsistency() {
   }
   if (verifyDebug.wroteToRedis === undefined) {
     issues.push('verify_race response missing debug.wroteToRedis');
+    consistencyPass = false;
+  }
+  if (verifyDebug.verifyWritePerformed === undefined) {
+    issues.push('verify_race response missing debug.verifyWritePerformed');
+    consistencyPass = false;
+  }
+  if (!verifyDebug.verifyWriteReason) {
+    issues.push('verify_race response missing debug.verifyWriteReason');
+    consistencyPass = false;
+  }
+  // verifyKeyWritten should match verifyKey if write was attempted
+  if (verifyDebug.verifyKey && verifyDebug.verifyKeyWritten && verifyDebug.verifyKey !== verifyDebug.verifyKeyWritten) {
+    issues.push(`verifyKeyWritten (${verifyDebug.verifyKeyWritten}) does not match verifyKey (${verifyDebug.verifyKey})`);
     consistencyPass = false;
   }
   

@@ -507,22 +507,36 @@ async function logVerifyResult(result) {
     
     // Always write (per requirement: log ALL verify responses for analytics)
     // This ensures ok:true results overwrite stale ok:false records
+    // CRITICAL: Determine write reason for debugging
+    const verifyWriteReason = hasCompleteOutcome 
+      ? "ok_true_with_complete_outcome"
+      : (result.ok === true ? "ok_true_incomplete_outcome" : "ok_false_analytics");
+    const verifyWritePerformed = true; // We always attempt write
+    
     try {
       const { setex } = await import('../../lib/redis.js');
       await setex(logKey, 7776000, JSON.stringify(logPayload));
       logPayload.debug.verifyWriteOk = true;
       logPayload.debug.verifyWriteError = null;
+      logPayload.debug.verifyWriteReason = verifyWriteReason;
       // CRITICAL: Update result.debug so it appears in API response
       if (!result.debug) result.debug = {};
       result.debug.wroteToRedis = true;
+      result.debug.verifyKeyWritten = logKey; // Explicit key name written
+      result.debug.verifyWritePerformed = verifyWritePerformed;
+      result.debug.verifyWriteReason = verifyWriteReason;
       result.debug.writeResult = { success: true, key: logKey, hasCompleteOutcome };
     } catch (writeErr) {
       // Track verify write error but don't break user flow
       logPayload.debug.verifyWriteOk = false;
       logPayload.debug.verifyWriteError = writeErr?.message || String(writeErr);
+      logPayload.debug.verifyWriteReason = verifyWriteReason;
       // CRITICAL: Update result.debug so it appears in API response
       if (!result.debug) result.debug = {};
       result.debug.wroteToRedis = false;
+      result.debug.verifyKeyWritten = logKey; // Key we attempted to write (even if failed)
+      result.debug.verifyWritePerformed = false; // Write was attempted but failed
+      result.debug.verifyWriteReason = verifyWriteReason;
       result.debug.writeResult = { 
         success: false, 
         key: logKey, 
@@ -2044,14 +2058,15 @@ function sanitizeResponse(response) {
     
     // Compute ok from outcome validation if corrupted
     const outcome = cleanResponse.outcome || {};
-    const hasValidOutcome = outcome.win && outcome.place && outcome.show;
-    cleanResponse.ok = Boolean(hasValidOutcome);
+    // CRITICAL: Ensure hasValidOutcome is ALWAYS boolean (not string like outcome.show)
+    const hasValidOutcome = Boolean(outcome.win && outcome.place && outcome.show);
+    cleanResponse.ok = hasValidOutcome;
     
     if (!cleanResponse.debug) cleanResponse.debug = {};
     cleanResponse.debug.okTypeError = `ok was coerced from ${typeof response.ok} to boolean`;
     cleanResponse.debug.okOriginalType = typeof response.ok;
     cleanResponse.debug.okOriginalValue = response.ok;
-    cleanResponse.debug.okComputedFromOutcome = hasValidOutcome;
+    cleanResponse.debug.okComputedFromOutcome = hasValidOutcome; // Always boolean
   }
   
   return cleanResponse;
