@@ -27,7 +27,15 @@ async function logVerifyResult(result) {
   // Log ALL verify responses (including ok:false), so we can analyze coverage and failures.
   // Still keep the ok flag in the payload so calibration or analysis can filter later.
   if (!result) {
-    return;
+    return {
+      verifyKey: null,
+      writeOk: false,
+      writeErr: "result is null",
+      readbackOk: false,
+      readbackErr: "result is null",
+      ttlSeconds: null,
+      valueSize: null,
+    };
   }
 
   try {
@@ -2985,6 +2993,8 @@ export default async function handler(req, res) {
             backendVersion: BACKEND_VERSION,
             bypassedPayGate: bypassedPayGate,
             internalBypassAuthorized: internalBypassAuthorized,
+            redis: finalResult._redisResult || null,
+            redisFingerprint: finalResult._redisFingerprint || null,
           }
         });
       } catch (error) {
@@ -3277,11 +3287,13 @@ export default async function handler(req, res) {
         return res.status(200).json({
           ...sanitizedValidated,
           bypassedPayGate: bypassedPayGate,
-          responseMeta: {
-            ...validatedResult.responseMeta,
-            bypassedPayGate: bypassedPayGate,
-            internalBypassAuthorized: internalBypassAuthorized
-          }
+        responseMeta: {
+          ...validatedResult.responseMeta,
+          bypassedPayGate: bypassedPayGate,
+          internalBypassAuthorized: internalBypassAuthorized,
+          redis: validatedResult._redisResult || null,
+          redisFingerprint: validatedResult._redisFingerprint || null,
+        }
         });
       }
 
