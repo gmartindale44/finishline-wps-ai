@@ -166,68 +166,59 @@ async function testManualVerify() {
     console.log(`[smoke_verify] step: "${step}"`);
     console.log(`[smoke_verify] raceId: "${raceId}"`);
     
-    // Build expected verify key
-    const verifyKey = buildVerifyKey("Meadowlands", "2026-01-11", "8");
-    console.log(`[smoke_verify] Expected verify key: ${verifyKey}`);
+    // Check server-side Redis verification from responseMeta
+    const responseMeta = responseJson.responseMeta || {};
+    const redisMeta = responseMeta.redis || null;
+    const redisFingerprint = responseMeta.redisFingerprint || null;
     
-    // Wait a moment for Redis write
-    console.log(`[smoke_verify] Waiting 2 seconds for Redis write...`);
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    // Check if verify key exists
-    console.log(`[smoke_verify] Checking Redis for verify key...`);
-    const keyCheck = await checkVerifyKey(verifyKey);
-    
-    if (keyCheck.exists) {
-      console.log(`[smoke_verify] ✅ Verify key exists in Redis`);
-      console.log(`[smoke_verify] TTL: ${keyCheck.ttl !== null ? `${keyCheck.ttl} seconds (${Math.floor(keyCheck.ttl / (24 * 60 * 60))}d ${Math.floor((keyCheck.ttl % (24 * 60 * 60)) / (60 * 60))}h)` : "N/A"}`);
-      
-      if (keyCheck.payload) {
-        const p = keyCheck.payload;
-        console.log(`[smoke_verify] Key payload summary:`);
-        console.log(`  ok: ${p.ok}`);
-        console.log(`  step: ${p.step || "N/A"}`);
-        console.log(`  track: ${p.track || "N/A"}`);
-        console.log(`  date: ${p.date || p.dateIso || "N/A"}`);
-        console.log(`  raceNo: ${p.raceNo || "N/A"}`);
-        console.log(`  created_at_ms: ${p.created_at_ms || p.ts || "N/A"}`);
-        console.log(`  confidence_pct: ${p.confidence_pct !== undefined ? p.confidence_pct : "N/A"}`);
-        console.log(`  t3m_pct: ${p.t3m_pct !== undefined ? p.t3m_pct : "N/A"}`);
-        
-        return {
-          success: true,
-          response: responseJson,
-          verifyKey,
-          keyExists: true,
-          keyPayload: p,
-          ttl: keyCheck.ttl,
-        };
-      } else {
-        return {
-          success: true,
-          response: responseJson,
-          verifyKey,
-          keyExists: true,
-          keyPayload: null,
-          ttl: keyCheck.ttl,
-          parseError: keyCheck.parseError,
-        };
+    console.log(`[smoke_verify] Server-side Redis verification:`);
+    if (redisMeta) {
+      console.log(`  verifyKey: ${redisMeta.verifyKey || "N/A"}`);
+      console.log(`  writeOk: ${redisMeta.writeOk}`);
+      console.log(`  readbackOk: ${redisMeta.readbackOk}`);
+      console.log(`  ttlSeconds: ${redisMeta.ttlSeconds !== null ? `${redisMeta.ttlSeconds} (${Math.floor(redisMeta.ttlSeconds / (24 * 60 * 60))}d ${Math.floor((redisMeta.ttlSeconds % (24 * 60 * 60)) / (60 * 60))}h)` : "N/A"}`);
+      if (redisMeta.writeErr) {
+        console.log(`  writeErr: ${redisMeta.writeErr}`);
+      }
+      if (redisMeta.readbackErr) {
+        console.log(`  readbackErr: ${redisMeta.readbackErr}`);
       }
     } else {
-      console.warn(`[smoke_verify] ⚠️  Verify key NOT found in Redis`);
-      console.warn(`[smoke_verify] Key: ${verifyKey}`);
-      if (keyCheck.error) {
-        console.warn(`[smoke_verify] Error: ${keyCheck.error}`);
-      }
-      
+      console.log(`  ⚠️  No Redis metadata in response`);
+    }
+    
+    if (redisFingerprint) {
+      console.log(`[smoke_verify] Redis fingerprint:`);
+      console.log(`  urlFingerprint: ${redisFingerprint.urlFingerprint || "N/A"}`);
+      console.log(`  tokenFingerprint: ${redisFingerprint.tokenFingerprint || "N/A"}`);
+    }
+    
+    // PASS condition: readbackOk must be true
+    const readbackOk = redisMeta && redisMeta.readbackOk === true;
+    const writeOk = redisMeta && redisMeta.writeOk === true;
+    
+    if (readbackOk && writeOk) {
+      console.log(`[smoke_verify] ✅ PASSED: Server confirms Redis write and readback succeeded`);
       return {
-        success: ok,
+        success: true,
         response: responseJson,
-        verifyKey,
-        keyExists: false,
-        keyPayload: null,
-        ttl: null,
-        warning: "Verify key not found in Redis",
+        verifyKey: redisMeta.verifyKey || null,
+        writeOk: true,
+        readbackOk: true,
+        ttlSeconds: redisMeta.ttlSeconds,
+        redisFingerprint: redisFingerprint,
+      };
+    } else {
+      console.warn(`[smoke_verify] ⚠️  PARTIAL: writeOk=${writeOk}, readbackOk=${readbackOk}`);
+      return {
+        success: ok && writeOk,
+        response: responseJson,
+        verifyKey: redisMeta?.verifyKey || null,
+        writeOk: writeOk,
+        readbackOk: readbackOk,
+        ttlSeconds: redisMeta?.ttlSeconds || null,
+        redisFingerprint: redisFingerprint,
+        warning: `Redis verification incomplete: writeOk=${writeOk}, readbackOk=${readbackOk}`,
       };
     }
     
@@ -388,19 +379,19 @@ async function runSuite() {
   console.log("\n[smoke_verify] === SUMMARY ===\n");
   
   console.log("Manual Verify:");
-  if (results.manual.success && results.manual.keyExists) {
-    console.log("  ✅ PASSED: Request succeeded and verify key exists");
-  } else if (results.manual.success && !results.manual.keyExists) {
-    console.log("  ⚠️  PARTIAL: Request succeeded but verify key not found");
+  if (results.manual.success && results.manual.readbackOk) {
+    console.log("  ✅ PASSED: Request succeeded and Redis readback confirmed");
+  } else if (results.manual.success && !results.manual.readbackOk) {
+    console.log("  ⚠️  PARTIAL: Request succeeded but Redis readback failed");
   } else {
     console.log("  ❌ FAILED: Request failed or error occurred");
   }
   
   console.log("Auto Verify:");
-  if (results.auto.success && results.auto.keyExists) {
-    console.log("  ✅ PASSED: Request succeeded and verify key exists");
-  } else if (results.auto.success && !results.auto.keyExists) {
-    console.log("  ⚠️  PARTIAL: Request succeeded but verify key not found");
+  if (results.auto.success && results.auto.readbackOk) {
+    console.log("  ✅ PASSED: Request succeeded and Redis readback confirmed");
+  } else if (results.auto.success && !results.auto.readbackOk) {
+    console.log("  ⚠️  PARTIAL: Request succeeded but Redis readback failed");
   } else {
     console.log("  ❌ FAILED: Request failed or error occurred");
   }

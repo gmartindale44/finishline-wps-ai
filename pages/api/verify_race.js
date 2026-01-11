@@ -513,20 +513,68 @@ async function logVerifyResult(result) {
       : (result.ok === true ? "ok_true_incomplete_outcome" : "ok_false_analytics");
     const verifyWritePerformed = true; // We always attempt write
     
+    // Return object for server-side verification
+    let redisResult = {
+      verifyKey: logKey,
+      writeOk: false,
+      writeErr: null,
+      readbackOk: false,
+      readbackErr: null,
+      ttlSeconds: null,
+      valueSize: null,
+    };
+    
     try {
-      const { setex } = await import('../../lib/redis.js');
-      await setex(logKey, 7776000, JSON.stringify(logPayload));
+      const { setex, get } = await import('../../lib/redis.js');
+      const redisModule = await import('../../lib/redis.js');
+      const redis = redisModule.default || redisModule.redis;
+      const valueStr = JSON.stringify(logPayload);
+      await setex(logKey, 7776000, valueStr);
+      
+      // CRITICAL: Immediate readback to verify write succeeded
+      const readbackValue = await get(logKey);
+      
+      // Get TTL using Upstash Redis client directly
+      let readbackTtl = null;
+      try {
+        const { Redis } = await import('@upstash/redis');
+        const redisClient = Redis.fromEnv();
+        readbackTtl = await redisClient.ttl(logKey);
+      } catch (ttlErr) {
+        // TTL check is best-effort, don't fail readback if TTL fails
+        console.warn("[verify-log] TTL check failed (non-critical):", ttlErr?.message);
+      }
+      
+      redisResult.writeOk = true;
+      redisResult.valueSize = valueStr.length;
+      
+      if (readbackValue !== null && readbackValue !== undefined) {
+        redisResult.readbackOk = true;
+        if (readbackTtl !== null && readbackTtl >= 0) {
+          redisResult.ttlSeconds = readbackTtl;
+        } else {
+          redisResult.readbackErr = "TTL check returned null or negative";
+        }
+      } else {
+        redisResult.readbackOk = false;
+        redisResult.readbackErr = "Readback returned null/undefined";
+      }
+      
       logPayload.debug.verifyWriteOk = true;
       logPayload.debug.verifyWriteError = null;
       logPayload.debug.verifyWriteReason = verifyWriteReason;
       // CRITICAL: Update result.debug so it appears in API response
       if (!result.debug) result.debug = {};
       result.debug.wroteToRedis = true;
-      result.debug.verifyKeyWritten = logKey; // Explicit key name written
+      result.debug.verifyKeyWritten = logKey;
       result.debug.verifyWritePerformed = verifyWritePerformed;
       result.debug.verifyWriteReason = verifyWriteReason;
       result.debug.writeResult = { success: true, key: logKey, hasCompleteOutcome };
+      result.debug.redisResult = redisResult; // Add readback result to debug
     } catch (writeErr) {
+      redisResult.writeOk = false;
+      redisResult.writeErr = writeErr?.message || String(writeErr);
+      
       // Track verify write error but don't break user flow
       logPayload.debug.verifyWriteOk = false;
       logPayload.debug.verifyWriteError = writeErr?.message || String(writeErr);
@@ -534,8 +582,8 @@ async function logVerifyResult(result) {
       // CRITICAL: Update result.debug so it appears in API response
       if (!result.debug) result.debug = {};
       result.debug.wroteToRedis = false;
-      result.debug.verifyKeyWritten = logKey; // Key we attempted to write (even if failed)
-      result.debug.verifyWritePerformed = false; // Write was attempted but failed
+      result.debug.verifyKeyWritten = logKey;
+      result.debug.verifyWritePerformed = false;
       result.debug.verifyWriteReason = verifyWriteReason;
       result.debug.writeResult = { 
         success: false, 
@@ -543,6 +591,7 @@ async function logVerifyResult(result) {
         hasCompleteOutcome,
         error: writeErr?.message || String(writeErr) 
       };
+      result.debug.redisResult = redisResult; // Include error details
       console.error("[verify-log] Failed to log verify result", writeErr);
     }
   } catch (err) {
@@ -2490,10 +2539,16 @@ async function buildStubResponse({ track, date, raceNo, predicted = {}, uiDateRa
     place: (outcome && typeof outcome.place === 'string') ? outcome.place : "",
     show: (outcome && typeof outcome.show === 'string') ? outcome.show : "",
   };
-  // Explicitly ensure no ok property exists
+  // Explicitly ensure no ok property exists (defensive cleanup)
   delete cleanOutcome.ok;
   
   // CRITICAL: Final recomputation of ok from cleaned outcome - NEVER trust existing ok variable
+  // ALWAYS compute ok as boolean explicitly to prevent contamination
+  const finalOk = Boolean(
+    cleanOutcome.win && 
+    cleanOutcome.place && 
+    cleanOutcome.show
+  );
   // This prevents any corruption from object spreads, destructuring, or variable shadowing
   const finalOk = Boolean(
     cleanOutcome.win && 
@@ -2877,8 +2932,8 @@ export default async function handler(req, res) {
         if (top3Mass !== null) result.top3Mass = top3Mass;
         if (body.provider) result.provider = body.provider;
 
-        // Log to Redis
-        await logVerifyResult(result);
+        // Log to Redis and get verification result
+        const redisResult = await logVerifyResult(result);
 
         // Add GreenZone (safe, never throws)
         await addGreenZoneToResponse(result);
