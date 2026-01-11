@@ -1550,6 +1550,9 @@ async function refreshGreenZone(host, ctx) {
           body: JSON.stringify(payload),
         });
         
+        // TEMPORARY DEBUG: Log HTTP status
+        console.log("[manual_verify] HTTP status:", resp.status, resp.ok);
+        
         // Check HTTP status before parsing JSON
         if (!resp.ok) {
           const text = await resp.text().catch(() => "");
@@ -1565,17 +1568,75 @@ async function refreshGreenZone(host, ctx) {
           return;
         }
         
-        const verifyData = await resp.json().catch(() => ({}));
-        console.log("[manual_verify] response", verifyData);
+        // TEMPORARY DEBUG: Get raw response text
+        const responseText = await resp.text();
+        console.log("[manual_verify] Raw response text:", responseText);
         
-        if (!verifyData || verifyData.ok === false) {
-          alert("Manual verify failed: " + (verifyData?.error || verifyData?.message || "Unknown error"));
+        // Parse JSON with error handling
+        let verifyData;
+        try {
+          verifyData = JSON.parse(responseText);
+        } catch (parseErr) {
+          console.error("[manual_verify] JSON parse error:", parseErr);
+          console.error("[manual_verify] Response text:", responseText);
+          alert("Manual verify failed: Invalid JSON response from server. Check console for details.");
+          if (statusNode) {
+            statusNode.textContent = "Parse Error";
+            statusNode.style.color = "#f87171";
+          }
+          if (summaryEl) {
+            summaryEl.textContent = "Error: Server returned invalid JSON.";
+          }
+          return;
+        }
+        
+        // TEMPORARY DEBUG: Log parsed data and ok field
+        console.log("[manual_verify] Parsed JSON:", verifyData);
+        console.log("[manual_verify] typeof verifyData.ok:", typeof verifyData.ok);
+        console.log("[manual_verify] verifyData.ok value:", verifyData.ok);
+        console.log("[manual_verify] verifyData.ok === true:", verifyData.ok === true);
+        
+        // Check for success - ONLY treat as success when ok === true (boolean)
+        const isOkBoolean = typeof verifyData.ok === 'boolean';
+        const isOkTrue = verifyData.ok === true;
+        const isOkString = typeof verifyData.ok === 'string' && verifyData.ok === 'true';
+        
+        // Warn if ok is string "true" (should be boolean)
+        if (isOkString) {
+          console.warn("[manual_verify] WARNING: ok is string 'true', not boolean. Coercing to boolean.");
+        }
+        
+        // Determine actual success: ok must be boolean true
+        const actualSuccess = isOkBoolean && isOkTrue;
+        
+        if (!actualSuccess) {
+          // Build detailed error message
+          let errorMsg = verifyData?.message || verifyData?.error || verifyData?.code || null;
+          if (!errorMsg && verifyData?.debug) {
+            errorMsg = JSON.stringify(verifyData.debug);
+          }
+          if (!errorMsg) {
+            errorMsg = "Unknown error (no message from server). Check Network → verify_race response.";
+          }
+          
+          console.error("[manual_verify] Manual verify failed:", {
+            ok: verifyData.ok,
+            okType: typeof verifyData.ok,
+            step: verifyData?.step,
+            error: verifyData?.error,
+            message: verifyData?.message,
+            code: verifyData?.code,
+            debug: verifyData?.debug,
+            summary: verifyData?.summary,
+          });
+          
+          alert("Manual verify failed: " + errorMsg);
           if (statusNode) {
             statusNode.textContent = "Error";
             statusNode.style.color = "#f87171";
           }
           if (summaryEl) {
-            summaryEl.textContent = "Error: " + (verifyData?.error || verifyData?.message || "Unknown error");
+            summaryEl.textContent = "Error: " + errorMsg;
           }
           return;
         }
