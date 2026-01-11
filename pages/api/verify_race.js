@@ -2576,11 +2576,6 @@ async function buildStubResponse({ track, date, raceNo, predicted = {}, uiDateRa
   
   // CRITICAL: Final recomputation of ok from cleaned outcome - NEVER trust existing ok variable
   // ALWAYS compute ok as boolean explicitly to prevent contamination
-  const finalOk = Boolean(
-    cleanOutcome.win && 
-    cleanOutcome.place && 
-    cleanOutcome.show
-  );
   // This prevents any corruption from object spreads, destructuring, or variable shadowing
   const finalOk = Boolean(
     cleanOutcome.win && 
@@ -3316,19 +3311,32 @@ export default async function handler(req, res) {
         // Add GreenZone (safe, never throws)
         await addGreenZoneToResponse(validatedResult);
         
-        await logVerifyResult(validatedResult);
+        // Log to Redis and get verification result
+        const redisResult = await logVerifyResult(validatedResult);
+        
+        // Build Redis fingerprint for diagnostics
+        let redisFingerprint = null;
+        try {
+          const { getRedisFingerprint } = await import('../../lib/redis_fingerprint.js');
+          redisFingerprint = getRedisFingerprint();
+        } catch {}
+        
+        // Store redis result in validatedResult for responseMeta
+        validatedResult._redisResult = redisResult;
+        validatedResult._redisFingerprint = redisFingerprint;
+        
         // CRITICAL: Ensure ok is always boolean (defensive check against type corruption)
         const sanitizedValidated = sanitizeResponse(validatedResult);
         return res.status(200).json({
           ...sanitizedValidated,
           bypassedPayGate: bypassedPayGate,
-        responseMeta: {
-          ...validatedResult.responseMeta,
-          bypassedPayGate: bypassedPayGate,
-          internalBypassAuthorized: internalBypassAuthorized,
-          redis: validatedResult._redisResult || null,
-          redisFingerprint: validatedResult._redisFingerprint || null,
-        }
+          responseMeta: {
+            ...validatedResult.responseMeta,
+            bypassedPayGate: bypassedPayGate,
+            internalBypassAuthorized: internalBypassAuthorized,
+            redis: validatedResult._redisResult || null,
+            redisFingerprint: validatedResult._redisFingerprint || null,
+          }
         });
       }
 
