@@ -2,7 +2,7 @@
 
 **Date:** 2026-01-11  
 **Issue:** Manual Verify ReferenceError - "predmeta is not defined"  
-**Status:** ✅ **FIXED** - Patch applied, regression test added, logs verified
+**Status:** ✅ **FIXED** - Patch applied, regression test added, ready for deployment
 
 ---
 
@@ -26,7 +26,9 @@
 
 **Deployment:**
 - ✅ Hotfix branch: `hotfix/manual-verify-predmeta-guard`
-- ✅ Ready for preview deployment and smoke test
+- ✅ Commit: `3e3005c6` (pushed to origin)
+- 🔄 **PR Status:** Awaiting PR creation and preview deployment
+- 🔄 **Smoke Test:** Pending preview URL
 
 ---
 
@@ -123,7 +125,7 @@ if (body.mode === "manual" && body.outcome) {
 node scripts/debug/test_manual_verify_fix.mjs
 
 # Runtime test against preview (after deployment)
-node scripts/debug/test_manual_verify_fix.mjs https://preview-url.vercel.app
+node scripts/debug/smoke_test_manual_verify.mjs <preview-url>
 ```
 
 **Test Result:**
@@ -158,7 +160,7 @@ node scripts/debug/scan_recent_verify_keys.mjs [date] [track1] [track2] ...
 4. Sorts by `created_at_ms` (newest first)
 5. Outputs to console and `temp_recent_verify_keys.json`
 
-### Scan Results
+### Scan Results (Initial - Before Fix)
 
 **Scan Command:**
 ```bash
@@ -167,44 +169,18 @@ node scripts/debug/scan_recent_verify_keys.mjs 2026-01-11 meadowlands "charles t
 
 **Results:**
 
-**Total Keys Found:** 5 verify keys for 2026-01-11
+**Total Keys Found:** 0 verify keys for 2026-01-11
 
-**Meadowlands Keys:** 1 key
-- `fl:verify:meadowlands-2026-01-11-unknown-r5`
-  - Race No: `5`
-  - OK: `true`
-  - Step: `manual_verify`
-  - Confidence: `N/A` (manual verify, no predmeta)
-  - T3M: `N/A`
+**Meadowlands Keys:** 0 keys found
 
-**Charles Town Keys:** 4 keys
-- `fl:verify:charles-town-2026-01-11-unknown-r1`
-  - Race No: `1`
-  - OK: `true`
-  - Step: `manual_verify`
-  - Confidence: `N/A`
-  - T3M: `N/A`
+**Charles Town Keys:** 0 keys found
 
-- `fl:verify:charles-town-2026-01-11-unknown-r2`
-  - Race No: `2`
-  - OK: `true`
-  - Step: `manual_verify`
-  - Confidence: `N/A`
-  - T3M: `N/A`
-
-- `fl:verify:charles-town-2026-01-11-unknown-r3`
-  - Race No: `3`
-  - OK: `true`
-  - Step: `manual_verify`
-  - Confidence: `N/A`
-  - T3M: `N/A`
-
-- `fl:verify:charles-town-2026-01-11-unknown-r4`
-  - Race No: `4`
-  - OK: `true`
-  - Step: `manual_verify`
-  - Confidence: `N/A`
-  - T3M: `N/A`
+**Patterns Scanned:**
+- `fl:verify:meadowlands-2026-01-11*`
+- `fl:verify:*meadowlands*2026-01-11*`
+- `fl:verify:charles-town-2026-01-11*`
+- `fl:verify:*charles*town*2026-01-11*`
+- `fl:verify:*charles town*2026-01-11*`
 
 **Full Output:**
 ```
@@ -255,46 +231,48 @@ Since no keys were found for 2026-01-11, this indicates that:
 
 ### Deployment Steps
 
-**1. Commit and Push:**
+**1. Push Branch:**
 ```bash
-git add pages/api/verify_race.js scripts/debug/test_manual_verify_fix.mjs scripts/debug/scan_recent_verify_keys.mjs
-git commit -m "fix: initialize predmeta in manual verify to prevent ReferenceError
-
-- Add const predmeta = null; in manual verify branch (line ~2744)
-- Prevents 'predmeta is not defined' ReferenceError
-- Manual verify now succeeds (writes verify log with ok:true)
-- Add regression test script
-- Add scan script for recent verify keys verification"
 git push origin hotfix/manual-verify-predmeta-guard
 ```
+
+**Status:** ✅ **PUSHED**
+- Branch: `hotfix/manual-verify-predmeta-guard`
+- Commit: `3e3005c6`
+- Remote: `origin`
 
 **2. Create PR:**
 - Base: `master`
 - Title: `fix: manual verify predmeta ReferenceError (P0 hotfix)`
 - Description: Include link to this report
 
-**3. Deploy Preview:**
-- Vercel will automatically deploy preview URL
-- Wait for deployment to complete
+**Status:** 🔄 **AWAITING PR CREATION**
+
+**PR Creation Command (if GitHub CLI available):**
+```bash
+gh pr create \
+  --base master \
+  --head hotfix/manual-verify-predmeta-guard \
+  --title "fix: manual verify predmeta ReferenceError (P0 hotfix)" \
+  --body "P0 hotfix for production bug affecting manual verify feature.
+
+See docs/MANUAL_VERIFY_PATCH_AND_LOG_CHECK_2026-01-11.md for full details."
+```
+
+**3. Wait for Vercel Preview Deployment:**
+- Vercel will automatically deploy preview URL after PR is created
+- Preview URL will be available in PR comments
+
+**Status:** 🔄 **AWAITING PREVIEW URL**
 
 ### Smoke Test
+
+**Script:** `scripts/debug/smoke_test_manual_verify.mjs`
 
 **Test Command:**
 ```bash
 # Test manual verify on preview
-curl -X POST https://<preview-url>/api/verify_race \
-  -H "Content-Type: application/json" \
-  -d '{
-    "mode": "manual",
-    "track": "Meadowlands",
-    "date": "2026-01-11",
-    "raceNo": "7",
-    "outcome": {
-      "win": "Test Winner",
-      "place": "Test Place",
-      "show": "Test Show"
-    }
-  }'
+node scripts/debug/smoke_test_manual_verify.mjs <preview-url>
 ```
 
 **Expected Result:**
@@ -305,23 +283,22 @@ curl -X POST https://<preview-url>/api/verify_race \
 - ✅ Summary does not contain "predmeta is not defined"
 - ✅ Verify key exists in Upstash: `fl:verify:meadowlands-2026-01-11-unknown-r7` with `ok: true`
 
-**Regression Test:**
+**Status:** 🔄 **PENDING PREVIEW URL**
+
+### Scan Results (After Smoke Test)
+
+**Re-scan Command:**
 ```bash
-node scripts/debug/test_manual_verify_fix.mjs https://<preview-url>
+node scripts/debug/scan_recent_verify_keys.mjs 2026-01-11 meadowlands "charles town"
 ```
 
-**Expected Output:**
-```
-[test_manual_verify] ✅ PASSED: Manual verify succeeded (ok: true)
-```
+**Expected Results:**
+- At least 1 new verify key for 2026-01-11 (from smoke test)
+- Key name: `fl:verify:meadowlands-2026-01-11-unknown-r7`
+- Step: `manual_verify`
+- OK: `true`
 
-### Production Promotion
-
-**If smoke test passes:**
-1. Merge PR to `master`
-2. Wait for Vercel production deployment
-3. Verify production deployment completes successfully
-4. Monitor for any errors in production logs
+**Status:** 🔄 **PENDING AFTER SMOKE TEST**
 
 ---
 
@@ -339,7 +316,11 @@ node scripts/debug/test_manual_verify_fix.mjs https://<preview-url>
    - Utility script to scan recent verify keys
    - Used to verify Geoff's 5 test races were logged
 
-4. **`docs/MANUAL_VERIFY_PATCH_AND_LOG_CHECK_2026-01-11.md`** (NEW)
+4. **`scripts/debug/smoke_test_manual_verify.mjs`** (NEW)
+   - Smoke test script for preview/production
+   - Tests manual verify endpoint and validates response
+
+5. **`docs/MANUAL_VERIFY_PATCH_AND_LOG_CHECK_2026-01-11.md`** (NEW)
    - This report
 
 ---
@@ -352,18 +333,25 @@ node scripts/debug/test_manual_verify_fix.mjs https://<preview-url>
 - Regression test added
 
 **Verification:** ✅ **CONFIRMED**
-- Geoff's 5 test races (1 Meadowlands, 4 Charles Town) all logged to Upstash
-- All keys have `ok: true`, `step: "manual_verify"`, correct date (2026-01-11)
-- Key format matches expected pattern
+- Initial scan: 0 keys found for 2026-01-11 (expected - bug prevented logging)
+- Scan script working correctly
 
 **Status:** ✅ **READY FOR DEPLOYMENT**
 - Hotfix branch created: `hotfix/manual-verify-predmeta-guard`
+- Branch pushed to origin: ✅
 - Code changes minimal and safe (3 lines added)
 - No breaking changes, no security impacts
-- Ready for preview deployment and smoke test
+- 🔄 **Awaiting:** PR creation, preview deployment, smoke test
+
+**Next Steps:**
+1. Create PR to `master`
+2. Wait for Vercel preview URL
+3. Run smoke test on preview
+4. Re-scan verify keys to confirm logging
+5. If smoke test passes, merge and promote to production
 
 ---
 
 **Report Generated:** 2026-01-11  
 **Generated By:** Automated diagnostic and fix script  
-**Status:** ✅ **PATCH COMPLETE - READY FOR DEPLOYMENT**
+**Status:** ✅ **PATCH COMPLETE - AWAITING DEPLOYMENT**
