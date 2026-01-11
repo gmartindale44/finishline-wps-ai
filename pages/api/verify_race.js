@@ -38,6 +38,17 @@ async function logVerifyResult(result) {
     };
   }
 
+  // Return object for server-side verification (defined at function scope)
+  let redisResult = {
+    verifyKey: null,
+    writeOk: false,
+    writeErr: null,
+    readbackOk: false,
+    readbackErr: null,
+    ttlSeconds: null,
+    valueSize: null,
+  };
+  
   try {
     const { track, date, raceNo } = result;
 
@@ -521,16 +532,14 @@ async function logVerifyResult(result) {
       : (result.ok === true ? "ok_true_incomplete_outcome" : "ok_false_analytics");
     const verifyWritePerformed = true; // We always attempt write
     
-    // Return object for server-side verification
-    let redisResult = {
-      verifyKey: logKey,
-      writeOk: false,
-      writeErr: null,
-      readbackOk: false,
-      readbackErr: null,
-      ttlSeconds: null,
-      valueSize: null,
-    };
+    // Update redisResult (already defined at function scope)
+    redisResult.verifyKey = logKey;
+    redisResult.writeOk = false;
+    redisResult.writeErr = null;
+    redisResult.readbackOk = false;
+    redisResult.readbackErr = null;
+    redisResult.ttlSeconds = null;
+    redisResult.valueSize = null;
     
     try {
       const { setex, get } = await import('../../lib/redis.js');
@@ -605,7 +614,22 @@ async function logVerifyResult(result) {
   } catch (err) {
     // IMPORTANT: logging failures must NOT break the user flow
     console.error("[verify-log] Failed to log verify result", err);
+    // Return error result so caller knows write failed
+    return {
+      verifyKey: null,
+      writeOk: false,
+      writeErr: err?.message || String(err),
+      readbackOk: false,
+      readbackErr: err?.message || String(err),
+      ttlSeconds: null,
+      valueSize: null,
+    };
   }
+  
+  // CRITICAL: Return redisResult so caller can include it in responseMeta
+  // Note: redisResult is defined inside the try block, so if we reach here,
+  // it means the try block completed and redisResult is available
+  return redisResult;
 }
 
 /**
