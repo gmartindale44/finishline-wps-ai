@@ -138,6 +138,10 @@ async function parseJSONBody(req) {
 export default async function handler(req, res) {
   // Set headers
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  
+  // Check for predsnap_force override (server-side only, diagnostics/testing)
+  // This is a snapshot write override only, does NOT bypass PayGate
+  const predsnapForce = req.query?.predsnap_force === '1' || req.query?.predsnap_force === 'true';
   res.setHeader('X-Handler-Identity', 'PREDICT_WPS_OK');
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.setHeader('Pragma', 'no-cache');
@@ -934,41 +938,84 @@ export default async function handler(req, res) {
     }
 
     // ADDITIVE: Store prediction snapshot in Redis (if enabled, raceId available, and qualifies)
-    // Option A: high-signal only - only write snapshots when allowAny OR confidenceHigh
-    // Track snapshot debug info for response
-    const snapshotDebug = {
+    // Track snapshot debug info for response with explicit fields as requested
+    const { getRedisFingerprint } = await import('../../lib/redis_fingerprint.js');
+    const redisFingerprint = getRedisFingerprint();
+    
+    // Initialize explicit debug fields as requested
+    const predsnapDebug = {
       enablePredSnapshots: process.env.ENABLE_PRED_SNAPSHOTS === 'true',
       redisConfigured: Boolean(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN),
-      snapshotAttempted: false,
-      snapshotKey: null,
-      snapshotWriteOk: null,
-      snapshotWriteError: null,
-      shouldSnapshot: false,
+      redisFingerprint: redisFingerprint, // Safe fingerprint (no secrets)
+      redisClientType: "REST API (lib/redis.js)", // For diagnostics
+      predsnapAttempted: false, // Explicit boolean as requested
+      predsnapWritten: false, // Explicit boolean as requested
+      predsnapKey: null, // String key name
+      predsnapSkipReason: null, // String enum explaining why skipped
+      predsnapError: null, // String error message or null
+      // Additional context for debugging
       allowAny: false,
-      confidenceHigh: false
+      confidenceHigh: false,
+      confidenceValue: typeof calibratedResponse.confidence === 'number' ? calibratedResponse.confidence : null,
+      raceIdPresent: !!raceId,
+      forceOverride: predsnapForce, // Show if ?predsnap_force=1 was used
     };
     
-    const enablePredSnapshots = snapshotDebug.enablePredSnapshots;
-    const redisConfigured = snapshotDebug.redisConfigured;
+    const enablePredSnapshots = predsnapDebug.enablePredSnapshots;
+    const redisConfigured = predsnapDebug.redisConfigured;
     
     // Determine if this prediction qualifies for snapshot (high-signal only)
+    // BUT: if ?predsnap_force=1, override the gating (server-side only, for diagnostics)
     const allow = shadowDecision?.allow || {};
     const allowAny = !!(allow?.win || allow?.place || allow?.show);
     const confidenceHigh = (typeof calibratedResponse.confidence === 'number' ? calibratedResponse.confidence : 0) >= 80;
-    const shouldSnapshot = !!(enablePredSnapshots && redisConfigured && raceId && (allowAny || confidenceHigh));
     
-    // Update debug fields (force booleans, no nulls)
-    snapshotDebug.shouldSnapshot = shouldSnapshot;
-    snapshotDebug.allowAny = allowAny;
-    snapshotDebug.confidenceHigh = confidenceHigh;
-    snapshotDebug.snapshotAttempted = shouldSnapshot;
+    // Original gating logic (unless force override)
+    const wouldSnapshotNormally = !!(enablePredSnapshots && redisConfigured && raceId && (allowAny || confidenceHigh));
+    const shouldSnapshot = predsnapForce ? !!(enablePredSnapshots && redisConfigured && raceId) : wouldSnapshotNormally;
+    
+    // Update debug fields
+    predsnapDebug.allowAny = allowAny;
+    predsnapDebug.confidenceHigh = confidenceHigh;
+    predsnapDebug.predsnapAttempted = shouldSnapshot;
+    
+    // Determine skip reason (explicit enum as requested)
+    if (!shouldSnapshot) {
+      if (predsnapForce) {
+        // Force was requested but still can't snapshot
+        if (!enablePredSnapshots) {
+          predsnapDebug.predsnapSkipReason = "ENABLE_PRED_SNAPSHOTS_NOT_SET";
+        } else if (!redisConfigured) {
+          predsnapDebug.predsnapSkipReason = "REDIS_NOT_CONFIGURED";
+        } else if (!raceId) {
+          predsnapDebug.predsnapSkipReason = "RACE_ID_MISSING";
+        } else {
+          predsnapDebug.predsnapSkipReason = "UNKNOWN_FORCE_OVERRIDE_FAILURE";
+        }
+      } else {
+        // Normal gating logic
+        if (!enablePredSnapshots) {
+          predsnapDebug.predsnapSkipReason = "ENABLE_PRED_SNAPSHOTS_NOT_SET";
+        } else if (!redisConfigured) {
+          predsnapDebug.predsnapSkipReason = "REDIS_NOT_CONFIGURED";
+        } else if (!raceId) {
+          predsnapDebug.predsnapSkipReason = "RACE_ID_MISSING";
+        } else if (!allowAny && !confidenceHigh) {
+          predsnapDebug.predsnapSkipReason = "GATING_RULE_NOT_MET"; // No bets allowed AND confidence < 80%
+        } else {
+          predsnapDebug.predsnapSkipReason = "UNKNOWN_GATING_FAILURE";
+        }
+      }
+    } else {
+      predsnapDebug.predsnapSkipReason = predsnapForce ? "FORCE_OVERRIDE_ACTIVE" : (allowAny ? "BET_ALLOWED" : "CONFIDENCE_HIGH");
+    }
     
     if (shouldSnapshot) {
-      snapshotDebug.snapshotKey = `fl:predsnap:${raceId}:${asOf}`;
+      predsnapDebug.predsnapKey = `fl:predsnap:${raceId}:${asOf}`;
       
       try {
         const { setex } = await import('../../lib/redis.js');
-        const snapshotKey = snapshotDebug.snapshotKey;
+        const snapshotKey = predsnapDebug.predsnapKey;
         
         // Store minimal snapshot payload (enough for verification)
         const snapshotPayload = {
@@ -989,13 +1036,17 @@ export default async function handler(req, res) {
         
         // TTL: 7 days (604800 seconds) - await inline for reliability
         await setex(snapshotKey, 604800, JSON.stringify(snapshotPayload));
-        snapshotDebug.snapshotWriteOk = true;
+        predsnapDebug.predsnapWritten = true;
+        predsnapDebug.predsnapError = null;
       } catch (err) {
         // Non-fatal: log but don't block response (fail-open)
-        snapshotDebug.snapshotWriteOk = false;
-        snapshotDebug.snapshotWriteError = err?.message || String(err);
-        console.warn('[predict_wps] Snapshot write failed (non-fatal):', snapshotDebug.snapshotWriteError);
+        predsnapDebug.predsnapWritten = false;
+        predsnapDebug.predsnapError = err?.message || String(err);
+        console.warn('[predict_wps] Snapshot write failed (non-fatal):', predsnapDebug.predsnapError);
       }
+    } else {
+      // Not attempted, so not written
+      predsnapDebug.predsnapWritten = false;
     }
 
     return res.status(200).json({
@@ -1007,8 +1058,8 @@ export default async function handler(req, res) {
         version: thresholds.version,
       },
       predmeta_debug: predmetaDebug,
-      // ADDITIVE: Snapshot debug info (non-sensitive)
-      snapshot_debug: snapshotDebug,
+      // ADDITIVE: Snapshot debug info (explicit fields as requested, non-sensitive)
+      predsnap_debug: predsnapDebug,
     });
   } catch (err) {
     console.error('[predict_wps] Error:', err);

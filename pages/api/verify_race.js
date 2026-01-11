@@ -13,41 +13,11 @@ import { computeGreenZoneForRace } from "../../lib/greenzone/greenzone_v1.js";
 // Normalize helpers for prediction lookup
 import { slugRaceId } from "../../lib/normalize.js";
 import { hgetall } from "../../lib/redis.js";
+// Centralized verify normalization (ensures key consistency)
+import { buildVerifyRaceId } from "../../lib/verify_normalize.js";
 
 const VERIFY_PREFIX = "fl:verify:";
 const PRED_PREFIX = "fl:pred:";
-
-/**
- * Build a race ID for verify logs (similar to prediction logs but without postTime)
- * This creates a key that can be used to store/retrieve verify logs
- * The calibration script joins on track|date|raceNo, so the key format doesn't matter
- * but we use a consistent slug format for readability
- */
-function buildVerifyRaceId(track, date, raceNo) {
-  // Normalize track: lowercase, collapse spaces, replace non-alphanum with '-', remove dup '-'
-  const slugTrack = (track || "")
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, " ")
-    .replace(/[^a-z0-9\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
-
-  // Normalize date: use YYYY-MM-DD format
-  let slugDate = date || "";
-  if (!slugDate || !/^\d{4}-\d{2}-\d{2}$/.test(slugDate)) {
-    // If date is invalid, use empty string (calibration script will handle it)
-    slugDate = "";
-  }
-
-  // Normalize race number
-  const slugRaceNo = String(raceNo || "").trim() || "0";
-
-  // Build: track-date-unknown-r{raceNo} (using "unknown" for postTime to match prediction pattern)
-  const parts = [slugTrack, slugDate, "unknown", `r${slugRaceNo}`].filter(Boolean);
-  return parts.join("-");
-}
 
 /**
  * Log verify result to Upstash Redis
@@ -104,6 +74,8 @@ async function logVerifyResult(result) {
         try {
           const joinKey = `${normDate}|${normTrack}|${normRaceNo}`;
           const { keys: redisKeys, get: redisGet } = await import('../../lib/redis.js');
+          const { getRedisFingerprint } = await import('../../lib/redis_fingerprint.js');
+          const redisFingerprint = getRedisFingerprint();
           
           // Find all snapshots for this race
           const snapshotPattern = `fl:predsnap:${joinKey}:*`;
@@ -112,6 +84,9 @@ async function logVerifyResult(result) {
           if (!predmeta) predmeta = {};
           if (!predmeta.debug) predmeta.debug = {};
           predmeta.debug.snapshotPattern = snapshotPattern;
+          predmeta.debug.redisFingerprint = redisFingerprint; // Safe fingerprint for diagnostics
+          predmeta.debug.redisClientType = "REST API (lib/redis.js)"; // For diagnostics
+          predmeta.debug.joinKey = joinKey; // Show exact key format used
           
           const snapshotKeys = await redisKeys(snapshotPattern);
           
@@ -499,19 +474,75 @@ async function logVerifyResult(result) {
 
     const logKey = `${VERIFY_PREFIX}${raceId}`;
     
-    // ADDITIVE: Add verify log key name to debug for diagnostics
+    // ADDITIVE: Add verify log key name to debug for diagnostics (in both logPayload and result.debug)
     if (!logPayload.debug) logPayload.debug = {};
-    logPayload.debug.verifyLogKey = logKey;
+    logPayload.debug.verifyLogKey = logKey; // Exact key written (for auditability)
+    logPayload.debug.raceId = raceId; // Race ID portion (without prefix)
+    
+    // CRITICAL: Also add to result.debug so it appears in the API response
+    if (!result.debug) result.debug = {};
+    result.debug.verifyRaceId = raceId; // Race ID portion (without prefix)
+    result.debug.verifyKey = logKey; // Full Redis key that will be written
+    result.debug.wroteToRedis = false; // Will be set to true if write succeeds
+    
+    // Add Redis fingerprint for diagnostics (safe, no secrets)
+    try {
+      const { getRedisFingerprint } = await import('../../lib/redis_fingerprint.js');
+      const fingerprint = getRedisFingerprint();
+      logPayload.debug.redisFingerprint = fingerprint;
+      logPayload.debug.redisClientType = "REST API (lib/redis.js)";
+      // Also add to result.debug
+      result.debug.redisFingerprint = fingerprint;
+      result.debug.redisClientType = "REST API (lib/redis.js)";
+    } catch {}
     
     // Use REST client setex for verify logs (90 days TTL = 7776000 seconds)
+    // CRITICAL: Always write to Redis (log all responses including ok:false for analytics)
+    // But ensure we ALWAYS overwrite when ok=true AND outcome has win/place/show
+    const hasCompleteOutcome = result.ok === true && 
+                               result.outcome && 
+                               result.outcome.win && 
+                               result.outcome.place && 
+                               result.outcome.show;
+    
+    // Always write (per requirement: log ALL verify responses for analytics)
+    // This ensures ok:true results overwrite stale ok:false records
+    // CRITICAL: Determine write reason for debugging
+    const verifyWriteReason = hasCompleteOutcome 
+      ? "ok_true_with_complete_outcome"
+      : (result.ok === true ? "ok_true_incomplete_outcome" : "ok_false_analytics");
+    const verifyWritePerformed = true; // We always attempt write
+    
     try {
       const { setex } = await import('../../lib/redis.js');
       await setex(logKey, 7776000, JSON.stringify(logPayload));
       logPayload.debug.verifyWriteOk = true;
+      logPayload.debug.verifyWriteError = null;
+      logPayload.debug.verifyWriteReason = verifyWriteReason;
+      // CRITICAL: Update result.debug so it appears in API response
+      if (!result.debug) result.debug = {};
+      result.debug.wroteToRedis = true;
+      result.debug.verifyKeyWritten = logKey; // Explicit key name written
+      result.debug.verifyWritePerformed = verifyWritePerformed;
+      result.debug.verifyWriteReason = verifyWriteReason;
+      result.debug.writeResult = { success: true, key: logKey, hasCompleteOutcome };
     } catch (writeErr) {
       // Track verify write error but don't break user flow
       logPayload.debug.verifyWriteOk = false;
       logPayload.debug.verifyWriteError = writeErr?.message || String(writeErr);
+      logPayload.debug.verifyWriteReason = verifyWriteReason;
+      // CRITICAL: Update result.debug so it appears in API response
+      if (!result.debug) result.debug = {};
+      result.debug.wroteToRedis = false;
+      result.debug.verifyKeyWritten = logKey; // Key we attempted to write (even if failed)
+      result.debug.verifyWritePerformed = false; // Write was attempted but failed
+      result.debug.verifyWriteReason = verifyWriteReason;
+      result.debug.writeResult = { 
+        success: false, 
+        key: logKey, 
+        hasCompleteOutcome,
+        error: writeErr?.message || String(writeErr) 
+      };
       console.error("[verify-log] Failed to log verify result", writeErr);
     }
   } catch (err) {
@@ -875,14 +906,90 @@ async function tryEquibaseFallback(track, dateIso, raceNo, baseDebug = {}) {
 }
 
 /**
+ * Fetch with retry logic and browser-like headers (for anti-bot evasion)
+ * @param {string} url - URL to fetch
+ * @param {object} options - Fetch options
+ * @param {number} maxRetries - Maximum retry attempts (default: 3)
+ * @returns {Promise<Response>}
+ */
+async function fetchWithRetry(url, options = {}, maxRetries = 3) {
+  const retryableStatuses = [403, 429, 503, 502, 504];
+  const backoffs = [500, 1500, 3000]; // ms delays
+  
+  // Browser-like headers to avoid anti-bot detection
+  const browserHeaders = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Referer": "https://www.google.com/",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "cross-site",
+    "Sec-Fetch-User": "?1",
+    "Upgrade-Insecure-Requests": "1",
+    ...options.headers,
+  };
+
+  let lastError = null;
+  let lastResponse = null;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers: browserHeaders,
+      });
+
+      // If successful or non-retryable error, return immediately
+      if (response.ok || !retryableStatuses.includes(response.status)) {
+        return response;
+      }
+
+      // Store response for retryable errors
+      lastResponse = response;
+
+      // If this is the last attempt, return the failed response
+      if (attempt === maxRetries - 1) {
+        return response;
+      }
+
+      // Wait before retrying (exponential backoff)
+      const delay = backoffs[Math.min(attempt, backoffs.length - 1)];
+      await new Promise(resolve => setTimeout(resolve, delay));
+
+    } catch (err) {
+      lastError = err;
+
+      // If this is the last attempt, re-throw
+      if (attempt === maxRetries - 1) {
+        throw err;
+      }
+
+      // Wait before retrying
+      const delay = backoffs[Math.min(attempt, backoffs.length - 1)];
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+
+  // Should never reach here, but handle edge case
+  if (lastResponse) return lastResponse;
+  if (lastError) throw lastError;
+  throw new Error("fetchWithRetry: unexpected state");
+}
+
+/**
  * Try HRN fallback - attempts to fetch and parse HRN entries-results page
  * @param {string} track - Track name
  * @param {string} dateIso - ISO date (YYYY-MM-DD)
  * @param {object} baseDebug - Existing debug object (may contain googleHtml)
- * @returns {{ outcome: object|null, debugExtras: object }}
+ * @returns {{ outcome: object|null, debugExtras: object, httpStatus: number|null }}
  */
 async function tryHrnFallback(track, dateIso, raceNo, baseDebug = {}) {
   const debugExtras = {};
+  let httpStatus = null;
+  let urlAttempted = null;
+  
   try {
     debugExtras.hrnAttempted = true;
     debugExtras.hrnRaceNo = (raceNo !== null && raceNo !== undefined) ? String(raceNo || "").trim() : null;
@@ -890,38 +997,46 @@ async function tryHrnFallback(track, dateIso, raceNo, baseDebug = {}) {
     const hrnUrlFromGoogle = baseDebug.googleHtml ? extractHrnUrlFromGoogleHtml(baseDebug.googleHtml) : null;
     const hrnUrl = hrnUrlFromGoogle || buildHrnUrl(track, dateIso);
     debugExtras.hrnUrl = hrnUrl || null;
+    urlAttempted = hrnUrl;
 
     if (!hrnUrl) {
       debugExtras.hrnParseError = "No HRN URL available";
-      return { outcome: null, debugExtras };
+      return { outcome: null, debugExtras, httpStatus: null };
     }
 
-    const res = await fetch(hrnUrl, {
+    // Use fetchWithRetry with browser-like headers and retry logic
+    const res = await fetchWithRetry(hrnUrl, {
       method: "GET",
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (compatible; FinishLineBot/1.0; +https://finishline-wps-ai.vercel.app)",
-        "Accept-Language": "en-US,en;q=0.9",
-      },
-    });
+    }, 3);
+
+    httpStatus = res.status;
+    debugExtras.hrnHttpStatus = httpStatus;
 
     if (!res.ok) {
-      debugExtras.hrnParseError = `HTTP ${res.status}`;
-      return { outcome: null, debugExtras };
+      const statusText = res.statusText || "";
+      debugExtras.hrnParseError = `HTTP ${httpStatus}${statusText ? ` ${statusText}` : ""} from HRN (blocked or unavailable)`;
+      return { outcome: null, debugExtras, httpStatus, urlAttempted };
     }
 
     const html = await res.text();
-    const outcome = extractOutcomeFromHrnHtml(html, raceNo);
+    const { outcome, debug: hrnDebug } = extractOutcomeFromHrnHtml(html, raceNo);
+    
+    // Merge ALL HRN debug fields into debugExtras (not just selective ones)
+    if (hrnDebug && typeof hrnDebug === 'object') {
+      // Merge all fields from hrnDebug into debugExtras
+      Object.assign(debugExtras, hrnDebug);
+    }
     
     if (!outcome || (!outcome.win && !outcome.place && !outcome.show)) {
       debugExtras.hrnParseError = "No outcome parsed from HRN HTML";
-      return { outcome: null, debugExtras };
+      return { outcome: null, debugExtras, httpStatus, urlAttempted };
     }
 
-    return { outcome, debugExtras };
+    return { outcome, debugExtras, httpStatus: 200, urlAttempted };
   } catch (err) {
-    debugExtras.hrnParseError = String(err && err.message ? err.message : err);
-    return { outcome: null, debugExtras };
+    const errorMsg = err && typeof err.message === "string" ? err.message : String(err || "Unknown error");
+    debugExtras.hrnParseError = `Fetch error: ${errorMsg}`;
+    return { outcome: null, debugExtras, httpStatus, urlAttempted };
   }
 }
 
@@ -1074,24 +1189,110 @@ function splitHrnHtmlIntoRaceBlocks(html) {
 /**
  * Extract Win/Place/Show from HRN entries-results HTML
  * Parses the finish order table to find horses in positions 1, 2, 3
+ * Uses multiple fallback strategies for robust extraction
  * @param {string} html - HRN page HTML
  * @param {string|number} raceNo - Race number to target (optional, defaults to first table)
- * @returns {{ win: string, place: string, show: string }}
+ * @returns {{ outcome: { win: string, place: string, show: string }, debug: object }}
  */
 function extractOutcomeFromHrnHtml(html, raceNo = null) {
   const outcome = { win: "", place: "", show: "" };
+  const debug = {
+    hrnParsedBy: null,
+    hrnOutcomeRaw: { win: "", place: "", show: "" },
+    hrnOutcomeNormalized: { win: "", place: "", show: "" },
+    hrnFoundMarkers: {
+      Results: false,
+      Finish: false,
+      Win: false,
+      Place: false,
+      Show: false,
+    },
+    hrnRegionFound: false,
+    hrnRegionSnippet: null,
+    hrnCandidateRejectedReasons: [],
+  };
   
   if (!html || typeof html !== "string") {
-    return outcome;
+    debug.hrnParsedBy = "none";
+    return { outcome, debug };
   }
   
   try {
-    // If raceNo is provided, try to find the matching race block
-    let targetHtml = html;
+    // STEP 1: Strip script/style/comment blocks BEFORE any parsing to avoid matching JS code
+    let sanitizedHtml = html
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, " ") // Remove all <script> blocks
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, " ") // Remove all <style> blocks
+      .replace(/<!--[\s\S]*?-->/g, " ") // Remove HTML comments
+      .replace(/<noscript[^>]*>[\s\S]*?<\/noscript>/gi, " ") // Remove noscript blocks
+      .replace(/\s+/g, " "); // Normalize whitespace
+    
+    // Check for markers in sanitized HTML (Results=True, Finish=True, Win=True, Place=True, Show=True)
+    const markersPattern = /(Results|Finish|Win|Place|Show)\s*=\s*True/gi;
+    let markerMatch;
+    while ((markerMatch = markersPattern.exec(sanitizedHtml)) !== null) {
+      const markerName = markerMatch[1];
+      if (markerName) {
+        debug.hrnFoundMarkers[markerName] = true;
+      }
+    }
+    
+    // STEP 2: Isolate "results region" - find section most likely to contain finish results
+    let resultsRegion = null;
+    const regionPatterns = [
+      // Pattern 1: Look for explicit "Results" or "Race Results" headings
+      /(?:<h[1-6][^>]*>[\s\S]*?(?:Results?|Finish|Payout)[\s\S]*?<\/h[1-6]>[\s\S]{0,5000})/i,
+      // Pattern 2: Look for containers with "results" class/id
+      /<[^>]*(?:class|id)=["'][^"']*(?:results?|finish|payout)[^"']*["'][^>]*>([\s\S]{500,8000})<\/[^>]+>/i,
+      // Pattern 3: Look for table with "results" or "payout" in class/id
+      /<table[^>]*(?:class|id)=["'][^"']*(?:results?|finish|payout|table-payouts)[^"']*["'][^>]*>([\s\S]{500,10000})<\/table>/i,
+      // Pattern 4: Look for section between "Race" and "Results" keywords (within reasonable distance)
+      /Race[\s\S]{0,2000}?(?:Results?|Finish)[\s\S]{0,5000}/i,
+    ];
+    
+    for (const pattern of regionPatterns) {
+      const match = sanitizedHtml.match(pattern);
+      if (match && match[0] && match[0].length > 500) {
+        resultsRegion = match[0];
+        break;
+      }
+    }
+    
+    // Fallback: If no specific region found, but markers exist, use a larger context around markers
+    if (!resultsRegion && (debug.hrnFoundMarkers.Results || debug.hrnFoundMarkers.Finish)) {
+      const markerPos = sanitizedHtml.search(/(?:Results|Finish)\s*=\s*True/i);
+      if (markerPos > -1) {
+        const start = Math.max(0, markerPos - 2000);
+        const end = Math.min(sanitizedHtml.length, markerPos + 5000);
+        resultsRegion = sanitizedHtml.slice(start, end);
+      }
+    }
+    
+    // If still no region found, try to find any table with "payout" or "results" in it
+    if (!resultsRegion) {
+      const tableMatch = sanitizedHtml.match(/<table[^>]*>[\s\S]{500,10000}?<\/table>/gi);
+      if (tableMatch) {
+        // Use the largest table (likely to be results table)
+        resultsRegion = tableMatch.reduce((largest, current) => 
+          current.length > (largest?.length || 0) ? current : largest, null);
+      }
+    }
+    
+    // If no results region found, return early with no outcome
+    if (!resultsRegion) {
+      debug.hrnParsedBy = "none";
+      debug.hrnRegionFound = false;
+      return { outcome, debug };
+    }
+    
+    debug.hrnRegionFound = true;
+    debug.hrnRegionSnippet = resultsRegion.slice(0, 200).replace(/\s+/g, " "); // First 200 chars for debugging
+    
+    // If raceNo is provided, try to find the matching race block within results region
+    let targetHtml = resultsRegion;
     if (raceNo !== null && raceNo !== undefined) {
       const raceNoStr = String(raceNo || "").trim();
       if (raceNoStr) {
-        const blocks = splitHrnHtmlIntoRaceBlocks(html);
+        const blocks = splitHrnHtmlIntoRaceBlocks(resultsRegion);
         
         // Find the block matching the requested race
         const matchingBlock = blocks.find(b => String(b.raceNo) === raceNoStr);
@@ -1101,7 +1302,7 @@ function extractOutcomeFromHrnHtml(html, raceNo = null) {
           const tablePattern = /<table[^>]*table-payouts[^>]*>[\s\S]*?<\/table>/gi;
           const allTables = [];
           let tableMatch;
-          while ((tableMatch = tablePattern.exec(html)) !== null) {
+          while ((tableMatch = tablePattern.exec(resultsRegion)) !== null) {
             allTables.push({ index: tableMatch.index, html: tableMatch[0] });
           }
           
@@ -1109,203 +1310,472 @@ function extractOutcomeFromHrnHtml(html, raceNo = null) {
             targetHtml = allTables[matchingBlock.tableIndex].html;
           }
         }
-        // If no matching block found, fall back to parsing all tables (original behavior)
       }
     }
-    // Helper to decode HTML entities
+    
+    // Enhanced helper to decode HTML entities
     const decodeEntity = (str) => {
       if (!str) return "";
       return str
         .replace(/&amp;/g, "&")
         .replace(/&quot;/g, '"')
         .replace(/&#39;/g, "'")
+        .replace(/&#x27;/g, "'")
+        .replace(/&apos;/g, "'")
         .replace(/&lt;/g, "<")
         .replace(/&gt;/g, ">")
         .replace(/&nbsp;/g, " ")
         .replace(/&#160;/g, " ")
+        .replace(/&mdash;/g, "—")
+        .replace(/&ndash;/g, "–")
         .trim();
     };
     
-    // Helper to validate horse name
-    const isValid = (name) => {
-      if (!name || name.length === 0) return false;
-      if (name.length > 50) return false;
-      if (!/[A-Za-z]/.test(name)) return false;
-      // Reject if it looks like HTML or code
-      if (name.includes("<") || name.includes(">") || name.includes("function")) return false;
-      // Reject common non-horse-name patterns
-      if (/^\d+$/.test(name)) return false; // Just numbers
-      if (name.toLowerCase().includes("finish") || name.toLowerCase().includes("position")) return false;
-      return true;
+    // Enhanced normalization: trim, decode entities, remove extra punctuation, preserve apostrophes/hyphens
+    const normalizeHorseName = (name) => {
+      if (!name) return "";
+      
+      // Decode HTML entities
+      let normalized = decodeEntity(name);
+      
+      // Remove HTML tags if any remain
+      normalized = normalized.replace(/<[^>]+>/g, "");
+      
+      // Remove speed figures in parentheses like "(92*)", "(89*)", etc.
+      normalized = normalized.replace(/\s*\([^)]*\)\s*$/, "");
+      
+      // Remove extra punctuation at start/end (but preserve apostrophes and hyphens inside)
+      normalized = normalized.replace(/^[^\w'-]+/, "").replace(/[^\w'-]+$/, "");
+      
+      // Collapse multiple spaces
+      normalized = normalized.replace(/\s+/g, " ");
+      
+      // Trim
+      normalized = normalized.trim();
+      
+      return normalized;
     };
     
-    // Strategy: Look for HRN payout tables with Win/Place/Show columns
-    // HRN uses table-payouts tables where:
-    // - First row with Win payout ($X.XX, not "-") = WINNER
-    // - Second row = PLACE
-    // - Third row = SHOW
-    // Horse names are in format: "Horse Name (Speed)" in the first <td>
-    
-    // Pattern 1: Look for table-payouts tables and extract first 3 rows
-    // HRN structure: <td>Horse Name (Speed)</td><td><img></td><td>Win</td><td>Place</td><td>Show</td>
-    const payoutTablePattern = /<table[^>]*table-payouts[^>]*>[\s\S]*?<tbody>([\s\S]*?)<\/tbody>/gi;
-    let tableMatch;
-    while ((tableMatch = payoutTablePattern.exec(targetHtml)) !== null) {
-      const tbody = tableMatch[1];
+    // Strict validation helper that rejects JS tokens, generic words, and invalid patterns
+    // Returns { valid: boolean, reason: string | null }
+    const validateHorseName = (name, debugReasons = null) => {
+      if (!name || name.length === 0) {
+        if (debugReasons) debugReasons.push("empty_name");
+        return { valid: false, reason: "empty_name" };
+      }
       
-      // Extract all TRs and parse TDs more generically
-      const trPattern = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
-      const rows = [];
-      let trMatch;
-      while ((trMatch = trPattern.exec(tbody)) !== null && rows.length < 5) {
-        const rowHtml = trMatch[1];
+      // Reject if too short (must be at least 3 chars)
+      if (name.length < 3) {
+        if (debugReasons) debugReasons.push(`too_short_${name.length}`);
+        return { valid: false, reason: "too_short" };
+      }
+      
+      if (name.length > 50) {
+        if (debugReasons) debugReasons.push(`too_long_${name.length}`);
+        return { valid: false, reason: "too_long" };
+      }
+      
+      // Must contain at least one letter
+      if (!/[A-Za-z]/.test(name)) {
+        if (debugReasons) debugReasons.push("no_letters");
+        return { valid: false, reason: "no_letters" };
+      }
+      
+      // Reject if contains dots (likely JS property access like "dow.dataLayer")
+      if (name.includes(".")) {
+        if (debugReasons) debugReasons.push(`contains_dot:${name}`);
+        return { valid: false, reason: "contains_dot" };
+      }
+      
+      // Reject if contains HTML angle brackets or "=" (likely HTML/JS code)
+      if (name.includes("<") || name.includes(">") || name.includes("=")) {
+        if (debugReasons) debugReasons.push(`contains_html:${name}`);
+        return { valid: false, reason: "contains_html" };
+      }
+      
+      // Reject JavaScript identifiers and keywords
+      const jsKeywords = [
+        "datalayer", "dow", "window", "document", "function", "var", "let", "const",
+        "this", "place", "win", "show", "true", "false", "null", "undefined",
+        "return", "if", "else", "for", "while", "prototype", "call", "apply",
+        "splice", "push", "pop", "slice", "split", "replace", "match", "exec",
+        "test", "parse", "stringify", "object", "array", "number", "string",
+      ];
+      const nameLower = name.toLowerCase().trim();
+      for (const keyword of jsKeywords) {
+        if (nameLower === keyword || nameLower === `"${keyword}"` || nameLower === `'${keyword}'`) {
+          if (debugReasons) debugReasons.push(`js_keyword:${keyword}`);
+          return { valid: false, reason: `js_keyword:${keyword}` };
+        }
+      }
+      
+      // Reject generic tokens that are too short or common words
+      const genericTokens = ["this", "place", "win", "show", "the", "a", "an", "is", "are", "was", "were"];
+      if (genericTokens.includes(nameLower)) {
+        if (debugReasons) debugReasons.push(`generic_token:${nameLower}`);
+        return { valid: false, reason: `generic_token:${nameLower}` };
+      }
+      
+      // Reject if looks like HTML or code
+      if (name.includes("function") || name.includes("=>") || name.includes("()")) {
+        if (debugReasons) debugReasons.push(`contains_code:${name}`);
+        return { valid: false, reason: "contains_code" };
+      }
+      
+      // Reject common non-horse-name patterns
+      if (/^\d+$/.test(name)) {
+        if (debugReasons) debugReasons.push(`pure_numbers:${name}`);
+        return { valid: false, reason: "pure_numbers" };
+      }
+      
+      if (name.toLowerCase().includes("finish") || name.toLowerCase().includes("position")) {
+        if (debugReasons) debugReasons.push(`contains_finish_position:${name}`);
+        return { valid: false, reason: "contains_finish_position" };
+      }
+      
+      if (name.toLowerCase().includes("win:") || name.toLowerCase().includes("place:") || name.toLowerCase().includes("show:")) {
+        if (debugReasons) debugReasons.push(`contains_label:${name}`);
+        return { valid: false, reason: "contains_label" };
+      }
+      
+      // Reject if it's just currency/payout info
+      if (/^\$?[\d,]+\.?\d*$/.test(name)) {
+        if (debugReasons) debugReasons.push(`currency_only:${name}`);
+        return { valid: false, reason: "currency_only" };
+      }
+      
+      // Reject if contains suspicious JS patterns
+      if (/[{}()=>]/.test(name) || /^[A-Z],/.test(name)) {
+        if (debugReasons) debugReasons.push(`js_pattern:${name}`);
+        return { valid: false, reason: "js_pattern" };
+      }
+      
+      return { valid: true, reason: null };
+    };
+    
+    // Helper for backward compatibility (used in some places)
+    const isValid = (name) => {
+      return validateHorseName(name).valid;
+    };
+    
+    // STRATEGY 1: Look for Results/Finish table sections and parse first three finishers
+    // This is the most reliable for entries-results pages
+    // Try multiple table patterns to handle different HRN structures
+    const tablePatterns = [
+      // Pattern 1: Standard table with tbody
+      /<table[^>]*(?:results|finish|payout|table-payouts)[^>]*>[\s\S]*?<tbody>([\s\S]*?)<\/tbody>[\s\S]*?<\/table>/gi,
+      // Pattern 2: Table without explicit tbody (rows directly in table)
+      /<table[^>]*(?:results|finish|payout)[^>]*>([\s\S]*?)<\/table>/gi,
+      // Pattern 3: Any table that might contain results
+      /<table[^>]*>([\s\S]{500,10000}?)<\/table>/gi, // Limit size to avoid matching entire page
+    ];
+    
+    const rows = [];
+    let foundTable = false;
+    
+    for (const tablePattern of tablePatterns) {
+      tablePattern.lastIndex = 0; // Reset regex
+      let tableMatch;
+      
+      while ((tableMatch = tablePattern.exec(targetHtml)) !== null && !foundTable) {
+        const tableContent = tableMatch[1];
+        if (!tableContent || tableContent.length < 100) continue; // Skip tiny tables
         
-        // Extract all TDs in this row
-        const tdPattern = /<td[^>]*>([\s\S]*?)<\/td>/gi;
-        const cells = [];
-        let tdMatch;
-        while ((tdMatch = tdPattern.exec(rowHtml)) !== null) {
-          // Remove all HTML tags and decode entities
-          const cellContent = tdMatch[1]
-            .replace(/<[^>]+>/g, "")
-            .replace(/&amp;/g, "&")
-            .replace(/&quot;/g, '"')
-            .replace(/&#39;/g, "'")
-            .replace(/&nbsp;/g, " ")
-            .trim();
-          cells.push(cellContent);
+        // Extract all TRs from table content
+        const trPattern = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+        let trMatch;
+        let rowIndex = 0;
+        const tableRows = [];
+        
+        while ((trMatch = trPattern.exec(tableContent)) !== null && rowIndex < 15) {
+          const rowHtml = trMatch[1];
+          
+          // Skip header rows (contain <th> or text like "Finish", "Position", "Horse")
+          if (rowHtml.match(/<th[^>]*>/i) || 
+              /finish|position|horse\s*name|win|place|show/i.test(rowHtml) && rowIndex === 0) {
+            continue;
+          }
+          
+          // Extract all TDs in this row
+          const tdPattern = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+          const cells = [];
+          let tdMatch;
+          
+          while ((tdMatch = tdPattern.exec(rowHtml)) !== null) {
+            // Remove all HTML tags first, then decode
+            let cellContent = tdMatch[1]
+              .replace(/<[^>]+>/g, " ")
+              .replace(/\s+/g, " ")
+              .trim();
+            // Decode entities
+            cellContent = decodeEntity(cellContent);
+            if (cellContent && cellContent.length > 0) {
+              cells.push(cellContent);
+            }
+          }
+          
+          // Try to find horse name and position
+          let horseNameRaw = null;
+          let position = null;
+          
+          // Strategy: Look for position number (1, 2, 3) in any cell, then horse name in adjacent cell
+          for (let i = 0; i < cells.length; i++) {
+            const cell = cells[i].trim();
+            // Check if this cell is a position number
+            if (/^\s*[123]\s*$/.test(cell)) {
+              position = parseInt(cell, 10);
+              // Horse name is likely in the next non-empty cell
+              for (let j = i + 1; j < Math.min(i + 4, cells.length); j++) {
+                const nextCell = cells[j].trim();
+                const normalized = normalizeHorseName(nextCell);
+                const validation = validateHorseName(normalized, debug.hrnCandidateRejectedReasons);
+                if (validation.valid) {
+                  horseNameRaw = nextCell;
+                  break;
+                }
+              }
+              if (horseNameRaw) break;
+            }
+          }
+          
+          // Fallback: If no position found, try to find horse name in first few cells
+          if (!position && !horseNameRaw && cells.length > 0) {
+            for (const cell of cells.slice(0, 5)) {
+              const normalized = normalizeHorseName(cell);
+              const validation = validateHorseName(normalized, debug.hrnCandidateRejectedReasons);
+              if (validation.valid) {
+                horseNameRaw = cell;
+                // Assume row order: 1st row = win, 2nd = place, 3rd = show
+                position = rowIndex + 1;
+                break;
+              }
+            }
+          }
+          
+          if (horseNameRaw) {
+            const horseName = normalizeHorseName(horseNameRaw);
+            const validation = validateHorseName(horseName, debug.hrnCandidateRejectedReasons);
+            if (validation.valid) {
+              tableRows.push({ position: position || (rowIndex + 1), horseName, raw: horseNameRaw });
+              rowIndex++;
+            }
+          }
         }
         
-        // HRN structure: [0] = Horse Name (Speed), [1] = empty/image, [2] = Win, [3] = Place, [4] = Show
-        if (cells.length >= 5) {
-          const horseNameRaw = cells[0];
-          // Extract horse name (remove speed figure in parentheses like "(92*)" or "(89*)")
-          const horseName = horseNameRaw.replace(/\s*\([^)]+\)\s*$/, "").trim();
-          const winPayout = (cells[2] || "").trim();
-          const placePayout = (cells[3] || "").trim();
-          const showPayout = (cells[4] || "").trim();
-          
-          if (isValid(horseName)) {
-            rows.push({ horseName, winPayout, placePayout, showPayout });
+        // If we found at least 3 valid rows, use this table
+        if (tableRows.length >= 3) {
+          rows.push(...tableRows);
+          foundTable = true;
+          break;
+        } else if (tableRows.length > 0) {
+          // Store partial results but keep looking
+          rows.push(...tableRows);
+        }
+      }
+      
+      if (foundTable) break;
+    }
+    
+    // Extract Win/Place/Show from collected rows
+    if (rows.length >= 1 && !outcome.win) {
+      const winner = rows.find(r => r.position === 1) || rows[0];
+      outcome.win = winner.horseName;
+      debug.hrnOutcomeRaw.win = winner.raw || "";
+    }
+    if (rows.length >= 2 && !outcome.place) {
+      const place = rows.find(r => r.position === 2) || rows[1];
+      outcome.place = place.horseName;
+      debug.hrnOutcomeRaw.place = place.raw || "";
+    }
+    if (rows.length >= 3 && !outcome.show) {
+      const show = rows.find(r => r.position === 3) || rows[2];
+      outcome.show = show.horseName;
+      debug.hrnOutcomeRaw.show = show.raw || "";
+    }
+    
+    if (outcome.win && outcome.place && outcome.show) {
+      debug.hrnParsedBy = "table";
+    }
+    
+    // STRATEGY 2: Look for explicit "Win / Place / Show" labels and parse adjacent horse names
+    // Only search within results region (targetHtml) to avoid matching JS code
+    if ((!outcome.win || !outcome.place || !outcome.show) && targetHtml && targetHtml.length > 100) {
+      // Pattern: "Win:" or "Win" followed by horse name (case insensitive)
+      // Updated patterns to be more restrictive - require at least 3 chars, avoid dots
+      const winLabelPatterns = [
+        /(?:^|\s|>|:)\s*Win\s*[:–—\-]?\s*([A-Za-z][A-Za-z0-9\s'\-]{2,30}?)(?:\s|$|,|;|<|\(|\[|\$)/i,
+        /Win\s+Payout[^:]*:\s*\$?[\d,]+\.?\d*\s+([A-Za-z][A-Za-z0-9\s'\-]{2,30}?)(?:\s|$|,|;|<|\(|\[)/i,
+      ];
+      
+      const placeLabelPatterns = [
+        /(?:^|\s|>|:)\s*Place\s*[:–—\-]?\s*([A-Za-z][A-Za-z0-9\s'\-]{2,30}?)(?:\s|$|,|;|<|\(|\[|\$)/i,
+        /Place\s+Payout[^:]*:\s*\$?[\d,]+\.?\d*\s+([A-Za-z][A-Za-z0-9\s'\-]{2,30}?)(?:\s|$|,|;|<|\(|\[)/i,
+      ];
+      
+      const showLabelPatterns = [
+        /(?:^|\s|>|:)\s*Show\s*[:–—\-]?\s*([A-Za-z][A-Za-z0-9\s'\-]{2,30}?)(?:\s|$|,|;|<|\(|\[|\$)/i,
+        /Show\s+Payout[^:]*:\s*\$?[\d,]+\.?\d*\s+([A-Za-z][A-Za-z0-9\s'\-]{2,30}?)(?:\s|$|,|;|<|\(|\[)/i,
+      ];
+      
+      for (const pattern of winLabelPatterns) {
+        const match = targetHtml.match(pattern);
+        if (match && match[1] && !outcome.win) {
+          const raw = match[1].trim();
+          const normalized = normalizeHorseName(raw);
+          const validation = validateHorseName(normalized, debug.hrnCandidateRejectedReasons);
+          if (validation.valid) {
+            outcome.win = normalized;
+            debug.hrnOutcomeRaw.win = raw;
+            if (!debug.hrnParsedBy) debug.hrnParsedBy = "labels";
+            break;
           }
         }
       }
       
-      // First row with Win payout (not "-" or "--" and not empty) is the winner
-      // Second row is place, third row is show
-      // Check if first row has a valid win payout (starts with $ or is a number)
-      const firstRowHasWin = rows.length >= 1 && 
-        rows[0].winPayout && 
-        rows[0].winPayout !== "-" && 
-        rows[0].winPayout !== "--" &&
-        rows[0].winPayout.trim() !== "" &&
-        (rows[0].winPayout.startsWith("$") || /^\d/.test(rows[0].winPayout));
-      
-      if (firstRowHasWin && !outcome.win) {
-        outcome.win = rows[0].horseName;
-      }
-      // Place is always the second row (even if win payout is "-")
-      if (rows.length >= 2 && !outcome.place) {
-        outcome.place = rows[1].horseName;
-      }
-      // Show is always the third row
-      if (rows.length >= 3 && !outcome.show) {
-        outcome.show = rows[2].horseName;
-      }
-      
-      // If we found all three, break
-      if (outcome.win && outcome.place && outcome.show) {
-        break;
-      }
-    }
-    
-    // Pattern 2: Look for table rows with finish position in a <td> followed by horse name
-    // This handles: <tr><td>1</td><td>Horse Name</td>...</tr>
-    if (!outcome.win || !outcome.place || !outcome.show) {
-      const tableRowPattern = /<tr[^>]*>[\s\S]*?<td[^>]*>\s*(\d+)\s*<\/td>[\s\S]*?<td[^>]*>([^<]+)<\/td>/gi;
-      const finishMap = {};
-      
-      let match;
-      while ((match = tableRowPattern.exec(html)) !== null) {
-        const position = parseInt(match[1], 10);
-        const horseName = decodeEntity(match[2]).replace(/\s*\([^)]+\)\s*$/, "").trim();
-        
-        if (position >= 1 && position <= 3 && isValid(horseName)) {
-          if (position === 1 && !finishMap[1]) finishMap[1] = horseName;
-          if (position === 2 && !finishMap[2]) finishMap[2] = horseName;
-          if (position === 3 && !finishMap[3]) finishMap[3] = horseName;
-        }
-      }
-      
-      if (!outcome.win && finishMap[1]) outcome.win = finishMap[1];
-      if (!outcome.place && finishMap[2]) outcome.place = finishMap[2];
-      if (!outcome.show && finishMap[3]) outcome.show = finishMap[3];
-    }
-    
-    // Pattern 2: Look for "Finish" or "Pos" column headers, then extract rows
-    // This handles tables with explicit Finish/Position columns
-    if (!outcome.win || !outcome.place || !outcome.show) {
-      // Try to find a results table section
-      const tableSectionMatch = targetHtml.match(/<table[^>]*>[\s\S]{0,5000}?<\/table>/i);
-      if (tableSectionMatch) {
-        const tableHtml = tableSectionMatch[0];
-        
-        // Look for rows with finish positions 1, 2, 3
-        const finishRowPattern = /<tr[^>]*>[\s\S]*?(?:finish|pos|position)[^>]*>\s*(\d+)\s*[^<]*<[\s\S]*?<td[^>]*>([^<]+)<\/td>/gi;
-        const finishMap2 = {};
-        
-        let match2;
-        while ((match2 = finishRowPattern.exec(tableHtml)) !== null) {
-          const position = parseInt(match2[1], 10);
-          const horseName = decodeEntity(match2[2]);
-          
-          if (position >= 1 && position <= 3 && isValid(horseName)) {
-            if (position === 1 && !finishMap2[1]) finishMap2[1] = horseName;
-            if (position === 2 && !finishMap2[2]) finishMap2[2] = horseName;
-            if (position === 3 && !finishMap2[3]) finishMap2[3] = horseName;
+      for (const pattern of placeLabelPatterns) {
+        const match = targetHtml.match(pattern);
+        if (match && match[1] && !outcome.place) {
+          const raw = match[1].trim();
+          const normalized = normalizeHorseName(raw);
+          const validation = validateHorseName(normalized, debug.hrnCandidateRejectedReasons);
+          if (validation.valid) {
+            outcome.place = normalized;
+            debug.hrnOutcomeRaw.place = raw;
+            if (!debug.hrnParsedBy) debug.hrnParsedBy = "labels";
+            break;
           }
         }
-        
-        if (!outcome.win && finishMap2[1]) outcome.win = finishMap2[1];
-        if (!outcome.place && finishMap2[2]) outcome.place = finishMap2[2];
-        if (!outcome.show && finishMap2[3]) outcome.show = finishMap2[3];
       }
-    }
-    
-    // Pattern 3: Look for "Win:", "Place:", "Show:" text patterns in payout sections
-    if (!outcome.win || !outcome.place || !outcome.show) {
-      // Look for payout table or results summary
-      const payoutSection = targetHtml.match(/(?:payout|results|finish)[\s\S]{0,2000}?(?:win|place|show)[\s\S]{0,2000}?/i);
-      if (payoutSection) {
-        const section = payoutSection[0];
-        
-        // Try to find horse names after Win/Place/Show labels
-        const winMatch = section.match(/win[:\s]+([A-Za-z0-9\s'\-\.]+?)(?:\s|$|,|;|<\/)/i);
-        const placeMatch = section.match(/place[:\s]+([A-Za-z0-9\s'\-\.]+?)(?:\s|$|,|;|<\/)/i);
-        const showMatch = section.match(/show[:\s]+([A-Za-z0-9\s'\-\.]+?)(?:\s|$|,|;|<\/)/i);
-        
-        if (winMatch && winMatch[1] && !outcome.win && isValid(winMatch[1].trim())) {
-          outcome.win = decodeEntity(winMatch[1].trim());
-        }
-        if (placeMatch && placeMatch[1] && !outcome.place && isValid(placeMatch[1].trim())) {
-          outcome.place = decodeEntity(placeMatch[1].trim());
-        }
-        if (showMatch && showMatch[1] && !outcome.show && isValid(showMatch[1].trim())) {
-          outcome.show = decodeEntity(showMatch[1].trim());
+      
+      for (const pattern of showLabelPatterns) {
+        const match = targetHtml.match(pattern);
+        if (match && match[1] && !outcome.show) {
+          const raw = match[1].trim();
+          const normalized = normalizeHorseName(raw);
+          const validation = validateHorseName(normalized, debug.hrnCandidateRejectedReasons);
+          if (validation.valid) {
+            outcome.show = normalized;
+            debug.hrnOutcomeRaw.show = raw;
+            if (!debug.hrnParsedBy) debug.hrnParsedBy = "labels";
+            break;
+          }
         }
       }
     }
     
-    // Final validation
-    if (!isValid(outcome.win)) outcome.win = "";
-    if (!isValid(outcome.place)) outcome.place = "";
-    if (!isValid(outcome.show)) outcome.show = "";
+    // STRATEGY 3: Regex fallbacks - capture patterns like "Win" followed by horse name
+    // Only search within results region (targetHtml) to avoid matching JS code
+    // More restrictive patterns - no dots allowed, must be at least 3 chars
+    if ((!outcome.win || !outcome.place || !outcome.show) && targetHtml && targetHtml.length > 100) {
+      // Pattern: Look for sequences like "Win [horse name]", avoiding odds/payout numbers
+      // Updated: removed dots from character class, require at least 3 chars
+      const regexPatterns = [
+        // Pattern: "Win" followed by optional punctuation, then horse name (no dots!)
+        { key: "win", regex: /Win\s*[:\-—–]?\s*([A-Za-z][A-Za-z0-9\s'\-]{2,30}?)(?:\s|$|,|;|<|\(|\[|\$|(?:\d+\.[\d,]+)|Win|Place|Show)/i },
+        { key: "place", regex: /Place\s*[:\-—–]?\s*([A-Za-z][A-Za-z0-9\s'\-]{2,30}?)(?:\s|$|,|;|<|\(|\[|\$|(?:\d+\.[\d,]+)|Win|Place|Show)/i },
+        { key: "show", regex: /Show\s*[:\-—–]?\s*([A-Za-z][A-Za-z0-9\s'\-]{2,30}?)(?:\s|$|,|;|<|\(|\[|\$|(?:\d+\.[\d,]+)|Win|Place|Show)/i },
+        // Alternative: Look for position numbers (1st, 2nd, 3rd) followed by horse name
+        { key: "win", regex: /(?:1st|First|1\s+st)\s+([A-Za-z][A-Za-z0-9\s'\-]{2,30}?)(?:\s|$|,|;|<|\(|\[)/i },
+        { key: "place", regex: /(?:2nd|Second|2\s+nd)\s+([A-Za-z][A-Za-z0-9\s'\-]{2,30}?)(?:\s|$|,|;|<|\(|\[)/i },
+        { key: "show", regex: /(?:3rd|Third|3\s+rd)\s+([A-Za-z][A-Za-z0-9\s'\-]{2,30}?)(?:\s|$|,|;|<|\(|\[)/i },
+      ];
+      
+      for (const { key, regex } of regexPatterns) {
+        if ((key === "win" && outcome.win) || (key === "place" && outcome.place) || (key === "show" && outcome.show)) {
+          continue; // Already found
+        }
+        
+        const match = targetHtml.match(regex);
+        if (match && match[1]) {
+          const raw = match[1].trim();
+          const normalized = normalizeHorseName(raw);
+          const validation = validateHorseName(normalized, debug.hrnCandidateRejectedReasons);
+          if (validation.valid) {
+            if (key === "win" && !outcome.win) {
+              outcome.win = normalized;
+              debug.hrnOutcomeRaw.win = raw;
+              if (!debug.hrnParsedBy) debug.hrnParsedBy = "regex";
+            } else if (key === "place" && !outcome.place) {
+              outcome.place = normalized;
+              debug.hrnOutcomeRaw.place = raw;
+              if (!debug.hrnParsedBy) debug.hrnParsedBy = "regex";
+            } else if (key === "show" && !outcome.show) {
+              outcome.show = normalized;
+              debug.hrnOutcomeRaw.show = raw;
+              if (!debug.hrnParsedBy) debug.hrnParsedBy = "regex";
+            }
+          }
+        }
+      }
+    }
+    
+    // Final normalization and strict validation
+    outcome.win = normalizeHorseName(outcome.win);
+    outcome.place = normalizeHorseName(outcome.place);
+    outcome.show = normalizeHorseName(outcome.show);
+    
+    // Final validation with strict rules - reject any invalid candidates
+    const winValidation = validateHorseName(outcome.win, debug.hrnCandidateRejectedReasons);
+    if (!winValidation.valid) {
+      outcome.win = "";
+      debug.hrnOutcomeRaw.win = "";
+    }
+    
+    const placeValidation = validateHorseName(outcome.place, debug.hrnCandidateRejectedReasons);
+    if (!placeValidation.valid) {
+      outcome.place = "";
+      debug.hrnOutcomeRaw.place = "";
+    }
+    
+    const showValidation = validateHorseName(outcome.show, debug.hrnCandidateRejectedReasons);
+    if (!showValidation.valid) {
+      outcome.show = "";
+      debug.hrnOutcomeRaw.show = "";
+    }
+    
+    // Store normalized values in debug
+    debug.hrnOutcomeNormalized = {
+      win: outcome.win,
+      place: outcome.place,
+      show: outcome.show,
+    };
+    
+    // If no valid outcome found, mark as "none" (don't return false positives)
+    if (!outcome.win && !outcome.place && !outcome.show) {
+      debug.hrnParsedBy = "none";
+    } else if (!debug.hrnParsedBy) {
+      // Partial results found but strategy not recorded (shouldn't happen, but handle it)
+      debug.hrnParsedBy = "partial";
+    }
     
   } catch (err) {
     console.error("[extractOutcomeFromHrnHtml] Parse error:", err.message || err);
+    debug.hrnParsedBy = "error";
     // Return empty outcome on error - never throw
-    return { win: "", place: "", show: "" };
+    // CRITICAL: Ensure outcome has no ok property
+    const cleanErrorOutcome = { win: "", place: "", show: "" };
+    delete cleanErrorOutcome.ok;
+    return { outcome: cleanErrorOutcome, debug };
   }
+  
+  // CRITICAL: Clean outcome before returning - ensure no ok property exists
+  // This prevents any contamination from object mutations or property assignments
+  const cleanReturnOutcome = {
+    win: (outcome.win && typeof outcome.win === 'string') ? outcome.win : "",
+    place: (outcome.place && typeof outcome.place === 'string') ? outcome.place : "",
+    show: (outcome.show && typeof outcome.show === 'string') ? outcome.show : "",
+  };
+  // Explicitly delete ok if it exists (defensive cleanup)
+  delete cleanReturnOutcome.ok;
+  
+  // CRITICAL: If outcome somehow got an ok property, log it for debugging
+  if ('ok' in outcome && outcome.ok !== undefined) {
+    console.error(`[extractOutcomeFromHrnHtml] CRITICAL: outcome has unexpected ok property (value: ${JSON.stringify(outcome.ok)})`);
+    console.error(`[extractOutcomeFromHrnHtml] Stack:`, new Error().stack);
+    console.error(`[extractOutcomeFromHrnHtml] Outcome object:`, JSON.stringify(outcome));
+  }
+  
+  return { outcome: cleanReturnOutcome, debug };
 }
 
 /**
@@ -1559,7 +2029,50 @@ function extractOutcomeFromGoogleHtml(html) {
  * This is the default behavior when VERIFY_RACE_MODE is not set to "full"
  * Now enhanced to fetch and parse Google HTML for Win/Place/Show
  */
-async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
+/**
+ * Sanitize response object to ensure ok is always boolean
+ * CRITICAL: Prevents type corruption bugs where ok might be string or other type
+ */
+function sanitizeResponse(response) {
+  if (!response || typeof response !== "object") return response;
+  
+  // CRITICAL: Defensively clean outcome before spreading to prevent ok property contamination
+  const cleanResponse = { ...response };
+  
+  // Ensure outcome has no ok property (defensive cleanup)
+  if (cleanResponse.outcome && typeof cleanResponse.outcome === 'object') {
+    const cleanOutcome = {
+      win: cleanResponse.outcome.win || "",
+      place: cleanResponse.outcome.place || "",
+      show: cleanResponse.outcome.show || "",
+    };
+    delete cleanOutcome.ok;
+    cleanResponse.outcome = cleanOutcome;
+  }
+  
+  // CRITICAL: Ensure ok is boolean - compute from outcome validation if corrupted
+  if (typeof cleanResponse.ok !== "boolean") {
+    console.error(`[verify_race] CRITICAL: ok is not boolean (type: ${typeof cleanResponse.ok}, value: ${JSON.stringify(cleanResponse.ok)}) - coercing to boolean`);
+    console.error(`[verify_race] Stack:`, new Error().stack);
+    console.error(`[verify_race] Response context:`, JSON.stringify({ step: cleanResponse.step, outcome: cleanResponse.outcome }));
+    
+    // Compute ok from outcome validation if corrupted
+    const outcome = cleanResponse.outcome || {};
+    // CRITICAL: Ensure hasValidOutcome is ALWAYS boolean (not string like outcome.show)
+    const hasValidOutcome = Boolean(outcome.win && outcome.place && outcome.show);
+    cleanResponse.ok = hasValidOutcome;
+    
+    if (!cleanResponse.debug) cleanResponse.debug = {};
+    cleanResponse.debug.okTypeError = `ok was coerced from ${typeof response.ok} to boolean`;
+    cleanResponse.debug.okOriginalType = typeof response.ok;
+    cleanResponse.debug.okOriginalValue = response.ok;
+    cleanResponse.debug.okComputedFromOutcome = hasValidOutcome; // Always boolean
+  }
+  
+  return cleanResponse;
+}
+
+async function buildStubResponse({ track, date, raceNo, predicted = {}, uiDateRaw = null }) {
   // CRITICAL: date should already be canonical ISO from handler
   // Use it as-is - no fallback to today, no re-normalization
   // If date is missing, that's an upstream bug - log warning but use empty string
@@ -1611,6 +2124,8 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
   let hrnUrl = null;
   let hrnOutcome = null;
   let hrnParseError = null;
+  // Initialize hrnDebugFields early to ensure it's always available if HRN is attempted
+  let hrnDebugFields = null;
   
   try {
     const res = await fetch(googleUrl, {
@@ -1639,8 +2154,13 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
 
   // ALWAYS try HRN fallback if we have track, date, and Google didn't find all three
   // This ensures HRN is attempted even if Google fetch fails or doesn't contain results
+  let hrnAttempted = false;
+  let hrnHttpStatus = null;
+  // Note: hrnDebugFields is already declared above, we'll populate it below
+  
   if (!outcome.win || !outcome.place || !outcome.show) {
     if (safeTrack && usingDate) {
+      hrnAttempted = true; // Mark that we attempted HRN (set early, before any async operations)
       try {
         // First try to extract HRN URL from Google HTML (if we have it)
         if (googleHtml) {
@@ -1663,37 +2183,82 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
               },
             });
             
+            hrnHttpStatus = hrnRes ? hrnRes.status : null;
+            
             if (hrnRes && hrnRes.ok) {
               const hrnHtml = await hrnRes.text();
-              hrnOutcome = extractOutcomeFromHrnHtml(hrnHtml, raceNoStr);
+              const hrnResult = extractOutcomeFromHrnHtml(hrnHtml, raceNoStr);
+              hrnOutcome = hrnResult.outcome;
+              
+              // CRITICAL: Store ALL HRN debug fields - ensure hrnDebugFields is always set when HRN attempted
+              if (hrnResult.debug && typeof hrnResult.debug === 'object') {
+                hrnDebugFields = { ...hrnResult.debug }; // Copy all fields
+              } else {
+                // If debug is missing, initialize empty object so we at least track that HRN was attempted
+                hrnDebugFields = { hrnParsedBy: "error", hrnParseError: "Debug object missing from parse result" };
+              }
               
               // If HRN parsing found at least one result, use it
+              // Note: We'll validate later in the function before setting ok=true
+              // CRITICAL: Only copy win/place/show properties - never spread entire object which might contain ok
               if (hrnOutcome && (hrnOutcome.win || hrnOutcome.place || hrnOutcome.show)) {
-                outcome = hrnOutcome;
+                // Defensively copy only the properties we want - prevent any accidental ok property
+                outcome = {
+                  win: hrnOutcome.win || "",
+                  place: hrnOutcome.place || "",
+                  show: hrnOutcome.show || "",
+                };
+                // Ensure no ok property exists in outcome (defensive)
+                delete outcome.ok;
                 // Mark as HRN fallback if we got all three, otherwise keep as partial
-                if (hrnOutcome.win && hrnOutcome.place && hrnOutcome.show) {
+                // Note: Final ok status will be determined by validation
+                if (outcome.win && outcome.place && outcome.show) {
                   step = "verify_race_fallback_hrn";
                 } else {
                   step = "verify_race_fallback_hrn_partial";
                 }
               } else {
                 hrnParseError = "No outcome parsed from HRN HTML";
-                // HRN failed - no Equibase fallback in stub mode
+                // Ensure hrnParsedBy is set even if no outcome
+                if (hrnDebugFields && !hrnDebugFields.hrnParsedBy) {
+                  hrnDebugFields.hrnParsedBy = "none";
+                }
               }
             } else {
-              hrnParseError = `HTTP ${hrnRes ? hrnRes.status : "unknown"}`;
-              // HRN fetch failed - no Equibase fallback in stub mode
+              hrnParseError = `HTTP ${hrnHttpStatus || "unknown"}`;
+              // Initialize debug fields even on HTTP error
+              if (!hrnDebugFields) {
+                hrnDebugFields = { hrnParsedBy: "http_error", hrnParseError };
+              }
             }
           } catch (hrnErr) {
             hrnParseError = String(hrnErr.message || hrnErr);
             console.error("[verify_race stub] HRN fetch/parse failed:", hrnErr);
+            // Initialize debug fields even on exception
+            if (!hrnDebugFields) {
+              hrnDebugFields = { hrnParsedBy: "error", hrnParseError };
+            }
           }
         } else {
           hrnParseError = "No HRN URL available";
+          // Initialize debug fields even when URL unavailable
+          if (!hrnDebugFields) {
+            hrnDebugFields = { hrnParsedBy: "none", hrnParseError };
+          }
         }
       } catch (err) {
         hrnParseError = String(err.message || err);
         console.error("[verify_race stub] HRN fallback error:", err);
+        // Initialize debug fields even on outer exception
+        if (!hrnDebugFields) {
+          hrnDebugFields = { hrnParsedBy: "error", hrnParseError };
+        }
+      }
+    } else {
+      // Track that HRN was not attempted due to missing track/date
+      if (!safeTrack || !usingDate) {
+        // Don't set hrnAttempted=true if we don't have required fields
+        // hrnAttempted stays false, which is correct
       }
     }
   }
@@ -1767,12 +2332,112 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
   }
 
   const summary = summaryLines.join("\n");
-
-  // Determine ok status: true if we have at least one outcome field
-  const hasOutcome = !!(outcome.win || outcome.place || outcome.show);
-  const ok = hasOutcome || step === "verify_race_fallback_hrn" || step === "verify_race_fallback_hrn_partial";
   
-  // Build debug object - only lightweight fields
+  // STRICT VALIDATION: Final gate check - use same validateHorseName logic as extractOutcomeFromHrnHtml
+  // Note: HRN parsing already validates internally, but we do a final gate check for safety
+  const validateHorseName = (name) => {
+    if (!name || name.length === 0) return { valid: false, reason: "empty_name" };
+    if (name.length < 3) return { valid: false, reason: "too_short" };
+    if (name.length > 50) return { valid: false, reason: "too_long" };
+    if (!/[A-Za-z]/.test(name)) return { valid: false, reason: "no_letters" };
+    if (name.includes(".")) return { valid: false, reason: "contains_dot" };
+    if (name.includes("<") || name.includes(">") || name.includes("=")) return { valid: false, reason: "contains_html" };
+    const jsKeywords = ["datalayer", "dow", "window", "document", "function", "var", "let", "const", "this", "place", "win", "show", "true", "false", "null", "undefined"];
+    const nameLower = name.toLowerCase().trim();
+    if (jsKeywords.includes(nameLower)) return { valid: false, reason: `js_keyword:${nameLower}` };
+    const genericTokens = ["this", "place", "win", "show", "the", "a", "an", "is", "are", "was", "were"];
+    if (genericTokens.includes(nameLower)) return { valid: false, reason: `generic_token:${nameLower}` };
+    if (name.includes("function") || name.includes("=>") || name.includes("()")) return { valid: false, reason: "contains_code" };
+    if (/^\d+$/.test(name)) return { valid: false, reason: "pure_numbers" };
+    if (name.toLowerCase().includes("finish") || name.toLowerCase().includes("position")) return { valid: false, reason: "contains_finish_position" };
+    if (name.toLowerCase().includes("win:") || name.toLowerCase().includes("place:") || name.toLowerCase().includes("show:")) return { valid: false, reason: "contains_label" };
+    if (/^\$?[\d,]+\.?\d*$/.test(name)) return { valid: false, reason: "currency_only" };
+    if (/[{}()=>]/.test(name) || /^[A-Z],/.test(name)) return { valid: false, reason: "js_pattern" };
+    return { valid: true, reason: null };
+  };
+  
+  // Final validation gate - validate what we have (HRN parsing already validated, but safety check)
+  // Save original values before validation to track rejections
+  const originalWin = outcome.win;
+  const originalPlace = outcome.place;
+  const originalShow = outcome.show;
+  
+  const winValid = validateHorseName(outcome.win);
+  const placeValid = validateHorseName(outcome.place);
+  const showValid = validateHorseName(outcome.show);
+  
+  // Track if we need to clear any invalid outcomes
+  let validationFailed = false;
+  if (originalWin && !winValid.valid) {
+    outcome.win = "";
+    validationFailed = true;
+  }
+  if (originalPlace && !placeValid.valid) {
+    outcome.place = "";
+    validationFailed = true;
+  }
+  if (originalShow && !showValid.valid) {
+    outcome.show = "";
+    validationFailed = true;
+  }
+  
+  // CRITICAL: Ensure outcome never has an ok property (defensive cleanup before computing ok)
+  if (outcome && typeof outcome === 'object') {
+    delete outcome.ok;
+  }
+  
+  // STRICT OK: ok=true ONLY if we have ALL THREE non-empty AND validated W/P/S
+  // Compute ok in exactly one place based on validated outcome - never from object properties
+  const hasAllValidOutcome = winValid.valid && placeValid.valid && showValid.valid && outcome.win && outcome.place && outcome.show;
+  const ok = Boolean(hasAllValidOutcome); // Explicitly coerce to boolean - never trust implicit conversion
+  
+  // If validation failed or missing W/P/S, update hrnDebugFields if HRN was attempted
+  // CRITICAL: Ensure hrnDebugFields exists if hrnAttempted is true
+  if (hrnAttempted) {
+    // Initialize hrnDebugFields if it doesn't exist (shouldn't happen, but defensive)
+    if (!hrnDebugFields || typeof hrnDebugFields !== 'object') {
+      hrnDebugFields = { hrnParsedBy: "none" };
+    }
+    
+    if (!hrnDebugFields.hrnCandidateRejectedReasons) {
+      hrnDebugFields.hrnCandidateRejectedReasons = [];
+    }
+    if (validationFailed) {
+      if (originalWin && !winValid.valid) {
+        hrnDebugFields.hrnCandidateRejectedReasons.push(`win_rejected:${winValid.reason}:${originalWin}`);
+      }
+      if (originalPlace && !placeValid.valid) {
+        hrnDebugFields.hrnCandidateRejectedReasons.push(`place_rejected:${placeValid.reason}:${originalPlace}`);
+      }
+      if (originalShow && !showValid.valid) {
+        hrnDebugFields.hrnCandidateRejectedReasons.push(`show_rejected:${showValid.reason}:${originalShow}`);
+      }
+    }
+    // If we don't have all three validated outcomes, ensure hrnParsedBy reflects this
+    if (!hasAllValidOutcome) {
+      if (validationFailed) {
+        // Validation failed - mark as validation_failed if we had a parse method
+        if (hrnDebugFields.hrnParsedBy && hrnDebugFields.hrnParsedBy !== "none" && hrnDebugFields.hrnParsedBy !== "error") {
+          hrnDebugFields.hrnParsedBy = "validation_failed";
+        } else {
+          hrnDebugFields.hrnParsedBy = "none";
+        }
+      } else if (!outcome.win || !outcome.place || !outcome.show) {
+        // Partial results - hrnParsedBy can stay as "table"/"labels"/"regex" but ok=false because incomplete
+        // Don't change hrnParsedBy, just ensure it's set
+        if (!hrnDebugFields.hrnParsedBy || hrnDebugFields.hrnParsedBy === null) {
+          hrnDebugFields.hrnParsedBy = "partial";
+        }
+      } else {
+        // No outcome at all
+        if (!hrnDebugFields.hrnParsedBy || hrnDebugFields.hrnParsedBy === null) {
+          hrnDebugFields.hrnParsedBy = "none";
+        }
+      }
+    }
+  }
+  
+  // Initialize debug object - NEVER reassign, only merge
   const debug = {
     googleUrl,
     backendVersion: BACKEND_VERSION,
@@ -1780,21 +2445,101 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
     canonicalDateIso: usingDate,
   };
   
-  // Include HRN debug info if we attempted it (lightweight fields only)
-  // Note: hrnRaceNo will be added by tryHrnFallback if called from full mode
-  if (hrnUrl) {
-    debug.hrnUrl = hrnUrl;
+  // Add uiDateRaw if provided (merge, don't reassign)
+  if (uiDateRaw !== null && uiDateRaw !== undefined) {
+    debug.uiDateRaw = uiDateRaw;
   }
   
-  if (hrnParseError) {
-    debug.hrnParseError = hrnParseError;
+  // Merge ALL HRN debug fields if HRN was attempted (merge, don't reassign)
+  if (hrnAttempted) {
+    debug.hrnAttempted = true;
+    if (hrnUrl) {
+      debug.hrnUrl = hrnUrl;
+    }
+    if (hrnHttpStatus !== null) {
+      debug.hrnHttpStatus = hrnHttpStatus;
+    }
+    if (hrnParseError) {
+      debug.hrnParseError = hrnParseError;
+    }
+    
+    // Merge ALL fields from hrnDebugFields (not just selective ones) - use Object.assign to merge into existing debug
+    if (hrnDebugFields && typeof hrnDebugFields === 'object') {
+      Object.assign(debug, hrnDebugFields);
+    }
+    
+    // If ok=false after validation, ensure hrnParsedBy reflects this
+    if (!ok && !debug.hrnParsedBy) {
+      debug.hrnParsedBy = "none";
+    }
+  }
+  
+  // Set source based on step (merge, don't reassign)
+  if (step && step.includes("hrn")) {
+    debug.source = "hrn";
+  } else if (step && step.includes("google")) {
+    debug.source = "google";
   }
   
   // Store googleHtml in debug for potential future use (but don't send it in response to avoid bloat)
   // We'll just keep it for internal reference if needed
   
+  // CRITICAL: Final defensive cleanup - ensure outcome has no ok property and ok is boolean
+  const cleanOutcome = {
+    win: (outcome && typeof outcome.win === 'string') ? outcome.win : "",
+    place: (outcome && typeof outcome.place === 'string') ? outcome.place : "",
+    show: (outcome && typeof outcome.show === 'string') ? outcome.show : "",
+  };
+  // Explicitly ensure no ok property exists
+  delete cleanOutcome.ok;
+  
+  // CRITICAL: Final recomputation of ok from cleaned outcome - NEVER trust existing ok variable
+  // This prevents any corruption from object spreads, destructuring, or variable shadowing
+  const finalOk = Boolean(
+    cleanOutcome.win && 
+    cleanOutcome.place && 
+    cleanOutcome.show &&
+    winValid.valid && 
+    placeValid.valid && 
+    showValid.valid
+  );
+  
+  // CRITICAL: Assert ok is boolean before returning (debug guard)
+  if (typeof finalOk !== 'boolean') {
+    console.error(`[verify_race] CRITICAL BUG: finalOk is ${typeof finalOk} (value: ${JSON.stringify(finalOk)}) in buildStubResponse return`);
+    console.error(`[verify_race] Stack:`, new Error().stack);
+    console.error(`[verify_race] Context: cleanOutcome=${JSON.stringify(cleanOutcome)}, validations: win=${winValid.valid}, place=${placeValid.valid}, show=${showValid.valid}`);
+    // Force to false if assertion fails
+    const forcedOk = false;
+    return {
+      ok: forcedOk,
+      step,
+      date: usingDate,
+      track: safeTrack,
+      raceNo: raceNoStr,
+      query,
+      top: {
+        title: `Google search: ${query}`,
+        link: googleUrl,
+      },
+      outcome: cleanOutcome,
+      predicted: predictedNormalized,
+      hits,
+      summary: summary,
+      debug: {
+        ...debug,
+        okComputationError: `finalOk was ${typeof finalOk}, forced to false`,
+      },
+      responseMeta: {
+        handlerFile: HANDLER_FILE,
+        backendVersion: BACKEND_VERSION,
+        internalBypassAuthorized: false,
+      },
+    };
+  }
+  
   return {
-    ok,
+    ok: finalOk, // Use recomputed value - never trust the original ok variable
     step,
     date: usingDate,
     track: safeTrack,
@@ -1804,11 +2549,7 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
       title: `Google search: ${query}`,
       link: googleUrl,
     },
-    outcome: {
-      win: outcome.win || "",
-      place: outcome.place || "",
-      show: outcome.show || "",
-    },
+    outcome: cleanOutcome, // Use cleaned outcome with no ok property
     predicted: predictedNormalized,
     hits,
     summary: summary,
@@ -1816,29 +2557,60 @@ async function buildStubResponse({ track, date, raceNo, predicted = {} }) {
     responseMeta: {
       handlerFile: HANDLER_FILE,
       backendVersion: BACKEND_VERSION,
+      internalBypassAuthorized: false, // buildStubResponse is used in error cases, so bypass is false
     },
   };
 }
 
 export default async function handler(req, res) {
+  // Check for internal/system flag to bypass PayGate (for verify_backfill batch jobs)
+  // Require BOTH internal header AND secret to prevent spoofing
+  const internalHeader = req.headers['x-finishline-internal'] === 'true';
+  const internalSecret = String(req.headers['x-finishline-internal-secret'] || '').trim();
+  const expectedSecret = process.env.INTERNAL_JOB_SECRET || '';
+  const secretOk = !!expectedSecret && internalSecret === expectedSecret;
+  const isInternalRequest = internalHeader && secretOk;
+  let bypassedPayGate = false;
+  let internalBypassAuthorized = false;
+
   // Server-side PayGate check (non-blocking in monitor mode)
-  try {
-    const { checkPayGateAccess } = await import('../../lib/paygate-server.js');
-    const accessCheck = checkPayGateAccess(req);
-    if (!accessCheck.allowed) {
-      return res.status(403).json({
-        ok: false,
-        error: 'PayGate locked',
-        message: 'Premium access required. Please unlock to continue.',
-        code: 'paygate_locked',
-        reason: accessCheck.reason,
-        step: 'verify_race_error'
-      });
+  // Skip PayGate ONLY if this is an internal system request with valid secret (e.g., from verify_backfill)
+  if (!isInternalRequest) {
+    // If header present but secret missing/mismatch, log for security monitoring
+    if (internalHeader && !secretOk) {
+      console.warn('[verify_race] Internal header present but secret missing/mismatch - enforcing PayGate');
     }
-  } catch (paygateErr) {
-    // Non-fatal: log but allow request (fail-open for safety)
-    console.warn('[verify_race] PayGate check failed (non-fatal):', paygateErr?.message);
+    
+    try {
+      const { checkPayGateAccess } = await import('../../lib/paygate-server.js');
+      const accessCheck = checkPayGateAccess(req);
+      if (!accessCheck.allowed) {
+        return res.status(403).json({
+          ok: false,
+          error: 'PayGate locked',
+          message: 'Premium access required. Please unlock to continue.',
+          code: 'paygate_locked',
+          reason: accessCheck.reason,
+          step: 'verify_race_error',
+          bypassedPayGate: false,
+          responseMeta: {
+            handlerFile: HANDLER_FILE,
+            backendVersion: BACKEND_VERSION,
+            internalBypassAuthorized: false
+          }
+        });
+      }
+    } catch (paygateErr) {
+      // Non-fatal: log but allow request (fail-open for safety)
+      console.warn('[verify_race] PayGate check failed (non-fatal):', paygateErr?.message);
+    }
+  } else {
+    // Internal request with valid secret - bypass PayGate
+    bypassedPayGate = true;
+    internalBypassAuthorized = true;
+    console.log('[verify_race] Internal request detected with valid secret - PayGate bypassed');
   }
+
   // We NEVER throw from this handler. All errors are reported in the JSON body.
   try {
     if (req.method !== "POST") {
@@ -1848,9 +2620,10 @@ export default async function handler(req, res) {
         raceNo: null,
       });
       res.setHeader('X-Handler-Identity', 'VERIFY_RACE_STUB');
+      // CRITICAL: Ensure ok is always boolean (defensive check against type corruption)
+      const sanitizedStub = sanitizeResponse({ ...stub, ok: false });
       return res.status(200).json({
-        ...stub,
-        ok: false,
+        ...sanitizedStub,
         step: "verify_race_stub",
         error: "METHOD_NOT_ALLOWED",
         message: `Expected POST, received ${req.method}`,
@@ -1894,6 +2667,7 @@ export default async function handler(req, res) {
 
     let canonicalDateIso = canonicalizeDateFromClient(uiDateRaw);
     
+    // Note: PayGate check already performed at top of handler - bypassedPayGate flag is set there
     // Server-side PayGate check (non-blocking in monitor mode)
     try {
       const { checkPayGateAccess } = await import('../../lib/paygate-server.js');
@@ -1946,6 +2720,7 @@ export default async function handler(req, res) {
         responseMeta: {
           handlerFile: HANDLER_FILE,
           backendVersion: BACKEND_VERSION,
+          internalBypassAuthorized: internalBypassAuthorized,
         },
       });
     }
@@ -1966,11 +2741,15 @@ export default async function handler(req, res) {
     // Manual verify branch - handle manual outcome entry
     if (body.mode === "manual" && body.outcome) {
       try {
+        // CRITICAL: Clean outcome from body - only copy win/place/show, explicitly delete ok if present
+        const bodyOutcome = body.outcome || {};
         const outcome = {
-          win: (body.outcome.win || "").trim(),
-          place: (body.outcome.place || "").trim(),
-          show: (body.outcome.show || "").trim(),
+          win: (bodyOutcome.win || "").trim(),
+          place: (bodyOutcome.place || "").trim(),
+          show: (bodyOutcome.show || "").trim(),
         };
+        // Defensive cleanup - ensure no ok property exists
+        delete outcome.ok;
 
         // Get predictions from body or fetch from Redis
         let predicted = predictedFromClient;
@@ -2053,15 +2832,31 @@ export default async function handler(req, res) {
         // Build raceId
         const raceId = buildVerifyRaceId(track, canonicalDateIso, raceNo);
 
+        // CRITICAL: Recompute ok from outcome - NEVER hardcode ok:true
+        // Clean outcome again to ensure no ok property contamination
+        const cleanManualOutcome = {
+          win: (outcome.win && typeof outcome.win === 'string') ? outcome.win : "",
+          place: (outcome.place && typeof outcome.place === 'string') ? outcome.place : "",
+          show: (outcome.show && typeof outcome.show === 'string') ? outcome.show : "",
+        };
+        delete cleanManualOutcome.ok; // Defensive cleanup
+        
+        // Recompute ok from cleaned outcome - this is the ONLY source of truth
+        const manualOk = Boolean(
+          cleanManualOutcome.win && 
+          cleanManualOutcome.place && 
+          cleanManualOutcome.show
+        );
+        
         // Build result object
         const result = {
-          ok: true,
+          ok: manualOk, // Recomputed from cleaned outcome - never hardcode true
           step: "manual_verify",
           track,
           date: canonicalDateIso,
           raceNo,
           raceId,
-          outcome,
+          outcome: cleanManualOutcome, // Use cleaned outcome with no ok property
           predicted: predictedNormalized,
           hits,
           summary,
@@ -2083,7 +2878,55 @@ export default async function handler(req, res) {
         // Add GreenZone (safe, never throws)
         await addGreenZoneToResponse(result);
 
-        return res.status(200).json(result);
+        // CRITICAL: result.ok should already be correctly computed above, but defensive check
+        // Clean outcome again to ensure no ok property contamination (defensive)
+        const resultOutcome = result.outcome || { win: "", place: "", show: "" };
+        const cleanResultOutcome = {
+          win: (resultOutcome.win && typeof resultOutcome.win === 'string') ? resultOutcome.win : "",
+          place: (resultOutcome.place && typeof resultOutcome.place === 'string') ? resultOutcome.place : "",
+          show: (resultOutcome.show && typeof resultOutcome.show === 'string') ? resultOutcome.show : "",
+        };
+        delete cleanResultOutcome.ok; // Defensive cleanup
+        
+        // Recompute ok from cleaned outcome - this is the ONLY source of truth
+        const resultHasValidOutcome = Boolean(
+          cleanResultOutcome.win && 
+          cleanResultOutcome.place && 
+          cleanResultOutcome.show
+        );
+        
+        // CRITICAL: Create final result with recomputed ok - don't trust existing result.ok
+        const finalResult = {
+          ...result,
+          ok: resultHasValidOutcome, // Recomputed from cleaned outcome - overwrite any existing value
+          outcome: cleanResultOutcome, // Use cleaned outcome
+        };
+        
+        // CRITICAL: Assert ok is boolean before proceeding (debug guard)
+        if (typeof finalResult.ok !== 'boolean') {
+          console.error(`[verify_race] CRITICAL BUG: finalResult.ok is ${typeof finalResult.ok} (value: ${JSON.stringify(finalResult.ok)}) after recomputation`);
+          console.error(`[verify_race] Stack:`, new Error().stack);
+          console.error(`[verify_race] Context:`, JSON.stringify({ step: finalResult.step, outcome: cleanResultOutcome, resultHasValidOutcome }));
+          console.error(`[verify_race] Original result.ok:`, typeof result.ok, JSON.stringify(result.ok));
+          // Force to boolean based on outcome
+          finalResult.ok = Boolean(resultHasValidOutcome);
+          if (!finalResult.debug) finalResult.debug = {};
+          finalResult.debug.okComputationError = `finalResult.ok was ${typeof finalResult.ok} (original: ${typeof result.ok}, value: ${JSON.stringify(result.ok)}), forced to ${finalResult.ok}`;
+        }
+        
+        // CRITICAL: Ensure ok is always boolean (defensive check against type corruption)
+        const sanitizedResult = sanitizeResponse(finalResult);
+        
+        return res.status(200).json({
+          ...sanitizedResult,
+          bypassedPayGate: bypassedPayGate,
+          responseMeta: {
+            handlerFile: HANDLER_FILE,
+            backendVersion: BACKEND_VERSION,
+            bypassedPayGate: bypassedPayGate,
+            internalBypassAuthorized: internalBypassAuthorized,
+          }
+        });
       } catch (error) {
         console.error("[verify_race] Manual verify error:", error);
         // Return error response (still 200 to match never-500 policy)
@@ -2107,6 +2950,13 @@ export default async function handler(req, res) {
             source: "manual",
           },
           greenZone: { enabled: false, reason: "error" },
+          bypassedPayGate: bypassedPayGate,
+          responseMeta: {
+            handlerFile: HANDLER_FILE,
+            backendVersion: BACKEND_VERSION,
+            bypassedPayGate: bypassedPayGate,
+            internalBypassAuthorized: internalBypassAuthorized,
+          },
         });
       }
     }
@@ -2127,11 +2977,28 @@ export default async function handler(req, res) {
 
     // If not in full mode, immediately return stub
     if (mode !== "full") {
-      const stub = await buildStubResponse(ctx);
-      // Add GreenZone (safe, never throws)
+      const stub = await buildStubResponse({
+        ...ctx,
+        uiDateRaw: ctx.dateRaw || uiDateRaw, // Pass uiDateRaw to buildStubResponse
+      });
+      // CRITICAL: Never reassign stub.debug - only merge additional fields if needed
+      // buildStubResponse already sets source, so we don't need to set it again
+      // Just ensure debug object is preserved as-is
+      
+      // Add GreenZone (safe, never throws) - this should not modify debug
       await addGreenZoneToResponse(stub);
       await logVerifyResult(stub);
-      return res.status(200).json(stub);
+      
+      // Return stub with preserved debug - never overwrite debug here
+      return res.status(200).json({
+        ...stub,
+        bypassedPayGate: bypassedPayGate,
+        responseMeta: {
+          ...stub.responseMeta,
+          bypassedPayGate: bypassedPayGate,
+          internalBypassAuthorized: internalBypassAuthorized,
+        }
+      });
     }
 
     // Full mode: attempt to use the full parser
@@ -2185,9 +3052,12 @@ export default async function handler(req, res) {
         await logVerifyResult(errorResponse).catch(() => {}); // Ignore logging errors
         return res.status(200).json({
           ...errorResponse,
+          bypassedPayGate: bypassedPayGate,
           responseMeta: {
             handlerFile: HANDLER_FILE,
             backendVersion: BACKEND_VERSION,
+            bypassedPayGate: bypassedPayGate,
+            internalBypassAuthorized: internalBypassAuthorized,
           },
         });
       }
@@ -2262,15 +3132,45 @@ export default async function handler(req, res) {
           };
         } else {
           // Normal path - no mismatch
+          // STRICT VALIDATION: Validate outcome before setting ok=true
+          const outcome = fullResult.outcome || { win: "", place: "", show: "" };
+          const validateHorseName = (name) => {
+            if (!name || name.length === 0 || name.length < 3 || name.length > 50) return false;
+            if (!/[A-Za-z]/.test(name)) return false;
+            if (name.includes(".") || name.includes("<") || name.includes(">") || name.includes("=")) return false;
+            const nameLower = name.toLowerCase().trim();
+            const jsKeywords = ["datalayer", "dow", "window", "document", "function", "var", "let", "const", "this", "place", "win", "show"];
+            if (jsKeywords.includes(nameLower)) return false;
+            const genericTokens = ["this", "place", "win", "show", "the", "a", "an"];
+            if (genericTokens.includes(nameLower)) return false;
+            if (/[{}()=>]/.test(name) || /^\d+$/.test(name)) return false;
+            return true;
+          };
+          
+          const winValid = validateHorseName(outcome.win);
+          const placeValid = validateHorseName(outcome.place);
+          const showValid = validateHorseName(outcome.show);
+          
+          // STRICT OK: ok=true ONLY if ALL THREE are validated
+          const hasAllValidOutcome = winValid && placeValid && showValid && outcome.win && outcome.place && outcome.show;
+          const strictOk = hasAllValidOutcome;
+          
+          // Clear invalid outcomes
+          const validatedOutcome = {
+            win: winValid && outcome.win ? outcome.win : "",
+            place: placeValid && outcome.place ? outcome.place : "",
+            show: showValid && outcome.show ? outcome.show : "",
+          };
+          
           validatedResult = {
-            ok: fullResult.ok !== undefined ? fullResult.ok : true,
+            ok: strictOk, // Use strict validation, not fullResult.ok
             step: "verify_race",
             date: fullResult.date || canonicalDateIso, // Use canonicalDateIso from handler
             track: fullResult.track || track || "",
             raceNo: fullResult.raceNo || raceNo || "",
             query: fullResult.query || "",
             top: fullResult.top || null,
-            outcome: fullResult.outcome || { win: "", place: "", show: "" },
+            outcome: validatedOutcome,
             predicted: fullResult.predicted || predictedFromClient,
             hits: fullResult.hits || {
               winHit: false,
@@ -2280,7 +3180,7 @@ export default async function handler(req, res) {
             },
             summary: fullResult.summary || "Full verify race completed.",
             debug: {
-              ...fullResult.debug,
+              ...(fullResult.debug || {}), // Preserve ALL debug fields from fullResult (including HRN fields)
               googleUrl:
                 fullResult.debug?.googleUrl ||
                 (() => {
@@ -2293,13 +3193,36 @@ export default async function handler(req, res) {
                 })(),
             },
           };
+          
+          // If validation failed, update debug
+          if (!strictOk && validatedResult.debug) {
+            if (!validatedResult.debug.hrnCandidateRejectedReasons) {
+              validatedResult.debug.hrnCandidateRejectedReasons = [];
+            }
+            if (outcome.win && !winValid) validatedResult.debug.hrnCandidateRejectedReasons.push(`win_invalid:${outcome.win}`);
+            if (outcome.place && !placeValid) validatedResult.debug.hrnCandidateRejectedReasons.push(`place_invalid:${outcome.place}`);
+            if (outcome.show && !showValid) validatedResult.debug.hrnCandidateRejectedReasons.push(`show_invalid:${outcome.show}`);
+            if (validatedResult.debug.hrnParsedBy && validatedResult.debug.hrnParsedBy !== "none") {
+              validatedResult.debug.hrnParsedBy = "validation_failed";
+            }
+          }
         }
 
         // Add GreenZone (safe, never throws)
         await addGreenZoneToResponse(validatedResult);
         
         await logVerifyResult(validatedResult);
-        return res.status(200).json(validatedResult);
+        // CRITICAL: Ensure ok is always boolean (defensive check against type corruption)
+        const sanitizedValidated = sanitizeResponse(validatedResult);
+        return res.status(200).json({
+          ...sanitizedValidated,
+          bypassedPayGate: bypassedPayGate,
+          responseMeta: {
+            ...validatedResult.responseMeta,
+            bypassedPayGate: bypassedPayGate,
+            internalBypassAuthorized: internalBypassAuthorized
+          }
+        });
       }
 
       // If step is "verify_race_full_fallback", use full result but ensure date is canonical
@@ -2310,9 +3233,33 @@ export default async function handler(req, res) {
           query: fullResult.query,
         });
         // Use full result but ensure date field is canonical
+        // CRITICAL: Do NOT spread fullResult directly - it may have corrupted ok. Explicitly construct.
+        // CRITICAL: Clean outcome to remove any ok property contamination
+        const fullResultOutcome = fullResult.outcome || { win: "", place: "", show: "" };
+        const cleanFullResultOutcome = {
+          win: (fullResultOutcome.win && typeof fullResultOutcome.win === 'string') ? fullResultOutcome.win : "",
+          place: (fullResultOutcome.place && typeof fullResultOutcome.place === 'string') ? fullResultOutcome.place : "",
+          show: (fullResultOutcome.show && typeof fullResultOutcome.show === 'string') ? fullResultOutcome.show : "",
+        };
+        // Explicitly delete ok if it exists (defensive)
+        delete cleanFullResultOutcome.ok;
+        
+        // CRITICAL: Recompute ok from cleaned outcome - NEVER use fullResult.ok
+        const fallbackResultOk = Boolean(
+          cleanFullResultOutcome.win && 
+          cleanFullResultOutcome.place && 
+          cleanFullResultOutcome.show
+        );
+        
         const fallbackResult = {
-          ...fullResult,
+          ok: fallbackResultOk, // Recomputed from cleaned outcome - never trust fullResult.ok
+          step: fullResult.step || "verify_race_fallback",
           date: fullResult.date || canonicalDateIso, // Ensure canonical date
+          track: fullResult.track || track || "",
+          raceNo: fullResult.raceNo || raceNo || "",
+          query: fullResult.query || "",
+          top: fullResult.top || null,
+          outcome: cleanFullResultOutcome, // Use cleaned outcome with no ok property
           predicted: fullResult.predicted || predictedFromClient,
           debug: {
             ...(fullResult.debug || {}),
@@ -2324,8 +3271,41 @@ export default async function handler(req, res) {
         // Try HRN fallback if we have track and date
         if (track && canonicalDateIso) {
           const canonicalRaceNo = String(raceNo || "").trim();
-          const { outcome: hrnOutcome, debugExtras: hrnDebug } = await tryHrnFallback(track, canonicalDateIso, canonicalRaceNo, fallbackResult.debug);
+          const { outcome: hrnOutcome, debugExtras: hrnDebug, httpStatus: hrnHttpStatus, urlAttempted: hrnUrlAttempted } = await tryHrnFallback(track, canonicalDateIso, canonicalRaceNo, fallbackResult.debug);
           fallbackResult.debug = { ...fallbackResult.debug, ...hrnDebug };
+
+          // If HRN fetch was blocked (403/429), return structured error
+          if (hrnHttpStatus === 403 || hrnHttpStatus === 429) {
+            return res.status(200).json({
+              ok: false,
+              step: "fetch_results",
+              httpStatus: hrnHttpStatus,
+              error: `${hrnHttpStatus} from HRN (blocked)`,
+              urlAttempted: hrnUrlAttempted || hrnDebug?.hrnUrl || null,
+              date: canonicalDateIso,
+              track: track || "",
+              raceNo: canonicalRaceNo || "",
+              query: fallbackResult.query || "",
+              top: null,
+              outcome: { win: "", place: "", show: "" },
+              predicted: fallbackResult.predicted || predictedFromClient,
+              hits: {
+                winHit: false,
+                placeHit: false,
+                showHit: false,
+                top3Hit: false,
+              },
+              summary: `HRN fetch blocked (HTTP ${hrnHttpStatus}). Results unavailable.`,
+              debug: fallbackResult.debug,
+              bypassedPayGate: bypassedPayGate,
+              responseMeta: {
+                handlerFile: HANDLER_FILE,
+                backendVersion: BACKEND_VERSION,
+                bypassedPayGate: bypassedPayGate,
+                internalBypassAuthorized: internalBypassAuthorized,
+              },
+            });
+          }
 
           if (hrnOutcome) {
             // Check for mismatch before accepting HRN outcome
@@ -2380,10 +3360,61 @@ export default async function handler(req, res) {
                 fallbackResult.summary = fallbackResult.summary || `Step: ${fallbackResult.step || "unknown"}\nResults not available yet on HRN (scraped race/date did not match UI).`;
               }
             } else {
-              // Accept HRN outcome - no mismatch
-              fallbackResult.outcome = hrnOutcome;
-              fallbackResult.ok = true;
-              fallbackResult.step = "verify_race_fallback_hrn";
+              // STRICT VALIDATION: Validate HRN outcome before accepting
+              const validateHorseName = (name) => {
+                if (!name || name.length === 0 || name.length < 3 || name.length > 50) return false;
+                if (!/[A-Za-z]/.test(name)) return false;
+                if (name.includes(".") || name.includes("<") || name.includes(">") || name.includes("=")) return false;
+                const nameLower = name.toLowerCase().trim();
+                const jsKeywords = ["datalayer", "dow", "window", "document", "function", "var", "let", "const", "this", "place", "win", "show"];
+                if (jsKeywords.includes(nameLower)) return false;
+                const genericTokens = ["this", "place", "win", "show", "the", "a", "an"];
+                if (genericTokens.includes(nameLower)) return false;
+                if (/[{}()=>]/.test(name) || /^\d+$/.test(name)) return false;
+                return true;
+              };
+              
+              const winValid = validateHorseName(hrnOutcome.win);
+              const placeValid = validateHorseName(hrnOutcome.place);
+              const showValid = validateHorseName(hrnOutcome.show);
+              
+              // Only accept if ALL THREE are validated
+              // CRITICAL: Only copy win/place/show properties - never spread entire object which might contain ok
+              if (winValid && placeValid && showValid && hrnOutcome.win && hrnOutcome.place && hrnOutcome.show) {
+                fallbackResult.outcome = {
+                  win: hrnOutcome.win || "",
+                  place: hrnOutcome.place || "",
+                  show: hrnOutcome.show || "",
+                };
+                // Defensive cleanup - ensure no ok property
+                delete fallbackResult.outcome.ok;
+                fallbackResult.ok = Boolean(true); // Explicitly boolean
+                fallbackResult.step = "verify_race_fallback_hrn";
+              } else {
+                // Validation failed - clear invalid outcomes and set ok=false
+                fallbackResult.outcome = {
+                  win: winValid && hrnOutcome.win ? hrnOutcome.win : "",
+                  place: placeValid && hrnOutcome.place ? hrnOutcome.place : "",
+                  show: showValid && hrnOutcome.show ? hrnOutcome.show : "",
+                };
+                // Defensive cleanup - ensure no ok property
+                delete fallbackResult.outcome.ok;
+                fallbackResult.ok = Boolean(false); // Explicitly boolean
+                fallbackResult.step = "verify_race_fallback_hrn_validation_failed";
+                // Update debug to reflect validation failure
+                if (fallbackResult.debug && hrnDebug) {
+                  if (!fallbackResult.debug.hrnCandidateRejectedReasons) {
+                    fallbackResult.debug.hrnCandidateRejectedReasons = [];
+                  }
+                  if (!winValid && hrnOutcome.win) fallbackResult.debug.hrnCandidateRejectedReasons.push(`win_invalid:${hrnOutcome.win}`);
+                  if (!placeValid && hrnOutcome.place) fallbackResult.debug.hrnCandidateRejectedReasons.push(`place_invalid:${hrnOutcome.place}`);
+                  if (!showValid && hrnOutcome.show) fallbackResult.debug.hrnCandidateRejectedReasons.push(`show_invalid:${hrnOutcome.show}`);
+                  if (fallbackResult.debug.hrnParsedBy && fallbackResult.debug.hrnParsedBy !== "none") {
+                    fallbackResult.debug.hrnParsedBy = "validation_failed";
+                  }
+                }
+              }
+              
               // Rebuild summary with final outcome
               try {
                 fallbackResult.summary = buildSummary({
@@ -2456,8 +3487,15 @@ export default async function handler(req, res) {
                 }
               } else {
                 // Accept Equibase outcome - no mismatch
-                fallbackResult.outcome = equibaseOutcome;
-                fallbackResult.ok = true;
+                // CRITICAL: Only copy win/place/show properties - never spread entire object which might contain ok
+                fallbackResult.outcome = {
+                  win: equibaseOutcome?.win || "",
+                  place: equibaseOutcome?.place || "",
+                  show: equibaseOutcome?.show || "",
+                };
+                // Defensive cleanup - ensure no ok property
+                delete fallbackResult.outcome.ok;
+                fallbackResult.ok = Boolean(true); // Explicitly boolean
                 fallbackResult.step = "verify_race_fallback_equibase";
                 
                 // Recompute hits if we have predicted values
@@ -2505,12 +3543,51 @@ export default async function handler(req, res) {
           }
         }
 
-        await logVerifyResult(fallbackResult);
-        return res.status(200).json({
+        // CRITICAL: Final recomputation of ok from outcome - NEVER trust existing fallbackResult.ok
+        // This must happen AFTER all outcome assignments but BEFORE logging/returning
+        const finalFallbackOutcome = fallbackResult.outcome || { win: "", place: "", show: "" };
+        const cleanFinalOutcome = {
+          win: (finalFallbackOutcome.win && typeof finalFallbackOutcome.win === 'string') ? finalFallbackOutcome.win : "",
+          place: (finalFallbackOutcome.place && typeof finalFallbackOutcome.place === 'string') ? finalFallbackOutcome.place : "",
+          show: (finalFallbackOutcome.show && typeof finalFallbackOutcome.show === 'string') ? finalFallbackOutcome.show : "",
+        };
+        delete cleanFinalOutcome.ok; // Defensive cleanup
+        
+        // Recompute ok from cleaned outcome - this is the ONLY source of truth
+        const finalFallbackOk = Boolean(
+          cleanFinalOutcome.win && 
+          cleanFinalOutcome.place && 
+          cleanFinalOutcome.show
+        );
+        
+        // CRITICAL: Create final object with recomputed ok - don't mutate existing fallbackResult
+        const finalFallbackForLog = {
           ...fallbackResult,
+          ok: finalFallbackOk, // Recomputed from cleaned outcome
+          outcome: cleanFinalOutcome, // Use cleaned outcome
+        };
+        
+        // CRITICAL: Assert ok is boolean (debug guard)
+        if (typeof finalFallbackForLog.ok !== 'boolean') {
+          console.error(`[verify_race] CRITICAL BUG: finalFallbackForLog.ok is ${typeof finalFallbackForLog.ok} (value: ${JSON.stringify(finalFallbackForLog.ok)})`);
+          console.error(`[verify_race] Stack:`, new Error().stack);
+          console.error(`[verify_race] Context:`, JSON.stringify({ step: finalFallbackForLog.step, outcome: cleanFinalOutcome }));
+          finalFallbackForLog.ok = Boolean(finalFallbackOk);
+          if (!finalFallbackForLog.debug) finalFallbackForLog.debug = {};
+          finalFallbackForLog.debug.okComputationError = `ok was ${typeof finalFallbackForLog.ok}, forced to ${finalFallbackForLog.ok}`;
+        }
+        
+        await logVerifyResult(finalFallbackForLog);
+        // CRITICAL: Ensure ok is always boolean (defensive check against type corruption)
+        const sanitizedFallback = sanitizeResponse(finalFallbackForLog);
+        return res.status(200).json({
+          ...sanitizedFallback,
+          bypassedPayGate: bypassedPayGate,
           responseMeta: {
             handlerFile: HANDLER_FILE,
             backendVersion: BACKEND_VERSION,
+            bypassedPayGate: bypassedPayGate,
+            internalBypassAuthorized: internalBypassAuthorized,
           },
         });
       }
@@ -2537,13 +3614,106 @@ export default async function handler(req, res) {
       // Try HRN fallback if we have track and date
       if (track && canonicalDateIso) {
         const canonicalRaceNo = String(raceNo || "").trim();
-        const { outcome: hrnOutcome, debugExtras: hrnDebug } = await tryHrnFallback(track, canonicalDateIso, canonicalRaceNo, fallbackStub.debug);
+        const { outcome: hrnOutcome, debugExtras: hrnDebug, httpStatus: hrnHttpStatus, urlAttempted: hrnUrlAttempted } = await tryHrnFallback(track, canonicalDateIso, canonicalRaceNo, fallbackStub.debug);
         fallbackStub.debug = { ...fallbackStub.debug, ...hrnDebug };
 
+        // If HRN fetch was blocked (403/429), return structured error
+        if (hrnHttpStatus === 403 || hrnHttpStatus === 429) {
+          await logVerifyResult({
+            ...fallbackStub,
+            ok: false,
+            step: "fetch_results",
+            httpStatus: hrnHttpStatus,
+            error: `${hrnHttpStatus} from HRN (blocked)`,
+            urlAttempted: hrnUrlAttempted || hrnDebug?.hrnUrl || null,
+          });
+          return res.status(200).json({
+            ok: false,
+            step: "fetch_results",
+            httpStatus: hrnHttpStatus,
+            error: `${hrnHttpStatus} from HRN (blocked)`,
+            urlAttempted: hrnUrlAttempted || hrnDebug?.hrnUrl || null,
+            date: canonicalDateIso,
+            track: track || "",
+            raceNo: canonicalRaceNo || "",
+            query: fallbackStub.query || "",
+            top: null,
+            outcome: { win: "", place: "", show: "" },
+            predicted: fallbackStub.predicted || predictedFromClient,
+            hits: {
+              winHit: false,
+              placeHit: false,
+              showHit: false,
+              top3Hit: false,
+            },
+            summary: `HRN fetch blocked (HTTP ${hrnHttpStatus}). Results unavailable.`,
+            debug: fallbackStub.debug,
+            bypassedPayGate: bypassedPayGate,
+            responseMeta: {
+              handlerFile: HANDLER_FILE,
+              backendVersion: BACKEND_VERSION,
+              bypassedPayGate: bypassedPayGate,
+              internalBypassAuthorized: internalBypassAuthorized,
+            },
+          });
+        }
+
         if (hrnOutcome) {
-          fallbackStub.outcome = hrnOutcome;
-          fallbackStub.ok = true;
-          fallbackStub.step = "verify_race_fallback_hrn";
+          // STRICT VALIDATION: Validate hrnOutcome before accepting it
+          const validateHorseName = (name) => {
+            if (!name || name.length === 0 || name.length < 3 || name.length > 50) return false;
+            if (!/[A-Za-z]/.test(name)) return false;
+            if (name.includes(".") || name.includes("<") || name.includes(">") || name.includes("=")) return false;
+            const nameLower = name.toLowerCase().trim();
+            const jsKeywords = ["datalayer", "dow", "window", "document", "function", "var", "let", "const", "this", "place", "win", "show"];
+            if (jsKeywords.includes(nameLower)) return false;
+            const genericTokens = ["this", "place", "win", "show", "the", "a", "an"];
+            if (genericTokens.includes(nameLower)) return false;
+            if (/[{}()=>]/.test(name) || /^\d+$/.test(name)) return false;
+            return true;
+          };
+          
+          const winValid = validateHorseName(hrnOutcome.win);
+          const placeValid = validateHorseName(hrnOutcome.place);
+          const showValid = validateHorseName(hrnOutcome.show);
+          
+          // Only accept if ALL THREE are validated
+          // CRITICAL: Only copy win/place/show properties - never spread entire object which might contain ok
+          if (winValid && placeValid && showValid && hrnOutcome.win && hrnOutcome.place && hrnOutcome.show) {
+            fallbackStub.outcome = {
+              win: hrnOutcome.win || "",
+              place: hrnOutcome.place || "",
+              show: hrnOutcome.show || "",
+            };
+            // Defensive cleanup - ensure no ok property
+            delete fallbackStub.outcome.ok;
+            fallbackStub.ok = Boolean(true); // Explicitly boolean
+            fallbackStub.step = "verify_race_fallback_hrn";
+          } else {
+            // Validation failed - clear invalid outcomes and set ok=false
+            fallbackStub.outcome = {
+              win: winValid && hrnOutcome.win ? hrnOutcome.win : "",
+              place: placeValid && hrnOutcome.place ? hrnOutcome.place : "",
+              show: showValid && hrnOutcome.show ? hrnOutcome.show : "",
+            };
+            // Defensive cleanup - ensure no ok property
+            delete fallbackStub.outcome.ok;
+            fallbackStub.ok = Boolean(false); // Explicitly boolean
+            fallbackStub.step = "verify_race_fallback_hrn_validation_failed";
+            // Update debug to reflect validation failure
+            if (fallbackStub.debug && hrnDebug) {
+              if (!fallbackStub.debug.hrnCandidateRejectedReasons) {
+                fallbackStub.debug.hrnCandidateRejectedReasons = [];
+              }
+              if (!winValid && hrnOutcome.win) fallbackStub.debug.hrnCandidateRejectedReasons.push(`win_invalid:${hrnOutcome.win}`);
+              if (!placeValid && hrnOutcome.place) fallbackStub.debug.hrnCandidateRejectedReasons.push(`place_invalid:${hrnOutcome.place}`);
+              if (!showValid && hrnOutcome.show) fallbackStub.debug.hrnCandidateRejectedReasons.push(`show_invalid:${hrnOutcome.show}`);
+              if (fallbackStub.debug.hrnParsedBy && fallbackStub.debug.hrnParsedBy !== "none") {
+                fallbackStub.debug.hrnParsedBy = "validation_failed";
+              }
+            }
+          }
+          
           // Rebuild summary with final outcome
           try {
             fallbackStub.summary = buildSummary({
@@ -2563,8 +3733,15 @@ export default async function handler(req, res) {
           fallbackStub.debug = { ...fallbackStub.debug, ...equibaseDebug };
 
           if (equibaseOutcome) {
-            fallbackStub.outcome = equibaseOutcome;
-            fallbackStub.ok = true;
+            // CRITICAL: Only copy win/place/show properties - never spread entire object which might contain ok
+            fallbackStub.outcome = {
+              win: equibaseOutcome?.win || "",
+              place: equibaseOutcome?.place || "",
+              show: equibaseOutcome?.show || "",
+            };
+            // Defensive cleanup - ensure no ok property
+            delete fallbackStub.outcome.ok;
+            fallbackStub.ok = Boolean(true); // Explicitly boolean
             fallbackStub.step = "verify_race_fallback_equibase";
             
             // Recompute hits if we have predicted values
@@ -2611,12 +3788,53 @@ export default async function handler(req, res) {
         }
       }
 
-      await logVerifyResult(fallbackStub);
-      return res.status(200).json({
+      // CRITICAL: Recompute ok from outcome - NEVER trust existing fallbackStub.ok value
+      // Clean outcome first to remove any ok property contamination
+      const finalOutcome = fallbackStub.outcome || { win: "", place: "", show: "" };
+      const cleanFallbackOutcome = {
+        win: (finalOutcome.win && typeof finalOutcome.win === 'string') ? finalOutcome.win : "",
+        place: (finalOutcome.place && typeof finalOutcome.place === 'string') ? finalOutcome.place : "",
+        show: (finalOutcome.show && typeof finalOutcome.show === 'string') ? finalOutcome.show : "",
+      };
+      // Explicitly delete ok if it exists
+      delete cleanFallbackOutcome.ok;
+      
+      // Recompute ok from cleaned outcome - this is the ONLY source of truth
+      const hasValidOutcome = Boolean(
+        cleanFallbackOutcome.win && 
+        cleanFallbackOutcome.place && 
+        cleanFallbackOutcome.show
+      );
+      
+      // CRITICAL: Create new fallbackStub object with recomputed ok - don't mutate existing
+      const finalFallbackStub = {
         ...fallbackStub,
+        ok: hasValidOutcome, // Recomputed from cleaned outcome
+        outcome: cleanFallbackOutcome, // Use cleaned outcome
+      };
+      
+      // CRITICAL: Assert ok is boolean before proceeding (debug guard)
+      if (typeof finalFallbackStub.ok !== 'boolean') {
+        console.error(`[verify_race] CRITICAL BUG: finalFallbackStub.ok is ${typeof finalFallbackStub.ok} (value: ${JSON.stringify(finalFallbackStub.ok)}) after recomputation`);
+        console.error(`[verify_race] Stack:`, new Error().stack);
+        console.error(`[verify_race] Context:`, JSON.stringify({ step: finalFallbackStub.step, outcome: cleanFallbackOutcome, hasValidOutcome }));
+        // Force to boolean based on outcome
+        finalFallbackStub.ok = Boolean(hasValidOutcome);
+        if (!finalFallbackStub.debug) finalFallbackStub.debug = {};
+        finalFallbackStub.debug.okComputationError = `finalFallbackStub.ok was ${typeof finalFallbackStub.ok}, forced to ${finalFallbackStub.ok}`;
+      }
+      
+      await logVerifyResult(finalFallbackStub);
+      // CRITICAL: Ensure ok is always boolean (defensive check against type corruption)
+      const sanitizedFallbackStub = sanitizeResponse(finalFallbackStub);
+      return res.status(200).json({
+        ...sanitizedFallbackStub,
+        bypassedPayGate: bypassedPayGate,
         responseMeta: {
           handlerFile: HANDLER_FILE,
           backendVersion: BACKEND_VERSION,
+          bypassedPayGate: bypassedPayGate,
+          internalBypassAuthorized: internalBypassAuthorized,
         },
       });
     } catch (fullError) {
@@ -2638,7 +3856,7 @@ export default async function handler(req, res) {
         predicted: stub.predicted || predictedFromClient,
         summary: `Full parser attempted but failed: ${errorMsg}. Using stub fallback (Google search only).\n${stub.summary}`,
         debug: {
-          ...stub.debug,
+          ...(stub.debug || {}), // Preserve ALL debug fields from stub (including HRN fields if present)
           fullError: errorMsg,
           fullErrorStack: fullError?.stack || undefined,
           backendVersion: BACKEND_VERSION,
@@ -2649,13 +3867,106 @@ export default async function handler(req, res) {
       // Try HRN fallback if we have track and date
       if (track && canonicalDateIso) {
         const canonicalRaceNo = String(raceNo || "").trim();
-        const { outcome: hrnOutcome, debugExtras: hrnDebug } = await tryHrnFallback(track, canonicalDateIso, canonicalRaceNo, errorStub.debug);
+        const { outcome: hrnOutcome, debugExtras: hrnDebug, httpStatus: hrnHttpStatus, urlAttempted: hrnUrlAttempted } = await tryHrnFallback(track, canonicalDateIso, canonicalRaceNo, errorStub.debug);
         errorStub.debug = { ...errorStub.debug, ...hrnDebug };
 
+        // If HRN fetch was blocked (403/429), return structured error
+        if (hrnHttpStatus === 403 || hrnHttpStatus === 429) {
+          await logVerifyResult({
+            ...errorStub,
+            ok: false,
+            step: "fetch_results",
+            httpStatus: hrnHttpStatus,
+            error: `${hrnHttpStatus} from HRN (blocked)`,
+            urlAttempted: hrnUrlAttempted || hrnDebug?.hrnUrl || null,
+          });
+          return res.status(200).json({
+            ok: false,
+            step: "fetch_results",
+            httpStatus: hrnHttpStatus,
+            error: `${hrnHttpStatus} from HRN (blocked)`,
+            urlAttempted: hrnUrlAttempted || hrnDebug?.hrnUrl || null,
+            date: canonicalDateIso,
+            track: track || "",
+            raceNo: canonicalRaceNo || "",
+            query: errorStub.query || "",
+            top: null,
+            outcome: { win: "", place: "", show: "" },
+            predicted: errorStub.predicted || predictedFromClient,
+            hits: {
+              winHit: false,
+              placeHit: false,
+              showHit: false,
+              top3Hit: false,
+            },
+            summary: `HRN fetch blocked (HTTP ${hrnHttpStatus}). Results unavailable.`,
+            debug: errorStub.debug,
+            bypassedPayGate: bypassedPayGate,
+            responseMeta: {
+              handlerFile: HANDLER_FILE,
+              backendVersion: BACKEND_VERSION,
+              bypassedPayGate: bypassedPayGate,
+              internalBypassAuthorized: internalBypassAuthorized,
+            },
+          });
+        }
+
         if (hrnOutcome) {
-          errorStub.outcome = hrnOutcome;
-          errorStub.ok = true;
-          errorStub.step = "verify_race_fallback_hrn";
+          // STRICT VALIDATION: Validate hrnOutcome before accepting it
+          const validateHorseName = (name) => {
+            if (!name || name.length === 0 || name.length < 3 || name.length > 50) return false;
+            if (!/[A-Za-z]/.test(name)) return false;
+            if (name.includes(".") || name.includes("<") || name.includes(">") || name.includes("=")) return false;
+            const nameLower = name.toLowerCase().trim();
+            const jsKeywords = ["datalayer", "dow", "window", "document", "function", "var", "let", "const", "this", "place", "win", "show"];
+            if (jsKeywords.includes(nameLower)) return false;
+            const genericTokens = ["this", "place", "win", "show", "the", "a", "an"];
+            if (genericTokens.includes(nameLower)) return false;
+            if (/[{}()=>]/.test(name) || /^\d+$/.test(name)) return false;
+            return true;
+          };
+          
+          const winValid = validateHorseName(hrnOutcome.win);
+          const placeValid = validateHorseName(hrnOutcome.place);
+          const showValid = validateHorseName(hrnOutcome.show);
+          
+          // Only accept if ALL THREE are validated
+          // CRITICAL: Only copy win/place/show properties - never spread entire object which might contain ok
+          if (winValid && placeValid && showValid && hrnOutcome.win && hrnOutcome.place && hrnOutcome.show) {
+            errorStub.outcome = {
+              win: hrnOutcome.win || "",
+              place: hrnOutcome.place || "",
+              show: hrnOutcome.show || "",
+            };
+            // Defensive cleanup - ensure no ok property
+            delete errorStub.outcome.ok;
+            errorStub.ok = Boolean(true); // Explicitly boolean
+            errorStub.step = "verify_race_fallback_hrn";
+          } else {
+            // Validation failed - clear invalid outcomes and set ok=false
+            errorStub.outcome = {
+              win: winValid && hrnOutcome.win ? hrnOutcome.win : "",
+              place: placeValid && hrnOutcome.place ? hrnOutcome.place : "",
+              show: showValid && hrnOutcome.show ? hrnOutcome.show : "",
+            };
+            // Defensive cleanup - ensure no ok property
+            delete errorStub.outcome.ok;
+            errorStub.ok = Boolean(false); // Explicitly boolean
+            errorStub.step = "verify_race_fallback_hrn_validation_failed";
+            // Update debug to reflect validation failure
+            if (errorStub.debug && hrnDebug) {
+              if (!errorStub.debug.hrnCandidateRejectedReasons) {
+                errorStub.debug.hrnCandidateRejectedReasons = [];
+              }
+              if (!winValid && hrnOutcome.win) errorStub.debug.hrnCandidateRejectedReasons.push(`win_invalid:${hrnOutcome.win}`);
+              if (!placeValid && hrnOutcome.place) errorStub.debug.hrnCandidateRejectedReasons.push(`place_invalid:${hrnOutcome.place}`);
+              if (!showValid && hrnOutcome.show) errorStub.debug.hrnCandidateRejectedReasons.push(`show_invalid:${hrnOutcome.show}`);
+              if (errorStub.debug.hrnParsedBy && errorStub.debug.hrnParsedBy !== "none") {
+                errorStub.debug.hrnParsedBy = "validation_failed";
+              }
+            }
+          }
+          
           // Rebuild summary with final outcome
           try {
             errorStub.summary = buildSummary({
@@ -2675,8 +3986,15 @@ export default async function handler(req, res) {
           errorStub.debug = { ...errorStub.debug, ...equibaseDebug };
 
           if (equibaseOutcome) {
-            errorStub.outcome = equibaseOutcome;
-            errorStub.ok = true;
+            // CRITICAL: Only copy win/place/show properties - never spread entire object which might contain ok
+            errorStub.outcome = {
+              win: equibaseOutcome?.win || "",
+              place: equibaseOutcome?.place || "",
+              show: equibaseOutcome?.show || "",
+            };
+            // Defensive cleanup - ensure no ok property
+            delete errorStub.outcome.ok;
+            errorStub.ok = Boolean(true); // Explicitly boolean
             errorStub.step = "verify_race_fallback_equibase";
             
             // Recompute hits if we have predicted values
@@ -2727,11 +4045,16 @@ export default async function handler(req, res) {
       await addGreenZoneToResponse(errorStub);
       
       await logVerifyResult(errorStub);
+      // CRITICAL: Ensure ok is always boolean (defensive check against type corruption)
+      const sanitizedErrorStub = sanitizeResponse(errorStub);
       return res.status(200).json({
-        ...errorStub,
+        ...sanitizedErrorStub,
+        bypassedPayGate: bypassedPayGate,
         responseMeta: {
           handlerFile: HANDLER_FILE,
           backendVersion: BACKEND_VERSION,
+          bypassedPayGate: bypassedPayGate,
+          internalBypassAuthorized: internalBypassAuthorized,
         },
       });
     }
@@ -2775,10 +4098,19 @@ export default async function handler(req, res) {
       summary: "Verify Race stub encountered an unexpected error, but the handler still returned 200.",
       date: errorDateIso,
       predicted: stub.predicted || errorPredicted,
+      debug: {
+        ...(stub.debug || {}), // Preserve ALL debug fields from stub
+        error: String(err && err.message ? err.message : err),
+        errorStack: err?.stack || undefined,
+        backendVersion: BACKEND_VERSION,
+        handlerFile: HANDLER_FILE,
+      },
     };
     // Add GreenZone (safe, never throws) - even for error cases
     await addGreenZoneToResponse(errorStub);
     // Don't log error cases (ok: false)
-    return res.status(200).json(errorStub);
+    // CRITICAL: Ensure ok is always boolean (defensive check against type corruption)
+    const sanitizedErrorStub = sanitizeResponse(errorStub);
+    return res.status(200).json(sanitizedErrorStub);
   }
 }

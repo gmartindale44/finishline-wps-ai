@@ -1,0 +1,18 @@
+{
+  "horses": [
+    {"name": "Thunder Strike", "odds": "3/1", "post": 3},
+    {"name": "Lightning Bolt", "odds": "5/2", "post": 5},
+    {"name": "Silver Star", "odds": "7/2", "post": 2},
+    {"name": "Dark Moon", "odds": "4/1", "post": 7}
+  ],
+  "track": "Gulfstream Park",
+  "surface": "dirt",
+  "distance_input": "6f",
+  "speedFigs": {
+    "Thunder Strike": 95,
+    "Lightning Bolt": 92,
+    "Silver Star": 88,
+    "Dark Moon": 85
+  }
+}
+

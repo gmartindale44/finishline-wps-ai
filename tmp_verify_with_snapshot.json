@@ -1,0 +1,32 @@
+﻿{
+    "ok":  false,
+    "step":  "manual_verify_error",
+    "track":  "Gulfstream Park",
+    "date":  "2026-01-06",
+    "raceNo":  "8",
+    "outcome":  {
+                    "place":  "Thunder Strike",
+                    "win":  "Lightning Bolt",
+                    "show":  "Silver Star"
+                },
+    "predicted":  {
+                      "win":  "",
+                      "place":  "",
+                      "show":  ""
+                  },
+    "hits":  {
+                 "winHit":  false,
+                 "placeHit":  false,
+                 "showHit":  false,
+                 "top3Hit":  false
+             },
+    "summary":  "Error: Manual verify failed - predmeta is not defined",
+    "debug":  {
+                  "error":  "predmeta is not defined",
+                  "source":  "manual"
+              },
+    "greenZone":  {
+                      "enabled":  false,
+                      "reason":  "error"
+                  }
+}
