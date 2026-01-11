@@ -3065,6 +3065,7 @@ export default async function handler(req, res) {
             backendVersion: BACKEND_VERSION,
             bypassedPayGate: bypassedPayGate,
             internalBypassAuthorized: internalBypassAuthorized,
+            vercelGitCommitSha: process.env.VERCEL_GIT_COMMIT_SHA || null,
           },
         });
       }
