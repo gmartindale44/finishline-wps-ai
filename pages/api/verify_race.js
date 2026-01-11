@@ -481,6 +481,8 @@ async function logVerifyResult(result) {
         logPayload.predsnap_asOf = predmeta.predsnap_asOf;
       }
       // ADDITIVE: Store snapshot debug fields if snapshot feature is enabled
+      // Note: enablePredSnapshots is defined in the outer scope (line 80)
+      const enablePredSnapshots = process.env.ENABLE_PRED_SNAPSHOTS === 'true';
       if (enablePredSnapshots && predmeta.debug) {
         if (!logPayload.debug) logPayload.debug = {};
         logPayload.debug.snapshotKeysFoundCount = predmeta.debug.snapshotKeysFoundCount;
