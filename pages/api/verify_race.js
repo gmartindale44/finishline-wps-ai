@@ -2964,12 +2964,18 @@ export default async function handler(req, res) {
         // Log to Redis and get verification result
         const redisResult = await logVerifyResult(result);
         
-        // Build Redis fingerprint for diagnostics
+        // Build Redis fingerprint for diagnostics (gated for production)
         let redisFingerprint = null;
-        try {
-          const { getRedisFingerprint } = await import('../../lib/redis_fingerprint.js');
-          redisFingerprint = getRedisFingerprint();
-        } catch {}
+        const vercelEnv = process.env.VERCEL_ENV || 'development';
+        const exposeRedisDebug = process.env.EXPOSE_REDIS_DEBUG === 'true';
+        const shouldExposeFingerprint = vercelEnv !== 'production' || exposeRedisDebug;
+        
+        if (shouldExposeFingerprint) {
+          try {
+            const { getRedisFingerprint } = await import('../../lib/redis_fingerprint.js');
+            redisFingerprint = getRedisFingerprint();
+          } catch {}
+        }
         
         // Store redis result in result for responseMeta
         result._redisResult = redisResult;
@@ -3316,12 +3322,18 @@ export default async function handler(req, res) {
         // Log to Redis and get verification result
         const redisResult = await logVerifyResult(validatedResult);
         
-        // Build Redis fingerprint for diagnostics
+        // Build Redis fingerprint for diagnostics (gated for production)
         let redisFingerprint = null;
-        try {
-          const { getRedisFingerprint } = await import('../../lib/redis_fingerprint.js');
-          redisFingerprint = getRedisFingerprint();
-        } catch {}
+        const vercelEnv = process.env.VERCEL_ENV || 'development';
+        const exposeRedisDebug = process.env.EXPOSE_REDIS_DEBUG === 'true';
+        const shouldExposeFingerprint = vercelEnv !== 'production' || exposeRedisDebug;
+        
+        if (shouldExposeFingerprint) {
+          try {
+            const { getRedisFingerprint } = await import('../../lib/redis_fingerprint.js');
+            redisFingerprint = getRedisFingerprint();
+          } catch {}
+        }
         
         // Store redis result in validatedResult for responseMeta
         validatedResult._redisResult = redisResult;
