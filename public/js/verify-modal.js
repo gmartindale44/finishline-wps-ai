@@ -1610,16 +1610,21 @@ async function refreshGreenZone(host, ctx) {
         const actualSuccess = isOkBoolean && isOkTrue;
         
         if (!actualSuccess) {
-          // Build detailed error message
+          // Build detailed error message with priority: message -> error -> code -> debug.error -> summary -> fallback
           let errorMsg = verifyData?.message || verifyData?.error || verifyData?.code || null;
-          if (!errorMsg && verifyData?.debug) {
-            errorMsg = JSON.stringify(verifyData.debug);
+          if (!errorMsg && verifyData?.debug?.error) {
+            errorMsg = verifyData.debug.error;
+          }
+          if (!errorMsg && verifyData?.summary) {
+            errorMsg = verifyData.summary;
           }
           if (!errorMsg) {
             errorMsg = "Unknown error (no message from server). Check Network → verify_race response.";
           }
           
+          // Log HTTP status, raw response, parsed JSON, and typeof ok for debugging
           console.error("[manual_verify] Manual verify failed:", {
+            httpStatus: resp.status,
             ok: verifyData.ok,
             okType: typeof verifyData.ok,
             step: verifyData?.step,
@@ -1628,6 +1633,7 @@ async function refreshGreenZone(host, ctx) {
             code: verifyData?.code,
             debug: verifyData?.debug,
             summary: verifyData?.summary,
+            responseMeta: verifyData?.responseMeta,
           });
           
           alert("Manual verify failed: " + errorMsg);

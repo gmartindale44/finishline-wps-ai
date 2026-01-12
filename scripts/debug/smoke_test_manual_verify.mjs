@@ -66,22 +66,19 @@ async function smokeTest() {
     console.log(JSON.stringify(responseJson, null, 2));
     console.log("\n[smoke_test] Analysis:\n");
     
-    // Check for ReferenceError
-    if (responseJson.summary && responseJson.summary.includes("predmeta is not defined")) {
-      console.error(`[smoke_test] ❌ FAILED: Response summary contains "predmeta is not defined"`);
-      console.error(`[smoke_test] Summary: ${responseJson.summary}`);
-      process.exit(1);
-    }
-    
-    if (responseJson.debug && responseJson.debug.error && responseJson.debug.error.includes("predmeta is not defined")) {
-      console.error(`[smoke_test] ❌ FAILED: Debug.error contains "predmeta is not defined"`);
-      console.error(`[smoke_test] Debug.error: ${responseJson.debug.error}`);
-      process.exit(1);
-    }
-    
-    if (responseJson.error && responseJson.error.includes("predmeta is not defined")) {
-      console.error(`[smoke_test] ❌ FAILED: Error field contains "predmeta is not defined"`);
-      console.error(`[smoke_test] Error: ${responseJson.error}`);
+    // Check for ReferenceError (fail immediately if found anywhere in response)
+    const responseStr = JSON.stringify(responseJson);
+    if (responseStr.includes("predmeta is not defined")) {
+      console.error(`[smoke_test] ❌ FAILED: Response contains "predmeta is not defined"`);
+      if (responseJson.summary && responseJson.summary.includes("predmeta is not defined")) {
+        console.error(`[smoke_test] Summary: ${responseJson.summary}`);
+      }
+      if (responseJson.debug?.error && responseJson.debug.error.includes("predmeta is not defined")) {
+        console.error(`[smoke_test] Debug.error: ${responseJson.debug.error}`);
+      }
+      if (responseJson.error && responseJson.error.includes("predmeta is not defined")) {
+        console.error(`[smoke_test] Error: ${responseJson.error}`);
+      }
       process.exit(1);
     }
     
@@ -91,6 +88,28 @@ async function smokeTest() {
       process.exit(1);
     }
     console.log(`[smoke_test] ✅ HTTP Status: ${response.status} (OK)`);
+    
+    // Check responseMeta fields (deployment proof)
+    if (responseJson.responseMeta) {
+      console.log(`[smoke_test] ✅ responseMeta present`);
+      if (responseJson.responseMeta.vercelCommit) {
+        console.log(`[smoke_test] ✅ responseMeta.vercelCommit: ${responseJson.responseMeta.vercelCommit}`);
+      } else {
+        console.warn(`[smoke_test] ⚠️  responseMeta.vercelCommit missing`);
+      }
+      if (responseJson.responseMeta.vercelEnv !== undefined) {
+        console.log(`[smoke_test] ✅ responseMeta.vercelEnv: ${responseJson.responseMeta.vercelEnv}`);
+      } else {
+        console.warn(`[smoke_test] ⚠️  responseMeta.vercelEnv missing`);
+      }
+      if (responseJson.responseMeta.nodeEnv !== undefined) {
+        console.log(`[smoke_test] ✅ responseMeta.nodeEnv: ${responseJson.responseMeta.nodeEnv}`);
+      } else {
+        console.warn(`[smoke_test] ⚠️  responseMeta.nodeEnv missing`);
+      }
+    } else {
+      console.warn(`[smoke_test] ⚠️  responseMeta missing`);
+    }
     
     // Check for success
     if (responseJson.ok === true) {
@@ -112,16 +131,11 @@ async function smokeTest() {
       console.warn(`[smoke_test] ⚠️  step: "${responseJson.step}" (expected "manual_verify")`);
     }
     
-    // Check for ReferenceError in any field
-    const responseStr = JSON.stringify(responseJson);
-    if (responseStr.includes("predmeta is not defined")) {
-      console.error(`[smoke_test] ❌ FAILED: Response contains "predmeta is not defined" somewhere`);
-      process.exit(1);
-    }
-    
     console.log(`[smoke_test] ✅ No "predmeta is not defined" error found in response`);
     console.log(`\n[smoke_test] ✅ PASSED: Manual verify fix is working correctly`);
-    console.log(`[smoke_test] Next: Verify key should exist in Upstash for raceId: meadowlands-2026-01-11-unknown-r7`);
+    if (responseJson.responseMeta?.vercelCommit) {
+      console.log(`[smoke_test] Deployment commit: ${responseJson.responseMeta.vercelCommit}`);
+    }
     
   } catch (err) {
     console.error(`[smoke_test] ❌ FAILED: Network or parsing error: ${err.message}`);

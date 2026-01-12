@@ -1,0 +1,409 @@
+{
+  "verifyKeys": [
+    {
+      "key": "fl:verify:charles-town-races-2025-12-09-unknown-r6",
+      "payload": {
+        "track": "Charles Town Races",
+        "date": "2025-12-09",
+        "raceNo": "6",
+        "ok": true,
+        "outcome": {
+          "win": "Labero",
+          "place": "Fire the Rocket",
+          "show": "Camco Laraido"
+        },
+        "predicted": {
+          "win": "Camco Laraido",
+          "place": "Labero",
+          "show": "Ma Barker"
+        },
+        "debug": {},
+        "step": "manual_verify"
+      },
+      "ttlSeconds": null,
+      "ttlHuman": "No expiration",
+      "hasPredmeta": false
+    },
+    {
+      "key": "fl:verify:charles-town-2026-01-03-unknown-r8",
+      "payload": {
+        "track": "Charles Town",
+        "date": "2026-01-03",
+        "raceNo": "8",
+        "ok": true,
+        "outcome": {
+          "win": "No Direction",
+          "place": "Sweet Lime",
+          "show": "I'd Rather Not"
+        },
+        "predicted": {
+          "win": "Brother Conway",
+          "place": "Social Chic",
+          "show": "Kaladin"
+        },
+        "confidence_pct": 92,
+        "t3m_pct": 48,
+        "top3_list": [
+          "Brother Conway",
+          "Social Chic",
+          "Kaladin"
+        ],
+        "debug": {},
+        "step": "verify_race"
+      },
+      "ttlSeconds": 7115788,
+      "ttlHuman": "82 days, 8 hours",
+      "hasPredmeta": true
+    },
+    {
+      "key": "fl:verify:charles-town-2026-01-03-unknown-r3",
+      "payload": {
+        "track": "Charles Town",
+        "date": "2026-01-03",
+        "raceNo": "3",
+        "ok": true,
+        "outcome": {
+          "win": "Rocket Appeal",
+          "place": "Auburn Mill",
+          "show": "Hopping Henry"
+        },
+        "predicted": {
+          "win": "Hopping Henry",
+          "place": "Auburn Mill",
+          "show": "Colt Rock"
+        },
+        "confidence_pct": 97,
+        "t3m_pct": 43,
+        "top3_list": [
+          "Hopping Henry",
+          "Auburn Mill",
+          "Colt Rock"
+        ],
+        "debug": {},
+        "step": "verify_race"
+      },
+      "ttlSeconds": 7157247,
+      "ttlHuman": "82 days, 20 hours",
+      "hasPredmeta": true
+    },
+    {
+      "key": "fl:verify:charles-town-2026-01-03-unknown-r2",
+      "payload": {
+        "track": "Charles Town",
+        "date": "2026-01-03",
+        "raceNo": "2",
+        "ok": true,
+        "outcome": {
+          "win": "Collegeville Queen",
+          "place": "Miss Shack Attack",
+          "show": "Cajun Prime"
+        },
+        "predicted": {
+          "win": "Fifth of June",
+          "place": "Citified",
+          "show": "Collegeville Queen"
+        },
+        "confidence_pct": 92,
+        "t3m_pct": 48,
+        "top3_list": [
+          "Fifth of June",
+          "Citified",
+          "Collegeville Queen"
+        ],
+        "debug": {},
+        "step": "verify_race"
+      },
+      "ttlSeconds": 7157016,
+      "ttlHuman": "82 days, 20 hours",
+      "hasPredmeta": true
+    },
+    {
+      "key": "fl:verify:charles-town-2026-01-02-unknown-r4",
+      "payload": {
+        "track": "Charles Town",
+        "date": "2026-01-02",
+        "raceNo": "4",
+        "ok": true,
+        "outcome": {
+          "win": "No Mo Muffins",
+          "place": "Peaceful Union",
+          "show": "Hurricane Lynn"
+        },
+        "predicted": {
+          "win": "No Mo Muffins",
+          "place": "Georgia Rain",
+          "show": "Rhenski"
+        },
+        "confidence_pct": 97,
+        "t3m_pct": 39,
+        "top3_list": [
+          "No Mo Muffins",
+          "Georgia Rain",
+          "Rhenski"
+        ],
+        "debug": {},
+        "step": "verify_race"
+      },
+      "ttlSeconds": 7081903,
+      "ttlHuman": "81 days, 23 hours",
+      "hasPredmeta": true
+    },
+    {
+      "key": "fl:verify:charles-town-2026-01-02-unknown-r3",
+      "payload": {
+        "track": "Charles Town",
+        "date": "2026-01-02",
+        "raceNo": "3",
+        "ok": true,
+        "outcome": {
+          "win": "Flying to Neptune",
+          "place": "True Buckpassing",
+          "show": "Camelia Rod"
+        },
+        "predicted": {
+          "win": "Flying to Neptune",
+          "place": "Arditamente",
+          "show": "Another Fine Juba"
+        },
+        "confidence_pct": 97,
+        "t3m_pct": 39,
+        "top3_list": [
+          "Flying to Neptune",
+          "Arditamente",
+          "Another Fine Juba"
+        ],
+        "debug": {},
+        "step": "verify_race"
+      },
+      "ttlSeconds": 7080870,
+      "ttlHuman": "81 days, 22 hours",
+      "hasPredmeta": true
+    },
+    {
+      "key": "fl:verify:charles-town-2026-01-02-unknown-r2",
+      "payload": {
+        "track": "Charles Town",
+        "date": "2026-01-02",
+        "raceNo": "2",
+        "ok": true,
+        "outcome": {
+          "win": "Love Is Wicked",
+          "place": "Highly Potent",
+          "show": "Powered by Love"
+        },
+        "predicted": {
+          "win": "Sharpasadiamond",
+          "place": "Boundforabruisin",
+          "show": "Love Is Wicked"
+        },
+        "confidence_pct": 84,
+        "t3m_pct": 54,
+        "top3_list": [
+          "Sharpasadiamond",
+          "Boundforbruisin",
+          "Love Is Wicked"
+        ],
+        "debug": {},
+        "step": "verify_race"
+      },
+      "ttlSeconds": 7079441,
+      "ttlHuman": "81 days, 22 hours",
+      "hasPredmeta": true
+    },
+    {
+      "key": "fl:verify:charles-town-2025-12-13-unknown-r6",
+      "payload": {
+        "track": "Charles Town",
+        "date": "2025-12-13",
+        "raceNo": "6",
+        "ok": true,
+        "outcome": {
+          "win": "Jeannette the Jet",
+          "place": "Aim's Redirect",
+          "show": "R Special"
+        },
+        "predicted": {
+          "win": "Classy Bay",
+          "place": "Barapha",
+          "show": "R Special"
+        },
+        "debug": {},
+        "step": "manual_verify"
+      },
+      "ttlSeconds": null,
+      "ttlHuman": "No expiration",
+      "hasPredmeta": false
+    },
+    {
+      "key": "fl:verify:charles-town-2025-12-05-unknown-r1",
+      "payload": {
+        "track": "Charles Town",
+        "date": "2025-12-05",
+        "raceNo": "1",
+        "ok": true,
+        "outcome": {
+          "win": "Sassy Maxine",
+          "place": "Impetus Echo (GB)",
+          "show": "Lilliput"
+        },
+        "predicted": {
+          "win": "Lilliput",
+          "place": "Sassy Maxine",
+          "show": "Bold Look"
+        },
+        "debug": {},
+        "step": "verify_race"
+      },
+      "ttlSeconds": null,
+      "ttlHuman": "No expiration",
+      "hasPredmeta": false
+    },
+    {
+      "key": "fl:verify:charles-town-2025-12-03-unknown-r3",
+      "payload": {
+        "track": "Charles Town",
+        "date": "2025-12-03",
+        "raceNo": "3",
+        "ok": true,
+        "outcome": {
+          "win": "Head of the Class",
+          "place": "Hardly Ever Better",
+          "show": "Heaven's Got Fire"
+        },
+        "predicted": {
+          "win": "Heaven's Got Fire",
+          "place": "Head of the Class",
+          "show": "Beechmont"
+        },
+        "debug": {},
+        "step": "verify_race"
+      },
+      "ttlSeconds": null,
+      "ttlHuman": "No expiration",
+      "hasPredmeta": false
+    }
+  ],
+  "predmetaKeys": [
+    {
+      "key": "fl:predmeta:2026-01-10|charles town|1",
+      "payload": {
+        "track": "charles town",
+        "date": "2026-01-10",
+        "raceNo": "1",
+        "confidence_pct": 84,
+        "t3m_pct": 54,
+        "top3_list": [
+          "Moonlit Notion",
+          "Pleasenthanku",
+          "On the Come Up"
+        ]
+      },
+      "ttlSeconds": 3880490,
+      "ttlHuman": "44 days, 21 hours"
+    },
+    {
+      "key": "fl:predmeta:2026-01-03|charles town|8",
+      "payload": {
+        "track": "charles town",
+        "date": "2026-01-03",
+        "raceNo": "8",
+        "confidence_pct": 92,
+        "t3m_pct": 48,
+        "top3_list": [
+          "Brother Conway",
+          "Social Chic",
+          "Kaladin"
+        ]
+      },
+      "ttlSeconds": 3227766,
+      "ttlHuman": "37 days, 8 hours"
+    },
+    {
+      "key": "fl:predmeta:2026-01-03|charles town|3",
+      "payload": {
+        "track": "charles town",
+        "date": "2026-01-03",
+        "raceNo": "3",
+        "confidence_pct": 97,
+        "t3m_pct": 43,
+        "top3_list": [
+          "Hopping Henry",
+          "Auburn Mill",
+          "Colt Rock"
+        ]
+      },
+      "ttlSeconds": 3269246,
+      "ttlHuman": "37 days, 20 hours"
+    },
+    {
+      "key": "fl:predmeta:2026-01-03|charles town|2",
+      "payload": {
+        "track": "charles town",
+        "date": "2026-01-03",
+        "raceNo": "2",
+        "confidence_pct": 92,
+        "t3m_pct": 48,
+        "top3_list": [
+          "Fifth of June",
+          "Citified",
+          "Collegeville Queen"
+        ]
+      },
+      "ttlSeconds": 3268845,
+      "ttlHuman": "37 days, 20 hours"
+    },
+    {
+      "key": "fl:predmeta:2026-01-02|charles town|4",
+      "payload": {
+        "track": "charles town",
+        "date": "2026-01-02",
+        "raceNo": "4",
+        "confidence_pct": 97,
+        "t3m_pct": 39,
+        "top3_list": [
+          "No Mo Muffins",
+          "Georgia Rain",
+          "Rhenski"
+        ]
+      },
+      "ttlSeconds": 3193902,
+      "ttlHuman": "36 days, 23 hours"
+    },
+    {
+      "key": "fl:predmeta:2026-01-02|charles town|3",
+      "payload": {
+        "track": "charles town",
+        "date": "2026-01-02",
+        "raceNo": "3",
+        "confidence_pct": 97,
+        "t3m_pct": 39,
+        "top3_list": [
+          "Flying to Neptune",
+          "Arditamente",
+          "Another Fine Juba"
+        ]
+      },
+      "ttlSeconds": 3192869,
+      "ttlHuman": "36 days, 22 hours"
+    },
+    {
+      "key": "fl:predmeta:2026-01-02|charles town|2",
+      "payload": {
+        "track": "charles town",
+        "date": "2026-01-02",
+        "raceNo": "2",
+        "confidence_pct": 84,
+        "t3m_pct": 54,
+        "top3_list": [
+          "Sharpasadiamond",
+          "Boundforbruisin",
+          "Love Is Wicked"
+        ]
+      },
+      "ttlSeconds": 3190936,
+      "ttlHuman": "36 days, 22 hours"
+    }
+  ],
+  "predsnapKeys": [],
+  "errors": []
+}
