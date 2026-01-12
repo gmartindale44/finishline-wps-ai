@@ -2731,6 +2731,19 @@ export default async function handler(req, res) {
     }
 
     const body = await safeParseBody(req);
+    
+    // CRITICAL: Sanitize request body - explicitly delete ok field to prevent injection
+    // Never trust client-provided ok field - always compute it from outcome validation
+    if (body && typeof body === 'object') {
+      delete body.ok; // Prevent client from injecting ok field
+      if (body.outcome && typeof body.outcome === 'object') {
+        delete body.outcome.ok; // Prevent client from injecting ok in outcome
+      }
+      if (body.predicted && typeof body.predicted === 'object') {
+        delete body.predicted.ok; // Prevent client from injecting ok in predicted
+      }
+    }
+    
     const track = (body.track || body.trackName || "").trim();
     
     // Normalize predictions from request body (handles multiple formats)
@@ -3060,7 +3073,17 @@ export default async function handler(req, res) {
           track,
           date: canonicalDateIso,
           raceNo,
-          outcome: body.outcome || { win: "", place: "", show: "" },
+          outcome: (() => {
+            const rawOutcome = body.outcome || { win: "", place: "", show: "" };
+            // CRITICAL: Clean outcome - only copy win/place/show, explicitly delete ok
+            const cleanOutcome = {
+              win: (rawOutcome.win || "").trim(),
+              place: (rawOutcome.place || "").trim(),
+              show: (rawOutcome.show || "").trim(),
+            };
+            delete cleanOutcome.ok; // Defensive cleanup
+            return cleanOutcome;
+          })(),
           predicted: predictedFromClient,
           hits: {
             winHit: false,

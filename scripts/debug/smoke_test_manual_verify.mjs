@@ -82,6 +82,22 @@ async function smokeTest() {
       process.exit(1);
     }
     
+    // Check for ok type corruption (okTypeError indicates ok was coerced from non-boolean)
+    if (responseJson.debug?.okTypeError) {
+      console.error(`[smoke_test] ❌ FAILED: ok field was corrupted (debug.okTypeError exists)`);
+      console.error(`[smoke_test] okTypeError: ${responseJson.debug.okTypeError}`);
+      console.error(`[smoke_test] okOriginalType: ${responseJson.debug.okOriginalType}`);
+      console.error(`[smoke_test] okOriginalValue: ${JSON.stringify(responseJson.debug.okOriginalValue)}`);
+      process.exit(1);
+    }
+    
+    // Check typeof ok is boolean
+    if (typeof responseJson.ok !== 'boolean') {
+      console.error(`[smoke_test] ❌ FAILED: ok is not boolean (type: ${typeof responseJson.ok}, value: ${JSON.stringify(responseJson.ok)})`);
+      process.exit(1);
+    }
+    console.log(`[smoke_test] ✅ ok is boolean (type: ${typeof responseJson.ok})`);
+    
     // Check HTTP status
     if (response.status !== 200) {
       console.error(`[smoke_test] ❌ FAILED: HTTP status ${response.status} (expected 200)`);
