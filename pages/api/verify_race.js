@@ -2647,6 +2647,21 @@ async function buildStubResponse({ track, date, raceNo, predicted = {}, uiDateRa
 }
 
 export default async function handler(req, res) {
+  // CRITICAL: Declare predmeta at handler scope to prevent ReferenceError in any code path
+  // This ensures predmeta is always defined (even if null) in both manual and auto verify paths
+  let predmeta = null;
+  
+  // Helper function to build responseMeta consistently
+  const buildResponseMeta = (baseMeta = {}) => ({
+    ...baseMeta,
+    vercelEnv: process.env.VERCEL_ENV || null,
+    vercelCommit: process.env.VERCEL_GIT_COMMIT_SHA || 
+                  process.env.VERCEL_GITHUB_COMMIT_SHA || 
+                  process.env.VERCEL_GIT_COMMIT_REF || 
+                  null,
+    nodeEnv: process.env.NODE_ENV || null,
+  });
+  
   // Check for internal/system flag to bypass PayGate (for verify_backfill batch jobs)
   // Require BOTH internal header AND secret to prevent spoofing
   const internalHeader = req.headers['x-finishline-internal'] === 'true';
@@ -2825,9 +2840,9 @@ export default async function handler(req, res) {
     // Manual verify branch - handle manual outcome entry
     if (body.mode === "manual" && body.outcome) {
       try {
-        // CRITICAL: Initialize predmeta to null (manual verify doesn't fetch predmeta, but code may reference it)
-        // This prevents ReferenceError when predmeta is referenced below
-        const predmeta = null;
+        // CRITICAL: predmeta is already declared at handler scope (line 2650)
+        // For manual verify, predmeta remains null (manual verify doesn't fetch predmeta)
+        // This ensures predmeta is never an undeclared identifier
         
         // CRITICAL: Clean outcome from body - only copy win/place/show, explicitly delete ok if present
         const bodyOutcome = body.outcome || {};
@@ -3026,15 +3041,15 @@ export default async function handler(req, res) {
         return res.status(200).json({
           ...sanitizedResult,
           bypassedPayGate: bypassedPayGate,
-          responseMeta: {
+          responseMeta: buildResponseMeta({
             handlerFile: HANDLER_FILE,
             backendVersion: BACKEND_VERSION,
             bypassedPayGate: bypassedPayGate,
             internalBypassAuthorized: internalBypassAuthorized,
             redis: finalResult._redisResult || null,
             redisFingerprint: finalResult._redisFingerprint || null,
-            vercelGitCommitSha: process.env.VERCEL_GIT_COMMIT_SHA || null,
-          }
+            vercelGitCommitSha: process.env.VERCEL_GIT_COMMIT_SHA || null, // Keep for backward compatibility
+          })
         });
       } catch (error) {
         console.error("[verify_race] Manual verify error:", error);
@@ -3060,13 +3075,13 @@ export default async function handler(req, res) {
           },
           greenZone: { enabled: false, reason: "error" },
           bypassedPayGate: bypassedPayGate,
-          responseMeta: {
+          responseMeta: buildResponseMeta({
             handlerFile: HANDLER_FILE,
             backendVersion: BACKEND_VERSION,
             bypassedPayGate: bypassedPayGate,
             internalBypassAuthorized: internalBypassAuthorized,
-            vercelGitCommitSha: process.env.VERCEL_GIT_COMMIT_SHA || null,
-          },
+            vercelGitCommitSha: process.env.VERCEL_GIT_COMMIT_SHA || null, // Keep for backward compatibility
+          }),
         });
       }
     }
