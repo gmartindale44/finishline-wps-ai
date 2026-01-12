@@ -1636,6 +1636,11 @@ async function refreshGreenZone(host, ctx) {
             responseMeta: verifyData?.responseMeta,
           });
           
+          // Log responseMeta commit info for debugging
+          const commitInfo = verifyData?.responseMeta?.vercelCommit || verifyData?.responseMeta?.vercelGitCommitSha || 'unknown';
+          const envInfo = verifyData?.responseMeta?.vercelEnv || 'unknown';
+          console.log(`[manual_verify] Error occurred on commit: ${commitInfo}, env: ${envInfo}`);
+          
           alert("Manual verify failed: " + errorMsg);
           if (statusNode) {
             statusNode.textContent = "Error";

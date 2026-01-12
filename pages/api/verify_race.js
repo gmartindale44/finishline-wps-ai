@@ -3091,6 +3091,8 @@ export default async function handler(req, res) {
             showHit: false,
             top3Hit: false,
           },
+          message: "Manual verify failed - " + (error?.message || "Unknown error"),
+          error: error?.message || String(error) || "Unknown error",
           summary: "Error: Manual verify failed - " + (error?.message || "Unknown error"),
           debug: {
             error: error?.message || String(error),
