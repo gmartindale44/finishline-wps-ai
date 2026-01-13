@@ -130,11 +130,16 @@ async function reproTest() {
     // Check debug fields (error diagnostics)
     if (responseJson.debug) {
       if (responseJson.debug.name) {
-        console.log(`[repro_ui] Debug.error.name: ${responseJson.debug.name}`);
+        console.log(`[repro_ui] Debug.name: ${responseJson.debug.name}`);
+      }
+      if (responseJson.debug.error) {
+        console.log(`[repro_ui] Debug.error: ${responseJson.debug.error}`);
       }
       if (responseJson.debug.stack) {
-        console.log(`[repro_ui] Debug.error.stack (first 500 chars):`);
-        console.log(responseJson.debug.stack.slice(0, 500));
+        console.log(`[repro_ui] Debug.stack (first 800 chars):`);
+        console.log(responseJson.debug.stack.slice(0, 800));
+      } else {
+        console.warn(`[repro_ui] ⚠️  Debug.stack missing (should be present in error responses)`);
       }
     }
     

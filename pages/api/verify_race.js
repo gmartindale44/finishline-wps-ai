@@ -2698,11 +2698,12 @@ export default async function handler(req, res) {
           reason: accessCheck.reason,
           step: 'verify_race_error',
           bypassedPayGate: false,
-          responseMeta: {
+          responseMeta: buildResponseMeta({
             handlerFile: HANDLER_FILE,
             backendVersion: BACKEND_VERSION,
+            bypassedPayGate: false,
             internalBypassAuthorized: false
-          }
+          })
         });
       }
     } catch (paygateErr) {
@@ -2859,9 +2860,10 @@ export default async function handler(req, res) {
     // Manual verify branch - handle manual outcome entry
     if (body.mode === "manual" && body.outcome) {
       try {
-        // CRITICAL: predmeta is already declared at handler scope (line 2650)
-        // For manual verify, predmeta remains null (manual verify doesn't fetch predmeta)
-        // This ensures predmeta is never an undeclared identifier
+        // CRITICAL: predmeta is already declared at handler scope (line 2652)
+        // For manual verify, explicitly set predmeta to null (manual verify doesn't fetch predmeta)
+        // This ensures predmeta is never an undeclared identifier in ANY code path
+        predmeta = null; // Explicit assignment for defensive programming
         
         // CRITICAL: Clean outcome from body - only copy win/place/show, explicitly delete ok if present
         const bodyOutcome = body.outcome || {};
@@ -3104,9 +3106,9 @@ export default async function handler(req, res) {
             showHit: false,
             top3Hit: false,
           },
-          message: "Manual verify failed - " + (error?.message || "Unknown error"),
+          message: `Manual verify failed: ${error?.message || "Unknown error"}`,
           error: error?.message || String(error) || "Unknown error",
-          summary: "Error: Manual verify failed - " + (error?.message || "Unknown error"),
+          summary: `Error: Manual verify failed - ${error?.message || "Unknown error"}`,
           debug: {
             error: error?.message || String(error),
             name: error?.name || "UnknownError",
