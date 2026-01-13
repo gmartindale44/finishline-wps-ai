@@ -2658,13 +2658,13 @@ export default async function handler(req, res) {
                          process.env.VERCEL_GIT_COMMIT_REF || 
                          null;
     const vercelEnv = process.env.VERCEL_ENV || null;
-    const commitShort = vercelCommit ? vercelCommit.slice(0, 7) : "no_sha";
+    const commitShort7 = vercelCommit ? vercelCommit.slice(0, 7) : "no-sha"; // 7 chars to match Vercel UI
     return {
       ...baseMeta,
       vercelEnv,
       vercelCommit,
       nodeEnv: process.env.NODE_ENV || null,
-      buildStamp: `${vercelEnv || "unknown"}-${commitShort}`, // For quick deployment verification
+      buildStamp: `${vercelEnv || "unknown"}-${commitShort7}`, // Format: preview-ffdd8bf (7-char SHA matches Vercel)
     };
   };
   
@@ -3071,7 +3071,14 @@ export default async function handler(req, res) {
           })
         });
       } catch (error) {
+        // Log full error details to server logs for diagnostics
+        console.error("[manual_verify_error]", {
+          name: error?.name,
+          message: error?.message,
+          stack: error?.stack,
+        });
         console.error("[verify_race] Manual verify error:", error);
+        
         // Return error response (still 200 to match never-500 policy)
         return res.status(200).json({
           ok: false,
@@ -3105,6 +3112,7 @@ export default async function handler(req, res) {
             name: error?.name || "UnknownError",
             stack: error?.stack || null, // Full stack trace for diagnostics
             source: "manual",
+            catcher: "manual_verify_catch_v2", // Fingerprint to identify which catch block fired
           },
           greenZone: { enabled: false, reason: "error" },
           bypassedPayGate: bypassedPayGate,
