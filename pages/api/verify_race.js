@@ -2652,15 +2652,21 @@ export default async function handler(req, res) {
   let predmeta = null;
   
   // Helper function to build responseMeta consistently
-  const buildResponseMeta = (baseMeta = {}) => ({
-    ...baseMeta,
-    vercelEnv: process.env.VERCEL_ENV || null,
-    vercelCommit: process.env.VERCEL_GIT_COMMIT_SHA || 
-                  process.env.VERCEL_GITHUB_COMMIT_SHA || 
-                  process.env.VERCEL_GIT_COMMIT_REF || 
-                  null,
-    nodeEnv: process.env.NODE_ENV || null,
-  });
+  const buildResponseMeta = (baseMeta = {}) => {
+    const vercelCommit = process.env.VERCEL_GIT_COMMIT_SHA || 
+                         process.env.VERCEL_GITHUB_COMMIT_SHA || 
+                         process.env.VERCEL_GIT_COMMIT_REF || 
+                         null;
+    const vercelEnv = process.env.VERCEL_ENV || null;
+    const commitShort = vercelCommit ? vercelCommit.slice(0, 7) : "no_sha";
+    return {
+      ...baseMeta,
+      vercelEnv,
+      vercelCommit,
+      nodeEnv: process.env.NODE_ENV || null,
+      buildStamp: `${vercelEnv || "unknown"}-${commitShort}`, // For quick deployment verification
+    };
+  };
   
   // Check for internal/system flag to bypass PayGate (for verify_backfill batch jobs)
   // Require BOTH internal header AND secret to prevent spoofing
@@ -3096,6 +3102,8 @@ export default async function handler(req, res) {
           summary: "Error: Manual verify failed - " + (error?.message || "Unknown error"),
           debug: {
             error: error?.message || String(error),
+            name: error?.name || "UnknownError",
+            stack: error?.stack || null, // Full stack trace for diagnostics
             source: "manual",
           },
           greenZone: { enabled: false, reason: "error" },

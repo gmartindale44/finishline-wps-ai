@@ -108,6 +108,11 @@ async function reproTest() {
       } else {
         console.warn(`[repro_ui] ⚠️  responseMeta.vercelCommit and vercelGitCommitSha missing`);
       }
+      if (responseJson.responseMeta.buildStamp) {
+        console.log(`[repro_ui] ✅ responseMeta.buildStamp: ${responseJson.responseMeta.buildStamp}`);
+      } else {
+        console.warn(`[repro_ui] ⚠️  responseMeta.buildStamp missing`);
+      }
       if (responseJson.responseMeta.vercelEnv !== undefined) {
         console.log(`[repro_ui] ✅ responseMeta.vercelEnv: ${responseJson.responseMeta.vercelEnv}`);
       } else {
@@ -120,6 +125,17 @@ async function reproTest() {
       }
     } else {
       console.warn(`[repro_ui] ⚠️  responseMeta missing`);
+    }
+    
+    // Check debug fields (error diagnostics)
+    if (responseJson.debug) {
+      if (responseJson.debug.name) {
+        console.log(`[repro_ui] Debug.error.name: ${responseJson.debug.name}`);
+      }
+      if (responseJson.debug.stack) {
+        console.log(`[repro_ui] Debug.error.stack (first 500 chars):`);
+        console.log(responseJson.debug.stack.slice(0, 500));
+      }
     }
     
     // Check for success
