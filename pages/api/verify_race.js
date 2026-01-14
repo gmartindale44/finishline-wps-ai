@@ -27,9 +27,28 @@ async function logVerifyResult(result) {
   // Log ALL verify responses (including ok:false), so we can analyze coverage and failures.
   // Still keep the ok flag in the payload so calibration or analysis can filter later.
   if (!result) {
-    return;
+    return {
+      verifyKey: null,
+      writeOk: false,
+      writeErr: "result is null",
+      readbackOk: false,
+      readbackErr: "result is null",
+      ttlSeconds: null,
+      valueSize: null,
+    };
   }
 
+  // Return object for server-side verification (defined at function scope)
+  let redisResult = {
+    verifyKey: null,
+    writeOk: false,
+    writeErr: null,
+    readbackOk: false,
+    readbackErr: null,
+    ttlSeconds: null,
+    valueSize: null,
+  };
+  
   try {
     const { track, date, raceNo } = result;
 
@@ -462,6 +481,8 @@ async function logVerifyResult(result) {
         logPayload.predsnap_asOf = predmeta.predsnap_asOf;
       }
       // ADDITIVE: Store snapshot debug fields if snapshot feature is enabled
+      // Note: enablePredSnapshots is defined in the outer scope (line 80)
+      const enablePredSnapshots = process.env.ENABLE_PRED_SNAPSHOTS === 'true';
       if (enablePredSnapshots && predmeta.debug) {
         if (!logPayload.debug) logPayload.debug = {};
         logPayload.debug.snapshotKeysFoundCount = predmeta.debug.snapshotKeysFoundCount;
@@ -513,20 +534,66 @@ async function logVerifyResult(result) {
       : (result.ok === true ? "ok_true_incomplete_outcome" : "ok_false_analytics");
     const verifyWritePerformed = true; // We always attempt write
     
+    // Update redisResult (already defined at function scope)
+    redisResult.verifyKey = logKey;
+    redisResult.writeOk = false;
+    redisResult.writeErr = null;
+    redisResult.readbackOk = false;
+    redisResult.readbackErr = null;
+    redisResult.ttlSeconds = null;
+    redisResult.valueSize = null;
+    
     try {
-      const { setex } = await import('../../lib/redis.js');
-      await setex(logKey, 7776000, JSON.stringify(logPayload));
+      const { setex, get } = await import('../../lib/redis.js');
+      const redisModule = await import('../../lib/redis.js');
+      const redis = redisModule.default || redisModule.redis;
+      const valueStr = JSON.stringify(logPayload);
+      await setex(logKey, 7776000, valueStr);
+      
+      // CRITICAL: Immediate readback to verify write succeeded
+      const readbackValue = await get(logKey);
+      
+      // Get TTL using Upstash Redis client directly
+      let readbackTtl = null;
+      try {
+        const { Redis } = await import('@upstash/redis');
+        const redisClient = Redis.fromEnv();
+        readbackTtl = await redisClient.ttl(logKey);
+      } catch (ttlErr) {
+        // TTL check is best-effort, don't fail readback if TTL fails
+        console.warn("[verify-log] TTL check failed (non-critical):", ttlErr?.message);
+      }
+      
+      redisResult.writeOk = true;
+      redisResult.valueSize = valueStr.length;
+      
+      if (readbackValue !== null && readbackValue !== undefined) {
+        redisResult.readbackOk = true;
+        if (readbackTtl !== null && readbackTtl >= 0) {
+          redisResult.ttlSeconds = readbackTtl;
+        } else {
+          redisResult.readbackErr = "TTL check returned null or negative";
+        }
+      } else {
+        redisResult.readbackOk = false;
+        redisResult.readbackErr = "Readback returned null/undefined";
+      }
+      
       logPayload.debug.verifyWriteOk = true;
       logPayload.debug.verifyWriteError = null;
       logPayload.debug.verifyWriteReason = verifyWriteReason;
       // CRITICAL: Update result.debug so it appears in API response
       if (!result.debug) result.debug = {};
       result.debug.wroteToRedis = true;
-      result.debug.verifyKeyWritten = logKey; // Explicit key name written
+      result.debug.verifyKeyWritten = logKey;
       result.debug.verifyWritePerformed = verifyWritePerformed;
       result.debug.verifyWriteReason = verifyWriteReason;
       result.debug.writeResult = { success: true, key: logKey, hasCompleteOutcome };
+      result.debug.redisResult = redisResult; // Add readback result to debug
     } catch (writeErr) {
+      redisResult.writeOk = false;
+      redisResult.writeErr = writeErr?.message || String(writeErr);
+      
       // Track verify write error but don't break user flow
       logPayload.debug.verifyWriteOk = false;
       logPayload.debug.verifyWriteError = writeErr?.message || String(writeErr);
@@ -534,8 +601,8 @@ async function logVerifyResult(result) {
       // CRITICAL: Update result.debug so it appears in API response
       if (!result.debug) result.debug = {};
       result.debug.wroteToRedis = false;
-      result.debug.verifyKeyWritten = logKey; // Key we attempted to write (even if failed)
-      result.debug.verifyWritePerformed = false; // Write was attempted but failed
+      result.debug.verifyKeyWritten = logKey;
+      result.debug.verifyWritePerformed = false;
       result.debug.verifyWriteReason = verifyWriteReason;
       result.debug.writeResult = { 
         success: false, 
@@ -543,12 +610,28 @@ async function logVerifyResult(result) {
         hasCompleteOutcome,
         error: writeErr?.message || String(writeErr) 
       };
+      result.debug.redisResult = redisResult; // Include error details
       console.error("[verify-log] Failed to log verify result", writeErr);
     }
   } catch (err) {
     // IMPORTANT: logging failures must NOT break the user flow
     console.error("[verify-log] Failed to log verify result", err);
+    // Return error result so caller knows write failed
+    return {
+      verifyKey: null,
+      writeOk: false,
+      writeErr: err?.message || String(err),
+      readbackOk: false,
+      readbackErr: err?.message || String(err),
+      ttlSeconds: null,
+      valueSize: null,
+    };
   }
+  
+  // CRITICAL: Return redisResult so caller can include it in responseMeta
+  // Note: redisResult is defined inside the try block, so if we reach here,
+  // it means the try block completed and redisResult is available
+  return redisResult;
 }
 
 /**
@@ -2490,10 +2573,11 @@ async function buildStubResponse({ track, date, raceNo, predicted = {}, uiDateRa
     place: (outcome && typeof outcome.place === 'string') ? outcome.place : "",
     show: (outcome && typeof outcome.show === 'string') ? outcome.show : "",
   };
-  // Explicitly ensure no ok property exists
+  // Explicitly ensure no ok property exists (defensive cleanup)
   delete cleanOutcome.ok;
   
   // CRITICAL: Final recomputation of ok from cleaned outcome - NEVER trust existing ok variable
+  // ALWAYS compute ok as boolean explicitly to prevent contamination
   // This prevents any corruption from object spreads, destructuring, or variable shadowing
   const finalOk = Boolean(
     cleanOutcome.win && 
@@ -2563,6 +2647,27 @@ async function buildStubResponse({ track, date, raceNo, predicted = {}, uiDateRa
 }
 
 export default async function handler(req, res) {
+  // CRITICAL: Declare predmeta at handler scope to prevent ReferenceError in any code path
+  // This ensures predmeta is always defined (even if null) in both manual and auto verify paths
+  let predmeta = null;
+  
+  // Helper function to build responseMeta consistently
+  const buildResponseMeta = (baseMeta = {}) => {
+    const vercelCommit = process.env.VERCEL_GIT_COMMIT_SHA || 
+                         process.env.VERCEL_GITHUB_COMMIT_SHA || 
+                         process.env.VERCEL_GIT_COMMIT_REF || 
+                         null;
+    const vercelEnv = process.env.VERCEL_ENV || null;
+    const commitShort7 = vercelCommit ? vercelCommit.slice(0, 7) : "no-sha"; // 7 chars to match Vercel UI
+    return {
+      ...baseMeta,
+      vercelEnv,
+      vercelCommit,
+      nodeEnv: process.env.NODE_ENV || null,
+      buildStamp: `${vercelEnv || "unknown"}-${commitShort7}`, // Format: preview-ffdd8bf (7-char SHA matches Vercel)
+    };
+  };
+  
   // Check for internal/system flag to bypass PayGate (for verify_backfill batch jobs)
   // Require BOTH internal header AND secret to prevent spoofing
   const internalHeader = req.headers['x-finishline-internal'] === 'true';
@@ -2593,11 +2698,12 @@ export default async function handler(req, res) {
           reason: accessCheck.reason,
           step: 'verify_race_error',
           bypassedPayGate: false,
-          responseMeta: {
+          responseMeta: buildResponseMeta({
             handlerFile: HANDLER_FILE,
             backendVersion: BACKEND_VERSION,
+            bypassedPayGate: false,
             internalBypassAuthorized: false
-          }
+          })
         });
       }
     } catch (paygateErr) {
@@ -2632,6 +2738,19 @@ export default async function handler(req, res) {
     }
 
     const body = await safeParseBody(req);
+    
+    // CRITICAL: Sanitize request body - explicitly delete ok field to prevent injection
+    // Never trust client-provided ok field - always compute it from outcome validation
+    if (body && typeof body === 'object') {
+      delete body.ok; // Prevent client from injecting ok field
+      if (body.outcome && typeof body.outcome === 'object') {
+        delete body.outcome.ok; // Prevent client from injecting ok in outcome
+      }
+      if (body.predicted && typeof body.predicted === 'object') {
+        delete body.predicted.ok; // Prevent client from injecting ok in predicted
+      }
+    }
+    
     const track = (body.track || body.trackName || "").trim();
     
     // Normalize predictions from request body (handles multiple formats)
@@ -2741,9 +2860,10 @@ export default async function handler(req, res) {
     // Manual verify branch - handle manual outcome entry
     if (body.mode === "manual" && body.outcome) {
       try {
-        // CRITICAL: Initialize predmeta to null (manual verify doesn't fetch predmeta, but code may reference it)
-        // This prevents ReferenceError when predmeta is referenced below
-        const predmeta = null;
+        // CRITICAL: predmeta is already declared at handler scope (line 2652)
+        // For manual verify, explicitly set predmeta to null (manual verify doesn't fetch predmeta)
+        // This ensures predmeta is never an undeclared identifier in ANY code path
+        predmeta = null; // Explicit assignment for defensive programming
         
         // CRITICAL: Clean outcome from body - only copy win/place/show, explicitly delete ok if present
         const bodyOutcome = body.outcome || {};
@@ -2877,8 +2997,25 @@ export default async function handler(req, res) {
         if (top3Mass !== null) result.top3Mass = top3Mass;
         if (body.provider) result.provider = body.provider;
 
-        // Log to Redis
-        await logVerifyResult(result);
+        // Log to Redis and get verification result
+        const redisResult = await logVerifyResult(result);
+        
+        // Build Redis fingerprint for diagnostics (gated for production)
+        let redisFingerprint = null;
+        const vercelEnv = process.env.VERCEL_ENV || 'development';
+        const exposeRedisDebug = process.env.EXPOSE_REDIS_DEBUG === 'true';
+        const shouldExposeFingerprint = vercelEnv !== 'production' || exposeRedisDebug;
+        
+        if (shouldExposeFingerprint) {
+          try {
+            const { getRedisFingerprint } = await import('../../lib/redis_fingerprint.js');
+            redisFingerprint = getRedisFingerprint();
+          } catch {}
+        }
+        
+        // Store redis result in result for responseMeta
+        result._redisResult = redisResult;
+        result._redisFingerprint = redisFingerprint;
 
         // Add GreenZone (safe, never throws)
         await addGreenZoneToResponse(result);
@@ -2925,15 +3062,25 @@ export default async function handler(req, res) {
         return res.status(200).json({
           ...sanitizedResult,
           bypassedPayGate: bypassedPayGate,
-          responseMeta: {
+          responseMeta: buildResponseMeta({
             handlerFile: HANDLER_FILE,
             backendVersion: BACKEND_VERSION,
             bypassedPayGate: bypassedPayGate,
             internalBypassAuthorized: internalBypassAuthorized,
-          }
+            redis: finalResult._redisResult || null,
+            redisFingerprint: finalResult._redisFingerprint || null,
+            vercelGitCommitSha: process.env.VERCEL_GIT_COMMIT_SHA || null, // Keep for backward compatibility
+          })
         });
       } catch (error) {
+        // Log full error details to server logs for diagnostics
+        console.error("[manual_verify_error]", {
+          name: error?.name,
+          message: error?.message,
+          stack: error?.stack,
+        });
         console.error("[verify_race] Manual verify error:", error);
+        
         // Return error response (still 200 to match never-500 policy)
         return res.status(200).json({
           ok: false,
@@ -2941,7 +3088,17 @@ export default async function handler(req, res) {
           track,
           date: canonicalDateIso,
           raceNo,
-          outcome: body.outcome || { win: "", place: "", show: "" },
+          outcome: (() => {
+            const rawOutcome = body.outcome || { win: "", place: "", show: "" };
+            // CRITICAL: Clean outcome - only copy win/place/show, explicitly delete ok
+            const cleanOutcome = {
+              win: (rawOutcome.win || "").trim(),
+              place: (rawOutcome.place || "").trim(),
+              show: (rawOutcome.show || "").trim(),
+            };
+            delete cleanOutcome.ok; // Defensive cleanup
+            return cleanOutcome;
+          })(),
           predicted: predictedFromClient,
           hits: {
             winHit: false,
@@ -2949,19 +3106,25 @@ export default async function handler(req, res) {
             showHit: false,
             top3Hit: false,
           },
-          summary: "Error: Manual verify failed - " + (error?.message || "Unknown error"),
+          message: `Manual verify failed: ${error?.message || "Unknown error"}`,
+          error: error?.message || String(error) || "Unknown error",
+          summary: `Error: Manual verify failed - ${error?.message || "Unknown error"}`,
           debug: {
             error: error?.message || String(error),
+            name: error?.name || "UnknownError",
+            stack: error?.stack || null, // Full stack trace for diagnostics
             source: "manual",
+            catcher: "manual_verify_catch_v2", // Fingerprint to identify which catch block fired
           },
           greenZone: { enabled: false, reason: "error" },
           bypassedPayGate: bypassedPayGate,
-          responseMeta: {
+          responseMeta: buildResponseMeta({
             handlerFile: HANDLER_FILE,
             backendVersion: BACKEND_VERSION,
             bypassedPayGate: bypassedPayGate,
             internalBypassAuthorized: internalBypassAuthorized,
-          },
+            vercelGitCommitSha: process.env.VERCEL_GIT_COMMIT_SHA || null, // Keep for backward compatibility
+          }),
         });
       }
     }
@@ -3216,7 +3379,26 @@ export default async function handler(req, res) {
         // Add GreenZone (safe, never throws)
         await addGreenZoneToResponse(validatedResult);
         
-        await logVerifyResult(validatedResult);
+        // Log to Redis and get verification result
+        const redisResult = await logVerifyResult(validatedResult);
+        
+        // Build Redis fingerprint for diagnostics (gated for production)
+        let redisFingerprint = null;
+        const vercelEnv = process.env.VERCEL_ENV || 'development';
+        const exposeRedisDebug = process.env.EXPOSE_REDIS_DEBUG === 'true';
+        const shouldExposeFingerprint = vercelEnv !== 'production' || exposeRedisDebug;
+        
+        if (shouldExposeFingerprint) {
+          try {
+            const { getRedisFingerprint } = await import('../../lib/redis_fingerprint.js');
+            redisFingerprint = getRedisFingerprint();
+          } catch {}
+        }
+        
+        // Store redis result in validatedResult for responseMeta
+        validatedResult._redisResult = redisResult;
+        validatedResult._redisFingerprint = redisFingerprint;
+        
         // CRITICAL: Ensure ok is always boolean (defensive check against type corruption)
         const sanitizedValidated = sanitizeResponse(validatedResult);
         return res.status(200).json({
@@ -3225,7 +3407,9 @@ export default async function handler(req, res) {
           responseMeta: {
             ...validatedResult.responseMeta,
             bypassedPayGate: bypassedPayGate,
-            internalBypassAuthorized: internalBypassAuthorized
+            internalBypassAuthorized: internalBypassAuthorized,
+            redis: validatedResult._redisResult || null,
+            redisFingerprint: validatedResult._redisFingerprint || null,
           }
         });
       }

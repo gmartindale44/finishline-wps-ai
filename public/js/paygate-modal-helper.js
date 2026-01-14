@@ -39,9 +39,15 @@
     // Get PayGate helper - use same URLs as paygate-helper.js
     const paygate = (typeof window !== 'undefined' && window.__FL_PAYGATE__) || {};
     
-    // Fallback to hardcoded URLs if helper not available (same as paygate-helper.js)
-    const DAY_PASS_URL = paygate.DAY_PASS_URL || "https://buy.stripe.com/9B600c09y5GU0HS3kn9k405";
-    const CORE_MONTHLY_URL = paygate.CORE_MONTHLY_URL || "https://buy.stripe.com/14A7sEaOc8T6aisbQT9k407";
+    // Get Stripe URLs from environment variables (injected by /api/paygate-token.js)
+    // Falls back to production URLs if env vars not set (backward compatibility)
+    // Also check paygate helper for URLs (if it exposes them)
+    const DAY_PASS_URL = paygate.DAY_PASS_URL || 
+      (typeof window !== 'undefined' && window.__STRIPE_DAY_PASS_URL__) || 
+      "https://buy.stripe.com/9B600c09y5GU0HS3kn9k405";
+    const CORE_MONTHLY_URL = paygate.CORE_MONTHLY_URL || 
+      (typeof window !== 'undefined' && window.__STRIPE_CORE_MONTHLY_URL__) || 
+      "https://buy.stripe.com/14A7sEaOc8T6aisbQT9k407";
 
     // Check if already unlocked (might have unlocked via URL params)
     if (paygate.isUnlocked && paygate.isUnlocked()) {

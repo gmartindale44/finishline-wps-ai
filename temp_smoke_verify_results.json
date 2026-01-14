@@ -1,0 +1,311 @@
+{
+  "manual": {
+    "success": true,
+    "response": {
+      "ok": true,
+      "step": "manual_verify",
+      "track": "Meadowlands",
+      "date": "2026-01-11",
+      "raceNo": "8",
+      "raceId": "meadowlands-2026-01-11-unknown-r8",
+      "outcome": {
+        "win": "Smoke Test Winner",
+        "place": "Smoke Test Place",
+        "show": "Smoke Test Show"
+      },
+      "predicted": {
+        "win": "",
+        "place": "",
+        "show": ""
+      },
+      "hits": {
+        "winHit": false,
+        "placeHit": false,
+        "showHit": false,
+        "top3Hit": false
+      },
+      "summary": "Using date: 2026-01-11\nOutcome (manual entry):\n  Win: Smoke Test Winner\n  Place: Smoke Test Place\n  Show: Smoke Test Show\nHits: (none)",
+      "debug": {
+        "source": "manual",
+        "manualProvider": "TwinSpires",
+        "canonicalDateIso": "2026-01-11",
+        "verifyRaceId": "meadowlands-2026-01-11-unknown-r8",
+        "verifyKey": "fl:verify:meadowlands-2026-01-11-unknown-r8",
+        "wroteToRedis": true,
+        "redisFingerprint": {
+          "urlFingerprint": "ash.io",
+          "tokenFingerprint": "b745c083",
+          "env": "preview-production-03be167",
+          "configured": true,
+          "urlHost": "picked-grouse-35888.upstash.io",
+          "vercelEnv": "preview",
+          "vercelGitCommitSha": "03be1673cd85d025976f694109c6154ef7d2b54b",
+          "nodeEnv": "production"
+        },
+        "redisClientType": "REST API (lib/redis.js)",
+        "verifyKeyWritten": "fl:verify:meadowlands-2026-01-11-unknown-r8",
+        "verifyWritePerformed": true,
+        "verifyWriteReason": "ok_true_with_complete_outcome",
+        "writeResult": {
+          "success": true,
+          "key": "fl:verify:meadowlands-2026-01-11-unknown-r8",
+          "hasCompleteOutcome": "Smoke Test Show"
+        },
+        "redisResult": {
+          "verifyKey": "fl:verify:meadowlands-2026-01-11-unknown-r8",
+          "writeOk": true,
+          "writeErr": null,
+          "readbackOk": true,
+          "readbackErr": null,
+          "ttlSeconds": 7776000,
+          "valueSize": 1134
+        }
+      },
+      "_redisResult": {
+        "verifyKey": "fl:verify:meadowlands-2026-01-11-unknown-r8",
+        "writeOk": true,
+        "writeErr": null,
+        "readbackOk": true,
+        "readbackErr": null,
+        "ttlSeconds": 7776000,
+        "valueSize": 1134
+      },
+      "_redisFingerprint": {
+        "urlFingerprint": "ash.io",
+        "tokenFingerprint": "b745c083",
+        "env": "preview-production-03be167",
+        "configured": true,
+        "urlHost": "picked-grouse-35888.upstash.io",
+        "vercelEnv": "preview",
+        "vercelGitCommitSha": "03be1673cd85d025976f694109c6154ef7d2b54b",
+        "nodeEnv": "production"
+      },
+      "greenZone": {
+        "enabled": false,
+        "reason": "insufficient_historical_data",
+        "debug": {
+          "historicalCount": 0
+        }
+      },
+      "bypassedPayGate": false,
+      "responseMeta": {
+        "handlerFile": "pages/api/verify_race.js",
+        "backendVersion": "verify_v4_hrn_equibase",
+        "bypassedPayGate": false,
+        "internalBypassAuthorized": false,
+        "redis": {
+          "verifyKey": "fl:verify:meadowlands-2026-01-11-unknown-r8",
+          "writeOk": true,
+          "writeErr": null,
+          "readbackOk": true,
+          "readbackErr": null,
+          "ttlSeconds": 7776000,
+          "valueSize": 1134
+        },
+        "redisFingerprint": {
+          "urlFingerprint": "ash.io",
+          "tokenFingerprint": "b745c083",
+          "env": "preview-production-03be167",
+          "configured": true,
+          "urlHost": "picked-grouse-35888.upstash.io",
+          "vercelEnv": "preview",
+          "vercelGitCommitSha": "03be1673cd85d025976f694109c6154ef7d2b54b",
+          "nodeEnv": "production"
+        }
+      }
+    },
+    "verifyKey": "fl:verify:meadowlands-2026-01-11-unknown-r8",
+    "writeOk": true,
+    "readbackOk": true,
+    "ttlSeconds": 7776000,
+    "redisFingerprint": {
+      "urlFingerprint": "ash.io",
+      "tokenFingerprint": "b745c083",
+      "env": "preview-production-03be167",
+      "configured": true,
+      "urlHost": "picked-grouse-35888.upstash.io",
+      "vercelEnv": "preview",
+      "vercelGitCommitSha": "03be1673cd85d025976f694109c6154ef7d2b54b",
+      "nodeEnv": "production"
+    }
+  },
+  "auto": {
+    "success": true,
+    "response": {
+      "ok": true,
+      "step": "verify_race",
+      "date": "2026-01-03",
+      "track": "Charles Town",
+      "raceNo": "1",
+      "query": "Charles Town Race 1 Jan 3 2026 results Win Place Show order (site:equibase.com OR site:horseracingnation.com OR site:entries.horseracingnation.com)",
+      "top": {
+        "title": "HRN results",
+        "link": "https://entries.horseracingnation.com/entries-results/charles-town/2026-01-03"
+      },
+      "outcome": {
+        "win": "No Direction",
+        "place": "Sweet Lime",
+        "show": "I'd Rather Not"
+      },
+      "predicted": {
+        "win": "",
+        "place": "",
+        "show": ""
+      },
+      "hits": {
+        "winHit": false,
+        "placeHit": false,
+        "showHit": false,
+        "top3Hit": false
+      },
+      "summary": "UI date: 2026-01-03\nUsing date: 2026-01-03\nOutcome:\n  Win: No Direction\n  Place: Sweet Lime\n  Show: I'd Rather Not",
+      "debug": {
+        "source": "hrn",
+        "googleUrl": "https://www.google.com/search?q=Charles%20Town%20Race%201%20Jan%203%202026%20results%20Win%20Place%20Show%20order%20(site%3Aequibase.com%20OR%20site%3Ahorseracingnation.com%20OR%20site%3Aentries.horseracingnation.com)",
+        "uiDateRaw": "2026-01-03",
+        "canonicalDateIso": "2026-01-03",
+        "verifyRaceId": "charles-town-2026-01-03-unknown-r1",
+        "verifyKey": "fl:verify:charles-town-2026-01-03-unknown-r1",
+        "wroteToRedis": true,
+        "redisFingerprint": {
+          "urlFingerprint": "ash.io",
+          "tokenFingerprint": "b745c083",
+          "env": "preview-production-03be167",
+          "configured": true,
+          "urlHost": "picked-grouse-35888.upstash.io",
+          "vercelEnv": "preview",
+          "vercelGitCommitSha": "03be1673cd85d025976f694109c6154ef7d2b54b",
+          "nodeEnv": "production"
+        },
+        "redisClientType": "REST API (lib/redis.js)",
+        "verifyKeyWritten": "fl:verify:charles-town-2026-01-03-unknown-r1",
+        "verifyWritePerformed": true,
+        "verifyWriteReason": "ok_false_analytics",
+        "writeResult": {
+          "success": true,
+          "key": "fl:verify:charles-town-2026-01-03-unknown-r1",
+          "hasCompleteOutcome": false
+        },
+        "redisResult": {
+          "verifyKey": "fl:verify:charles-town-2026-01-03-unknown-r1",
+          "writeOk": true,
+          "writeErr": null,
+          "readbackOk": true,
+          "readbackErr": null,
+          "ttlSeconds": 7776000,
+          "valueSize": 1582
+        },
+        "okTypeError": "ok was coerced from string to boolean",
+        "okOriginalType": "string",
+        "okOriginalValue": "I'd Rather Not",
+        "okComputedFromOutcome": true
+      },
+      "greenZone": {
+        "enabled": false,
+        "reason": "insufficient_historical_data",
+        "debug": {
+          "historicalCount": 0
+        }
+      },
+      "_redisResult": {
+        "verifyKey": "fl:verify:charles-town-2026-01-03-unknown-r1",
+        "writeOk": true,
+        "writeErr": null,
+        "readbackOk": true,
+        "readbackErr": null,
+        "ttlSeconds": 7776000,
+        "valueSize": 1582
+      },
+      "_redisFingerprint": {
+        "urlFingerprint": "ash.io",
+        "tokenFingerprint": "b745c083",
+        "env": "preview-production-03be167",
+        "configured": true,
+        "urlHost": "picked-grouse-35888.upstash.io",
+        "vercelEnv": "preview",
+        "vercelGitCommitSha": "03be1673cd85d025976f694109c6154ef7d2b54b",
+        "nodeEnv": "production"
+      },
+      "bypassedPayGate": false,
+      "responseMeta": {
+        "bypassedPayGate": false,
+        "internalBypassAuthorized": false,
+        "redis": {
+          "verifyKey": "fl:verify:charles-town-2026-01-03-unknown-r1",
+          "writeOk": true,
+          "writeErr": null,
+          "readbackOk": true,
+          "readbackErr": null,
+          "ttlSeconds": 7776000,
+          "valueSize": 1582
+        },
+        "redisFingerprint": {
+          "urlFingerprint": "ash.io",
+          "tokenFingerprint": "b745c083",
+          "env": "preview-production-03be167",
+          "configured": true,
+          "urlHost": "picked-grouse-35888.upstash.io",
+          "vercelEnv": "preview",
+          "vercelGitCommitSha": "03be1673cd85d025976f694109c6154ef7d2b54b",
+          "nodeEnv": "production"
+        }
+      }
+    },
+    "verifyKey": "fl:verify:charles-town-2026-01-03-unknown-r1",
+    "keyExists": true,
+    "keyPayload": {
+      "raceId": "charles-town-2026-01-03-unknown-r1",
+      "track": "Charles Town",
+      "date": "2026-01-03",
+      "dateIso": "2026-01-03",
+      "raceNo": "1",
+      "query": "Charles Town Race 1 Jan 3 2026 results Win Place Show order (site:equibase.com OR site:horseracingnation.com OR site:entries.horseracingnation.com)",
+      "top": {
+        "title": "HRN results",
+        "link": "https://entries.horseracingnation.com/entries-results/charles-town/2026-01-03"
+      },
+      "outcome": {
+        "win": "No Direction",
+        "place": "Sweet Lime",
+        "show": "I'd Rather Not"
+      },
+      "predicted": {
+        "win": "",
+        "place": "",
+        "show": ""
+      },
+      "hits": {
+        "winHit": false,
+        "placeHit": false,
+        "showHit": false,
+        "top3Hit": false
+      },
+      "summary": "UI date: 2026-01-03\nUsing date: 2026-01-03\nOutcome:\n  Win: No Direction\n  Place: Sweet Lime\n  Show: I'd Rather Not",
+      "ok": false,
+      "step": "verify_race",
+      "debug": {
+        "source": "hrn",
+        "googleUrl": "https://www.google.com/search?q=Charles%20Town%20Race%201%20Jan%203%202026%20results%20Win%20Place%20Show%20order%20(site%3Aequibase.com%20OR%20site%3Ahorseracingnation.com%20OR%20site%3Aentries.horseracingnation.com)",
+        "uiDateRaw": "2026-01-03",
+        "canonicalDateIso": "2026-01-03",
+        "snapshotKeysFoundCount": 0,
+        "snapshotSelectedAsOf": null,
+        "verifyLogKey": "fl:verify:charles-town-2026-01-03-unknown-r1",
+        "raceId": "charles-town-2026-01-03-unknown-r1",
+        "redisFingerprint": {
+          "urlFingerprint": "ash.io",
+          "tokenFingerprint": "b745c083",
+          "env": "preview-production-03be167",
+          "configured": true,
+          "urlHost": "picked-grouse-35888.upstash.io",
+          "vercelEnv": "preview",
+          "vercelGitCommitSha": "03be1673cd85d025976f694109c6154ef7d2b54b",
+          "nodeEnv": "production"
+        },
+        "redisClientType": "REST API (lib/redis.js)"
+      },
+      "ts": 1768170473112
+    },
+    "ttl": 7775998
+  }
+}
