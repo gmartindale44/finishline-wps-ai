@@ -51,6 +51,13 @@ export default function handler(req, res) {
   const enforceEnv = enforceEnvRaw.toLowerCase().trim();
   const enforceEnabled = ['true', '1', 'yes', 'on'].includes(enforceEnv);
 
+  // Get Stripe Payment Link URLs from environment variables (preview vs production)
+  // These should be set per-environment in Vercel:
+  // - Preview: Test mode Stripe links configured to redirect to preview host
+  // - Production: Production Stripe links configured to redirect to production host
+  const stripeDayPassUrl = process.env.NEXT_PUBLIC_STRIPE_DAY_PASS_URL || null;
+  const stripeCoreMonthlyUrl = process.env.NEXT_PUBLIC_STRIPE_CORE_MONTHLY_URL || null;
+
   // Server-side debug logging
   console.log('[PayGate Token Handler] Config check:', {
     testModeEnvRaw: testModeEnvRaw,
@@ -59,14 +66,20 @@ export default function handler(req, res) {
     enforceEnvRaw: enforceEnvRaw,
     enforceEnvParsed: enforceEnv,
     enforceEnabled: enforceEnabled,
+    stripeUrlsConfigured: {
+      dayPass: !!stripeDayPassUrl,
+      coreMonthly: !!stripeCoreMonthlyUrl
+    },
     envVarPresent: {
       testMode: !!(process.env.NEXT_PUBLIC_PAYGATE_TEST_MODE || process.env.PAYGATE_TEST_MODE),
-      enforce: !!(process.env.NEXT_PUBLIC_PAYGATE_ENFORCE || process.env.PAYGATE_ENFORCE)
+      enforce: !!(process.env.NEXT_PUBLIC_PAYGATE_ENFORCE || process.env.PAYGATE_ENFORCE),
+      stripeDayPass: !!process.env.NEXT_PUBLIC_STRIPE_DAY_PASS_URL,
+      stripeCoreMonthly: !!process.env.NEXT_PUBLIC_STRIPE_CORE_MONTHLY_URL
     }
   });
 
   // Return JavaScript that sets window variables (DO NOT expose raw token)
-  // Only expose tokenVersion (safe hash), familyUnlockDays, test mode, and enforce flag
+  // Only expose tokenVersion (safe hash), familyUnlockDays, test mode, enforce flag, and Stripe URLs
   const js = `// PAYGATE_TOKEN_HANDLER_OK
 window.__FL_FAMILY_UNLOCK_TOKEN_VERSION__ = ${JSON.stringify(tokenVersion || '')};
 window.__FL_FAMILY_UNLOCK_DAYS__ = ${familyUnlockDays};
@@ -74,7 +87,9 @@ window.__PAYGATE_TEST_MODE__ = ${testModeEnabled ? 'true' : 'false'};
 window.__PAYGATE_TEST_MODE_ENV__ = ${JSON.stringify(testModeEnvRaw)};
 window.__PAYGATE_ENFORCE__ = ${enforceEnabled ? 'true' : 'false'};
 window.__PAYGATE_ENFORCE_ENV__ = ${JSON.stringify(enforceEnvRaw)};
-console.log('[PayGate] Token script loaded:', { hasTokenVersion: ${tokenVersion !== null}, familyUnlockDays: ${familyUnlockDays}, testMode: ${testModeEnabled}, testModeEnvValue: ${JSON.stringify(testModeEnv)}, testModeEnvRaw: ${JSON.stringify(testModeEnvRaw)}, enforce: ${enforceEnabled}, enforceEnvValue: ${JSON.stringify(enforceEnv)}, enforceEnvRaw: ${JSON.stringify(enforceEnvRaw)} });`;
+window.__STRIPE_DAY_PASS_URL__ = ${stripeDayPassUrl ? JSON.stringify(stripeDayPassUrl) : 'null'};
+window.__STRIPE_CORE_MONTHLY_URL__ = ${stripeCoreMonthlyUrl ? JSON.stringify(stripeCoreMonthlyUrl) : 'null'};
+console.log('[PayGate] Token script loaded:', { hasTokenVersion: ${tokenVersion !== null}, familyUnlockDays: ${familyUnlockDays}, testMode: ${testModeEnabled}, testModeEnvValue: ${JSON.stringify(testModeEnv)}, testModeEnvRaw: ${JSON.stringify(testModeEnvRaw)}, enforce: ${enforceEnabled}, enforceEnvValue: ${JSON.stringify(enforceEnv)}, enforceEnvRaw: ${JSON.stringify(enforceEnvRaw)}, stripeDayPassUrl: ${stripeDayPassUrl ? 'true' : 'false'}, stripeCoreMonthlyUrl: ${stripeCoreMonthlyUrl ? 'true' : 'false'} });`;
 
 
   res.status(200).send(js);
