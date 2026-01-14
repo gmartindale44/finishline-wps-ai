@@ -10,3 +10,8 @@ venv/
 node_modules/
 .next
 scripts/debug/inspect_verify_keys.mjs
+
+# Large calibration export artifacts
+data/finishline_tests_from_verify_redis_v1.csv
+data/finishline_tests_calibration_v1.csv
+temp_*.json

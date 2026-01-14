@@ -12,10 +12,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "url";
 import { execSync } from "child_process";
-import { exec } from "child_process";
-import { promisify } from "util";
-
-const execAsync = promisify(exec);
+import { spawn } from "child_process";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -48,6 +45,32 @@ function formatDelta(newVal, oldVal) {
   const delta = newVal - oldVal;
   const sign = delta >= 0 ? "+" : "";
   return `${sign}${(delta * 100).toFixed(2)}pp`;
+}
+
+/**
+ * Run npm script using spawn (for streaming output)
+ */
+function runNpmScript(scriptName) {
+  return new Promise((resolve, reject) => {
+    const proc = spawn("npm", ["run", scriptName], {
+      stdio: "inherit",
+      shell: true,
+      cwd: process.cwd(),
+      env: process.env,
+    });
+
+    proc.on("error", (err) => {
+      reject(new Error(`Failed to spawn ${scriptName}: ${err.message}`));
+    });
+
+    proc.on("close", (code) => {
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(new Error(`${scriptName} exited with code ${code}`));
+      }
+    });
+  });
 }
 
 /**
@@ -96,6 +119,56 @@ async function saveTrendData(trendData) {
   trendData.lastUpdated = new Date().toISOString();
   await fs.mkdir(path.dirname(TREND_FILE), { recursive: true });
   await fs.writeFile(TREND_FILE, JSON.stringify(trendData, null, 2), "utf8");
+}
+
+/**
+ * Check if a run is a duplicate (same commitSha + sampleSize + close timestamp)
+ */
+function isDuplicateRun(newRun, existingRun) {
+  const sameCommit = newRun.commitSha === existingRun.commitSha;
+  const sameSampleSize = newRun.sampleSize === existingRun.sampleSize;
+  
+  if (!sameCommit || !sameSampleSize) {
+    return false;
+  }
+  
+  // Check if timestamps are within 1 hour (to catch multiple runs on same commit)
+  const newTime = new Date(newRun.timestamp).getTime();
+  const existingTime = new Date(existingRun.timestamp).getTime();
+  const timeDiff = Math.abs(newTime - existingTime);
+  const oneHour = 60 * 60 * 1000;
+  
+  return timeDiff < oneHour;
+}
+
+/**
+ * Remove duplicate entries from trend data
+ */
+function dedupeTrendData(trendData) {
+  const seen = new Map();
+  const deduped = [];
+  
+  // Process in reverse order (keep most recent duplicates)
+  for (let i = trendData.runs.length - 1; i >= 0; i--) {
+    const run = trendData.runs[i];
+    const key = `${run.commitSha}-${run.sampleSize}`;
+    
+    if (!seen.has(key)) {
+      seen.set(key, true);
+      deduped.unshift(run); // Add to front to preserve order
+    } else {
+      // Check if this is a true duplicate (close timestamp)
+      const existing = deduped.find((r) => r.commitSha === run.commitSha && r.sampleSize === run.sampleSize);
+      if (existing && isDuplicateRun(run, existing)) {
+        // Skip this duplicate
+        continue;
+      }
+      deduped.unshift(run);
+    }
+  }
+  
+  trendData.runs = deduped;
+  return trendData;
 }
 
 /**
@@ -389,7 +462,7 @@ async function main() {
     // Step 1: Run calibration pipeline
     console.log("Step 1: Exporting verify logs from Redis...");
     try {
-      await execAsync("npm run export:verify-redis");
+      await runNpmScript("export:verify-redis");
     } catch (err) {
       console.error("❌ Export failed:", err.message);
       process.exit(1);
@@ -397,7 +470,7 @@ async function main() {
 
     console.log("\nStep 2: Building calibration sample...");
     try {
-      await execAsync("npm run build:calibration-sample");
+      await runNpmScript("build:calibration-sample");
     } catch (err) {
       console.error("❌ Sample build failed:", err.message);
       process.exit(1);
@@ -405,7 +478,7 @@ async function main() {
 
     console.log("\nStep 3: Running calibration...");
     try {
-      await execAsync("npm run calibrate:verify-v1");
+      await runNpmScript("calibrate:verify-v1");
     } catch (err) {
       console.error("❌ Calibration failed:", err.message);
       process.exit(1);
@@ -423,6 +496,9 @@ async function main() {
     // Step 4: Load and update trend data
     console.log("Step 5: Updating trend data...");
     const trendData = await loadTrendData();
+    
+    // Dedupe existing trend data
+    dedupeTrendData(trendData);
 
     const newRun = {
       timestamp: new Date().toISOString(),
@@ -437,7 +513,14 @@ async function main() {
       predmetaCoverage: newMetrics.predmeta?.coverage?.coverageRate || 0,
     };
 
-    trendData.runs.push(newRun);
+    // Check for duplicate before adding
+    const isDuplicate = trendData.runs.some((run) => isDuplicateRun(newRun, run));
+    if (!isDuplicate) {
+      trendData.runs.push(newRun);
+    } else {
+      console.log("⚠️  Duplicate run detected (same commit + sampleSize + close timestamp), skipping...");
+    }
+    
     await saveTrendData(trendData);
 
     // Step 5: Check regression guardrails
