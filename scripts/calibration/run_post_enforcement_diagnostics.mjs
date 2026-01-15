@@ -48,13 +48,31 @@ function formatDelta(newVal, oldVal) {
 }
 
 /**
+ * Get npm command path (cross-platform)
+ */
+function getNpmCommand() {
+  if (process.platform === "win32") {
+    try {
+      // Find npm.cmd in PATH
+      const npmPath = execSync("where npm.cmd", { encoding: "utf8" }).trim().split("\n")[0];
+      if (npmPath) return npmPath;
+    } catch {}
+    // Fallback to npm.cmd (will be resolved by PATH via spawn)
+    return "npm.cmd";
+  }
+  return "npm";
+}
+
+/**
  * Run npm script using spawn (for streaming output)
  */
 function runNpmScript(scriptName) {
   return new Promise((resolve, reject) => {
-    const proc = spawn("npm", ["run", scriptName], {
+    // On Windows, use npm.cmd to avoid shell requirement and deprecation warning
+    // On Unix-like systems, use npm directly
+    const npmCmd = getNpmCommand();
+    const proc = spawn(npmCmd, ["run", scriptName], {
       stdio: "inherit",
-      shell: true,
       cwd: process.cwd(),
       env: process.env,
     });
