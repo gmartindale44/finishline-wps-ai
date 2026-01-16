@@ -48,44 +48,26 @@ function formatDelta(newVal, oldVal) {
 }
 
 /**
- * Get npm command path (cross-platform)
+ * Run Node script directly using spawn (for streaming output)
  */
-function getNpmCommand() {
-  if (process.platform === "win32") {
-    try {
-      // Find npm.cmd in PATH
-      const npmPath = execSync("where npm.cmd", { encoding: "utf8" }).trim().split("\n")[0];
-      if (npmPath) return npmPath;
-    } catch {}
-    // Fallback to npm.cmd (will be resolved by PATH via spawn)
-    return "npm.cmd";
-  }
-  return "npm";
-}
-
-/**
- * Run npm script using spawn (for streaming output)
- */
-function runNpmScript(scriptName) {
+function runNodeScript(relativeScriptPath) {
   return new Promise((resolve, reject) => {
-    // On Windows, use npm.cmd to avoid shell requirement and deprecation warning
-    // On Unix-like systems, use npm directly
-    const npmCmd = getNpmCommand();
-    const proc = spawn(npmCmd, ["run", scriptName], {
+    const absoluteScriptPath = path.resolve(process.cwd(), relativeScriptPath);
+    const proc = spawn(process.execPath, [absoluteScriptPath], {
       stdio: "inherit",
       cwd: process.cwd(),
       env: process.env,
     });
 
     proc.on("error", (err) => {
-      reject(new Error(`Failed to spawn ${scriptName}: ${err.message}`));
+      reject(new Error(`Failed to spawn ${relativeScriptPath}: ${err.message}`));
     });
 
     proc.on("close", (code) => {
       if (code === 0) {
         resolve();
       } else {
-        reject(new Error(`${scriptName} exited with code ${code}`));
+        reject(new Error(`${relativeScriptPath} exited with code ${code}`));
       }
     });
   });
@@ -480,7 +462,7 @@ async function main() {
     // Step 1: Run calibration pipeline
     console.log("Step 1: Exporting verify logs from Redis...");
     try {
-      await runNpmScript("export:verify-redis");
+      await runNodeScript("scripts/calibration/export_verify_redis_to_csv.mjs");
     } catch (err) {
       console.error("❌ Export failed:", err.message);
       process.exit(1);
@@ -488,7 +470,7 @@ async function main() {
 
     console.log("\nStep 2: Building calibration sample...");
     try {
-      await runNpmScript("build:calibration-sample");
+      await runNodeScript("scripts/calibration/build_calibration_sample_from_verify_csv.mjs");
     } catch (err) {
       console.error("❌ Sample build failed:", err.message);
       process.exit(1);
@@ -496,7 +478,7 @@ async function main() {
 
     console.log("\nStep 3: Running calibration...");
     try {
-      await runNpmScript("calibrate:verify-v1");
+      await runNodeScript("scripts/calibration/run_calibrate_verify_v1.mjs");
     } catch (err) {
       console.error("❌ Calibration failed:", err.message);
       process.exit(1);
