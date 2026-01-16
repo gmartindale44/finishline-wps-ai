@@ -1,0 +1,17 @@
+{
+  "runs": [
+    {
+      "timestamp": "2026-01-14T17:19:01.259Z",
+      "commitSha": "fd7d107ae4015206bc758686d046821189604899",
+      "sampleSize": 5000,
+      "top3HitRate": 0.8316,
+      "winHitRate": 0.2432,
+      "placeHitRate": 0.1492,
+      "showHitRate": 0.138,
+      "anyHitRate": 0.4066,
+      "trifectaRate": 0.014,
+      "predmetaCoverage": 0.4948
+    }
+  ],
+  "lastUpdated": "2026-01-14T17:19:01.260Z"
+}
