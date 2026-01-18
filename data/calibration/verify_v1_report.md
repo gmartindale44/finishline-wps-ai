@@ -1,6 +1,6 @@
 # Verify V1 Calibration Report
 
-**Generated:** 1/11/2026, 10:14:36 AM
+**Generated:** 1/18/2026, 10:23:25 AM
 **Source:** finishline_tests_calibration_v1.csv
 **Total Rows:** 5,000
 **Filtered Rows:** 5,000
@@ -10,61 +10,61 @@
 | Metric | Value |
 |--------|-------|
 | Total Races | 5,000 |
-| Win Hit Rate | 24.8% |
-| Place Hit Rate | 15.1% |
-| Show Hit Rate | 13.7% |
-| Top 3 Hit Rate | 82.8% |
-| Any Hit Rate | 41.0% |
+| Win Hit Rate | 24.1% |
+| Place Hit Rate | 15.0% |
+| Show Hit Rate | 13.3% |
+| Top 3 Hit Rate | 83.6% |
+| Any Hit Rate | 40.1% |
 | Exact Trifecta Rate | 1.4% |
-| Partial Order Top 3 Rate | 82.8% |
+| Partial Order Top 3 Rate | 83.6% |
 
 ## Predmeta Metrics
 
 | Metric | Value |
 |--------|-------|
-| Predmeta Coverage | 48.6% |
-| Rows with Confidence | 2,430 |
-| Rows with T3M | 2,430 |
-| Rows with Both | 2,430 |
+| Predmeta Coverage | 51.3% |
+| Rows with Confidence | 2,567 |
+| Rows with T3M | 2,567 |
+| Rows with Both | 2,567 |
 
 ### Accuracy by Confidence Bucket
 
 | Confidence | Races | Win Hit Rate | Top 3 Hit Rate |
 |------------|-------|--------------|----------------|
-| 50-60% | 18 | 100.0% | 100.0% |
-| 60-70% | 72 | 25.0% | 100.0% |
-| 70-80% | 216 | 16.7% | 100.0% |
-| 80+% | 2,124 | 25.4% | 85.6% |
+| 50-60% | 34 | 50.0% | 100.0% |
+| 60-70% | 102 | 33.3% | 100.0% |
+| 70-80% | 221 | 23.1% | 100.0% |
+| 80+% | 2,210 | 23.1% | 86.9% |
 
 ### Accuracy by T3M Bucket
 
 | T3M % | Races | Win Hit Rate | Top 3 Hit Rate |
 |-------|-------|--------------|----------------|
-| 30-40% | 594 | 33.3% | 78.8% |
-| 40-50% | 954 | 18.9% | 88.7% |
-| 50-60% | 540 | 33.3% | 90.0% |
-| 60+% | 288 | 18.8% | 100.0% |
+| 30-40% | 578 | 32.4% | 79.4% |
+| 40-50% | 1,020 | 16.7% | 90.0% |
+| 50-60% | 527 | 32.3% | 90.3% |
+| 60+% | 391 | 21.7% | 100.0% |
 
 ## Top 10 Tracks (by Race Count)
 
 | Track | Races | Win Hit Rate | Top 3 Hit Rate |
 |-------|-------|--------------|----------------|
-| Fair Grounds | 432 | 29.2% | 87.5% |
-| Gulfstream Park | 414 | 26.1% | 91.3% |
-| Aqueduct | 396 | 22.7% | 86.4% |
-| Mahoning Valley | 360 | 20.0% | 90.0% |
-| Parx Racing | 342 | 31.6% | 94.7% |
-| Laurel Park | 288 | 18.8% | 93.8% |
-| Oaklawn Park | 270 | 20.0% | 86.7% |
-| Tampa Bay Downs | 270 | 20.0% | 86.7% |
-| Turf Paradise | 270 | 26.7% | 86.7% |
-| Delta Downs | 252 | 21.4% | 71.4% |
+| Fair Grounds | 425 | 28.0% | 88.0% |
+| Gulfstream Park | 425 | 24.0% | 92.0% |
+| Aqueduct | 376 | 22.6% | 85.9% |
+| Mahoning Valley | 374 | 18.2% | 90.9% |
+| Parx Racing | 357 | 28.6% | 95.2% |
+| Laurel Park | 306 | 22.2% | 94.4% |
+| Delta Downs | 272 | 18.8% | 75.0% |
+| Oaklawn Park | 255 | 20.0% | 86.7% |
+| Tampa Bay Downs | 255 | 20.0% | 86.7% |
+| Turf Paradise | 255 | 26.7% | 86.7% |
 
 ## Strategy Summary
 
 | Strategy | Races | Win Hit Rate | Top 3 Hit Rate |
 |----------|-------|--------------|----------------|
-| default@v1 | 5,000 | 24.8% | 82.8% |
+| default@v1 | 5,000 | 24.1% | 83.6% |
 
 ## Notes
 
