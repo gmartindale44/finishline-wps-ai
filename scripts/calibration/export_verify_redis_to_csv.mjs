@@ -26,6 +26,7 @@ import { Redis } from "@upstash/redis";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "url";
+import { normalizeTrackName } from "../../lib/calibration/track_normalize.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -55,8 +56,10 @@ function normalizeToCalibrationRow(verifyLog) {
     return null;
   }
 
-  // Extract fields from verify log
-  const track = csvEscape(verifyLog.track || "");
+  // Extract fields from verify log and normalize track name
+  const rawTrack = verifyLog.track || "";
+  const normalizedTrack = normalizeTrackName(rawTrack);
+  const track = csvEscape(normalizedTrack);
   const date = csvEscape(verifyLog.date || verifyLog.dateIso || "");
   const raceNo = csvEscape(verifyLog.raceNo || "");
 

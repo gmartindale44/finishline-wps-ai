@@ -226,6 +226,35 @@ function generateMarkdownReport(metrics) {
       }
       md += `\n`;
     }
+    
+    // Brier Score
+    if (predmeta.brierScore && predmeta.brierScore.brierScore != null) {
+      md += `### Brier Score (Win Probability Calibration)\n\n`;
+      md += `| Metric | Value |\n`;
+      md += `|--------|-------|\n`;
+      md += `| Brier Score | ${predmeta.brierScore.brierScore.toFixed(4)} |\n`;
+      md += `| Rows with Probability | ${predmeta.brierScore.rowsWithProbability.toLocaleString()} |\n`;
+      md += `| Total Rows | ${predmeta.brierScore.totalRows.toLocaleString()} |\n`;
+      md += `\n`;
+      md += `*Lower is better (0 = perfect calibration, 1 = worst)*\n\n`;
+    }
+    
+    // Confidence Calibration Table
+    const confCalibration = Object.entries(predmeta.confidenceCalibration || {});
+    if (confCalibration.length > 0) {
+      md += `### Confidence Bucket Calibration\n\n`;
+      md += `| Confidence | Races | Expected Win Rate | Observed Win Rate | Calibration Error |\n`;
+      md += `|------------|-------|-------------------|-------------------|-------------------|\n`;
+      for (const [bucket, stats] of confCalibration.sort((a, b) => {
+        const aMin = parseInt(a[0].split('-')[0] || a[0].replace('+', ''));
+        const bMin = parseInt(b[0].split('-')[0] || b[0].replace('+', ''));
+        return aMin - bMin;
+      })) {
+        const errorSign = stats.calibrationError >= 0 ? "+" : "";
+        md += `| ${bucket}% | ${stats.races.toLocaleString()} | ${formatPercent(stats.expectedWinRate)} | ${formatPercent(stats.observedWinRate)} | ${errorSign}${formatPercent(stats.calibrationError)} |\n`;
+      }
+      md += `\n`;
+    }
   }
 
   // Top tracks
