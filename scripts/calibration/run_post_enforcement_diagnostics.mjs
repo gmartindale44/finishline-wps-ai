@@ -25,6 +25,7 @@ const CAL_REPORT_JSON = path.join(__dirname, "../../data/calibration/verify_v1_r
 const REGRESSION_THRESHOLDS = {
   TOP3_HIT_DROP: 0.01, // 1.0pp drop triggers warning
   WIN_HIT_DROP: 0.01,  // 1.0pp drop for 2 consecutive runs triggers watch
+  BRIER_SCORE_WORSEN: 0.01, // 0.01 increase in Brier score triggers watch
 };
 
 /**
@@ -312,6 +313,23 @@ function checkRegressionGuardrails(newMetrics, prevMetrics, trendData) {
     }
   }
 
+  // Check Brier score degradation
+  const newBrier = newMetrics.predmeta?.brierScore?.brierScore;
+  const prevBrier = prevMetrics?.predmeta?.brierScore?.brierScore;
+  if (newBrier != null && prevBrier != null && Number.isFinite(newBrier) && Number.isFinite(prevBrier)) {
+    const brierDelta = newBrier - prevBrier;
+    if (brierDelta >= REGRESSION_THRESHOLDS.BRIER_SCORE_WORSEN) {
+      watches.push({
+        type: "WATCH",
+        metric: "Brier Score",
+        current: newBrier.toFixed(4),
+        previous: prevBrier.toFixed(4),
+        delta: `+${brierDelta.toFixed(4)}`,
+        threshold: "+0.01 increase",
+      });
+    }
+  }
+
   return { warnings, watches };
 }
 
@@ -487,12 +505,52 @@ async function generateReport(newMetrics, prevMetrics, trendData, warnings, watc
     lines.push("");
   }
 
+  // New Metrics Section
+  if (newMetrics.predmeta?.brierScore?.brierScore != null) {
+    lines.push("## Calibration Metrics");
+    lines.push("");
+    lines.push("### Brier Score");
+    lines.push("");
+    lines.push(`| Metric | Value |`);
+    lines.push(`|--------|-------|`);
+    lines.push(`| Brier Score | ${newMetrics.predmeta.brierScore.brierScore.toFixed(4)} |`);
+    lines.push(`| Rows with Probability | ${newMetrics.predmeta.brierScore.rowsWithProbability.toLocaleString()} |`);
+    lines.push("");
+    
+    if (prevMetrics?.predmeta?.brierScore?.brierScore != null) {
+      const prevBrier = prevMetrics.predmeta.brierScore.brierScore;
+      const currBrier = newMetrics.predmeta.brierScore.brierScore;
+      const delta = currBrier - prevBrier;
+      const sign = delta >= 0 ? "+" : "";
+      lines.push(`**Delta vs Previous:** ${sign}${delta.toFixed(4)}`);
+      lines.push("");
+    }
+  }
+  
+  if (newMetrics.predmeta?.confidenceCalibration && Object.keys(newMetrics.predmeta.confidenceCalibration).length > 0) {
+    lines.push("### Confidence Bucket Calibration");
+    lines.push("");
+    lines.push("| Confidence | Races | Expected | Observed | Error |");
+    lines.push("|------------|-------|----------|----------|-------|");
+    const calEntries = Object.entries(newMetrics.predmeta.confidenceCalibration).sort((a, b) => {
+      const aMin = parseInt(a[0].split('-')[0] || a[0].replace('+', ''));
+      const bMin = parseInt(b[0].split('-')[0] || b[0].replace('+', ''));
+      return aMin - bMin;
+    });
+    for (const [bucket, stats] of calEntries) {
+      const errorSign = stats.calibrationError >= 0 ? "+" : "";
+      lines.push(`| ${bucket}% | ${stats.races.toLocaleString()} | ${formatPercent(stats.expectedWinRate)} | ${formatPercent(stats.observedWinRate)} | ${errorSign}${formatPercent(stats.calibrationError)} |`);
+    }
+    lines.push("");
+  }
+
   // Regression Guardrails
   lines.push("## Regression Guardrails");
   lines.push("");
   lines.push("**Active Thresholds:**");
   lines.push(`- Top 3 Hit Rate drop ≥ ${(REGRESSION_THRESHOLDS.TOP3_HIT_DROP * 100).toFixed(1)}pp → REGRESSION WARNING`);
   lines.push(`- Win Hit Rate drop ≥ ${(REGRESSION_THRESHOLDS.WIN_HIT_DROP * 100).toFixed(1)}pp for 2 consecutive runs → WATCH`);
+  lines.push(`- Brier Score increase ≥ ${REGRESSION_THRESHOLDS.BRIER_SCORE_WORSEN.toFixed(2)} → WATCH`);
   lines.push("");
 
   return lines.join("\n");
