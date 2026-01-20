@@ -35,7 +35,19 @@
       "anyHitRate": 0.4012,
       "trifectaRate": 0.0136,
       "predmetaCoverage": 0.5134
+    },
+    {
+      "timestamp": "2026-01-20T22:01:21.776Z",
+      "commitSha": "7f2cd1d6b29ef061e4e4ebcb1d2c6e3dba8f3488",
+      "sampleSize": 5000,
+      "top3HitRate": 0.839,
+      "winHitRate": 0.2432,
+      "placeHitRate": 0.1522,
+      "showHitRate": 0.1324,
+      "anyHitRate": 0.4026,
+      "trifectaRate": 0.0136,
+      "predmetaCoverage": 0.5102
     }
   ],
-  "lastUpdated": "2026-01-19T02:52:52.335Z"
+  "lastUpdated": "2026-01-20T22:01:21.777Z"
 }

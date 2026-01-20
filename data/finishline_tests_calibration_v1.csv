@@ -21,7 +21,8 @@ Aqueduct,2026-01-09,5,,,Probability,Antietam,Kaz Oil Changer,Sequential,Probabil
 Aqueduct,2026-01-09,6,,,That's Funny,Blenheim Baby,Spirit of Esther,That's Funny,Blenheim Baby,Spirit of Esther,true,true,true,true,84,54,"[""That's Funny"",""Blenheim Baby"",""Spirit of Esther""]"
 Aqueduct,2026-01-09,7,,,Vettriano,Mr Skylight,Big Hat Willie,One Nine Hundred,Toxic Gray,Mr Skylight,false,false,false,true,84,54,"[""Vettriano"",""Mr Skylight"",""Big Hat Willie""]"
 Aqueduct,2026-01-09,8,,,Mo Spice,Bellamy,Tinseltown,Mo Spice,Bellamy,Tinseltown,true,true,true,true,97,39,"[""Spidey Man"",""Skillian"",""Biker Baley""]"
-Aqueduct Racetrack,2026-01-04,7,,,Metfardeh,Purloin,Noticeable,Purloin,I'm Buzzy,Texas QuMedfardeheen,false,false,false,true,92,48,"[""Metfardeh"",""Purloin"",""Noticeable""]"
+Aqueduct,2026-01-18,1,,,Fort Nelson,Rule Sixty Two,New York Scrappy,New York Scrappy,Fort Nelson,Middle Market,false,false,false,true,,,
+Aqueduct,2026-01-04,7,,,Metfardeh,Purloin,Noticeable,Purloin,I'm Buzzy,Texas QuMedfardeheen,false,false,false,true,92,48,"[""Metfardeh"",""Purloin"",""Noticeable""]"
 AUS Lismore,2026-01-03,4,,,Artie Lady,Do It For You,Ourlegs Eleven,Do It For You,Per Capita,Alabama Girl,false,false,false,true,97,39,"[""Artie Lady"",""Do It For You"",""Ourlegs Eleven""]"
 AUS Nowra,2025-12-13,3,,,Breakaway Week,Tillman,Ken'ker,Breakaway Week,Tillman,Fire And Gemstone,true,true,false,true,,,
 AUS Randwick Kensington,2026-01-13,3,,,Indigo Star,Lady Of The Castle,Let's Go Barbie,Gorgeous,Let's Go Barbie,Double Vision,false,false,false,true,97,43,"[""Indigo Star"",""Lady Of The Castle"",""Let's Go Barbie""]"
@@ -42,8 +43,8 @@ Charles Town,2026-01-02,4,,,No Mo Muffins,Georgia Rain,Rhenski,No Mo Muffins,Pea
 Charles Town,2026-01-03,2,,,Fifth of June,Citified,Collegeville Queen,Collegeville Queen,Miss Shack Attack,Cajun Prime,false,false,false,true,92,48,"[""Fifth of June"",""Citified"",""Collegeville Queen""]"
 Charles Town,2026-01-03,3,,,Hopping Henry,Auburn Mill,Colt Rock,Rocket Appeal,Auburn Mill,Hopping Henry,false,true,false,true,97,43,"[""Hopping Henry"",""Auburn Mill"",""Colt Rock""]"
 Charles Town,2026-01-03,8,,,Brother Conway,Social Chic,Kaladin,No Direction,Sweet Lime,I'd Rather Not,false,false,false,false,92,48,"[""Brother Conway"",""Social Chic"",""Kaladin""]"
-Charles Town Races,2025-12-09,6,,,Camco Laraido,Labero,Ma Barker,Labero,Fire the Rocket,Camco Laraido,false,false,false,true,,,
-Charles Town Races,2026-01-16,8,,,Omar Comin,Late in the Game,Strava,Omar Comin,Strava,Rick'swarmheart,true,false,false,true,67,62,"[""Omar Comin"",""Late in the Game"",""Strava""]"
+Charles Town,2025-12-09,6,,,Camco Laraido,Labero,Ma Barker,Labero,Fire the Rocket,Camco Laraido,false,false,false,true,,,
+Charles Town,2026-01-16,8,,,Omar Comin,Late in the Game,Strava,Omar Comin,Strava,Rick'swarmheart,true,false,false,true,67,62,"[""Omar Comin"",""Late in the Game"",""Strava""]"
 Dayton,2025-12-09,11,,,Banderas,Tie the Knot,Believe in Tom,Banderas,Tie the Knot,Chanceyfascination,true,true,false,true,,,
 Dayton,2025-12-10,9,,,Divine Thing,Sayinwhatimthinkin,Triathlon As,Famous Father,Triathlon As,Sayinwhatimthinkin,false,false,false,true,,,
 Delta Downs,2025-12-05,1,,,Killer Guitar,Drewrelius,Respecttheconnect,Killer Guitar,Drewrelius,Ninth Ward Bobby O,true,true,false,true,,,
@@ -90,6 +91,7 @@ Fair Grounds,2026-01-09,2,,,Leah's First,Honor Azteca,Cloudy Lass,Amazing Lady,S
 Fair Grounds,2026-01-09,3,,,Daredevil Doug,Mister O,Spielman,Lost in the Sauce,Miracle On Central,Spielman,false,false,true,true,92,48,"[""Daredevil Doug"",""Mister O"",""Spielman""]"
 Fair Grounds,2026-01-09,5,,,Sippin On Gin,Highland Creek,Cosmic Train,Sippin On Gin,Mangum,Cosmic Train,true,false,true,true,92,48,"[""Sippin On Gin"",""Highland Creek"",""Cosmic Train""]"
 Fair Grounds,2026-01-16,12,,,Just a Touch,Moonlight,Sir Greylind,Accelerize,Just a Touch,Cadet Corps,false,false,false,true,91,48,"[""Just a Touch"",""Moonlight"",""Sir Greylind""]"
+Fair Grounds,2026-01-19,1,,,Precious Money,The Pretty Sister,Honor His Half,Precious Money,The Pretty Sister,About to Set Sail,true,true,false,true,,,
 Flamboro Downs,2025-12-10,2,,,Tellit Russ Tellit,Onyx Bovino,Ambitious Mind,Ara You Crazy,Onyx Bovino,Ambitious Mind,false,true,true,true,,,
 FRA Lyon La Soie,2025-12-07,1,,,Rejaitt,Dream in Brooke,Valentine Day,,,,false,false,false,false,,,
 FRA Marseille Vivaux,2025-12-21,8,,,Dubalaa,Aventino,Noce De Rubis,Dubalaa,Lover Song,Westminster Love,true,false,false,true,,,
@@ -161,11 +163,11 @@ Mahoning Valley,2026-01-06,5,,,Lionistic,Az We Speak,Kichi Kitsu,Sweet Unique,Ki
 Mahoning Valley,2026-01-06,6,,,Washington's Union (86),Grey Streak (105),Supply Chain (87),Collectorate,Washington's Union,Supply Chain,false,false,true,true,100,48,"[""Washington's Union (86)"",""Grey Streak (105)"",""Supply Chain (87)""]"
 Mahoning Valley,2026-01-13,3,,,Relish the Ride,Dark Vader,Wetzel,Dark Vader,Raven Moon,Gone in a Flash,false,false,false,true,82,82,"[""Relish the Ride"",""Dark Vader"",""Wetzel""]"
 Mahoning Valley,2026-01-13,7,,,Mission Control,Who Da Boss,Casual Attire,Sunset Town,Mission Control,Casual Attire,false,false,true,true,82,82,"[""Mission Control"",""Who Da Boss"",""Casual Attire""]"
-Mahoning Valley Race Course,2025-12-16,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
-Mahoning Valley Race Course,2025-12-17,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
-Mahoning Valley Race Course,2025-12-20,1,,,Lookin Like Lucky,Santorino,Briarcliff,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-16,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-17,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-20,1,,,Lookin Like Lucky,Santorino,Briarcliff,,,,false,false,false,false,,,
 Meadowlands,2026-01-02,6,,,Nila Maree N,Ithatobeeyou,Youllfindout,Nila Maree N,Youllfindout,Arsenal's Ladybug,true,false,false,true,97,43,"[""Nila Maree N"",""Ithatobeeyou"",""Youllfindout""]"
-Meadowlands Racetrack,2026-01-16,11,,,Swedish Starlet N,Avf Claire,Fearless Bettor,Avf Claire,Fearless Bettor,Cruise Alert,false,false,false,true,97,43,"[""Swedish Starlet N"",""Avf Claire"",""Fearless Bettor""]"
+Meadowlands,2026-01-16,11,,,Swedish Starlet N,Avf Claire,Fearless Bettor,Avf Claire,Fearless Bettor,Cruise Alert,false,false,false,true,97,43,"[""Swedish Starlet N"",""Avf Claire"",""Fearless Bettor""]"
 Monticello Raceway,2025-12-24,1,,,Ziggy Sky,Fox Valley Inferno,Prairie Fenway,Ziggy Sky,Fox Valley Inferno,Aintnobettor A,true,true,false,true,,,
 Mountaineer Park,2025-12-07,2,,,Dreaming of Hope,Popstyle,Kozem,Maci's World,Dreaming of Hope,Popstyle,false,false,false,true,,,
 Mountaineer Park,2025-12-07,3,,,Spuns Kitten,Shotgun Margaret,Holly Roller,Shotgun Margaret,Spuns Kitten,Pour Me a Drink,false,false,false,true,,,
@@ -224,7 +226,7 @@ Remington Park,2025-12-20,3,,,Vestes,Tigers 'n Bears,Quarterly Report,Vestes,Spe
 Sam Houston,2026-01-03,5,,,Dutch Mills,Chivalrous,Bling Mountain,Shogun Be Fast,Team Leader,Cinco Richie,false,false,false,false,97,43,"[""Malibu S S"",""Team Leader"",""Shogun Be Fast""]"
 Sam Houston,2026-01-03,6,,,Dutch Mills,Chivalrous,Bling Mountain,Bling Mountain,Copper Storm,Noble Eagle,false,false,false,true,92,48,"[""Dutch Mills"",""Chivalrous"",""Bling Mountain""]"
 Sam Houston Race Park,2026-01-03,5,,,Malibu S S,Team Leader,Shogun Be Fast,,,,false,false,false,false,97,43,"[""Malibu S S"",""Team Leader"",""Shogun Be Fast""]"
-Saratoga Race Course,2025-12-07,9,,,Manhattan Artist,Hangman Mcgee,Morrone Dolce,Manhattan Artist,Hangman Mcgee,Dark Hour,true,true,false,true,,,
+Saratoga,2025-12-07,9,,,Manhattan Artist,Hangman Mcgee,Morrone Dolce,Manhattan Artist,Hangman Mcgee,Dark Hour,true,true,false,true,,,
 Sunland Park,2026-01-03,1,,,Wedding Groom,Broadway Dish,Shell Game,Wedding Groom,Shell Game,Billy de Kid,true,false,false,true,97,39,"[""Wedding Groom"",""Broadway Dish"",""Shell Game""]"
 Sunland Park,2026-01-05,5,,,Stand Up Guy,Exit Strategy,He's a Genius,Trafficstorm,Holy Bullet,American Storm,false,false,false,false,84,54,"[""Stand Up Guy"",""Exit Strategy"",""He's a Genius""]"
 SWE Bjerke,2025-12-21,5,,,Resilient Reddington,Explosive Axe,Icarus B.R.,Resilient Reddington,Caramel Volo,Explosive Axe,true,false,false,true,,,
@@ -284,8 +286,8 @@ Woodbine Mohawk (,2025-12-27,8,,,Bruno No No,Cold Creek Queso,Dublin Dasher,Brun
 Woodbine Mohawk,2025-12-27,9,,,Bronx Drifter,Sometime Somewhere,Pipewrench Charlie,Bronx Drifter,Self Made,Sergeant Slaughter,true,false,false,true,97,39,"[""Bronx Drifter"",""Sometime Somewhere"",""Pipewrench Charlie""]"
 Woodbine Mohawk,2026-01-02,5,,,Kellina Diamond,Job Hunter,Im Betonsix,POWDER PLAY,JOB HUNTER,KELLINA DIAMOND,false,true,false,true,67,62,"[""Kellina Diamond"",""Job Hunter"",""Im Betonsix""]"
 Woodbine Mohawk,2026-01-03,11,,,Blue Bar,Ernwood Big Mack,Summer Dancer,Dusty Lane Levi,Blue Bar,Erinwood Big Mack,false,false,false,true,82,54,"[""So Much More"",""Angostura Hanover"",""Century Jamila""]"
-Woodbine Racetrack,2025-12-04,1,,,Nicki Is a Breeze,Lady Izzy,Majestic Appeal,,,,false,false,false,false,,,
-Woodbine Racetrack,2025-12-07,2,,,Logan Park,Hasty Bid,What About Elmo,Logan Park,Hasty Bid,Sid the Kid,true,true,false,true,,,
+Woodbine,2025-12-04,1,,,Nicki Is a Breeze,Lady Izzy,Majestic Appeal,,,,false,false,false,false,,,
+Woodbine,2025-12-07,2,,,Logan Park,Hasty Bid,What About Elmo,Logan Park,Hasty Bid,Sid the Kid,true,true,false,true,,,
 yonkers,2025-12-08,10,,,Italian Lad N,Western Era,Walkinshaw N,Speaker of Peace,Italian Lad N,Music Hall,false,false,false,true,,,
 yonkers,2025-12-08,6,,,Just Enuff Stuff,Hammering Hank,Perfect Promises,Hammering Hank,Perfect Promises,Why Tomorrow Ray,false,false,false,true,,,
 yonkers,2025-12-09,1,,,Disaronno Hill,Bout Damn Time A,Nuttinbuthebest,Bout Damn Time A,Disaronno Hill,Bluebird Crush,false,false,false,true,,,
@@ -315,7 +317,8 @@ Aqueduct,2026-01-09,5,,,Probability,Antietam,Kaz Oil Changer,Sequential,Probabil
 Aqueduct,2026-01-09,6,,,That's Funny,Blenheim Baby,Spirit of Esther,That's Funny,Blenheim Baby,Spirit of Esther,true,true,true,true,84,54,"[""That's Funny"",""Blenheim Baby"",""Spirit of Esther""]"
 Aqueduct,2026-01-09,7,,,Vettriano,Mr Skylight,Big Hat Willie,One Nine Hundred,Toxic Gray,Mr Skylight,false,false,false,true,84,54,"[""Vettriano"",""Mr Skylight"",""Big Hat Willie""]"
 Aqueduct,2026-01-09,8,,,Mo Spice,Bellamy,Tinseltown,Mo Spice,Bellamy,Tinseltown,true,true,true,true,97,39,"[""Spidey Man"",""Skillian"",""Biker Baley""]"
-Aqueduct Racetrack,2026-01-04,7,,,Metfardeh,Purloin,Noticeable,Purloin,I'm Buzzy,Texas QuMedfardeheen,false,false,false,true,92,48,"[""Metfardeh"",""Purloin"",""Noticeable""]"
+Aqueduct,2026-01-18,1,,,Fort Nelson,Rule Sixty Two,New York Scrappy,New York Scrappy,Fort Nelson,Middle Market,false,false,false,true,,,
+Aqueduct,2026-01-04,7,,,Metfardeh,Purloin,Noticeable,Purloin,I'm Buzzy,Texas QuMedfardeheen,false,false,false,true,92,48,"[""Metfardeh"",""Purloin"",""Noticeable""]"
 AUS Lismore,2026-01-03,4,,,Artie Lady,Do It For You,Ourlegs Eleven,Do It For You,Per Capita,Alabama Girl,false,false,false,true,97,39,"[""Artie Lady"",""Do It For You"",""Ourlegs Eleven""]"
 AUS Nowra,2025-12-13,3,,,Breakaway Week,Tillman,Ken'ker,Breakaway Week,Tillman,Fire And Gemstone,true,true,false,true,,,
 AUS Randwick Kensington,2026-01-13,3,,,Indigo Star,Lady Of The Castle,Let's Go Barbie,Gorgeous,Let's Go Barbie,Double Vision,false,false,false,true,97,43,"[""Indigo Star"",""Lady Of The Castle"",""Let's Go Barbie""]"
@@ -336,8 +339,8 @@ Charles Town,2026-01-02,4,,,No Mo Muffins,Georgia Rain,Rhenski,No Mo Muffins,Pea
 Charles Town,2026-01-03,2,,,Fifth of June,Citified,Collegeville Queen,Collegeville Queen,Miss Shack Attack,Cajun Prime,false,false,false,true,92,48,"[""Fifth of June"",""Citified"",""Collegeville Queen""]"
 Charles Town,2026-01-03,3,,,Hopping Henry,Auburn Mill,Colt Rock,Rocket Appeal,Auburn Mill,Hopping Henry,false,true,false,true,97,43,"[""Hopping Henry"",""Auburn Mill"",""Colt Rock""]"
 Charles Town,2026-01-03,8,,,Brother Conway,Social Chic,Kaladin,No Direction,Sweet Lime,I'd Rather Not,false,false,false,false,92,48,"[""Brother Conway"",""Social Chic"",""Kaladin""]"
-Charles Town Races,2025-12-09,6,,,Camco Laraido,Labero,Ma Barker,Labero,Fire the Rocket,Camco Laraido,false,false,false,true,,,
-Charles Town Races,2026-01-16,8,,,Omar Comin,Late in the Game,Strava,Omar Comin,Strava,Rick'swarmheart,true,false,false,true,67,62,"[""Omar Comin"",""Late in the Game"",""Strava""]"
+Charles Town,2025-12-09,6,,,Camco Laraido,Labero,Ma Barker,Labero,Fire the Rocket,Camco Laraido,false,false,false,true,,,
+Charles Town,2026-01-16,8,,,Omar Comin,Late in the Game,Strava,Omar Comin,Strava,Rick'swarmheart,true,false,false,true,67,62,"[""Omar Comin"",""Late in the Game"",""Strava""]"
 Dayton,2025-12-09,11,,,Banderas,Tie the Knot,Believe in Tom,Banderas,Tie the Knot,Chanceyfascination,true,true,false,true,,,
 Dayton,2025-12-10,9,,,Divine Thing,Sayinwhatimthinkin,Triathlon As,Famous Father,Triathlon As,Sayinwhatimthinkin,false,false,false,true,,,
 Delta Downs,2025-12-05,1,,,Killer Guitar,Drewrelius,Respecttheconnect,Killer Guitar,Drewrelius,Ninth Ward Bobby O,true,true,false,true,,,
@@ -384,6 +387,7 @@ Fair Grounds,2026-01-09,2,,,Leah's First,Honor Azteca,Cloudy Lass,Amazing Lady,S
 Fair Grounds,2026-01-09,3,,,Daredevil Doug,Mister O,Spielman,Lost in the Sauce,Miracle On Central,Spielman,false,false,true,true,92,48,"[""Daredevil Doug"",""Mister O"",""Spielman""]"
 Fair Grounds,2026-01-09,5,,,Sippin On Gin,Highland Creek,Cosmic Train,Sippin On Gin,Mangum,Cosmic Train,true,false,true,true,92,48,"[""Sippin On Gin"",""Highland Creek"",""Cosmic Train""]"
 Fair Grounds,2026-01-16,12,,,Just a Touch,Moonlight,Sir Greylind,Accelerize,Just a Touch,Cadet Corps,false,false,false,true,91,48,"[""Just a Touch"",""Moonlight"",""Sir Greylind""]"
+Fair Grounds,2026-01-19,1,,,Precious Money,The Pretty Sister,Honor His Half,Precious Money,The Pretty Sister,About to Set Sail,true,true,false,true,,,
 Flamboro Downs,2025-12-10,2,,,Tellit Russ Tellit,Onyx Bovino,Ambitious Mind,Ara You Crazy,Onyx Bovino,Ambitious Mind,false,true,true,true,,,
 FRA Lyon La Soie,2025-12-07,1,,,Rejaitt,Dream in Brooke,Valentine Day,,,,false,false,false,false,,,
 FRA Marseille Vivaux,2025-12-21,8,,,Dubalaa,Aventino,Noce De Rubis,Dubalaa,Lover Song,Westminster Love,true,false,false,true,,,
@@ -455,11 +459,11 @@ Mahoning Valley,2026-01-06,5,,,Lionistic,Az We Speak,Kichi Kitsu,Sweet Unique,Ki
 Mahoning Valley,2026-01-06,6,,,Washington's Union (86),Grey Streak (105),Supply Chain (87),Collectorate,Washington's Union,Supply Chain,false,false,true,true,100,48,"[""Washington's Union (86)"",""Grey Streak (105)"",""Supply Chain (87)""]"
 Mahoning Valley,2026-01-13,3,,,Relish the Ride,Dark Vader,Wetzel,Dark Vader,Raven Moon,Gone in a Flash,false,false,false,true,82,82,"[""Relish the Ride"",""Dark Vader"",""Wetzel""]"
 Mahoning Valley,2026-01-13,7,,,Mission Control,Who Da Boss,Casual Attire,Sunset Town,Mission Control,Casual Attire,false,false,true,true,82,82,"[""Mission Control"",""Who Da Boss"",""Casual Attire""]"
-Mahoning Valley Race Course,2025-12-16,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
-Mahoning Valley Race Course,2025-12-17,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
-Mahoning Valley Race Course,2025-12-20,1,,,Lookin Like Lucky,Santorino,Briarcliff,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-16,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-17,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-20,1,,,Lookin Like Lucky,Santorino,Briarcliff,,,,false,false,false,false,,,
 Meadowlands,2026-01-02,6,,,Nila Maree N,Ithatobeeyou,Youllfindout,Nila Maree N,Youllfindout,Arsenal's Ladybug,true,false,false,true,97,43,"[""Nila Maree N"",""Ithatobeeyou"",""Youllfindout""]"
-Meadowlands Racetrack,2026-01-16,11,,,Swedish Starlet N,Avf Claire,Fearless Bettor,Avf Claire,Fearless Bettor,Cruise Alert,false,false,false,true,97,43,"[""Swedish Starlet N"",""Avf Claire"",""Fearless Bettor""]"
+Meadowlands,2026-01-16,11,,,Swedish Starlet N,Avf Claire,Fearless Bettor,Avf Claire,Fearless Bettor,Cruise Alert,false,false,false,true,97,43,"[""Swedish Starlet N"",""Avf Claire"",""Fearless Bettor""]"
 Monticello Raceway,2025-12-24,1,,,Ziggy Sky,Fox Valley Inferno,Prairie Fenway,Ziggy Sky,Fox Valley Inferno,Aintnobettor A,true,true,false,true,,,
 Mountaineer Park,2025-12-07,2,,,Dreaming of Hope,Popstyle,Kozem,Maci's World,Dreaming of Hope,Popstyle,false,false,false,true,,,
 Mountaineer Park,2025-12-07,3,,,Spuns Kitten,Shotgun Margaret,Holly Roller,Shotgun Margaret,Spuns Kitten,Pour Me a Drink,false,false,false,true,,,
@@ -518,7 +522,7 @@ Remington Park,2025-12-20,3,,,Vestes,Tigers 'n Bears,Quarterly Report,Vestes,Spe
 Sam Houston,2026-01-03,5,,,Dutch Mills,Chivalrous,Bling Mountain,Shogun Be Fast,Team Leader,Cinco Richie,false,false,false,false,97,43,"[""Malibu S S"",""Team Leader"",""Shogun Be Fast""]"
 Sam Houston,2026-01-03,6,,,Dutch Mills,Chivalrous,Bling Mountain,Bling Mountain,Copper Storm,Noble Eagle,false,false,false,true,92,48,"[""Dutch Mills"",""Chivalrous"",""Bling Mountain""]"
 Sam Houston Race Park,2026-01-03,5,,,Malibu S S,Team Leader,Shogun Be Fast,,,,false,false,false,false,97,43,"[""Malibu S S"",""Team Leader"",""Shogun Be Fast""]"
-Saratoga Race Course,2025-12-07,9,,,Manhattan Artist,Hangman Mcgee,Morrone Dolce,Manhattan Artist,Hangman Mcgee,Dark Hour,true,true,false,true,,,
+Saratoga,2025-12-07,9,,,Manhattan Artist,Hangman Mcgee,Morrone Dolce,Manhattan Artist,Hangman Mcgee,Dark Hour,true,true,false,true,,,
 Sunland Park,2026-01-03,1,,,Wedding Groom,Broadway Dish,Shell Game,Wedding Groom,Shell Game,Billy de Kid,true,false,false,true,97,39,"[""Wedding Groom"",""Broadway Dish"",""Shell Game""]"
 Sunland Park,2026-01-05,5,,,Stand Up Guy,Exit Strategy,He's a Genius,Trafficstorm,Holy Bullet,American Storm,false,false,false,false,84,54,"[""Stand Up Guy"",""Exit Strategy"",""He's a Genius""]"
 SWE Bjerke,2025-12-21,5,,,Resilient Reddington,Explosive Axe,Icarus B.R.,Resilient Reddington,Caramel Volo,Explosive Axe,true,false,false,true,,,
@@ -578,8 +582,8 @@ Woodbine Mohawk (,2025-12-27,8,,,Bruno No No,Cold Creek Queso,Dublin Dasher,Brun
 Woodbine Mohawk,2025-12-27,9,,,Bronx Drifter,Sometime Somewhere,Pipewrench Charlie,Bronx Drifter,Self Made,Sergeant Slaughter,true,false,false,true,97,39,"[""Bronx Drifter"",""Sometime Somewhere"",""Pipewrench Charlie""]"
 Woodbine Mohawk,2026-01-02,5,,,Kellina Diamond,Job Hunter,Im Betonsix,POWDER PLAY,JOB HUNTER,KELLINA DIAMOND,false,true,false,true,67,62,"[""Kellina Diamond"",""Job Hunter"",""Im Betonsix""]"
 Woodbine Mohawk,2026-01-03,11,,,Blue Bar,Ernwood Big Mack,Summer Dancer,Dusty Lane Levi,Blue Bar,Erinwood Big Mack,false,false,false,true,82,54,"[""So Much More"",""Angostura Hanover"",""Century Jamila""]"
-Woodbine Racetrack,2025-12-04,1,,,Nicki Is a Breeze,Lady Izzy,Majestic Appeal,,,,false,false,false,false,,,
-Woodbine Racetrack,2025-12-07,2,,,Logan Park,Hasty Bid,What About Elmo,Logan Park,Hasty Bid,Sid the Kid,true,true,false,true,,,
+Woodbine,2025-12-04,1,,,Nicki Is a Breeze,Lady Izzy,Majestic Appeal,,,,false,false,false,false,,,
+Woodbine,2025-12-07,2,,,Logan Park,Hasty Bid,What About Elmo,Logan Park,Hasty Bid,Sid the Kid,true,true,false,true,,,
 yonkers,2025-12-08,10,,,Italian Lad N,Western Era,Walkinshaw N,Speaker of Peace,Italian Lad N,Music Hall,false,false,false,true,,,
 yonkers,2025-12-08,6,,,Just Enuff Stuff,Hammering Hank,Perfect Promises,Hammering Hank,Perfect Promises,Why Tomorrow Ray,false,false,false,true,,,
 yonkers,2025-12-09,1,,,Disaronno Hill,Bout Damn Time A,Nuttinbuthebest,Bout Damn Time A,Disaronno Hill,Bluebird Crush,false,false,false,true,,,
@@ -609,7 +613,8 @@ Aqueduct,2026-01-09,5,,,Probability,Antietam,Kaz Oil Changer,Sequential,Probabil
 Aqueduct,2026-01-09,6,,,That's Funny,Blenheim Baby,Spirit of Esther,That's Funny,Blenheim Baby,Spirit of Esther,true,true,true,true,84,54,"[""That's Funny"",""Blenheim Baby"",""Spirit of Esther""]"
 Aqueduct,2026-01-09,7,,,Vettriano,Mr Skylight,Big Hat Willie,One Nine Hundred,Toxic Gray,Mr Skylight,false,false,false,true,84,54,"[""Vettriano"",""Mr Skylight"",""Big Hat Willie""]"
 Aqueduct,2026-01-09,8,,,Mo Spice,Bellamy,Tinseltown,Mo Spice,Bellamy,Tinseltown,true,true,true,true,97,39,"[""Spidey Man"",""Skillian"",""Biker Baley""]"
-Aqueduct Racetrack,2026-01-04,7,,,Metfardeh,Purloin,Noticeable,Purloin,I'm Buzzy,Texas QuMedfardeheen,false,false,false,true,92,48,"[""Metfardeh"",""Purloin"",""Noticeable""]"
+Aqueduct,2026-01-18,1,,,Fort Nelson,Rule Sixty Two,New York Scrappy,New York Scrappy,Fort Nelson,Middle Market,false,false,false,true,,,
+Aqueduct,2026-01-04,7,,,Metfardeh,Purloin,Noticeable,Purloin,I'm Buzzy,Texas QuMedfardeheen,false,false,false,true,92,48,"[""Metfardeh"",""Purloin"",""Noticeable""]"
 AUS Lismore,2026-01-03,4,,,Artie Lady,Do It For You,Ourlegs Eleven,Do It For You,Per Capita,Alabama Girl,false,false,false,true,97,39,"[""Artie Lady"",""Do It For You"",""Ourlegs Eleven""]"
 AUS Nowra,2025-12-13,3,,,Breakaway Week,Tillman,Ken'ker,Breakaway Week,Tillman,Fire And Gemstone,true,true,false,true,,,
 AUS Randwick Kensington,2026-01-13,3,,,Indigo Star,Lady Of The Castle,Let's Go Barbie,Gorgeous,Let's Go Barbie,Double Vision,false,false,false,true,97,43,"[""Indigo Star"",""Lady Of The Castle"",""Let's Go Barbie""]"
@@ -630,8 +635,8 @@ Charles Town,2026-01-02,4,,,No Mo Muffins,Georgia Rain,Rhenski,No Mo Muffins,Pea
 Charles Town,2026-01-03,2,,,Fifth of June,Citified,Collegeville Queen,Collegeville Queen,Miss Shack Attack,Cajun Prime,false,false,false,true,92,48,"[""Fifth of June"",""Citified"",""Collegeville Queen""]"
 Charles Town,2026-01-03,3,,,Hopping Henry,Auburn Mill,Colt Rock,Rocket Appeal,Auburn Mill,Hopping Henry,false,true,false,true,97,43,"[""Hopping Henry"",""Auburn Mill"",""Colt Rock""]"
 Charles Town,2026-01-03,8,,,Brother Conway,Social Chic,Kaladin,No Direction,Sweet Lime,I'd Rather Not,false,false,false,false,92,48,"[""Brother Conway"",""Social Chic"",""Kaladin""]"
-Charles Town Races,2025-12-09,6,,,Camco Laraido,Labero,Ma Barker,Labero,Fire the Rocket,Camco Laraido,false,false,false,true,,,
-Charles Town Races,2026-01-16,8,,,Omar Comin,Late in the Game,Strava,Omar Comin,Strava,Rick'swarmheart,true,false,false,true,67,62,"[""Omar Comin"",""Late in the Game"",""Strava""]"
+Charles Town,2025-12-09,6,,,Camco Laraido,Labero,Ma Barker,Labero,Fire the Rocket,Camco Laraido,false,false,false,true,,,
+Charles Town,2026-01-16,8,,,Omar Comin,Late in the Game,Strava,Omar Comin,Strava,Rick'swarmheart,true,false,false,true,67,62,"[""Omar Comin"",""Late in the Game"",""Strava""]"
 Dayton,2025-12-09,11,,,Banderas,Tie the Knot,Believe in Tom,Banderas,Tie the Knot,Chanceyfascination,true,true,false,true,,,
 Dayton,2025-12-10,9,,,Divine Thing,Sayinwhatimthinkin,Triathlon As,Famous Father,Triathlon As,Sayinwhatimthinkin,false,false,false,true,,,
 Delta Downs,2025-12-05,1,,,Killer Guitar,Drewrelius,Respecttheconnect,Killer Guitar,Drewrelius,Ninth Ward Bobby O,true,true,false,true,,,
@@ -678,6 +683,7 @@ Fair Grounds,2026-01-09,2,,,Leah's First,Honor Azteca,Cloudy Lass,Amazing Lady,S
 Fair Grounds,2026-01-09,3,,,Daredevil Doug,Mister O,Spielman,Lost in the Sauce,Miracle On Central,Spielman,false,false,true,true,92,48,"[""Daredevil Doug"",""Mister O"",""Spielman""]"
 Fair Grounds,2026-01-09,5,,,Sippin On Gin,Highland Creek,Cosmic Train,Sippin On Gin,Mangum,Cosmic Train,true,false,true,true,92,48,"[""Sippin On Gin"",""Highland Creek"",""Cosmic Train""]"
 Fair Grounds,2026-01-16,12,,,Just a Touch,Moonlight,Sir Greylind,Accelerize,Just a Touch,Cadet Corps,false,false,false,true,91,48,"[""Just a Touch"",""Moonlight"",""Sir Greylind""]"
+Fair Grounds,2026-01-19,1,,,Precious Money,The Pretty Sister,Honor His Half,Precious Money,The Pretty Sister,About to Set Sail,true,true,false,true,,,
 Flamboro Downs,2025-12-10,2,,,Tellit Russ Tellit,Onyx Bovino,Ambitious Mind,Ara You Crazy,Onyx Bovino,Ambitious Mind,false,true,true,true,,,
 FRA Lyon La Soie,2025-12-07,1,,,Rejaitt,Dream in Brooke,Valentine Day,,,,false,false,false,false,,,
 FRA Marseille Vivaux,2025-12-21,8,,,Dubalaa,Aventino,Noce De Rubis,Dubalaa,Lover Song,Westminster Love,true,false,false,true,,,
@@ -749,11 +755,11 @@ Mahoning Valley,2026-01-06,5,,,Lionistic,Az We Speak,Kichi Kitsu,Sweet Unique,Ki
 Mahoning Valley,2026-01-06,6,,,Washington's Union (86),Grey Streak (105),Supply Chain (87),Collectorate,Washington's Union,Supply Chain,false,false,true,true,100,48,"[""Washington's Union (86)"",""Grey Streak (105)"",""Supply Chain (87)""]"
 Mahoning Valley,2026-01-13,3,,,Relish the Ride,Dark Vader,Wetzel,Dark Vader,Raven Moon,Gone in a Flash,false,false,false,true,82,82,"[""Relish the Ride"",""Dark Vader"",""Wetzel""]"
 Mahoning Valley,2026-01-13,7,,,Mission Control,Who Da Boss,Casual Attire,Sunset Town,Mission Control,Casual Attire,false,false,true,true,82,82,"[""Mission Control"",""Who Da Boss"",""Casual Attire""]"
-Mahoning Valley Race Course,2025-12-16,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
-Mahoning Valley Race Course,2025-12-17,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
-Mahoning Valley Race Course,2025-12-20,1,,,Lookin Like Lucky,Santorino,Briarcliff,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-16,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-17,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-20,1,,,Lookin Like Lucky,Santorino,Briarcliff,,,,false,false,false,false,,,
 Meadowlands,2026-01-02,6,,,Nila Maree N,Ithatobeeyou,Youllfindout,Nila Maree N,Youllfindout,Arsenal's Ladybug,true,false,false,true,97,43,"[""Nila Maree N"",""Ithatobeeyou"",""Youllfindout""]"
-Meadowlands Racetrack,2026-01-16,11,,,Swedish Starlet N,Avf Claire,Fearless Bettor,Avf Claire,Fearless Bettor,Cruise Alert,false,false,false,true,97,43,"[""Swedish Starlet N"",""Avf Claire"",""Fearless Bettor""]"
+Meadowlands,2026-01-16,11,,,Swedish Starlet N,Avf Claire,Fearless Bettor,Avf Claire,Fearless Bettor,Cruise Alert,false,false,false,true,97,43,"[""Swedish Starlet N"",""Avf Claire"",""Fearless Bettor""]"
 Monticello Raceway,2025-12-24,1,,,Ziggy Sky,Fox Valley Inferno,Prairie Fenway,Ziggy Sky,Fox Valley Inferno,Aintnobettor A,true,true,false,true,,,
 Mountaineer Park,2025-12-07,2,,,Dreaming of Hope,Popstyle,Kozem,Maci's World,Dreaming of Hope,Popstyle,false,false,false,true,,,
 Mountaineer Park,2025-12-07,3,,,Spuns Kitten,Shotgun Margaret,Holly Roller,Shotgun Margaret,Spuns Kitten,Pour Me a Drink,false,false,false,true,,,
@@ -812,7 +818,7 @@ Remington Park,2025-12-20,3,,,Vestes,Tigers 'n Bears,Quarterly Report,Vestes,Spe
 Sam Houston,2026-01-03,5,,,Dutch Mills,Chivalrous,Bling Mountain,Shogun Be Fast,Team Leader,Cinco Richie,false,false,false,false,97,43,"[""Malibu S S"",""Team Leader"",""Shogun Be Fast""]"
 Sam Houston,2026-01-03,6,,,Dutch Mills,Chivalrous,Bling Mountain,Bling Mountain,Copper Storm,Noble Eagle,false,false,false,true,92,48,"[""Dutch Mills"",""Chivalrous"",""Bling Mountain""]"
 Sam Houston Race Park,2026-01-03,5,,,Malibu S S,Team Leader,Shogun Be Fast,,,,false,false,false,false,97,43,"[""Malibu S S"",""Team Leader"",""Shogun Be Fast""]"
-Saratoga Race Course,2025-12-07,9,,,Manhattan Artist,Hangman Mcgee,Morrone Dolce,Manhattan Artist,Hangman Mcgee,Dark Hour,true,true,false,true,,,
+Saratoga,2025-12-07,9,,,Manhattan Artist,Hangman Mcgee,Morrone Dolce,Manhattan Artist,Hangman Mcgee,Dark Hour,true,true,false,true,,,
 Sunland Park,2026-01-03,1,,,Wedding Groom,Broadway Dish,Shell Game,Wedding Groom,Shell Game,Billy de Kid,true,false,false,true,97,39,"[""Wedding Groom"",""Broadway Dish"",""Shell Game""]"
 Sunland Park,2026-01-05,5,,,Stand Up Guy,Exit Strategy,He's a Genius,Trafficstorm,Holy Bullet,American Storm,false,false,false,false,84,54,"[""Stand Up Guy"",""Exit Strategy"",""He's a Genius""]"
 SWE Bjerke,2025-12-21,5,,,Resilient Reddington,Explosive Axe,Icarus B.R.,Resilient Reddington,Caramel Volo,Explosive Axe,true,false,false,true,,,
@@ -872,8 +878,8 @@ Woodbine Mohawk (,2025-12-27,8,,,Bruno No No,Cold Creek Queso,Dublin Dasher,Brun
 Woodbine Mohawk,2025-12-27,9,,,Bronx Drifter,Sometime Somewhere,Pipewrench Charlie,Bronx Drifter,Self Made,Sergeant Slaughter,true,false,false,true,97,39,"[""Bronx Drifter"",""Sometime Somewhere"",""Pipewrench Charlie""]"
 Woodbine Mohawk,2026-01-02,5,,,Kellina Diamond,Job Hunter,Im Betonsix,POWDER PLAY,JOB HUNTER,KELLINA DIAMOND,false,true,false,true,67,62,"[""Kellina Diamond"",""Job Hunter"",""Im Betonsix""]"
 Woodbine Mohawk,2026-01-03,11,,,Blue Bar,Ernwood Big Mack,Summer Dancer,Dusty Lane Levi,Blue Bar,Erinwood Big Mack,false,false,false,true,82,54,"[""So Much More"",""Angostura Hanover"",""Century Jamila""]"
-Woodbine Racetrack,2025-12-04,1,,,Nicki Is a Breeze,Lady Izzy,Majestic Appeal,,,,false,false,false,false,,,
-Woodbine Racetrack,2025-12-07,2,,,Logan Park,Hasty Bid,What About Elmo,Logan Park,Hasty Bid,Sid the Kid,true,true,false,true,,,
+Woodbine,2025-12-04,1,,,Nicki Is a Breeze,Lady Izzy,Majestic Appeal,,,,false,false,false,false,,,
+Woodbine,2025-12-07,2,,,Logan Park,Hasty Bid,What About Elmo,Logan Park,Hasty Bid,Sid the Kid,true,true,false,true,,,
 yonkers,2025-12-08,10,,,Italian Lad N,Western Era,Walkinshaw N,Speaker of Peace,Italian Lad N,Music Hall,false,false,false,true,,,
 yonkers,2025-12-08,6,,,Just Enuff Stuff,Hammering Hank,Perfect Promises,Hammering Hank,Perfect Promises,Why Tomorrow Ray,false,false,false,true,,,
 yonkers,2025-12-09,1,,,Disaronno Hill,Bout Damn Time A,Nuttinbuthebest,Bout Damn Time A,Disaronno Hill,Bluebird Crush,false,false,false,true,,,
@@ -903,7 +909,8 @@ Aqueduct,2026-01-09,5,,,Probability,Antietam,Kaz Oil Changer,Sequential,Probabil
 Aqueduct,2026-01-09,6,,,That's Funny,Blenheim Baby,Spirit of Esther,That's Funny,Blenheim Baby,Spirit of Esther,true,true,true,true,84,54,"[""That's Funny"",""Blenheim Baby"",""Spirit of Esther""]"
 Aqueduct,2026-01-09,7,,,Vettriano,Mr Skylight,Big Hat Willie,One Nine Hundred,Toxic Gray,Mr Skylight,false,false,false,true,84,54,"[""Vettriano"",""Mr Skylight"",""Big Hat Willie""]"
 Aqueduct,2026-01-09,8,,,Mo Spice,Bellamy,Tinseltown,Mo Spice,Bellamy,Tinseltown,true,true,true,true,97,39,"[""Spidey Man"",""Skillian"",""Biker Baley""]"
-Aqueduct Racetrack,2026-01-04,7,,,Metfardeh,Purloin,Noticeable,Purloin,I'm Buzzy,Texas QuMedfardeheen,false,false,false,true,92,48,"[""Metfardeh"",""Purloin"",""Noticeable""]"
+Aqueduct,2026-01-18,1,,,Fort Nelson,Rule Sixty Two,New York Scrappy,New York Scrappy,Fort Nelson,Middle Market,false,false,false,true,,,
+Aqueduct,2026-01-04,7,,,Metfardeh,Purloin,Noticeable,Purloin,I'm Buzzy,Texas QuMedfardeheen,false,false,false,true,92,48,"[""Metfardeh"",""Purloin"",""Noticeable""]"
 AUS Lismore,2026-01-03,4,,,Artie Lady,Do It For You,Ourlegs Eleven,Do It For You,Per Capita,Alabama Girl,false,false,false,true,97,39,"[""Artie Lady"",""Do It For You"",""Ourlegs Eleven""]"
 AUS Nowra,2025-12-13,3,,,Breakaway Week,Tillman,Ken'ker,Breakaway Week,Tillman,Fire And Gemstone,true,true,false,true,,,
 AUS Randwick Kensington,2026-01-13,3,,,Indigo Star,Lady Of The Castle,Let's Go Barbie,Gorgeous,Let's Go Barbie,Double Vision,false,false,false,true,97,43,"[""Indigo Star"",""Lady Of The Castle"",""Let's Go Barbie""]"
@@ -924,8 +931,8 @@ Charles Town,2026-01-02,4,,,No Mo Muffins,Georgia Rain,Rhenski,No Mo Muffins,Pea
 Charles Town,2026-01-03,2,,,Fifth of June,Citified,Collegeville Queen,Collegeville Queen,Miss Shack Attack,Cajun Prime,false,false,false,true,92,48,"[""Fifth of June"",""Citified"",""Collegeville Queen""]"
 Charles Town,2026-01-03,3,,,Hopping Henry,Auburn Mill,Colt Rock,Rocket Appeal,Auburn Mill,Hopping Henry,false,true,false,true,97,43,"[""Hopping Henry"",""Auburn Mill"",""Colt Rock""]"
 Charles Town,2026-01-03,8,,,Brother Conway,Social Chic,Kaladin,No Direction,Sweet Lime,I'd Rather Not,false,false,false,false,92,48,"[""Brother Conway"",""Social Chic"",""Kaladin""]"
-Charles Town Races,2025-12-09,6,,,Camco Laraido,Labero,Ma Barker,Labero,Fire the Rocket,Camco Laraido,false,false,false,true,,,
-Charles Town Races,2026-01-16,8,,,Omar Comin,Late in the Game,Strava,Omar Comin,Strava,Rick'swarmheart,true,false,false,true,67,62,"[""Omar Comin"",""Late in the Game"",""Strava""]"
+Charles Town,2025-12-09,6,,,Camco Laraido,Labero,Ma Barker,Labero,Fire the Rocket,Camco Laraido,false,false,false,true,,,
+Charles Town,2026-01-16,8,,,Omar Comin,Late in the Game,Strava,Omar Comin,Strava,Rick'swarmheart,true,false,false,true,67,62,"[""Omar Comin"",""Late in the Game"",""Strava""]"
 Dayton,2025-12-09,11,,,Banderas,Tie the Knot,Believe in Tom,Banderas,Tie the Knot,Chanceyfascination,true,true,false,true,,,
 Dayton,2025-12-10,9,,,Divine Thing,Sayinwhatimthinkin,Triathlon As,Famous Father,Triathlon As,Sayinwhatimthinkin,false,false,false,true,,,
 Delta Downs,2025-12-05,1,,,Killer Guitar,Drewrelius,Respecttheconnect,Killer Guitar,Drewrelius,Ninth Ward Bobby O,true,true,false,true,,,
@@ -972,6 +979,7 @@ Fair Grounds,2026-01-09,2,,,Leah's First,Honor Azteca,Cloudy Lass,Amazing Lady,S
 Fair Grounds,2026-01-09,3,,,Daredevil Doug,Mister O,Spielman,Lost in the Sauce,Miracle On Central,Spielman,false,false,true,true,92,48,"[""Daredevil Doug"",""Mister O"",""Spielman""]"
 Fair Grounds,2026-01-09,5,,,Sippin On Gin,Highland Creek,Cosmic Train,Sippin On Gin,Mangum,Cosmic Train,true,false,true,true,92,48,"[""Sippin On Gin"",""Highland Creek"",""Cosmic Train""]"
 Fair Grounds,2026-01-16,12,,,Just a Touch,Moonlight,Sir Greylind,Accelerize,Just a Touch,Cadet Corps,false,false,false,true,91,48,"[""Just a Touch"",""Moonlight"",""Sir Greylind""]"
+Fair Grounds,2026-01-19,1,,,Precious Money,The Pretty Sister,Honor His Half,Precious Money,The Pretty Sister,About to Set Sail,true,true,false,true,,,
 Flamboro Downs,2025-12-10,2,,,Tellit Russ Tellit,Onyx Bovino,Ambitious Mind,Ara You Crazy,Onyx Bovino,Ambitious Mind,false,true,true,true,,,
 FRA Lyon La Soie,2025-12-07,1,,,Rejaitt,Dream in Brooke,Valentine Day,,,,false,false,false,false,,,
 FRA Marseille Vivaux,2025-12-21,8,,,Dubalaa,Aventino,Noce De Rubis,Dubalaa,Lover Song,Westminster Love,true,false,false,true,,,
@@ -1043,11 +1051,11 @@ Mahoning Valley,2026-01-06,5,,,Lionistic,Az We Speak,Kichi Kitsu,Sweet Unique,Ki
 Mahoning Valley,2026-01-06,6,,,Washington's Union (86),Grey Streak (105),Supply Chain (87),Collectorate,Washington's Union,Supply Chain,false,false,true,true,100,48,"[""Washington's Union (86)"",""Grey Streak (105)"",""Supply Chain (87)""]"
 Mahoning Valley,2026-01-13,3,,,Relish the Ride,Dark Vader,Wetzel,Dark Vader,Raven Moon,Gone in a Flash,false,false,false,true,82,82,"[""Relish the Ride"",""Dark Vader"",""Wetzel""]"
 Mahoning Valley,2026-01-13,7,,,Mission Control,Who Da Boss,Casual Attire,Sunset Town,Mission Control,Casual Attire,false,false,true,true,82,82,"[""Mission Control"",""Who Da Boss"",""Casual Attire""]"
-Mahoning Valley Race Course,2025-12-16,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
-Mahoning Valley Race Course,2025-12-17,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
-Mahoning Valley Race Course,2025-12-20,1,,,Lookin Like Lucky,Santorino,Briarcliff,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-16,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-17,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-20,1,,,Lookin Like Lucky,Santorino,Briarcliff,,,,false,false,false,false,,,
 Meadowlands,2026-01-02,6,,,Nila Maree N,Ithatobeeyou,Youllfindout,Nila Maree N,Youllfindout,Arsenal's Ladybug,true,false,false,true,97,43,"[""Nila Maree N"",""Ithatobeeyou"",""Youllfindout""]"
-Meadowlands Racetrack,2026-01-16,11,,,Swedish Starlet N,Avf Claire,Fearless Bettor,Avf Claire,Fearless Bettor,Cruise Alert,false,false,false,true,97,43,"[""Swedish Starlet N"",""Avf Claire"",""Fearless Bettor""]"
+Meadowlands,2026-01-16,11,,,Swedish Starlet N,Avf Claire,Fearless Bettor,Avf Claire,Fearless Bettor,Cruise Alert,false,false,false,true,97,43,"[""Swedish Starlet N"",""Avf Claire"",""Fearless Bettor""]"
 Monticello Raceway,2025-12-24,1,,,Ziggy Sky,Fox Valley Inferno,Prairie Fenway,Ziggy Sky,Fox Valley Inferno,Aintnobettor A,true,true,false,true,,,
 Mountaineer Park,2025-12-07,2,,,Dreaming of Hope,Popstyle,Kozem,Maci's World,Dreaming of Hope,Popstyle,false,false,false,true,,,
 Mountaineer Park,2025-12-07,3,,,Spuns Kitten,Shotgun Margaret,Holly Roller,Shotgun Margaret,Spuns Kitten,Pour Me a Drink,false,false,false,true,,,
@@ -1106,7 +1114,7 @@ Remington Park,2025-12-20,3,,,Vestes,Tigers 'n Bears,Quarterly Report,Vestes,Spe
 Sam Houston,2026-01-03,5,,,Dutch Mills,Chivalrous,Bling Mountain,Shogun Be Fast,Team Leader,Cinco Richie,false,false,false,false,97,43,"[""Malibu S S"",""Team Leader"",""Shogun Be Fast""]"
 Sam Houston,2026-01-03,6,,,Dutch Mills,Chivalrous,Bling Mountain,Bling Mountain,Copper Storm,Noble Eagle,false,false,false,true,92,48,"[""Dutch Mills"",""Chivalrous"",""Bling Mountain""]"
 Sam Houston Race Park,2026-01-03,5,,,Malibu S S,Team Leader,Shogun Be Fast,,,,false,false,false,false,97,43,"[""Malibu S S"",""Team Leader"",""Shogun Be Fast""]"
-Saratoga Race Course,2025-12-07,9,,,Manhattan Artist,Hangman Mcgee,Morrone Dolce,Manhattan Artist,Hangman Mcgee,Dark Hour,true,true,false,true,,,
+Saratoga,2025-12-07,9,,,Manhattan Artist,Hangman Mcgee,Morrone Dolce,Manhattan Artist,Hangman Mcgee,Dark Hour,true,true,false,true,,,
 Sunland Park,2026-01-03,1,,,Wedding Groom,Broadway Dish,Shell Game,Wedding Groom,Shell Game,Billy de Kid,true,false,false,true,97,39,"[""Wedding Groom"",""Broadway Dish"",""Shell Game""]"
 Sunland Park,2026-01-05,5,,,Stand Up Guy,Exit Strategy,He's a Genius,Trafficstorm,Holy Bullet,American Storm,false,false,false,false,84,54,"[""Stand Up Guy"",""Exit Strategy"",""He's a Genius""]"
 SWE Bjerke,2025-12-21,5,,,Resilient Reddington,Explosive Axe,Icarus B.R.,Resilient Reddington,Caramel Volo,Explosive Axe,true,false,false,true,,,
@@ -1166,8 +1174,8 @@ Woodbine Mohawk (,2025-12-27,8,,,Bruno No No,Cold Creek Queso,Dublin Dasher,Brun
 Woodbine Mohawk,2025-12-27,9,,,Bronx Drifter,Sometime Somewhere,Pipewrench Charlie,Bronx Drifter,Self Made,Sergeant Slaughter,true,false,false,true,97,39,"[""Bronx Drifter"",""Sometime Somewhere"",""Pipewrench Charlie""]"
 Woodbine Mohawk,2026-01-02,5,,,Kellina Diamond,Job Hunter,Im Betonsix,POWDER PLAY,JOB HUNTER,KELLINA DIAMOND,false,true,false,true,67,62,"[""Kellina Diamond"",""Job Hunter"",""Im Betonsix""]"
 Woodbine Mohawk,2026-01-03,11,,,Blue Bar,Ernwood Big Mack,Summer Dancer,Dusty Lane Levi,Blue Bar,Erinwood Big Mack,false,false,false,true,82,54,"[""So Much More"",""Angostura Hanover"",""Century Jamila""]"
-Woodbine Racetrack,2025-12-04,1,,,Nicki Is a Breeze,Lady Izzy,Majestic Appeal,,,,false,false,false,false,,,
-Woodbine Racetrack,2025-12-07,2,,,Logan Park,Hasty Bid,What About Elmo,Logan Park,Hasty Bid,Sid the Kid,true,true,false,true,,,
+Woodbine,2025-12-04,1,,,Nicki Is a Breeze,Lady Izzy,Majestic Appeal,,,,false,false,false,false,,,
+Woodbine,2025-12-07,2,,,Logan Park,Hasty Bid,What About Elmo,Logan Park,Hasty Bid,Sid the Kid,true,true,false,true,,,
 yonkers,2025-12-08,10,,,Italian Lad N,Western Era,Walkinshaw N,Speaker of Peace,Italian Lad N,Music Hall,false,false,false,true,,,
 yonkers,2025-12-08,6,,,Just Enuff Stuff,Hammering Hank,Perfect Promises,Hammering Hank,Perfect Promises,Why Tomorrow Ray,false,false,false,true,,,
 yonkers,2025-12-09,1,,,Disaronno Hill,Bout Damn Time A,Nuttinbuthebest,Bout Damn Time A,Disaronno Hill,Bluebird Crush,false,false,false,true,,,
@@ -1197,7 +1205,8 @@ Aqueduct,2026-01-09,5,,,Probability,Antietam,Kaz Oil Changer,Sequential,Probabil
 Aqueduct,2026-01-09,6,,,That's Funny,Blenheim Baby,Spirit of Esther,That's Funny,Blenheim Baby,Spirit of Esther,true,true,true,true,84,54,"[""That's Funny"",""Blenheim Baby"",""Spirit of Esther""]"
 Aqueduct,2026-01-09,7,,,Vettriano,Mr Skylight,Big Hat Willie,One Nine Hundred,Toxic Gray,Mr Skylight,false,false,false,true,84,54,"[""Vettriano"",""Mr Skylight"",""Big Hat Willie""]"
 Aqueduct,2026-01-09,8,,,Mo Spice,Bellamy,Tinseltown,Mo Spice,Bellamy,Tinseltown,true,true,true,true,97,39,"[""Spidey Man"",""Skillian"",""Biker Baley""]"
-Aqueduct Racetrack,2026-01-04,7,,,Metfardeh,Purloin,Noticeable,Purloin,I'm Buzzy,Texas QuMedfardeheen,false,false,false,true,92,48,"[""Metfardeh"",""Purloin"",""Noticeable""]"
+Aqueduct,2026-01-18,1,,,Fort Nelson,Rule Sixty Two,New York Scrappy,New York Scrappy,Fort Nelson,Middle Market,false,false,false,true,,,
+Aqueduct,2026-01-04,7,,,Metfardeh,Purloin,Noticeable,Purloin,I'm Buzzy,Texas QuMedfardeheen,false,false,false,true,92,48,"[""Metfardeh"",""Purloin"",""Noticeable""]"
 AUS Lismore,2026-01-03,4,,,Artie Lady,Do It For You,Ourlegs Eleven,Do It For You,Per Capita,Alabama Girl,false,false,false,true,97,39,"[""Artie Lady"",""Do It For You"",""Ourlegs Eleven""]"
 AUS Nowra,2025-12-13,3,,,Breakaway Week,Tillman,Ken'ker,Breakaway Week,Tillman,Fire And Gemstone,true,true,false,true,,,
 AUS Randwick Kensington,2026-01-13,3,,,Indigo Star,Lady Of The Castle,Let's Go Barbie,Gorgeous,Let's Go Barbie,Double Vision,false,false,false,true,97,43,"[""Indigo Star"",""Lady Of The Castle"",""Let's Go Barbie""]"
@@ -1218,8 +1227,8 @@ Charles Town,2026-01-02,4,,,No Mo Muffins,Georgia Rain,Rhenski,No Mo Muffins,Pea
 Charles Town,2026-01-03,2,,,Fifth of June,Citified,Collegeville Queen,Collegeville Queen,Miss Shack Attack,Cajun Prime,false,false,false,true,92,48,"[""Fifth of June"",""Citified"",""Collegeville Queen""]"
 Charles Town,2026-01-03,3,,,Hopping Henry,Auburn Mill,Colt Rock,Rocket Appeal,Auburn Mill,Hopping Henry,false,true,false,true,97,43,"[""Hopping Henry"",""Auburn Mill"",""Colt Rock""]"
 Charles Town,2026-01-03,8,,,Brother Conway,Social Chic,Kaladin,No Direction,Sweet Lime,I'd Rather Not,false,false,false,false,92,48,"[""Brother Conway"",""Social Chic"",""Kaladin""]"
-Charles Town Races,2025-12-09,6,,,Camco Laraido,Labero,Ma Barker,Labero,Fire the Rocket,Camco Laraido,false,false,false,true,,,
-Charles Town Races,2026-01-16,8,,,Omar Comin,Late in the Game,Strava,Omar Comin,Strava,Rick'swarmheart,true,false,false,true,67,62,"[""Omar Comin"",""Late in the Game"",""Strava""]"
+Charles Town,2025-12-09,6,,,Camco Laraido,Labero,Ma Barker,Labero,Fire the Rocket,Camco Laraido,false,false,false,true,,,
+Charles Town,2026-01-16,8,,,Omar Comin,Late in the Game,Strava,Omar Comin,Strava,Rick'swarmheart,true,false,false,true,67,62,"[""Omar Comin"",""Late in the Game"",""Strava""]"
 Dayton,2025-12-09,11,,,Banderas,Tie the Knot,Believe in Tom,Banderas,Tie the Knot,Chanceyfascination,true,true,false,true,,,
 Dayton,2025-12-10,9,,,Divine Thing,Sayinwhatimthinkin,Triathlon As,Famous Father,Triathlon As,Sayinwhatimthinkin,false,false,false,true,,,
 Delta Downs,2025-12-05,1,,,Killer Guitar,Drewrelius,Respecttheconnect,Killer Guitar,Drewrelius,Ninth Ward Bobby O,true,true,false,true,,,
@@ -1266,6 +1275,7 @@ Fair Grounds,2026-01-09,2,,,Leah's First,Honor Azteca,Cloudy Lass,Amazing Lady,S
 Fair Grounds,2026-01-09,3,,,Daredevil Doug,Mister O,Spielman,Lost in the Sauce,Miracle On Central,Spielman,false,false,true,true,92,48,"[""Daredevil Doug"",""Mister O"",""Spielman""]"
 Fair Grounds,2026-01-09,5,,,Sippin On Gin,Highland Creek,Cosmic Train,Sippin On Gin,Mangum,Cosmic Train,true,false,true,true,92,48,"[""Sippin On Gin"",""Highland Creek"",""Cosmic Train""]"
 Fair Grounds,2026-01-16,12,,,Just a Touch,Moonlight,Sir Greylind,Accelerize,Just a Touch,Cadet Corps,false,false,false,true,91,48,"[""Just a Touch"",""Moonlight"",""Sir Greylind""]"
+Fair Grounds,2026-01-19,1,,,Precious Money,The Pretty Sister,Honor His Half,Precious Money,The Pretty Sister,About to Set Sail,true,true,false,true,,,
 Flamboro Downs,2025-12-10,2,,,Tellit Russ Tellit,Onyx Bovino,Ambitious Mind,Ara You Crazy,Onyx Bovino,Ambitious Mind,false,true,true,true,,,
 FRA Lyon La Soie,2025-12-07,1,,,Rejaitt,Dream in Brooke,Valentine Day,,,,false,false,false,false,,,
 FRA Marseille Vivaux,2025-12-21,8,,,Dubalaa,Aventino,Noce De Rubis,Dubalaa,Lover Song,Westminster Love,true,false,false,true,,,
@@ -1337,11 +1347,11 @@ Mahoning Valley,2026-01-06,5,,,Lionistic,Az We Speak,Kichi Kitsu,Sweet Unique,Ki
 Mahoning Valley,2026-01-06,6,,,Washington's Union (86),Grey Streak (105),Supply Chain (87),Collectorate,Washington's Union,Supply Chain,false,false,true,true,100,48,"[""Washington's Union (86)"",""Grey Streak (105)"",""Supply Chain (87)""]"
 Mahoning Valley,2026-01-13,3,,,Relish the Ride,Dark Vader,Wetzel,Dark Vader,Raven Moon,Gone in a Flash,false,false,false,true,82,82,"[""Relish the Ride"",""Dark Vader"",""Wetzel""]"
 Mahoning Valley,2026-01-13,7,,,Mission Control,Who Da Boss,Casual Attire,Sunset Town,Mission Control,Casual Attire,false,false,true,true,82,82,"[""Mission Control"",""Who Da Boss"",""Casual Attire""]"
-Mahoning Valley Race Course,2025-12-16,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
-Mahoning Valley Race Course,2025-12-17,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
-Mahoning Valley Race Course,2025-12-20,1,,,Lookin Like Lucky,Santorino,Briarcliff,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-16,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-17,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-20,1,,,Lookin Like Lucky,Santorino,Briarcliff,,,,false,false,false,false,,,
 Meadowlands,2026-01-02,6,,,Nila Maree N,Ithatobeeyou,Youllfindout,Nila Maree N,Youllfindout,Arsenal's Ladybug,true,false,false,true,97,43,"[""Nila Maree N"",""Ithatobeeyou"",""Youllfindout""]"
-Meadowlands Racetrack,2026-01-16,11,,,Swedish Starlet N,Avf Claire,Fearless Bettor,Avf Claire,Fearless Bettor,Cruise Alert,false,false,false,true,97,43,"[""Swedish Starlet N"",""Avf Claire"",""Fearless Bettor""]"
+Meadowlands,2026-01-16,11,,,Swedish Starlet N,Avf Claire,Fearless Bettor,Avf Claire,Fearless Bettor,Cruise Alert,false,false,false,true,97,43,"[""Swedish Starlet N"",""Avf Claire"",""Fearless Bettor""]"
 Monticello Raceway,2025-12-24,1,,,Ziggy Sky,Fox Valley Inferno,Prairie Fenway,Ziggy Sky,Fox Valley Inferno,Aintnobettor A,true,true,false,true,,,
 Mountaineer Park,2025-12-07,2,,,Dreaming of Hope,Popstyle,Kozem,Maci's World,Dreaming of Hope,Popstyle,false,false,false,true,,,
 Mountaineer Park,2025-12-07,3,,,Spuns Kitten,Shotgun Margaret,Holly Roller,Shotgun Margaret,Spuns Kitten,Pour Me a Drink,false,false,false,true,,,
@@ -1400,7 +1410,7 @@ Remington Park,2025-12-20,3,,,Vestes,Tigers 'n Bears,Quarterly Report,Vestes,Spe
 Sam Houston,2026-01-03,5,,,Dutch Mills,Chivalrous,Bling Mountain,Shogun Be Fast,Team Leader,Cinco Richie,false,false,false,false,97,43,"[""Malibu S S"",""Team Leader"",""Shogun Be Fast""]"
 Sam Houston,2026-01-03,6,,,Dutch Mills,Chivalrous,Bling Mountain,Bling Mountain,Copper Storm,Noble Eagle,false,false,false,true,92,48,"[""Dutch Mills"",""Chivalrous"",""Bling Mountain""]"
 Sam Houston Race Park,2026-01-03,5,,,Malibu S S,Team Leader,Shogun Be Fast,,,,false,false,false,false,97,43,"[""Malibu S S"",""Team Leader"",""Shogun Be Fast""]"
-Saratoga Race Course,2025-12-07,9,,,Manhattan Artist,Hangman Mcgee,Morrone Dolce,Manhattan Artist,Hangman Mcgee,Dark Hour,true,true,false,true,,,
+Saratoga,2025-12-07,9,,,Manhattan Artist,Hangman Mcgee,Morrone Dolce,Manhattan Artist,Hangman Mcgee,Dark Hour,true,true,false,true,,,
 Sunland Park,2026-01-03,1,,,Wedding Groom,Broadway Dish,Shell Game,Wedding Groom,Shell Game,Billy de Kid,true,false,false,true,97,39,"[""Wedding Groom"",""Broadway Dish"",""Shell Game""]"
 Sunland Park,2026-01-05,5,,,Stand Up Guy,Exit Strategy,He's a Genius,Trafficstorm,Holy Bullet,American Storm,false,false,false,false,84,54,"[""Stand Up Guy"",""Exit Strategy"",""He's a Genius""]"
 SWE Bjerke,2025-12-21,5,,,Resilient Reddington,Explosive Axe,Icarus B.R.,Resilient Reddington,Caramel Volo,Explosive Axe,true,false,false,true,,,
@@ -1460,8 +1470,8 @@ Woodbine Mohawk (,2025-12-27,8,,,Bruno No No,Cold Creek Queso,Dublin Dasher,Brun
 Woodbine Mohawk,2025-12-27,9,,,Bronx Drifter,Sometime Somewhere,Pipewrench Charlie,Bronx Drifter,Self Made,Sergeant Slaughter,true,false,false,true,97,39,"[""Bronx Drifter"",""Sometime Somewhere"",""Pipewrench Charlie""]"
 Woodbine Mohawk,2026-01-02,5,,,Kellina Diamond,Job Hunter,Im Betonsix,POWDER PLAY,JOB HUNTER,KELLINA DIAMOND,false,true,false,true,67,62,"[""Kellina Diamond"",""Job Hunter"",""Im Betonsix""]"
 Woodbine Mohawk,2026-01-03,11,,,Blue Bar,Ernwood Big Mack,Summer Dancer,Dusty Lane Levi,Blue Bar,Erinwood Big Mack,false,false,false,true,82,54,"[""So Much More"",""Angostura Hanover"",""Century Jamila""]"
-Woodbine Racetrack,2025-12-04,1,,,Nicki Is a Breeze,Lady Izzy,Majestic Appeal,,,,false,false,false,false,,,
-Woodbine Racetrack,2025-12-07,2,,,Logan Park,Hasty Bid,What About Elmo,Logan Park,Hasty Bid,Sid the Kid,true,true,false,true,,,
+Woodbine,2025-12-04,1,,,Nicki Is a Breeze,Lady Izzy,Majestic Appeal,,,,false,false,false,false,,,
+Woodbine,2025-12-07,2,,,Logan Park,Hasty Bid,What About Elmo,Logan Park,Hasty Bid,Sid the Kid,true,true,false,true,,,
 yonkers,2025-12-08,10,,,Italian Lad N,Western Era,Walkinshaw N,Speaker of Peace,Italian Lad N,Music Hall,false,false,false,true,,,
 yonkers,2025-12-08,6,,,Just Enuff Stuff,Hammering Hank,Perfect Promises,Hammering Hank,Perfect Promises,Why Tomorrow Ray,false,false,false,true,,,
 yonkers,2025-12-09,1,,,Disaronno Hill,Bout Damn Time A,Nuttinbuthebest,Bout Damn Time A,Disaronno Hill,Bluebird Crush,false,false,false,true,,,
@@ -1491,7 +1501,8 @@ Aqueduct,2026-01-09,5,,,Probability,Antietam,Kaz Oil Changer,Sequential,Probabil
 Aqueduct,2026-01-09,6,,,That's Funny,Blenheim Baby,Spirit of Esther,That's Funny,Blenheim Baby,Spirit of Esther,true,true,true,true,84,54,"[""That's Funny"",""Blenheim Baby"",""Spirit of Esther""]"
 Aqueduct,2026-01-09,7,,,Vettriano,Mr Skylight,Big Hat Willie,One Nine Hundred,Toxic Gray,Mr Skylight,false,false,false,true,84,54,"[""Vettriano"",""Mr Skylight"",""Big Hat Willie""]"
 Aqueduct,2026-01-09,8,,,Mo Spice,Bellamy,Tinseltown,Mo Spice,Bellamy,Tinseltown,true,true,true,true,97,39,"[""Spidey Man"",""Skillian"",""Biker Baley""]"
-Aqueduct Racetrack,2026-01-04,7,,,Metfardeh,Purloin,Noticeable,Purloin,I'm Buzzy,Texas QuMedfardeheen,false,false,false,true,92,48,"[""Metfardeh"",""Purloin"",""Noticeable""]"
+Aqueduct,2026-01-18,1,,,Fort Nelson,Rule Sixty Two,New York Scrappy,New York Scrappy,Fort Nelson,Middle Market,false,false,false,true,,,
+Aqueduct,2026-01-04,7,,,Metfardeh,Purloin,Noticeable,Purloin,I'm Buzzy,Texas QuMedfardeheen,false,false,false,true,92,48,"[""Metfardeh"",""Purloin"",""Noticeable""]"
 AUS Lismore,2026-01-03,4,,,Artie Lady,Do It For You,Ourlegs Eleven,Do It For You,Per Capita,Alabama Girl,false,false,false,true,97,39,"[""Artie Lady"",""Do It For You"",""Ourlegs Eleven""]"
 AUS Nowra,2025-12-13,3,,,Breakaway Week,Tillman,Ken'ker,Breakaway Week,Tillman,Fire And Gemstone,true,true,false,true,,,
 AUS Randwick Kensington,2026-01-13,3,,,Indigo Star,Lady Of The Castle,Let's Go Barbie,Gorgeous,Let's Go Barbie,Double Vision,false,false,false,true,97,43,"[""Indigo Star"",""Lady Of The Castle"",""Let's Go Barbie""]"
@@ -1512,8 +1523,8 @@ Charles Town,2026-01-02,4,,,No Mo Muffins,Georgia Rain,Rhenski,No Mo Muffins,Pea
 Charles Town,2026-01-03,2,,,Fifth of June,Citified,Collegeville Queen,Collegeville Queen,Miss Shack Attack,Cajun Prime,false,false,false,true,92,48,"[""Fifth of June"",""Citified"",""Collegeville Queen""]"
 Charles Town,2026-01-03,3,,,Hopping Henry,Auburn Mill,Colt Rock,Rocket Appeal,Auburn Mill,Hopping Henry,false,true,false,true,97,43,"[""Hopping Henry"",""Auburn Mill"",""Colt Rock""]"
 Charles Town,2026-01-03,8,,,Brother Conway,Social Chic,Kaladin,No Direction,Sweet Lime,I'd Rather Not,false,false,false,false,92,48,"[""Brother Conway"",""Social Chic"",""Kaladin""]"
-Charles Town Races,2025-12-09,6,,,Camco Laraido,Labero,Ma Barker,Labero,Fire the Rocket,Camco Laraido,false,false,false,true,,,
-Charles Town Races,2026-01-16,8,,,Omar Comin,Late in the Game,Strava,Omar Comin,Strava,Rick'swarmheart,true,false,false,true,67,62,"[""Omar Comin"",""Late in the Game"",""Strava""]"
+Charles Town,2025-12-09,6,,,Camco Laraido,Labero,Ma Barker,Labero,Fire the Rocket,Camco Laraido,false,false,false,true,,,
+Charles Town,2026-01-16,8,,,Omar Comin,Late in the Game,Strava,Omar Comin,Strava,Rick'swarmheart,true,false,false,true,67,62,"[""Omar Comin"",""Late in the Game"",""Strava""]"
 Dayton,2025-12-09,11,,,Banderas,Tie the Knot,Believe in Tom,Banderas,Tie the Knot,Chanceyfascination,true,true,false,true,,,
 Dayton,2025-12-10,9,,,Divine Thing,Sayinwhatimthinkin,Triathlon As,Famous Father,Triathlon As,Sayinwhatimthinkin,false,false,false,true,,,
 Delta Downs,2025-12-05,1,,,Killer Guitar,Drewrelius,Respecttheconnect,Killer Guitar,Drewrelius,Ninth Ward Bobby O,true,true,false,true,,,
@@ -1560,6 +1571,7 @@ Fair Grounds,2026-01-09,2,,,Leah's First,Honor Azteca,Cloudy Lass,Amazing Lady,S
 Fair Grounds,2026-01-09,3,,,Daredevil Doug,Mister O,Spielman,Lost in the Sauce,Miracle On Central,Spielman,false,false,true,true,92,48,"[""Daredevil Doug"",""Mister O"",""Spielman""]"
 Fair Grounds,2026-01-09,5,,,Sippin On Gin,Highland Creek,Cosmic Train,Sippin On Gin,Mangum,Cosmic Train,true,false,true,true,92,48,"[""Sippin On Gin"",""Highland Creek"",""Cosmic Train""]"
 Fair Grounds,2026-01-16,12,,,Just a Touch,Moonlight,Sir Greylind,Accelerize,Just a Touch,Cadet Corps,false,false,false,true,91,48,"[""Just a Touch"",""Moonlight"",""Sir Greylind""]"
+Fair Grounds,2026-01-19,1,,,Precious Money,The Pretty Sister,Honor His Half,Precious Money,The Pretty Sister,About to Set Sail,true,true,false,true,,,
 Flamboro Downs,2025-12-10,2,,,Tellit Russ Tellit,Onyx Bovino,Ambitious Mind,Ara You Crazy,Onyx Bovino,Ambitious Mind,false,true,true,true,,,
 FRA Lyon La Soie,2025-12-07,1,,,Rejaitt,Dream in Brooke,Valentine Day,,,,false,false,false,false,,,
 FRA Marseille Vivaux,2025-12-21,8,,,Dubalaa,Aventino,Noce De Rubis,Dubalaa,Lover Song,Westminster Love,true,false,false,true,,,
@@ -1631,11 +1643,11 @@ Mahoning Valley,2026-01-06,5,,,Lionistic,Az We Speak,Kichi Kitsu,Sweet Unique,Ki
 Mahoning Valley,2026-01-06,6,,,Washington's Union (86),Grey Streak (105),Supply Chain (87),Collectorate,Washington's Union,Supply Chain,false,false,true,true,100,48,"[""Washington's Union (86)"",""Grey Streak (105)"",""Supply Chain (87)""]"
 Mahoning Valley,2026-01-13,3,,,Relish the Ride,Dark Vader,Wetzel,Dark Vader,Raven Moon,Gone in a Flash,false,false,false,true,82,82,"[""Relish the Ride"",""Dark Vader"",""Wetzel""]"
 Mahoning Valley,2026-01-13,7,,,Mission Control,Who Da Boss,Casual Attire,Sunset Town,Mission Control,Casual Attire,false,false,true,true,82,82,"[""Mission Control"",""Who Da Boss"",""Casual Attire""]"
-Mahoning Valley Race Course,2025-12-16,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
-Mahoning Valley Race Course,2025-12-17,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
-Mahoning Valley Race Course,2025-12-20,1,,,Lookin Like Lucky,Santorino,Briarcliff,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-16,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-17,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-20,1,,,Lookin Like Lucky,Santorino,Briarcliff,,,,false,false,false,false,,,
 Meadowlands,2026-01-02,6,,,Nila Maree N,Ithatobeeyou,Youllfindout,Nila Maree N,Youllfindout,Arsenal's Ladybug,true,false,false,true,97,43,"[""Nila Maree N"",""Ithatobeeyou"",""Youllfindout""]"
-Meadowlands Racetrack,2026-01-16,11,,,Swedish Starlet N,Avf Claire,Fearless Bettor,Avf Claire,Fearless Bettor,Cruise Alert,false,false,false,true,97,43,"[""Swedish Starlet N"",""Avf Claire"",""Fearless Bettor""]"
+Meadowlands,2026-01-16,11,,,Swedish Starlet N,Avf Claire,Fearless Bettor,Avf Claire,Fearless Bettor,Cruise Alert,false,false,false,true,97,43,"[""Swedish Starlet N"",""Avf Claire"",""Fearless Bettor""]"
 Monticello Raceway,2025-12-24,1,,,Ziggy Sky,Fox Valley Inferno,Prairie Fenway,Ziggy Sky,Fox Valley Inferno,Aintnobettor A,true,true,false,true,,,
 Mountaineer Park,2025-12-07,2,,,Dreaming of Hope,Popstyle,Kozem,Maci's World,Dreaming of Hope,Popstyle,false,false,false,true,,,
 Mountaineer Park,2025-12-07,3,,,Spuns Kitten,Shotgun Margaret,Holly Roller,Shotgun Margaret,Spuns Kitten,Pour Me a Drink,false,false,false,true,,,
@@ -1694,7 +1706,7 @@ Remington Park,2025-12-20,3,,,Vestes,Tigers 'n Bears,Quarterly Report,Vestes,Spe
 Sam Houston,2026-01-03,5,,,Dutch Mills,Chivalrous,Bling Mountain,Shogun Be Fast,Team Leader,Cinco Richie,false,false,false,false,97,43,"[""Malibu S S"",""Team Leader"",""Shogun Be Fast""]"
 Sam Houston,2026-01-03,6,,,Dutch Mills,Chivalrous,Bling Mountain,Bling Mountain,Copper Storm,Noble Eagle,false,false,false,true,92,48,"[""Dutch Mills"",""Chivalrous"",""Bling Mountain""]"
 Sam Houston Race Park,2026-01-03,5,,,Malibu S S,Team Leader,Shogun Be Fast,,,,false,false,false,false,97,43,"[""Malibu S S"",""Team Leader"",""Shogun Be Fast""]"
-Saratoga Race Course,2025-12-07,9,,,Manhattan Artist,Hangman Mcgee,Morrone Dolce,Manhattan Artist,Hangman Mcgee,Dark Hour,true,true,false,true,,,
+Saratoga,2025-12-07,9,,,Manhattan Artist,Hangman Mcgee,Morrone Dolce,Manhattan Artist,Hangman Mcgee,Dark Hour,true,true,false,true,,,
 Sunland Park,2026-01-03,1,,,Wedding Groom,Broadway Dish,Shell Game,Wedding Groom,Shell Game,Billy de Kid,true,false,false,true,97,39,"[""Wedding Groom"",""Broadway Dish"",""Shell Game""]"
 Sunland Park,2026-01-05,5,,,Stand Up Guy,Exit Strategy,He's a Genius,Trafficstorm,Holy Bullet,American Storm,false,false,false,false,84,54,"[""Stand Up Guy"",""Exit Strategy"",""He's a Genius""]"
 SWE Bjerke,2025-12-21,5,,,Resilient Reddington,Explosive Axe,Icarus B.R.,Resilient Reddington,Caramel Volo,Explosive Axe,true,false,false,true,,,
@@ -1754,8 +1766,8 @@ Woodbine Mohawk (,2025-12-27,8,,,Bruno No No,Cold Creek Queso,Dublin Dasher,Brun
 Woodbine Mohawk,2025-12-27,9,,,Bronx Drifter,Sometime Somewhere,Pipewrench Charlie,Bronx Drifter,Self Made,Sergeant Slaughter,true,false,false,true,97,39,"[""Bronx Drifter"",""Sometime Somewhere"",""Pipewrench Charlie""]"
 Woodbine Mohawk,2026-01-02,5,,,Kellina Diamond,Job Hunter,Im Betonsix,POWDER PLAY,JOB HUNTER,KELLINA DIAMOND,false,true,false,true,67,62,"[""Kellina Diamond"",""Job Hunter"",""Im Betonsix""]"
 Woodbine Mohawk,2026-01-03,11,,,Blue Bar,Ernwood Big Mack,Summer Dancer,Dusty Lane Levi,Blue Bar,Erinwood Big Mack,false,false,false,true,82,54,"[""So Much More"",""Angostura Hanover"",""Century Jamila""]"
-Woodbine Racetrack,2025-12-04,1,,,Nicki Is a Breeze,Lady Izzy,Majestic Appeal,,,,false,false,false,false,,,
-Woodbine Racetrack,2025-12-07,2,,,Logan Park,Hasty Bid,What About Elmo,Logan Park,Hasty Bid,Sid the Kid,true,true,false,true,,,
+Woodbine,2025-12-04,1,,,Nicki Is a Breeze,Lady Izzy,Majestic Appeal,,,,false,false,false,false,,,
+Woodbine,2025-12-07,2,,,Logan Park,Hasty Bid,What About Elmo,Logan Park,Hasty Bid,Sid the Kid,true,true,false,true,,,
 yonkers,2025-12-08,10,,,Italian Lad N,Western Era,Walkinshaw N,Speaker of Peace,Italian Lad N,Music Hall,false,false,false,true,,,
 yonkers,2025-12-08,6,,,Just Enuff Stuff,Hammering Hank,Perfect Promises,Hammering Hank,Perfect Promises,Why Tomorrow Ray,false,false,false,true,,,
 yonkers,2025-12-09,1,,,Disaronno Hill,Bout Damn Time A,Nuttinbuthebest,Bout Damn Time A,Disaronno Hill,Bluebird Crush,false,false,false,true,,,
@@ -1785,7 +1797,8 @@ Aqueduct,2026-01-09,5,,,Probability,Antietam,Kaz Oil Changer,Sequential,Probabil
 Aqueduct,2026-01-09,6,,,That's Funny,Blenheim Baby,Spirit of Esther,That's Funny,Blenheim Baby,Spirit of Esther,true,true,true,true,84,54,"[""That's Funny"",""Blenheim Baby"",""Spirit of Esther""]"
 Aqueduct,2026-01-09,7,,,Vettriano,Mr Skylight,Big Hat Willie,One Nine Hundred,Toxic Gray,Mr Skylight,false,false,false,true,84,54,"[""Vettriano"",""Mr Skylight"",""Big Hat Willie""]"
 Aqueduct,2026-01-09,8,,,Mo Spice,Bellamy,Tinseltown,Mo Spice,Bellamy,Tinseltown,true,true,true,true,97,39,"[""Spidey Man"",""Skillian"",""Biker Baley""]"
-Aqueduct Racetrack,2026-01-04,7,,,Metfardeh,Purloin,Noticeable,Purloin,I'm Buzzy,Texas QuMedfardeheen,false,false,false,true,92,48,"[""Metfardeh"",""Purloin"",""Noticeable""]"
+Aqueduct,2026-01-18,1,,,Fort Nelson,Rule Sixty Two,New York Scrappy,New York Scrappy,Fort Nelson,Middle Market,false,false,false,true,,,
+Aqueduct,2026-01-04,7,,,Metfardeh,Purloin,Noticeable,Purloin,I'm Buzzy,Texas QuMedfardeheen,false,false,false,true,92,48,"[""Metfardeh"",""Purloin"",""Noticeable""]"
 AUS Lismore,2026-01-03,4,,,Artie Lady,Do It For You,Ourlegs Eleven,Do It For You,Per Capita,Alabama Girl,false,false,false,true,97,39,"[""Artie Lady"",""Do It For You"",""Ourlegs Eleven""]"
 AUS Nowra,2025-12-13,3,,,Breakaway Week,Tillman,Ken'ker,Breakaway Week,Tillman,Fire And Gemstone,true,true,false,true,,,
 AUS Randwick Kensington,2026-01-13,3,,,Indigo Star,Lady Of The Castle,Let's Go Barbie,Gorgeous,Let's Go Barbie,Double Vision,false,false,false,true,97,43,"[""Indigo Star"",""Lady Of The Castle"",""Let's Go Barbie""]"
@@ -1806,8 +1819,8 @@ Charles Town,2026-01-02,4,,,No Mo Muffins,Georgia Rain,Rhenski,No Mo Muffins,Pea
 Charles Town,2026-01-03,2,,,Fifth of June,Citified,Collegeville Queen,Collegeville Queen,Miss Shack Attack,Cajun Prime,false,false,false,true,92,48,"[""Fifth of June"",""Citified"",""Collegeville Queen""]"
 Charles Town,2026-01-03,3,,,Hopping Henry,Auburn Mill,Colt Rock,Rocket Appeal,Auburn Mill,Hopping Henry,false,true,false,true,97,43,"[""Hopping Henry"",""Auburn Mill"",""Colt Rock""]"
 Charles Town,2026-01-03,8,,,Brother Conway,Social Chic,Kaladin,No Direction,Sweet Lime,I'd Rather Not,false,false,false,false,92,48,"[""Brother Conway"",""Social Chic"",""Kaladin""]"
-Charles Town Races,2025-12-09,6,,,Camco Laraido,Labero,Ma Barker,Labero,Fire the Rocket,Camco Laraido,false,false,false,true,,,
-Charles Town Races,2026-01-16,8,,,Omar Comin,Late in the Game,Strava,Omar Comin,Strava,Rick'swarmheart,true,false,false,true,67,62,"[""Omar Comin"",""Late in the Game"",""Strava""]"
+Charles Town,2025-12-09,6,,,Camco Laraido,Labero,Ma Barker,Labero,Fire the Rocket,Camco Laraido,false,false,false,true,,,
+Charles Town,2026-01-16,8,,,Omar Comin,Late in the Game,Strava,Omar Comin,Strava,Rick'swarmheart,true,false,false,true,67,62,"[""Omar Comin"",""Late in the Game"",""Strava""]"
 Dayton,2025-12-09,11,,,Banderas,Tie the Knot,Believe in Tom,Banderas,Tie the Knot,Chanceyfascination,true,true,false,true,,,
 Dayton,2025-12-10,9,,,Divine Thing,Sayinwhatimthinkin,Triathlon As,Famous Father,Triathlon As,Sayinwhatimthinkin,false,false,false,true,,,
 Delta Downs,2025-12-05,1,,,Killer Guitar,Drewrelius,Respecttheconnect,Killer Guitar,Drewrelius,Ninth Ward Bobby O,true,true,false,true,,,
@@ -1854,6 +1867,7 @@ Fair Grounds,2026-01-09,2,,,Leah's First,Honor Azteca,Cloudy Lass,Amazing Lady,S
 Fair Grounds,2026-01-09,3,,,Daredevil Doug,Mister O,Spielman,Lost in the Sauce,Miracle On Central,Spielman,false,false,true,true,92,48,"[""Daredevil Doug"",""Mister O"",""Spielman""]"
 Fair Grounds,2026-01-09,5,,,Sippin On Gin,Highland Creek,Cosmic Train,Sippin On Gin,Mangum,Cosmic Train,true,false,true,true,92,48,"[""Sippin On Gin"",""Highland Creek"",""Cosmic Train""]"
 Fair Grounds,2026-01-16,12,,,Just a Touch,Moonlight,Sir Greylind,Accelerize,Just a Touch,Cadet Corps,false,false,false,true,91,48,"[""Just a Touch"",""Moonlight"",""Sir Greylind""]"
+Fair Grounds,2026-01-19,1,,,Precious Money,The Pretty Sister,Honor His Half,Precious Money,The Pretty Sister,About to Set Sail,true,true,false,true,,,
 Flamboro Downs,2025-12-10,2,,,Tellit Russ Tellit,Onyx Bovino,Ambitious Mind,Ara You Crazy,Onyx Bovino,Ambitious Mind,false,true,true,true,,,
 FRA Lyon La Soie,2025-12-07,1,,,Rejaitt,Dream in Brooke,Valentine Day,,,,false,false,false,false,,,
 FRA Marseille Vivaux,2025-12-21,8,,,Dubalaa,Aventino,Noce De Rubis,Dubalaa,Lover Song,Westminster Love,true,false,false,true,,,
@@ -1925,11 +1939,11 @@ Mahoning Valley,2026-01-06,5,,,Lionistic,Az We Speak,Kichi Kitsu,Sweet Unique,Ki
 Mahoning Valley,2026-01-06,6,,,Washington's Union (86),Grey Streak (105),Supply Chain (87),Collectorate,Washington's Union,Supply Chain,false,false,true,true,100,48,"[""Washington's Union (86)"",""Grey Streak (105)"",""Supply Chain (87)""]"
 Mahoning Valley,2026-01-13,3,,,Relish the Ride,Dark Vader,Wetzel,Dark Vader,Raven Moon,Gone in a Flash,false,false,false,true,82,82,"[""Relish the Ride"",""Dark Vader"",""Wetzel""]"
 Mahoning Valley,2026-01-13,7,,,Mission Control,Who Da Boss,Casual Attire,Sunset Town,Mission Control,Casual Attire,false,false,true,true,82,82,"[""Mission Control"",""Who Da Boss"",""Casual Attire""]"
-Mahoning Valley Race Course,2025-12-16,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
-Mahoning Valley Race Course,2025-12-17,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
-Mahoning Valley Race Course,2025-12-20,1,,,Lookin Like Lucky,Santorino,Briarcliff,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-16,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-17,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-20,1,,,Lookin Like Lucky,Santorino,Briarcliff,,,,false,false,false,false,,,
 Meadowlands,2026-01-02,6,,,Nila Maree N,Ithatobeeyou,Youllfindout,Nila Maree N,Youllfindout,Arsenal's Ladybug,true,false,false,true,97,43,"[""Nila Maree N"",""Ithatobeeyou"",""Youllfindout""]"
-Meadowlands Racetrack,2026-01-16,11,,,Swedish Starlet N,Avf Claire,Fearless Bettor,Avf Claire,Fearless Bettor,Cruise Alert,false,false,false,true,97,43,"[""Swedish Starlet N"",""Avf Claire"",""Fearless Bettor""]"
+Meadowlands,2026-01-16,11,,,Swedish Starlet N,Avf Claire,Fearless Bettor,Avf Claire,Fearless Bettor,Cruise Alert,false,false,false,true,97,43,"[""Swedish Starlet N"",""Avf Claire"",""Fearless Bettor""]"
 Monticello Raceway,2025-12-24,1,,,Ziggy Sky,Fox Valley Inferno,Prairie Fenway,Ziggy Sky,Fox Valley Inferno,Aintnobettor A,true,true,false,true,,,
 Mountaineer Park,2025-12-07,2,,,Dreaming of Hope,Popstyle,Kozem,Maci's World,Dreaming of Hope,Popstyle,false,false,false,true,,,
 Mountaineer Park,2025-12-07,3,,,Spuns Kitten,Shotgun Margaret,Holly Roller,Shotgun Margaret,Spuns Kitten,Pour Me a Drink,false,false,false,true,,,
@@ -1988,7 +2002,7 @@ Remington Park,2025-12-20,3,,,Vestes,Tigers 'n Bears,Quarterly Report,Vestes,Spe
 Sam Houston,2026-01-03,5,,,Dutch Mills,Chivalrous,Bling Mountain,Shogun Be Fast,Team Leader,Cinco Richie,false,false,false,false,97,43,"[""Malibu S S"",""Team Leader"",""Shogun Be Fast""]"
 Sam Houston,2026-01-03,6,,,Dutch Mills,Chivalrous,Bling Mountain,Bling Mountain,Copper Storm,Noble Eagle,false,false,false,true,92,48,"[""Dutch Mills"",""Chivalrous"",""Bling Mountain""]"
 Sam Houston Race Park,2026-01-03,5,,,Malibu S S,Team Leader,Shogun Be Fast,,,,false,false,false,false,97,43,"[""Malibu S S"",""Team Leader"",""Shogun Be Fast""]"
-Saratoga Race Course,2025-12-07,9,,,Manhattan Artist,Hangman Mcgee,Morrone Dolce,Manhattan Artist,Hangman Mcgee,Dark Hour,true,true,false,true,,,
+Saratoga,2025-12-07,9,,,Manhattan Artist,Hangman Mcgee,Morrone Dolce,Manhattan Artist,Hangman Mcgee,Dark Hour,true,true,false,true,,,
 Sunland Park,2026-01-03,1,,,Wedding Groom,Broadway Dish,Shell Game,Wedding Groom,Shell Game,Billy de Kid,true,false,false,true,97,39,"[""Wedding Groom"",""Broadway Dish"",""Shell Game""]"
 Sunland Park,2026-01-05,5,,,Stand Up Guy,Exit Strategy,He's a Genius,Trafficstorm,Holy Bullet,American Storm,false,false,false,false,84,54,"[""Stand Up Guy"",""Exit Strategy"",""He's a Genius""]"
 SWE Bjerke,2025-12-21,5,,,Resilient Reddington,Explosive Axe,Icarus B.R.,Resilient Reddington,Caramel Volo,Explosive Axe,true,false,false,true,,,
@@ -2048,8 +2062,8 @@ Woodbine Mohawk (,2025-12-27,8,,,Bruno No No,Cold Creek Queso,Dublin Dasher,Brun
 Woodbine Mohawk,2025-12-27,9,,,Bronx Drifter,Sometime Somewhere,Pipewrench Charlie,Bronx Drifter,Self Made,Sergeant Slaughter,true,false,false,true,97,39,"[""Bronx Drifter"",""Sometime Somewhere"",""Pipewrench Charlie""]"
 Woodbine Mohawk,2026-01-02,5,,,Kellina Diamond,Job Hunter,Im Betonsix,POWDER PLAY,JOB HUNTER,KELLINA DIAMOND,false,true,false,true,67,62,"[""Kellina Diamond"",""Job Hunter"",""Im Betonsix""]"
 Woodbine Mohawk,2026-01-03,11,,,Blue Bar,Ernwood Big Mack,Summer Dancer,Dusty Lane Levi,Blue Bar,Erinwood Big Mack,false,false,false,true,82,54,"[""So Much More"",""Angostura Hanover"",""Century Jamila""]"
-Woodbine Racetrack,2025-12-04,1,,,Nicki Is a Breeze,Lady Izzy,Majestic Appeal,,,,false,false,false,false,,,
-Woodbine Racetrack,2025-12-07,2,,,Logan Park,Hasty Bid,What About Elmo,Logan Park,Hasty Bid,Sid the Kid,true,true,false,true,,,
+Woodbine,2025-12-04,1,,,Nicki Is a Breeze,Lady Izzy,Majestic Appeal,,,,false,false,false,false,,,
+Woodbine,2025-12-07,2,,,Logan Park,Hasty Bid,What About Elmo,Logan Park,Hasty Bid,Sid the Kid,true,true,false,true,,,
 yonkers,2025-12-08,10,,,Italian Lad N,Western Era,Walkinshaw N,Speaker of Peace,Italian Lad N,Music Hall,false,false,false,true,,,
 yonkers,2025-12-08,6,,,Just Enuff Stuff,Hammering Hank,Perfect Promises,Hammering Hank,Perfect Promises,Why Tomorrow Ray,false,false,false,true,,,
 yonkers,2025-12-09,1,,,Disaronno Hill,Bout Damn Time A,Nuttinbuthebest,Bout Damn Time A,Disaronno Hill,Bluebird Crush,false,false,false,true,,,
@@ -2079,7 +2093,8 @@ Aqueduct,2026-01-09,5,,,Probability,Antietam,Kaz Oil Changer,Sequential,Probabil
 Aqueduct,2026-01-09,6,,,That's Funny,Blenheim Baby,Spirit of Esther,That's Funny,Blenheim Baby,Spirit of Esther,true,true,true,true,84,54,"[""That's Funny"",""Blenheim Baby"",""Spirit of Esther""]"
 Aqueduct,2026-01-09,7,,,Vettriano,Mr Skylight,Big Hat Willie,One Nine Hundred,Toxic Gray,Mr Skylight,false,false,false,true,84,54,"[""Vettriano"",""Mr Skylight"",""Big Hat Willie""]"
 Aqueduct,2026-01-09,8,,,Mo Spice,Bellamy,Tinseltown,Mo Spice,Bellamy,Tinseltown,true,true,true,true,97,39,"[""Spidey Man"",""Skillian"",""Biker Baley""]"
-Aqueduct Racetrack,2026-01-04,7,,,Metfardeh,Purloin,Noticeable,Purloin,I'm Buzzy,Texas QuMedfardeheen,false,false,false,true,92,48,"[""Metfardeh"",""Purloin"",""Noticeable""]"
+Aqueduct,2026-01-18,1,,,Fort Nelson,Rule Sixty Two,New York Scrappy,New York Scrappy,Fort Nelson,Middle Market,false,false,false,true,,,
+Aqueduct,2026-01-04,7,,,Metfardeh,Purloin,Noticeable,Purloin,I'm Buzzy,Texas QuMedfardeheen,false,false,false,true,92,48,"[""Metfardeh"",""Purloin"",""Noticeable""]"
 AUS Lismore,2026-01-03,4,,,Artie Lady,Do It For You,Ourlegs Eleven,Do It For You,Per Capita,Alabama Girl,false,false,false,true,97,39,"[""Artie Lady"",""Do It For You"",""Ourlegs Eleven""]"
 AUS Nowra,2025-12-13,3,,,Breakaway Week,Tillman,Ken'ker,Breakaway Week,Tillman,Fire And Gemstone,true,true,false,true,,,
 AUS Randwick Kensington,2026-01-13,3,,,Indigo Star,Lady Of The Castle,Let's Go Barbie,Gorgeous,Let's Go Barbie,Double Vision,false,false,false,true,97,43,"[""Indigo Star"",""Lady Of The Castle"",""Let's Go Barbie""]"
@@ -2100,8 +2115,8 @@ Charles Town,2026-01-02,4,,,No Mo Muffins,Georgia Rain,Rhenski,No Mo Muffins,Pea
 Charles Town,2026-01-03,2,,,Fifth of June,Citified,Collegeville Queen,Collegeville Queen,Miss Shack Attack,Cajun Prime,false,false,false,true,92,48,"[""Fifth of June"",""Citified"",""Collegeville Queen""]"
 Charles Town,2026-01-03,3,,,Hopping Henry,Auburn Mill,Colt Rock,Rocket Appeal,Auburn Mill,Hopping Henry,false,true,false,true,97,43,"[""Hopping Henry"",""Auburn Mill"",""Colt Rock""]"
 Charles Town,2026-01-03,8,,,Brother Conway,Social Chic,Kaladin,No Direction,Sweet Lime,I'd Rather Not,false,false,false,false,92,48,"[""Brother Conway"",""Social Chic"",""Kaladin""]"
-Charles Town Races,2025-12-09,6,,,Camco Laraido,Labero,Ma Barker,Labero,Fire the Rocket,Camco Laraido,false,false,false,true,,,
-Charles Town Races,2026-01-16,8,,,Omar Comin,Late in the Game,Strava,Omar Comin,Strava,Rick'swarmheart,true,false,false,true,67,62,"[""Omar Comin"",""Late in the Game"",""Strava""]"
+Charles Town,2025-12-09,6,,,Camco Laraido,Labero,Ma Barker,Labero,Fire the Rocket,Camco Laraido,false,false,false,true,,,
+Charles Town,2026-01-16,8,,,Omar Comin,Late in the Game,Strava,Omar Comin,Strava,Rick'swarmheart,true,false,false,true,67,62,"[""Omar Comin"",""Late in the Game"",""Strava""]"
 Dayton,2025-12-09,11,,,Banderas,Tie the Knot,Believe in Tom,Banderas,Tie the Knot,Chanceyfascination,true,true,false,true,,,
 Dayton,2025-12-10,9,,,Divine Thing,Sayinwhatimthinkin,Triathlon As,Famous Father,Triathlon As,Sayinwhatimthinkin,false,false,false,true,,,
 Delta Downs,2025-12-05,1,,,Killer Guitar,Drewrelius,Respecttheconnect,Killer Guitar,Drewrelius,Ninth Ward Bobby O,true,true,false,true,,,
@@ -2148,6 +2163,7 @@ Fair Grounds,2026-01-09,2,,,Leah's First,Honor Azteca,Cloudy Lass,Amazing Lady,S
 Fair Grounds,2026-01-09,3,,,Daredevil Doug,Mister O,Spielman,Lost in the Sauce,Miracle On Central,Spielman,false,false,true,true,92,48,"[""Daredevil Doug"",""Mister O"",""Spielman""]"
 Fair Grounds,2026-01-09,5,,,Sippin On Gin,Highland Creek,Cosmic Train,Sippin On Gin,Mangum,Cosmic Train,true,false,true,true,92,48,"[""Sippin On Gin"",""Highland Creek"",""Cosmic Train""]"
 Fair Grounds,2026-01-16,12,,,Just a Touch,Moonlight,Sir Greylind,Accelerize,Just a Touch,Cadet Corps,false,false,false,true,91,48,"[""Just a Touch"",""Moonlight"",""Sir Greylind""]"
+Fair Grounds,2026-01-19,1,,,Precious Money,The Pretty Sister,Honor His Half,Precious Money,The Pretty Sister,About to Set Sail,true,true,false,true,,,
 Flamboro Downs,2025-12-10,2,,,Tellit Russ Tellit,Onyx Bovino,Ambitious Mind,Ara You Crazy,Onyx Bovino,Ambitious Mind,false,true,true,true,,,
 FRA Lyon La Soie,2025-12-07,1,,,Rejaitt,Dream in Brooke,Valentine Day,,,,false,false,false,false,,,
 FRA Marseille Vivaux,2025-12-21,8,,,Dubalaa,Aventino,Noce De Rubis,Dubalaa,Lover Song,Westminster Love,true,false,false,true,,,
@@ -2219,11 +2235,11 @@ Mahoning Valley,2026-01-06,5,,,Lionistic,Az We Speak,Kichi Kitsu,Sweet Unique,Ki
 Mahoning Valley,2026-01-06,6,,,Washington's Union (86),Grey Streak (105),Supply Chain (87),Collectorate,Washington's Union,Supply Chain,false,false,true,true,100,48,"[""Washington's Union (86)"",""Grey Streak (105)"",""Supply Chain (87)""]"
 Mahoning Valley,2026-01-13,3,,,Relish the Ride,Dark Vader,Wetzel,Dark Vader,Raven Moon,Gone in a Flash,false,false,false,true,82,82,"[""Relish the Ride"",""Dark Vader"",""Wetzel""]"
 Mahoning Valley,2026-01-13,7,,,Mission Control,Who Da Boss,Casual Attire,Sunset Town,Mission Control,Casual Attire,false,false,true,true,82,82,"[""Mission Control"",""Who Da Boss"",""Casual Attire""]"
-Mahoning Valley Race Course,2025-12-16,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
-Mahoning Valley Race Course,2025-12-17,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
-Mahoning Valley Race Course,2025-12-20,1,,,Lookin Like Lucky,Santorino,Briarcliff,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-16,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-17,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-20,1,,,Lookin Like Lucky,Santorino,Briarcliff,,,,false,false,false,false,,,
 Meadowlands,2026-01-02,6,,,Nila Maree N,Ithatobeeyou,Youllfindout,Nila Maree N,Youllfindout,Arsenal's Ladybug,true,false,false,true,97,43,"[""Nila Maree N"",""Ithatobeeyou"",""Youllfindout""]"
-Meadowlands Racetrack,2026-01-16,11,,,Swedish Starlet N,Avf Claire,Fearless Bettor,Avf Claire,Fearless Bettor,Cruise Alert,false,false,false,true,97,43,"[""Swedish Starlet N"",""Avf Claire"",""Fearless Bettor""]"
+Meadowlands,2026-01-16,11,,,Swedish Starlet N,Avf Claire,Fearless Bettor,Avf Claire,Fearless Bettor,Cruise Alert,false,false,false,true,97,43,"[""Swedish Starlet N"",""Avf Claire"",""Fearless Bettor""]"
 Monticello Raceway,2025-12-24,1,,,Ziggy Sky,Fox Valley Inferno,Prairie Fenway,Ziggy Sky,Fox Valley Inferno,Aintnobettor A,true,true,false,true,,,
 Mountaineer Park,2025-12-07,2,,,Dreaming of Hope,Popstyle,Kozem,Maci's World,Dreaming of Hope,Popstyle,false,false,false,true,,,
 Mountaineer Park,2025-12-07,3,,,Spuns Kitten,Shotgun Margaret,Holly Roller,Shotgun Margaret,Spuns Kitten,Pour Me a Drink,false,false,false,true,,,
@@ -2282,7 +2298,7 @@ Remington Park,2025-12-20,3,,,Vestes,Tigers 'n Bears,Quarterly Report,Vestes,Spe
 Sam Houston,2026-01-03,5,,,Dutch Mills,Chivalrous,Bling Mountain,Shogun Be Fast,Team Leader,Cinco Richie,false,false,false,false,97,43,"[""Malibu S S"",""Team Leader"",""Shogun Be Fast""]"
 Sam Houston,2026-01-03,6,,,Dutch Mills,Chivalrous,Bling Mountain,Bling Mountain,Copper Storm,Noble Eagle,false,false,false,true,92,48,"[""Dutch Mills"",""Chivalrous"",""Bling Mountain""]"
 Sam Houston Race Park,2026-01-03,5,,,Malibu S S,Team Leader,Shogun Be Fast,,,,false,false,false,false,97,43,"[""Malibu S S"",""Team Leader"",""Shogun Be Fast""]"
-Saratoga Race Course,2025-12-07,9,,,Manhattan Artist,Hangman Mcgee,Morrone Dolce,Manhattan Artist,Hangman Mcgee,Dark Hour,true,true,false,true,,,
+Saratoga,2025-12-07,9,,,Manhattan Artist,Hangman Mcgee,Morrone Dolce,Manhattan Artist,Hangman Mcgee,Dark Hour,true,true,false,true,,,
 Sunland Park,2026-01-03,1,,,Wedding Groom,Broadway Dish,Shell Game,Wedding Groom,Shell Game,Billy de Kid,true,false,false,true,97,39,"[""Wedding Groom"",""Broadway Dish"",""Shell Game""]"
 Sunland Park,2026-01-05,5,,,Stand Up Guy,Exit Strategy,He's a Genius,Trafficstorm,Holy Bullet,American Storm,false,false,false,false,84,54,"[""Stand Up Guy"",""Exit Strategy"",""He's a Genius""]"
 SWE Bjerke,2025-12-21,5,,,Resilient Reddington,Explosive Axe,Icarus B.R.,Resilient Reddington,Caramel Volo,Explosive Axe,true,false,false,true,,,
@@ -2342,8 +2358,8 @@ Woodbine Mohawk (,2025-12-27,8,,,Bruno No No,Cold Creek Queso,Dublin Dasher,Brun
 Woodbine Mohawk,2025-12-27,9,,,Bronx Drifter,Sometime Somewhere,Pipewrench Charlie,Bronx Drifter,Self Made,Sergeant Slaughter,true,false,false,true,97,39,"[""Bronx Drifter"",""Sometime Somewhere"",""Pipewrench Charlie""]"
 Woodbine Mohawk,2026-01-02,5,,,Kellina Diamond,Job Hunter,Im Betonsix,POWDER PLAY,JOB HUNTER,KELLINA DIAMOND,false,true,false,true,67,62,"[""Kellina Diamond"",""Job Hunter"",""Im Betonsix""]"
 Woodbine Mohawk,2026-01-03,11,,,Blue Bar,Ernwood Big Mack,Summer Dancer,Dusty Lane Levi,Blue Bar,Erinwood Big Mack,false,false,false,true,82,54,"[""So Much More"",""Angostura Hanover"",""Century Jamila""]"
-Woodbine Racetrack,2025-12-04,1,,,Nicki Is a Breeze,Lady Izzy,Majestic Appeal,,,,false,false,false,false,,,
-Woodbine Racetrack,2025-12-07,2,,,Logan Park,Hasty Bid,What About Elmo,Logan Park,Hasty Bid,Sid the Kid,true,true,false,true,,,
+Woodbine,2025-12-04,1,,,Nicki Is a Breeze,Lady Izzy,Majestic Appeal,,,,false,false,false,false,,,
+Woodbine,2025-12-07,2,,,Logan Park,Hasty Bid,What About Elmo,Logan Park,Hasty Bid,Sid the Kid,true,true,false,true,,,
 yonkers,2025-12-08,10,,,Italian Lad N,Western Era,Walkinshaw N,Speaker of Peace,Italian Lad N,Music Hall,false,false,false,true,,,
 yonkers,2025-12-08,6,,,Just Enuff Stuff,Hammering Hank,Perfect Promises,Hammering Hank,Perfect Promises,Why Tomorrow Ray,false,false,false,true,,,
 yonkers,2025-12-09,1,,,Disaronno Hill,Bout Damn Time A,Nuttinbuthebest,Bout Damn Time A,Disaronno Hill,Bluebird Crush,false,false,false,true,,,
@@ -2373,7 +2389,8 @@ Aqueduct,2026-01-09,5,,,Probability,Antietam,Kaz Oil Changer,Sequential,Probabil
 Aqueduct,2026-01-09,6,,,That's Funny,Blenheim Baby,Spirit of Esther,That's Funny,Blenheim Baby,Spirit of Esther,true,true,true,true,84,54,"[""That's Funny"",""Blenheim Baby"",""Spirit of Esther""]"
 Aqueduct,2026-01-09,7,,,Vettriano,Mr Skylight,Big Hat Willie,One Nine Hundred,Toxic Gray,Mr Skylight,false,false,false,true,84,54,"[""Vettriano"",""Mr Skylight"",""Big Hat Willie""]"
 Aqueduct,2026-01-09,8,,,Mo Spice,Bellamy,Tinseltown,Mo Spice,Bellamy,Tinseltown,true,true,true,true,97,39,"[""Spidey Man"",""Skillian"",""Biker Baley""]"
-Aqueduct Racetrack,2026-01-04,7,,,Metfardeh,Purloin,Noticeable,Purloin,I'm Buzzy,Texas QuMedfardeheen,false,false,false,true,92,48,"[""Metfardeh"",""Purloin"",""Noticeable""]"
+Aqueduct,2026-01-18,1,,,Fort Nelson,Rule Sixty Two,New York Scrappy,New York Scrappy,Fort Nelson,Middle Market,false,false,false,true,,,
+Aqueduct,2026-01-04,7,,,Metfardeh,Purloin,Noticeable,Purloin,I'm Buzzy,Texas QuMedfardeheen,false,false,false,true,92,48,"[""Metfardeh"",""Purloin"",""Noticeable""]"
 AUS Lismore,2026-01-03,4,,,Artie Lady,Do It For You,Ourlegs Eleven,Do It For You,Per Capita,Alabama Girl,false,false,false,true,97,39,"[""Artie Lady"",""Do It For You"",""Ourlegs Eleven""]"
 AUS Nowra,2025-12-13,3,,,Breakaway Week,Tillman,Ken'ker,Breakaway Week,Tillman,Fire And Gemstone,true,true,false,true,,,
 AUS Randwick Kensington,2026-01-13,3,,,Indigo Star,Lady Of The Castle,Let's Go Barbie,Gorgeous,Let's Go Barbie,Double Vision,false,false,false,true,97,43,"[""Indigo Star"",""Lady Of The Castle"",""Let's Go Barbie""]"
@@ -2394,8 +2411,8 @@ Charles Town,2026-01-02,4,,,No Mo Muffins,Georgia Rain,Rhenski,No Mo Muffins,Pea
 Charles Town,2026-01-03,2,,,Fifth of June,Citified,Collegeville Queen,Collegeville Queen,Miss Shack Attack,Cajun Prime,false,false,false,true,92,48,"[""Fifth of June"",""Citified"",""Collegeville Queen""]"
 Charles Town,2026-01-03,3,,,Hopping Henry,Auburn Mill,Colt Rock,Rocket Appeal,Auburn Mill,Hopping Henry,false,true,false,true,97,43,"[""Hopping Henry"",""Auburn Mill"",""Colt Rock""]"
 Charles Town,2026-01-03,8,,,Brother Conway,Social Chic,Kaladin,No Direction,Sweet Lime,I'd Rather Not,false,false,false,false,92,48,"[""Brother Conway"",""Social Chic"",""Kaladin""]"
-Charles Town Races,2025-12-09,6,,,Camco Laraido,Labero,Ma Barker,Labero,Fire the Rocket,Camco Laraido,false,false,false,true,,,
-Charles Town Races,2026-01-16,8,,,Omar Comin,Late in the Game,Strava,Omar Comin,Strava,Rick'swarmheart,true,false,false,true,67,62,"[""Omar Comin"",""Late in the Game"",""Strava""]"
+Charles Town,2025-12-09,6,,,Camco Laraido,Labero,Ma Barker,Labero,Fire the Rocket,Camco Laraido,false,false,false,true,,,
+Charles Town,2026-01-16,8,,,Omar Comin,Late in the Game,Strava,Omar Comin,Strava,Rick'swarmheart,true,false,false,true,67,62,"[""Omar Comin"",""Late in the Game"",""Strava""]"
 Dayton,2025-12-09,11,,,Banderas,Tie the Knot,Believe in Tom,Banderas,Tie the Knot,Chanceyfascination,true,true,false,true,,,
 Dayton,2025-12-10,9,,,Divine Thing,Sayinwhatimthinkin,Triathlon As,Famous Father,Triathlon As,Sayinwhatimthinkin,false,false,false,true,,,
 Delta Downs,2025-12-05,1,,,Killer Guitar,Drewrelius,Respecttheconnect,Killer Guitar,Drewrelius,Ninth Ward Bobby O,true,true,false,true,,,
@@ -2442,6 +2459,7 @@ Fair Grounds,2026-01-09,2,,,Leah's First,Honor Azteca,Cloudy Lass,Amazing Lady,S
 Fair Grounds,2026-01-09,3,,,Daredevil Doug,Mister O,Spielman,Lost in the Sauce,Miracle On Central,Spielman,false,false,true,true,92,48,"[""Daredevil Doug"",""Mister O"",""Spielman""]"
 Fair Grounds,2026-01-09,5,,,Sippin On Gin,Highland Creek,Cosmic Train,Sippin On Gin,Mangum,Cosmic Train,true,false,true,true,92,48,"[""Sippin On Gin"",""Highland Creek"",""Cosmic Train""]"
 Fair Grounds,2026-01-16,12,,,Just a Touch,Moonlight,Sir Greylind,Accelerize,Just a Touch,Cadet Corps,false,false,false,true,91,48,"[""Just a Touch"",""Moonlight"",""Sir Greylind""]"
+Fair Grounds,2026-01-19,1,,,Precious Money,The Pretty Sister,Honor His Half,Precious Money,The Pretty Sister,About to Set Sail,true,true,false,true,,,
 Flamboro Downs,2025-12-10,2,,,Tellit Russ Tellit,Onyx Bovino,Ambitious Mind,Ara You Crazy,Onyx Bovino,Ambitious Mind,false,true,true,true,,,
 FRA Lyon La Soie,2025-12-07,1,,,Rejaitt,Dream in Brooke,Valentine Day,,,,false,false,false,false,,,
 FRA Marseille Vivaux,2025-12-21,8,,,Dubalaa,Aventino,Noce De Rubis,Dubalaa,Lover Song,Westminster Love,true,false,false,true,,,
@@ -2513,11 +2531,11 @@ Mahoning Valley,2026-01-06,5,,,Lionistic,Az We Speak,Kichi Kitsu,Sweet Unique,Ki
 Mahoning Valley,2026-01-06,6,,,Washington's Union (86),Grey Streak (105),Supply Chain (87),Collectorate,Washington's Union,Supply Chain,false,false,true,true,100,48,"[""Washington's Union (86)"",""Grey Streak (105)"",""Supply Chain (87)""]"
 Mahoning Valley,2026-01-13,3,,,Relish the Ride,Dark Vader,Wetzel,Dark Vader,Raven Moon,Gone in a Flash,false,false,false,true,82,82,"[""Relish the Ride"",""Dark Vader"",""Wetzel""]"
 Mahoning Valley,2026-01-13,7,,,Mission Control,Who Da Boss,Casual Attire,Sunset Town,Mission Control,Casual Attire,false,false,true,true,82,82,"[""Mission Control"",""Who Da Boss"",""Casual Attire""]"
-Mahoning Valley Race Course,2025-12-16,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
-Mahoning Valley Race Course,2025-12-17,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
-Mahoning Valley Race Course,2025-12-20,1,,,Lookin Like Lucky,Santorino,Briarcliff,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-16,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-17,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-20,1,,,Lookin Like Lucky,Santorino,Briarcliff,,,,false,false,false,false,,,
 Meadowlands,2026-01-02,6,,,Nila Maree N,Ithatobeeyou,Youllfindout,Nila Maree N,Youllfindout,Arsenal's Ladybug,true,false,false,true,97,43,"[""Nila Maree N"",""Ithatobeeyou"",""Youllfindout""]"
-Meadowlands Racetrack,2026-01-16,11,,,Swedish Starlet N,Avf Claire,Fearless Bettor,Avf Claire,Fearless Bettor,Cruise Alert,false,false,false,true,97,43,"[""Swedish Starlet N"",""Avf Claire"",""Fearless Bettor""]"
+Meadowlands,2026-01-16,11,,,Swedish Starlet N,Avf Claire,Fearless Bettor,Avf Claire,Fearless Bettor,Cruise Alert,false,false,false,true,97,43,"[""Swedish Starlet N"",""Avf Claire"",""Fearless Bettor""]"
 Monticello Raceway,2025-12-24,1,,,Ziggy Sky,Fox Valley Inferno,Prairie Fenway,Ziggy Sky,Fox Valley Inferno,Aintnobettor A,true,true,false,true,,,
 Mountaineer Park,2025-12-07,2,,,Dreaming of Hope,Popstyle,Kozem,Maci's World,Dreaming of Hope,Popstyle,false,false,false,true,,,
 Mountaineer Park,2025-12-07,3,,,Spuns Kitten,Shotgun Margaret,Holly Roller,Shotgun Margaret,Spuns Kitten,Pour Me a Drink,false,false,false,true,,,
@@ -2576,7 +2594,7 @@ Remington Park,2025-12-20,3,,,Vestes,Tigers 'n Bears,Quarterly Report,Vestes,Spe
 Sam Houston,2026-01-03,5,,,Dutch Mills,Chivalrous,Bling Mountain,Shogun Be Fast,Team Leader,Cinco Richie,false,false,false,false,97,43,"[""Malibu S S"",""Team Leader"",""Shogun Be Fast""]"
 Sam Houston,2026-01-03,6,,,Dutch Mills,Chivalrous,Bling Mountain,Bling Mountain,Copper Storm,Noble Eagle,false,false,false,true,92,48,"[""Dutch Mills"",""Chivalrous"",""Bling Mountain""]"
 Sam Houston Race Park,2026-01-03,5,,,Malibu S S,Team Leader,Shogun Be Fast,,,,false,false,false,false,97,43,"[""Malibu S S"",""Team Leader"",""Shogun Be Fast""]"
-Saratoga Race Course,2025-12-07,9,,,Manhattan Artist,Hangman Mcgee,Morrone Dolce,Manhattan Artist,Hangman Mcgee,Dark Hour,true,true,false,true,,,
+Saratoga,2025-12-07,9,,,Manhattan Artist,Hangman Mcgee,Morrone Dolce,Manhattan Artist,Hangman Mcgee,Dark Hour,true,true,false,true,,,
 Sunland Park,2026-01-03,1,,,Wedding Groom,Broadway Dish,Shell Game,Wedding Groom,Shell Game,Billy de Kid,true,false,false,true,97,39,"[""Wedding Groom"",""Broadway Dish"",""Shell Game""]"
 Sunland Park,2026-01-05,5,,,Stand Up Guy,Exit Strategy,He's a Genius,Trafficstorm,Holy Bullet,American Storm,false,false,false,false,84,54,"[""Stand Up Guy"",""Exit Strategy"",""He's a Genius""]"
 SWE Bjerke,2025-12-21,5,,,Resilient Reddington,Explosive Axe,Icarus B.R.,Resilient Reddington,Caramel Volo,Explosive Axe,true,false,false,true,,,
@@ -2636,8 +2654,8 @@ Woodbine Mohawk (,2025-12-27,8,,,Bruno No No,Cold Creek Queso,Dublin Dasher,Brun
 Woodbine Mohawk,2025-12-27,9,,,Bronx Drifter,Sometime Somewhere,Pipewrench Charlie,Bronx Drifter,Self Made,Sergeant Slaughter,true,false,false,true,97,39,"[""Bronx Drifter"",""Sometime Somewhere"",""Pipewrench Charlie""]"
 Woodbine Mohawk,2026-01-02,5,,,Kellina Diamond,Job Hunter,Im Betonsix,POWDER PLAY,JOB HUNTER,KELLINA DIAMOND,false,true,false,true,67,62,"[""Kellina Diamond"",""Job Hunter"",""Im Betonsix""]"
 Woodbine Mohawk,2026-01-03,11,,,Blue Bar,Ernwood Big Mack,Summer Dancer,Dusty Lane Levi,Blue Bar,Erinwood Big Mack,false,false,false,true,82,54,"[""So Much More"",""Angostura Hanover"",""Century Jamila""]"
-Woodbine Racetrack,2025-12-04,1,,,Nicki Is a Breeze,Lady Izzy,Majestic Appeal,,,,false,false,false,false,,,
-Woodbine Racetrack,2025-12-07,2,,,Logan Park,Hasty Bid,What About Elmo,Logan Park,Hasty Bid,Sid the Kid,true,true,false,true,,,
+Woodbine,2025-12-04,1,,,Nicki Is a Breeze,Lady Izzy,Majestic Appeal,,,,false,false,false,false,,,
+Woodbine,2025-12-07,2,,,Logan Park,Hasty Bid,What About Elmo,Logan Park,Hasty Bid,Sid the Kid,true,true,false,true,,,
 yonkers,2025-12-08,10,,,Italian Lad N,Western Era,Walkinshaw N,Speaker of Peace,Italian Lad N,Music Hall,false,false,false,true,,,
 yonkers,2025-12-08,6,,,Just Enuff Stuff,Hammering Hank,Perfect Promises,Hammering Hank,Perfect Promises,Why Tomorrow Ray,false,false,false,true,,,
 yonkers,2025-12-09,1,,,Disaronno Hill,Bout Damn Time A,Nuttinbuthebest,Bout Damn Time A,Disaronno Hill,Bluebird Crush,false,false,false,true,,,
@@ -2667,7 +2685,8 @@ Aqueduct,2026-01-09,5,,,Probability,Antietam,Kaz Oil Changer,Sequential,Probabil
 Aqueduct,2026-01-09,6,,,That's Funny,Blenheim Baby,Spirit of Esther,That's Funny,Blenheim Baby,Spirit of Esther,true,true,true,true,84,54,"[""That's Funny"",""Blenheim Baby"",""Spirit of Esther""]"
 Aqueduct,2026-01-09,7,,,Vettriano,Mr Skylight,Big Hat Willie,One Nine Hundred,Toxic Gray,Mr Skylight,false,false,false,true,84,54,"[""Vettriano"",""Mr Skylight"",""Big Hat Willie""]"
 Aqueduct,2026-01-09,8,,,Mo Spice,Bellamy,Tinseltown,Mo Spice,Bellamy,Tinseltown,true,true,true,true,97,39,"[""Spidey Man"",""Skillian"",""Biker Baley""]"
-Aqueduct Racetrack,2026-01-04,7,,,Metfardeh,Purloin,Noticeable,Purloin,I'm Buzzy,Texas QuMedfardeheen,false,false,false,true,92,48,"[""Metfardeh"",""Purloin"",""Noticeable""]"
+Aqueduct,2026-01-18,1,,,Fort Nelson,Rule Sixty Two,New York Scrappy,New York Scrappy,Fort Nelson,Middle Market,false,false,false,true,,,
+Aqueduct,2026-01-04,7,,,Metfardeh,Purloin,Noticeable,Purloin,I'm Buzzy,Texas QuMedfardeheen,false,false,false,true,92,48,"[""Metfardeh"",""Purloin"",""Noticeable""]"
 AUS Lismore,2026-01-03,4,,,Artie Lady,Do It For You,Ourlegs Eleven,Do It For You,Per Capita,Alabama Girl,false,false,false,true,97,39,"[""Artie Lady"",""Do It For You"",""Ourlegs Eleven""]"
 AUS Nowra,2025-12-13,3,,,Breakaway Week,Tillman,Ken'ker,Breakaway Week,Tillman,Fire And Gemstone,true,true,false,true,,,
 AUS Randwick Kensington,2026-01-13,3,,,Indigo Star,Lady Of The Castle,Let's Go Barbie,Gorgeous,Let's Go Barbie,Double Vision,false,false,false,true,97,43,"[""Indigo Star"",""Lady Of The Castle"",""Let's Go Barbie""]"
@@ -2688,8 +2707,8 @@ Charles Town,2026-01-02,4,,,No Mo Muffins,Georgia Rain,Rhenski,No Mo Muffins,Pea
 Charles Town,2026-01-03,2,,,Fifth of June,Citified,Collegeville Queen,Collegeville Queen,Miss Shack Attack,Cajun Prime,false,false,false,true,92,48,"[""Fifth of June"",""Citified"",""Collegeville Queen""]"
 Charles Town,2026-01-03,3,,,Hopping Henry,Auburn Mill,Colt Rock,Rocket Appeal,Auburn Mill,Hopping Henry,false,true,false,true,97,43,"[""Hopping Henry"",""Auburn Mill"",""Colt Rock""]"
 Charles Town,2026-01-03,8,,,Brother Conway,Social Chic,Kaladin,No Direction,Sweet Lime,I'd Rather Not,false,false,false,false,92,48,"[""Brother Conway"",""Social Chic"",""Kaladin""]"
-Charles Town Races,2025-12-09,6,,,Camco Laraido,Labero,Ma Barker,Labero,Fire the Rocket,Camco Laraido,false,false,false,true,,,
-Charles Town Races,2026-01-16,8,,,Omar Comin,Late in the Game,Strava,Omar Comin,Strava,Rick'swarmheart,true,false,false,true,67,62,"[""Omar Comin"",""Late in the Game"",""Strava""]"
+Charles Town,2025-12-09,6,,,Camco Laraido,Labero,Ma Barker,Labero,Fire the Rocket,Camco Laraido,false,false,false,true,,,
+Charles Town,2026-01-16,8,,,Omar Comin,Late in the Game,Strava,Omar Comin,Strava,Rick'swarmheart,true,false,false,true,67,62,"[""Omar Comin"",""Late in the Game"",""Strava""]"
 Dayton,2025-12-09,11,,,Banderas,Tie the Knot,Believe in Tom,Banderas,Tie the Knot,Chanceyfascination,true,true,false,true,,,
 Dayton,2025-12-10,9,,,Divine Thing,Sayinwhatimthinkin,Triathlon As,Famous Father,Triathlon As,Sayinwhatimthinkin,false,false,false,true,,,
 Delta Downs,2025-12-05,1,,,Killer Guitar,Drewrelius,Respecttheconnect,Killer Guitar,Drewrelius,Ninth Ward Bobby O,true,true,false,true,,,
@@ -2736,6 +2755,7 @@ Fair Grounds,2026-01-09,2,,,Leah's First,Honor Azteca,Cloudy Lass,Amazing Lady,S
 Fair Grounds,2026-01-09,3,,,Daredevil Doug,Mister O,Spielman,Lost in the Sauce,Miracle On Central,Spielman,false,false,true,true,92,48,"[""Daredevil Doug"",""Mister O"",""Spielman""]"
 Fair Grounds,2026-01-09,5,,,Sippin On Gin,Highland Creek,Cosmic Train,Sippin On Gin,Mangum,Cosmic Train,true,false,true,true,92,48,"[""Sippin On Gin"",""Highland Creek"",""Cosmic Train""]"
 Fair Grounds,2026-01-16,12,,,Just a Touch,Moonlight,Sir Greylind,Accelerize,Just a Touch,Cadet Corps,false,false,false,true,91,48,"[""Just a Touch"",""Moonlight"",""Sir Greylind""]"
+Fair Grounds,2026-01-19,1,,,Precious Money,The Pretty Sister,Honor His Half,Precious Money,The Pretty Sister,About to Set Sail,true,true,false,true,,,
 Flamboro Downs,2025-12-10,2,,,Tellit Russ Tellit,Onyx Bovino,Ambitious Mind,Ara You Crazy,Onyx Bovino,Ambitious Mind,false,true,true,true,,,
 FRA Lyon La Soie,2025-12-07,1,,,Rejaitt,Dream in Brooke,Valentine Day,,,,false,false,false,false,,,
 FRA Marseille Vivaux,2025-12-21,8,,,Dubalaa,Aventino,Noce De Rubis,Dubalaa,Lover Song,Westminster Love,true,false,false,true,,,
@@ -2807,11 +2827,11 @@ Mahoning Valley,2026-01-06,5,,,Lionistic,Az We Speak,Kichi Kitsu,Sweet Unique,Ki
 Mahoning Valley,2026-01-06,6,,,Washington's Union (86),Grey Streak (105),Supply Chain (87),Collectorate,Washington's Union,Supply Chain,false,false,true,true,100,48,"[""Washington's Union (86)"",""Grey Streak (105)"",""Supply Chain (87)""]"
 Mahoning Valley,2026-01-13,3,,,Relish the Ride,Dark Vader,Wetzel,Dark Vader,Raven Moon,Gone in a Flash,false,false,false,true,82,82,"[""Relish the Ride"",""Dark Vader"",""Wetzel""]"
 Mahoning Valley,2026-01-13,7,,,Mission Control,Who Da Boss,Casual Attire,Sunset Town,Mission Control,Casual Attire,false,false,true,true,82,82,"[""Mission Control"",""Who Da Boss"",""Casual Attire""]"
-Mahoning Valley Race Course,2025-12-16,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
-Mahoning Valley Race Course,2025-12-17,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
-Mahoning Valley Race Course,2025-12-20,1,,,Lookin Like Lucky,Santorino,Briarcliff,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-16,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-17,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-20,1,,,Lookin Like Lucky,Santorino,Briarcliff,,,,false,false,false,false,,,
 Meadowlands,2026-01-02,6,,,Nila Maree N,Ithatobeeyou,Youllfindout,Nila Maree N,Youllfindout,Arsenal's Ladybug,true,false,false,true,97,43,"[""Nila Maree N"",""Ithatobeeyou"",""Youllfindout""]"
-Meadowlands Racetrack,2026-01-16,11,,,Swedish Starlet N,Avf Claire,Fearless Bettor,Avf Claire,Fearless Bettor,Cruise Alert,false,false,false,true,97,43,"[""Swedish Starlet N"",""Avf Claire"",""Fearless Bettor""]"
+Meadowlands,2026-01-16,11,,,Swedish Starlet N,Avf Claire,Fearless Bettor,Avf Claire,Fearless Bettor,Cruise Alert,false,false,false,true,97,43,"[""Swedish Starlet N"",""Avf Claire"",""Fearless Bettor""]"
 Monticello Raceway,2025-12-24,1,,,Ziggy Sky,Fox Valley Inferno,Prairie Fenway,Ziggy Sky,Fox Valley Inferno,Aintnobettor A,true,true,false,true,,,
 Mountaineer Park,2025-12-07,2,,,Dreaming of Hope,Popstyle,Kozem,Maci's World,Dreaming of Hope,Popstyle,false,false,false,true,,,
 Mountaineer Park,2025-12-07,3,,,Spuns Kitten,Shotgun Margaret,Holly Roller,Shotgun Margaret,Spuns Kitten,Pour Me a Drink,false,false,false,true,,,
@@ -2870,7 +2890,7 @@ Remington Park,2025-12-20,3,,,Vestes,Tigers 'n Bears,Quarterly Report,Vestes,Spe
 Sam Houston,2026-01-03,5,,,Dutch Mills,Chivalrous,Bling Mountain,Shogun Be Fast,Team Leader,Cinco Richie,false,false,false,false,97,43,"[""Malibu S S"",""Team Leader"",""Shogun Be Fast""]"
 Sam Houston,2026-01-03,6,,,Dutch Mills,Chivalrous,Bling Mountain,Bling Mountain,Copper Storm,Noble Eagle,false,false,false,true,92,48,"[""Dutch Mills"",""Chivalrous"",""Bling Mountain""]"
 Sam Houston Race Park,2026-01-03,5,,,Malibu S S,Team Leader,Shogun Be Fast,,,,false,false,false,false,97,43,"[""Malibu S S"",""Team Leader"",""Shogun Be Fast""]"
-Saratoga Race Course,2025-12-07,9,,,Manhattan Artist,Hangman Mcgee,Morrone Dolce,Manhattan Artist,Hangman Mcgee,Dark Hour,true,true,false,true,,,
+Saratoga,2025-12-07,9,,,Manhattan Artist,Hangman Mcgee,Morrone Dolce,Manhattan Artist,Hangman Mcgee,Dark Hour,true,true,false,true,,,
 Sunland Park,2026-01-03,1,,,Wedding Groom,Broadway Dish,Shell Game,Wedding Groom,Shell Game,Billy de Kid,true,false,false,true,97,39,"[""Wedding Groom"",""Broadway Dish"",""Shell Game""]"
 Sunland Park,2026-01-05,5,,,Stand Up Guy,Exit Strategy,He's a Genius,Trafficstorm,Holy Bullet,American Storm,false,false,false,false,84,54,"[""Stand Up Guy"",""Exit Strategy"",""He's a Genius""]"
 SWE Bjerke,2025-12-21,5,,,Resilient Reddington,Explosive Axe,Icarus B.R.,Resilient Reddington,Caramel Volo,Explosive Axe,true,false,false,true,,,
@@ -2930,8 +2950,8 @@ Woodbine Mohawk (,2025-12-27,8,,,Bruno No No,Cold Creek Queso,Dublin Dasher,Brun
 Woodbine Mohawk,2025-12-27,9,,,Bronx Drifter,Sometime Somewhere,Pipewrench Charlie,Bronx Drifter,Self Made,Sergeant Slaughter,true,false,false,true,97,39,"[""Bronx Drifter"",""Sometime Somewhere"",""Pipewrench Charlie""]"
 Woodbine Mohawk,2026-01-02,5,,,Kellina Diamond,Job Hunter,Im Betonsix,POWDER PLAY,JOB HUNTER,KELLINA DIAMOND,false,true,false,true,67,62,"[""Kellina Diamond"",""Job Hunter"",""Im Betonsix""]"
 Woodbine Mohawk,2026-01-03,11,,,Blue Bar,Ernwood Big Mack,Summer Dancer,Dusty Lane Levi,Blue Bar,Erinwood Big Mack,false,false,false,true,82,54,"[""So Much More"",""Angostura Hanover"",""Century Jamila""]"
-Woodbine Racetrack,2025-12-04,1,,,Nicki Is a Breeze,Lady Izzy,Majestic Appeal,,,,false,false,false,false,,,
-Woodbine Racetrack,2025-12-07,2,,,Logan Park,Hasty Bid,What About Elmo,Logan Park,Hasty Bid,Sid the Kid,true,true,false,true,,,
+Woodbine,2025-12-04,1,,,Nicki Is a Breeze,Lady Izzy,Majestic Appeal,,,,false,false,false,false,,,
+Woodbine,2025-12-07,2,,,Logan Park,Hasty Bid,What About Elmo,Logan Park,Hasty Bid,Sid the Kid,true,true,false,true,,,
 yonkers,2025-12-08,10,,,Italian Lad N,Western Era,Walkinshaw N,Speaker of Peace,Italian Lad N,Music Hall,false,false,false,true,,,
 yonkers,2025-12-08,6,,,Just Enuff Stuff,Hammering Hank,Perfect Promises,Hammering Hank,Perfect Promises,Why Tomorrow Ray,false,false,false,true,,,
 yonkers,2025-12-09,1,,,Disaronno Hill,Bout Damn Time A,Nuttinbuthebest,Bout Damn Time A,Disaronno Hill,Bluebird Crush,false,false,false,true,,,
@@ -2961,7 +2981,8 @@ Aqueduct,2026-01-09,5,,,Probability,Antietam,Kaz Oil Changer,Sequential,Probabil
 Aqueduct,2026-01-09,6,,,That's Funny,Blenheim Baby,Spirit of Esther,That's Funny,Blenheim Baby,Spirit of Esther,true,true,true,true,84,54,"[""That's Funny"",""Blenheim Baby"",""Spirit of Esther""]"
 Aqueduct,2026-01-09,7,,,Vettriano,Mr Skylight,Big Hat Willie,One Nine Hundred,Toxic Gray,Mr Skylight,false,false,false,true,84,54,"[""Vettriano"",""Mr Skylight"",""Big Hat Willie""]"
 Aqueduct,2026-01-09,8,,,Mo Spice,Bellamy,Tinseltown,Mo Spice,Bellamy,Tinseltown,true,true,true,true,97,39,"[""Spidey Man"",""Skillian"",""Biker Baley""]"
-Aqueduct Racetrack,2026-01-04,7,,,Metfardeh,Purloin,Noticeable,Purloin,I'm Buzzy,Texas QuMedfardeheen,false,false,false,true,92,48,"[""Metfardeh"",""Purloin"",""Noticeable""]"
+Aqueduct,2026-01-18,1,,,Fort Nelson,Rule Sixty Two,New York Scrappy,New York Scrappy,Fort Nelson,Middle Market,false,false,false,true,,,
+Aqueduct,2026-01-04,7,,,Metfardeh,Purloin,Noticeable,Purloin,I'm Buzzy,Texas QuMedfardeheen,false,false,false,true,92,48,"[""Metfardeh"",""Purloin"",""Noticeable""]"
 AUS Lismore,2026-01-03,4,,,Artie Lady,Do It For You,Ourlegs Eleven,Do It For You,Per Capita,Alabama Girl,false,false,false,true,97,39,"[""Artie Lady"",""Do It For You"",""Ourlegs Eleven""]"
 AUS Nowra,2025-12-13,3,,,Breakaway Week,Tillman,Ken'ker,Breakaway Week,Tillman,Fire And Gemstone,true,true,false,true,,,
 AUS Randwick Kensington,2026-01-13,3,,,Indigo Star,Lady Of The Castle,Let's Go Barbie,Gorgeous,Let's Go Barbie,Double Vision,false,false,false,true,97,43,"[""Indigo Star"",""Lady Of The Castle"",""Let's Go Barbie""]"
@@ -2982,8 +3003,8 @@ Charles Town,2026-01-02,4,,,No Mo Muffins,Georgia Rain,Rhenski,No Mo Muffins,Pea
 Charles Town,2026-01-03,2,,,Fifth of June,Citified,Collegeville Queen,Collegeville Queen,Miss Shack Attack,Cajun Prime,false,false,false,true,92,48,"[""Fifth of June"",""Citified"",""Collegeville Queen""]"
 Charles Town,2026-01-03,3,,,Hopping Henry,Auburn Mill,Colt Rock,Rocket Appeal,Auburn Mill,Hopping Henry,false,true,false,true,97,43,"[""Hopping Henry"",""Auburn Mill"",""Colt Rock""]"
 Charles Town,2026-01-03,8,,,Brother Conway,Social Chic,Kaladin,No Direction,Sweet Lime,I'd Rather Not,false,false,false,false,92,48,"[""Brother Conway"",""Social Chic"",""Kaladin""]"
-Charles Town Races,2025-12-09,6,,,Camco Laraido,Labero,Ma Barker,Labero,Fire the Rocket,Camco Laraido,false,false,false,true,,,
-Charles Town Races,2026-01-16,8,,,Omar Comin,Late in the Game,Strava,Omar Comin,Strava,Rick'swarmheart,true,false,false,true,67,62,"[""Omar Comin"",""Late in the Game"",""Strava""]"
+Charles Town,2025-12-09,6,,,Camco Laraido,Labero,Ma Barker,Labero,Fire the Rocket,Camco Laraido,false,false,false,true,,,
+Charles Town,2026-01-16,8,,,Omar Comin,Late in the Game,Strava,Omar Comin,Strava,Rick'swarmheart,true,false,false,true,67,62,"[""Omar Comin"",""Late in the Game"",""Strava""]"
 Dayton,2025-12-09,11,,,Banderas,Tie the Knot,Believe in Tom,Banderas,Tie the Knot,Chanceyfascination,true,true,false,true,,,
 Dayton,2025-12-10,9,,,Divine Thing,Sayinwhatimthinkin,Triathlon As,Famous Father,Triathlon As,Sayinwhatimthinkin,false,false,false,true,,,
 Delta Downs,2025-12-05,1,,,Killer Guitar,Drewrelius,Respecttheconnect,Killer Guitar,Drewrelius,Ninth Ward Bobby O,true,true,false,true,,,
@@ -3030,6 +3051,7 @@ Fair Grounds,2026-01-09,2,,,Leah's First,Honor Azteca,Cloudy Lass,Amazing Lady,S
 Fair Grounds,2026-01-09,3,,,Daredevil Doug,Mister O,Spielman,Lost in the Sauce,Miracle On Central,Spielman,false,false,true,true,92,48,"[""Daredevil Doug"",""Mister O"",""Spielman""]"
 Fair Grounds,2026-01-09,5,,,Sippin On Gin,Highland Creek,Cosmic Train,Sippin On Gin,Mangum,Cosmic Train,true,false,true,true,92,48,"[""Sippin On Gin"",""Highland Creek"",""Cosmic Train""]"
 Fair Grounds,2026-01-16,12,,,Just a Touch,Moonlight,Sir Greylind,Accelerize,Just a Touch,Cadet Corps,false,false,false,true,91,48,"[""Just a Touch"",""Moonlight"",""Sir Greylind""]"
+Fair Grounds,2026-01-19,1,,,Precious Money,The Pretty Sister,Honor His Half,Precious Money,The Pretty Sister,About to Set Sail,true,true,false,true,,,
 Flamboro Downs,2025-12-10,2,,,Tellit Russ Tellit,Onyx Bovino,Ambitious Mind,Ara You Crazy,Onyx Bovino,Ambitious Mind,false,true,true,true,,,
 FRA Lyon La Soie,2025-12-07,1,,,Rejaitt,Dream in Brooke,Valentine Day,,,,false,false,false,false,,,
 FRA Marseille Vivaux,2025-12-21,8,,,Dubalaa,Aventino,Noce De Rubis,Dubalaa,Lover Song,Westminster Love,true,false,false,true,,,
@@ -3101,11 +3123,11 @@ Mahoning Valley,2026-01-06,5,,,Lionistic,Az We Speak,Kichi Kitsu,Sweet Unique,Ki
 Mahoning Valley,2026-01-06,6,,,Washington's Union (86),Grey Streak (105),Supply Chain (87),Collectorate,Washington's Union,Supply Chain,false,false,true,true,100,48,"[""Washington's Union (86)"",""Grey Streak (105)"",""Supply Chain (87)""]"
 Mahoning Valley,2026-01-13,3,,,Relish the Ride,Dark Vader,Wetzel,Dark Vader,Raven Moon,Gone in a Flash,false,false,false,true,82,82,"[""Relish the Ride"",""Dark Vader"",""Wetzel""]"
 Mahoning Valley,2026-01-13,7,,,Mission Control,Who Da Boss,Casual Attire,Sunset Town,Mission Control,Casual Attire,false,false,true,true,82,82,"[""Mission Control"",""Who Da Boss"",""Casual Attire""]"
-Mahoning Valley Race Course,2025-12-16,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
-Mahoning Valley Race Course,2025-12-17,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
-Mahoning Valley Race Course,2025-12-20,1,,,Lookin Like Lucky,Santorino,Briarcliff,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-16,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-17,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-20,1,,,Lookin Like Lucky,Santorino,Briarcliff,,,,false,false,false,false,,,
 Meadowlands,2026-01-02,6,,,Nila Maree N,Ithatobeeyou,Youllfindout,Nila Maree N,Youllfindout,Arsenal's Ladybug,true,false,false,true,97,43,"[""Nila Maree N"",""Ithatobeeyou"",""Youllfindout""]"
-Meadowlands Racetrack,2026-01-16,11,,,Swedish Starlet N,Avf Claire,Fearless Bettor,Avf Claire,Fearless Bettor,Cruise Alert,false,false,false,true,97,43,"[""Swedish Starlet N"",""Avf Claire"",""Fearless Bettor""]"
+Meadowlands,2026-01-16,11,,,Swedish Starlet N,Avf Claire,Fearless Bettor,Avf Claire,Fearless Bettor,Cruise Alert,false,false,false,true,97,43,"[""Swedish Starlet N"",""Avf Claire"",""Fearless Bettor""]"
 Monticello Raceway,2025-12-24,1,,,Ziggy Sky,Fox Valley Inferno,Prairie Fenway,Ziggy Sky,Fox Valley Inferno,Aintnobettor A,true,true,false,true,,,
 Mountaineer Park,2025-12-07,2,,,Dreaming of Hope,Popstyle,Kozem,Maci's World,Dreaming of Hope,Popstyle,false,false,false,true,,,
 Mountaineer Park,2025-12-07,3,,,Spuns Kitten,Shotgun Margaret,Holly Roller,Shotgun Margaret,Spuns Kitten,Pour Me a Drink,false,false,false,true,,,
@@ -3164,7 +3186,7 @@ Remington Park,2025-12-20,3,,,Vestes,Tigers 'n Bears,Quarterly Report,Vestes,Spe
 Sam Houston,2026-01-03,5,,,Dutch Mills,Chivalrous,Bling Mountain,Shogun Be Fast,Team Leader,Cinco Richie,false,false,false,false,97,43,"[""Malibu S S"",""Team Leader"",""Shogun Be Fast""]"
 Sam Houston,2026-01-03,6,,,Dutch Mills,Chivalrous,Bling Mountain,Bling Mountain,Copper Storm,Noble Eagle,false,false,false,true,92,48,"[""Dutch Mills"",""Chivalrous"",""Bling Mountain""]"
 Sam Houston Race Park,2026-01-03,5,,,Malibu S S,Team Leader,Shogun Be Fast,,,,false,false,false,false,97,43,"[""Malibu S S"",""Team Leader"",""Shogun Be Fast""]"
-Saratoga Race Course,2025-12-07,9,,,Manhattan Artist,Hangman Mcgee,Morrone Dolce,Manhattan Artist,Hangman Mcgee,Dark Hour,true,true,false,true,,,
+Saratoga,2025-12-07,9,,,Manhattan Artist,Hangman Mcgee,Morrone Dolce,Manhattan Artist,Hangman Mcgee,Dark Hour,true,true,false,true,,,
 Sunland Park,2026-01-03,1,,,Wedding Groom,Broadway Dish,Shell Game,Wedding Groom,Shell Game,Billy de Kid,true,false,false,true,97,39,"[""Wedding Groom"",""Broadway Dish"",""Shell Game""]"
 Sunland Park,2026-01-05,5,,,Stand Up Guy,Exit Strategy,He's a Genius,Trafficstorm,Holy Bullet,American Storm,false,false,false,false,84,54,"[""Stand Up Guy"",""Exit Strategy"",""He's a Genius""]"
 SWE Bjerke,2025-12-21,5,,,Resilient Reddington,Explosive Axe,Icarus B.R.,Resilient Reddington,Caramel Volo,Explosive Axe,true,false,false,true,,,
@@ -3224,8 +3246,8 @@ Woodbine Mohawk (,2025-12-27,8,,,Bruno No No,Cold Creek Queso,Dublin Dasher,Brun
 Woodbine Mohawk,2025-12-27,9,,,Bronx Drifter,Sometime Somewhere,Pipewrench Charlie,Bronx Drifter,Self Made,Sergeant Slaughter,true,false,false,true,97,39,"[""Bronx Drifter"",""Sometime Somewhere"",""Pipewrench Charlie""]"
 Woodbine Mohawk,2026-01-02,5,,,Kellina Diamond,Job Hunter,Im Betonsix,POWDER PLAY,JOB HUNTER,KELLINA DIAMOND,false,true,false,true,67,62,"[""Kellina Diamond"",""Job Hunter"",""Im Betonsix""]"
 Woodbine Mohawk,2026-01-03,11,,,Blue Bar,Ernwood Big Mack,Summer Dancer,Dusty Lane Levi,Blue Bar,Erinwood Big Mack,false,false,false,true,82,54,"[""So Much More"",""Angostura Hanover"",""Century Jamila""]"
-Woodbine Racetrack,2025-12-04,1,,,Nicki Is a Breeze,Lady Izzy,Majestic Appeal,,,,false,false,false,false,,,
-Woodbine Racetrack,2025-12-07,2,,,Logan Park,Hasty Bid,What About Elmo,Logan Park,Hasty Bid,Sid the Kid,true,true,false,true,,,
+Woodbine,2025-12-04,1,,,Nicki Is a Breeze,Lady Izzy,Majestic Appeal,,,,false,false,false,false,,,
+Woodbine,2025-12-07,2,,,Logan Park,Hasty Bid,What About Elmo,Logan Park,Hasty Bid,Sid the Kid,true,true,false,true,,,
 yonkers,2025-12-08,10,,,Italian Lad N,Western Era,Walkinshaw N,Speaker of Peace,Italian Lad N,Music Hall,false,false,false,true,,,
 yonkers,2025-12-08,6,,,Just Enuff Stuff,Hammering Hank,Perfect Promises,Hammering Hank,Perfect Promises,Why Tomorrow Ray,false,false,false,true,,,
 yonkers,2025-12-09,1,,,Disaronno Hill,Bout Damn Time A,Nuttinbuthebest,Bout Damn Time A,Disaronno Hill,Bluebird Crush,false,false,false,true,,,
@@ -3255,7 +3277,8 @@ Aqueduct,2026-01-09,5,,,Probability,Antietam,Kaz Oil Changer,Sequential,Probabil
 Aqueduct,2026-01-09,6,,,That's Funny,Blenheim Baby,Spirit of Esther,That's Funny,Blenheim Baby,Spirit of Esther,true,true,true,true,84,54,"[""That's Funny"",""Blenheim Baby"",""Spirit of Esther""]"
 Aqueduct,2026-01-09,7,,,Vettriano,Mr Skylight,Big Hat Willie,One Nine Hundred,Toxic Gray,Mr Skylight,false,false,false,true,84,54,"[""Vettriano"",""Mr Skylight"",""Big Hat Willie""]"
 Aqueduct,2026-01-09,8,,,Mo Spice,Bellamy,Tinseltown,Mo Spice,Bellamy,Tinseltown,true,true,true,true,97,39,"[""Spidey Man"",""Skillian"",""Biker Baley""]"
-Aqueduct Racetrack,2026-01-04,7,,,Metfardeh,Purloin,Noticeable,Purloin,I'm Buzzy,Texas QuMedfardeheen,false,false,false,true,92,48,"[""Metfardeh"",""Purloin"",""Noticeable""]"
+Aqueduct,2026-01-18,1,,,Fort Nelson,Rule Sixty Two,New York Scrappy,New York Scrappy,Fort Nelson,Middle Market,false,false,false,true,,,
+Aqueduct,2026-01-04,7,,,Metfardeh,Purloin,Noticeable,Purloin,I'm Buzzy,Texas QuMedfardeheen,false,false,false,true,92,48,"[""Metfardeh"",""Purloin"",""Noticeable""]"
 AUS Lismore,2026-01-03,4,,,Artie Lady,Do It For You,Ourlegs Eleven,Do It For You,Per Capita,Alabama Girl,false,false,false,true,97,39,"[""Artie Lady"",""Do It For You"",""Ourlegs Eleven""]"
 AUS Nowra,2025-12-13,3,,,Breakaway Week,Tillman,Ken'ker,Breakaway Week,Tillman,Fire And Gemstone,true,true,false,true,,,
 AUS Randwick Kensington,2026-01-13,3,,,Indigo Star,Lady Of The Castle,Let's Go Barbie,Gorgeous,Let's Go Barbie,Double Vision,false,false,false,true,97,43,"[""Indigo Star"",""Lady Of The Castle"",""Let's Go Barbie""]"
@@ -3276,8 +3299,8 @@ Charles Town,2026-01-02,4,,,No Mo Muffins,Georgia Rain,Rhenski,No Mo Muffins,Pea
 Charles Town,2026-01-03,2,,,Fifth of June,Citified,Collegeville Queen,Collegeville Queen,Miss Shack Attack,Cajun Prime,false,false,false,true,92,48,"[""Fifth of June"",""Citified"",""Collegeville Queen""]"
 Charles Town,2026-01-03,3,,,Hopping Henry,Auburn Mill,Colt Rock,Rocket Appeal,Auburn Mill,Hopping Henry,false,true,false,true,97,43,"[""Hopping Henry"",""Auburn Mill"",""Colt Rock""]"
 Charles Town,2026-01-03,8,,,Brother Conway,Social Chic,Kaladin,No Direction,Sweet Lime,I'd Rather Not,false,false,false,false,92,48,"[""Brother Conway"",""Social Chic"",""Kaladin""]"
-Charles Town Races,2025-12-09,6,,,Camco Laraido,Labero,Ma Barker,Labero,Fire the Rocket,Camco Laraido,false,false,false,true,,,
-Charles Town Races,2026-01-16,8,,,Omar Comin,Late in the Game,Strava,Omar Comin,Strava,Rick'swarmheart,true,false,false,true,67,62,"[""Omar Comin"",""Late in the Game"",""Strava""]"
+Charles Town,2025-12-09,6,,,Camco Laraido,Labero,Ma Barker,Labero,Fire the Rocket,Camco Laraido,false,false,false,true,,,
+Charles Town,2026-01-16,8,,,Omar Comin,Late in the Game,Strava,Omar Comin,Strava,Rick'swarmheart,true,false,false,true,67,62,"[""Omar Comin"",""Late in the Game"",""Strava""]"
 Dayton,2025-12-09,11,,,Banderas,Tie the Knot,Believe in Tom,Banderas,Tie the Knot,Chanceyfascination,true,true,false,true,,,
 Dayton,2025-12-10,9,,,Divine Thing,Sayinwhatimthinkin,Triathlon As,Famous Father,Triathlon As,Sayinwhatimthinkin,false,false,false,true,,,
 Delta Downs,2025-12-05,1,,,Killer Guitar,Drewrelius,Respecttheconnect,Killer Guitar,Drewrelius,Ninth Ward Bobby O,true,true,false,true,,,
@@ -3324,6 +3347,7 @@ Fair Grounds,2026-01-09,2,,,Leah's First,Honor Azteca,Cloudy Lass,Amazing Lady,S
 Fair Grounds,2026-01-09,3,,,Daredevil Doug,Mister O,Spielman,Lost in the Sauce,Miracle On Central,Spielman,false,false,true,true,92,48,"[""Daredevil Doug"",""Mister O"",""Spielman""]"
 Fair Grounds,2026-01-09,5,,,Sippin On Gin,Highland Creek,Cosmic Train,Sippin On Gin,Mangum,Cosmic Train,true,false,true,true,92,48,"[""Sippin On Gin"",""Highland Creek"",""Cosmic Train""]"
 Fair Grounds,2026-01-16,12,,,Just a Touch,Moonlight,Sir Greylind,Accelerize,Just a Touch,Cadet Corps,false,false,false,true,91,48,"[""Just a Touch"",""Moonlight"",""Sir Greylind""]"
+Fair Grounds,2026-01-19,1,,,Precious Money,The Pretty Sister,Honor His Half,Precious Money,The Pretty Sister,About to Set Sail,true,true,false,true,,,
 Flamboro Downs,2025-12-10,2,,,Tellit Russ Tellit,Onyx Bovino,Ambitious Mind,Ara You Crazy,Onyx Bovino,Ambitious Mind,false,true,true,true,,,
 FRA Lyon La Soie,2025-12-07,1,,,Rejaitt,Dream in Brooke,Valentine Day,,,,false,false,false,false,,,
 FRA Marseille Vivaux,2025-12-21,8,,,Dubalaa,Aventino,Noce De Rubis,Dubalaa,Lover Song,Westminster Love,true,false,false,true,,,
@@ -3395,11 +3419,11 @@ Mahoning Valley,2026-01-06,5,,,Lionistic,Az We Speak,Kichi Kitsu,Sweet Unique,Ki
 Mahoning Valley,2026-01-06,6,,,Washington's Union (86),Grey Streak (105),Supply Chain (87),Collectorate,Washington's Union,Supply Chain,false,false,true,true,100,48,"[""Washington's Union (86)"",""Grey Streak (105)"",""Supply Chain (87)""]"
 Mahoning Valley,2026-01-13,3,,,Relish the Ride,Dark Vader,Wetzel,Dark Vader,Raven Moon,Gone in a Flash,false,false,false,true,82,82,"[""Relish the Ride"",""Dark Vader"",""Wetzel""]"
 Mahoning Valley,2026-01-13,7,,,Mission Control,Who Da Boss,Casual Attire,Sunset Town,Mission Control,Casual Attire,false,false,true,true,82,82,"[""Mission Control"",""Who Da Boss"",""Casual Attire""]"
-Mahoning Valley Race Course,2025-12-16,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
-Mahoning Valley Race Course,2025-12-17,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
-Mahoning Valley Race Course,2025-12-20,1,,,Lookin Like Lucky,Santorino,Briarcliff,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-16,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-17,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-20,1,,,Lookin Like Lucky,Santorino,Briarcliff,,,,false,false,false,false,,,
 Meadowlands,2026-01-02,6,,,Nila Maree N,Ithatobeeyou,Youllfindout,Nila Maree N,Youllfindout,Arsenal's Ladybug,true,false,false,true,97,43,"[""Nila Maree N"",""Ithatobeeyou"",""Youllfindout""]"
-Meadowlands Racetrack,2026-01-16,11,,,Swedish Starlet N,Avf Claire,Fearless Bettor,Avf Claire,Fearless Bettor,Cruise Alert,false,false,false,true,97,43,"[""Swedish Starlet N"",""Avf Claire"",""Fearless Bettor""]"
+Meadowlands,2026-01-16,11,,,Swedish Starlet N,Avf Claire,Fearless Bettor,Avf Claire,Fearless Bettor,Cruise Alert,false,false,false,true,97,43,"[""Swedish Starlet N"",""Avf Claire"",""Fearless Bettor""]"
 Monticello Raceway,2025-12-24,1,,,Ziggy Sky,Fox Valley Inferno,Prairie Fenway,Ziggy Sky,Fox Valley Inferno,Aintnobettor A,true,true,false,true,,,
 Mountaineer Park,2025-12-07,2,,,Dreaming of Hope,Popstyle,Kozem,Maci's World,Dreaming of Hope,Popstyle,false,false,false,true,,,
 Mountaineer Park,2025-12-07,3,,,Spuns Kitten,Shotgun Margaret,Holly Roller,Shotgun Margaret,Spuns Kitten,Pour Me a Drink,false,false,false,true,,,
@@ -3458,7 +3482,7 @@ Remington Park,2025-12-20,3,,,Vestes,Tigers 'n Bears,Quarterly Report,Vestes,Spe
 Sam Houston,2026-01-03,5,,,Dutch Mills,Chivalrous,Bling Mountain,Shogun Be Fast,Team Leader,Cinco Richie,false,false,false,false,97,43,"[""Malibu S S"",""Team Leader"",""Shogun Be Fast""]"
 Sam Houston,2026-01-03,6,,,Dutch Mills,Chivalrous,Bling Mountain,Bling Mountain,Copper Storm,Noble Eagle,false,false,false,true,92,48,"[""Dutch Mills"",""Chivalrous"",""Bling Mountain""]"
 Sam Houston Race Park,2026-01-03,5,,,Malibu S S,Team Leader,Shogun Be Fast,,,,false,false,false,false,97,43,"[""Malibu S S"",""Team Leader"",""Shogun Be Fast""]"
-Saratoga Race Course,2025-12-07,9,,,Manhattan Artist,Hangman Mcgee,Morrone Dolce,Manhattan Artist,Hangman Mcgee,Dark Hour,true,true,false,true,,,
+Saratoga,2025-12-07,9,,,Manhattan Artist,Hangman Mcgee,Morrone Dolce,Manhattan Artist,Hangman Mcgee,Dark Hour,true,true,false,true,,,
 Sunland Park,2026-01-03,1,,,Wedding Groom,Broadway Dish,Shell Game,Wedding Groom,Shell Game,Billy de Kid,true,false,false,true,97,39,"[""Wedding Groom"",""Broadway Dish"",""Shell Game""]"
 Sunland Park,2026-01-05,5,,,Stand Up Guy,Exit Strategy,He's a Genius,Trafficstorm,Holy Bullet,American Storm,false,false,false,false,84,54,"[""Stand Up Guy"",""Exit Strategy"",""He's a Genius""]"
 SWE Bjerke,2025-12-21,5,,,Resilient Reddington,Explosive Axe,Icarus B.R.,Resilient Reddington,Caramel Volo,Explosive Axe,true,false,false,true,,,
@@ -3518,8 +3542,8 @@ Woodbine Mohawk (,2025-12-27,8,,,Bruno No No,Cold Creek Queso,Dublin Dasher,Brun
 Woodbine Mohawk,2025-12-27,9,,,Bronx Drifter,Sometime Somewhere,Pipewrench Charlie,Bronx Drifter,Self Made,Sergeant Slaughter,true,false,false,true,97,39,"[""Bronx Drifter"",""Sometime Somewhere"",""Pipewrench Charlie""]"
 Woodbine Mohawk,2026-01-02,5,,,Kellina Diamond,Job Hunter,Im Betonsix,POWDER PLAY,JOB HUNTER,KELLINA DIAMOND,false,true,false,true,67,62,"[""Kellina Diamond"",""Job Hunter"",""Im Betonsix""]"
 Woodbine Mohawk,2026-01-03,11,,,Blue Bar,Ernwood Big Mack,Summer Dancer,Dusty Lane Levi,Blue Bar,Erinwood Big Mack,false,false,false,true,82,54,"[""So Much More"",""Angostura Hanover"",""Century Jamila""]"
-Woodbine Racetrack,2025-12-04,1,,,Nicki Is a Breeze,Lady Izzy,Majestic Appeal,,,,false,false,false,false,,,
-Woodbine Racetrack,2025-12-07,2,,,Logan Park,Hasty Bid,What About Elmo,Logan Park,Hasty Bid,Sid the Kid,true,true,false,true,,,
+Woodbine,2025-12-04,1,,,Nicki Is a Breeze,Lady Izzy,Majestic Appeal,,,,false,false,false,false,,,
+Woodbine,2025-12-07,2,,,Logan Park,Hasty Bid,What About Elmo,Logan Park,Hasty Bid,Sid the Kid,true,true,false,true,,,
 yonkers,2025-12-08,10,,,Italian Lad N,Western Era,Walkinshaw N,Speaker of Peace,Italian Lad N,Music Hall,false,false,false,true,,,
 yonkers,2025-12-08,6,,,Just Enuff Stuff,Hammering Hank,Perfect Promises,Hammering Hank,Perfect Promises,Why Tomorrow Ray,false,false,false,true,,,
 yonkers,2025-12-09,1,,,Disaronno Hill,Bout Damn Time A,Nuttinbuthebest,Bout Damn Time A,Disaronno Hill,Bluebird Crush,false,false,false,true,,,
@@ -3549,7 +3573,8 @@ Aqueduct,2026-01-09,5,,,Probability,Antietam,Kaz Oil Changer,Sequential,Probabil
 Aqueduct,2026-01-09,6,,,That's Funny,Blenheim Baby,Spirit of Esther,That's Funny,Blenheim Baby,Spirit of Esther,true,true,true,true,84,54,"[""That's Funny"",""Blenheim Baby"",""Spirit of Esther""]"
 Aqueduct,2026-01-09,7,,,Vettriano,Mr Skylight,Big Hat Willie,One Nine Hundred,Toxic Gray,Mr Skylight,false,false,false,true,84,54,"[""Vettriano"",""Mr Skylight"",""Big Hat Willie""]"
 Aqueduct,2026-01-09,8,,,Mo Spice,Bellamy,Tinseltown,Mo Spice,Bellamy,Tinseltown,true,true,true,true,97,39,"[""Spidey Man"",""Skillian"",""Biker Baley""]"
-Aqueduct Racetrack,2026-01-04,7,,,Metfardeh,Purloin,Noticeable,Purloin,I'm Buzzy,Texas QuMedfardeheen,false,false,false,true,92,48,"[""Metfardeh"",""Purloin"",""Noticeable""]"
+Aqueduct,2026-01-18,1,,,Fort Nelson,Rule Sixty Two,New York Scrappy,New York Scrappy,Fort Nelson,Middle Market,false,false,false,true,,,
+Aqueduct,2026-01-04,7,,,Metfardeh,Purloin,Noticeable,Purloin,I'm Buzzy,Texas QuMedfardeheen,false,false,false,true,92,48,"[""Metfardeh"",""Purloin"",""Noticeable""]"
 AUS Lismore,2026-01-03,4,,,Artie Lady,Do It For You,Ourlegs Eleven,Do It For You,Per Capita,Alabama Girl,false,false,false,true,97,39,"[""Artie Lady"",""Do It For You"",""Ourlegs Eleven""]"
 AUS Nowra,2025-12-13,3,,,Breakaway Week,Tillman,Ken'ker,Breakaway Week,Tillman,Fire And Gemstone,true,true,false,true,,,
 AUS Randwick Kensington,2026-01-13,3,,,Indigo Star,Lady Of The Castle,Let's Go Barbie,Gorgeous,Let's Go Barbie,Double Vision,false,false,false,true,97,43,"[""Indigo Star"",""Lady Of The Castle"",""Let's Go Barbie""]"
@@ -3570,8 +3595,8 @@ Charles Town,2026-01-02,4,,,No Mo Muffins,Georgia Rain,Rhenski,No Mo Muffins,Pea
 Charles Town,2026-01-03,2,,,Fifth of June,Citified,Collegeville Queen,Collegeville Queen,Miss Shack Attack,Cajun Prime,false,false,false,true,92,48,"[""Fifth of June"",""Citified"",""Collegeville Queen""]"
 Charles Town,2026-01-03,3,,,Hopping Henry,Auburn Mill,Colt Rock,Rocket Appeal,Auburn Mill,Hopping Henry,false,true,false,true,97,43,"[""Hopping Henry"",""Auburn Mill"",""Colt Rock""]"
 Charles Town,2026-01-03,8,,,Brother Conway,Social Chic,Kaladin,No Direction,Sweet Lime,I'd Rather Not,false,false,false,false,92,48,"[""Brother Conway"",""Social Chic"",""Kaladin""]"
-Charles Town Races,2025-12-09,6,,,Camco Laraido,Labero,Ma Barker,Labero,Fire the Rocket,Camco Laraido,false,false,false,true,,,
-Charles Town Races,2026-01-16,8,,,Omar Comin,Late in the Game,Strava,Omar Comin,Strava,Rick'swarmheart,true,false,false,true,67,62,"[""Omar Comin"",""Late in the Game"",""Strava""]"
+Charles Town,2025-12-09,6,,,Camco Laraido,Labero,Ma Barker,Labero,Fire the Rocket,Camco Laraido,false,false,false,true,,,
+Charles Town,2026-01-16,8,,,Omar Comin,Late in the Game,Strava,Omar Comin,Strava,Rick'swarmheart,true,false,false,true,67,62,"[""Omar Comin"",""Late in the Game"",""Strava""]"
 Dayton,2025-12-09,11,,,Banderas,Tie the Knot,Believe in Tom,Banderas,Tie the Knot,Chanceyfascination,true,true,false,true,,,
 Dayton,2025-12-10,9,,,Divine Thing,Sayinwhatimthinkin,Triathlon As,Famous Father,Triathlon As,Sayinwhatimthinkin,false,false,false,true,,,
 Delta Downs,2025-12-05,1,,,Killer Guitar,Drewrelius,Respecttheconnect,Killer Guitar,Drewrelius,Ninth Ward Bobby O,true,true,false,true,,,
@@ -3618,6 +3643,7 @@ Fair Grounds,2026-01-09,2,,,Leah's First,Honor Azteca,Cloudy Lass,Amazing Lady,S
 Fair Grounds,2026-01-09,3,,,Daredevil Doug,Mister O,Spielman,Lost in the Sauce,Miracle On Central,Spielman,false,false,true,true,92,48,"[""Daredevil Doug"",""Mister O"",""Spielman""]"
 Fair Grounds,2026-01-09,5,,,Sippin On Gin,Highland Creek,Cosmic Train,Sippin On Gin,Mangum,Cosmic Train,true,false,true,true,92,48,"[""Sippin On Gin"",""Highland Creek"",""Cosmic Train""]"
 Fair Grounds,2026-01-16,12,,,Just a Touch,Moonlight,Sir Greylind,Accelerize,Just a Touch,Cadet Corps,false,false,false,true,91,48,"[""Just a Touch"",""Moonlight"",""Sir Greylind""]"
+Fair Grounds,2026-01-19,1,,,Precious Money,The Pretty Sister,Honor His Half,Precious Money,The Pretty Sister,About to Set Sail,true,true,false,true,,,
 Flamboro Downs,2025-12-10,2,,,Tellit Russ Tellit,Onyx Bovino,Ambitious Mind,Ara You Crazy,Onyx Bovino,Ambitious Mind,false,true,true,true,,,
 FRA Lyon La Soie,2025-12-07,1,,,Rejaitt,Dream in Brooke,Valentine Day,,,,false,false,false,false,,,
 FRA Marseille Vivaux,2025-12-21,8,,,Dubalaa,Aventino,Noce De Rubis,Dubalaa,Lover Song,Westminster Love,true,false,false,true,,,
@@ -3689,11 +3715,11 @@ Mahoning Valley,2026-01-06,5,,,Lionistic,Az We Speak,Kichi Kitsu,Sweet Unique,Ki
 Mahoning Valley,2026-01-06,6,,,Washington's Union (86),Grey Streak (105),Supply Chain (87),Collectorate,Washington's Union,Supply Chain,false,false,true,true,100,48,"[""Washington's Union (86)"",""Grey Streak (105)"",""Supply Chain (87)""]"
 Mahoning Valley,2026-01-13,3,,,Relish the Ride,Dark Vader,Wetzel,Dark Vader,Raven Moon,Gone in a Flash,false,false,false,true,82,82,"[""Relish the Ride"",""Dark Vader"",""Wetzel""]"
 Mahoning Valley,2026-01-13,7,,,Mission Control,Who Da Boss,Casual Attire,Sunset Town,Mission Control,Casual Attire,false,false,true,true,82,82,"[""Mission Control"",""Who Da Boss"",""Casual Attire""]"
-Mahoning Valley Race Course,2025-12-16,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
-Mahoning Valley Race Course,2025-12-17,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
-Mahoning Valley Race Course,2025-12-20,1,,,Lookin Like Lucky,Santorino,Briarcliff,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-16,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-17,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-20,1,,,Lookin Like Lucky,Santorino,Briarcliff,,,,false,false,false,false,,,
 Meadowlands,2026-01-02,6,,,Nila Maree N,Ithatobeeyou,Youllfindout,Nila Maree N,Youllfindout,Arsenal's Ladybug,true,false,false,true,97,43,"[""Nila Maree N"",""Ithatobeeyou"",""Youllfindout""]"
-Meadowlands Racetrack,2026-01-16,11,,,Swedish Starlet N,Avf Claire,Fearless Bettor,Avf Claire,Fearless Bettor,Cruise Alert,false,false,false,true,97,43,"[""Swedish Starlet N"",""Avf Claire"",""Fearless Bettor""]"
+Meadowlands,2026-01-16,11,,,Swedish Starlet N,Avf Claire,Fearless Bettor,Avf Claire,Fearless Bettor,Cruise Alert,false,false,false,true,97,43,"[""Swedish Starlet N"",""Avf Claire"",""Fearless Bettor""]"
 Monticello Raceway,2025-12-24,1,,,Ziggy Sky,Fox Valley Inferno,Prairie Fenway,Ziggy Sky,Fox Valley Inferno,Aintnobettor A,true,true,false,true,,,
 Mountaineer Park,2025-12-07,2,,,Dreaming of Hope,Popstyle,Kozem,Maci's World,Dreaming of Hope,Popstyle,false,false,false,true,,,
 Mountaineer Park,2025-12-07,3,,,Spuns Kitten,Shotgun Margaret,Holly Roller,Shotgun Margaret,Spuns Kitten,Pour Me a Drink,false,false,false,true,,,
@@ -3752,7 +3778,7 @@ Remington Park,2025-12-20,3,,,Vestes,Tigers 'n Bears,Quarterly Report,Vestes,Spe
 Sam Houston,2026-01-03,5,,,Dutch Mills,Chivalrous,Bling Mountain,Shogun Be Fast,Team Leader,Cinco Richie,false,false,false,false,97,43,"[""Malibu S S"",""Team Leader"",""Shogun Be Fast""]"
 Sam Houston,2026-01-03,6,,,Dutch Mills,Chivalrous,Bling Mountain,Bling Mountain,Copper Storm,Noble Eagle,false,false,false,true,92,48,"[""Dutch Mills"",""Chivalrous"",""Bling Mountain""]"
 Sam Houston Race Park,2026-01-03,5,,,Malibu S S,Team Leader,Shogun Be Fast,,,,false,false,false,false,97,43,"[""Malibu S S"",""Team Leader"",""Shogun Be Fast""]"
-Saratoga Race Course,2025-12-07,9,,,Manhattan Artist,Hangman Mcgee,Morrone Dolce,Manhattan Artist,Hangman Mcgee,Dark Hour,true,true,false,true,,,
+Saratoga,2025-12-07,9,,,Manhattan Artist,Hangman Mcgee,Morrone Dolce,Manhattan Artist,Hangman Mcgee,Dark Hour,true,true,false,true,,,
 Sunland Park,2026-01-03,1,,,Wedding Groom,Broadway Dish,Shell Game,Wedding Groom,Shell Game,Billy de Kid,true,false,false,true,97,39,"[""Wedding Groom"",""Broadway Dish"",""Shell Game""]"
 Sunland Park,2026-01-05,5,,,Stand Up Guy,Exit Strategy,He's a Genius,Trafficstorm,Holy Bullet,American Storm,false,false,false,false,84,54,"[""Stand Up Guy"",""Exit Strategy"",""He's a Genius""]"
 SWE Bjerke,2025-12-21,5,,,Resilient Reddington,Explosive Axe,Icarus B.R.,Resilient Reddington,Caramel Volo,Explosive Axe,true,false,false,true,,,
@@ -3812,8 +3838,8 @@ Woodbine Mohawk (,2025-12-27,8,,,Bruno No No,Cold Creek Queso,Dublin Dasher,Brun
 Woodbine Mohawk,2025-12-27,9,,,Bronx Drifter,Sometime Somewhere,Pipewrench Charlie,Bronx Drifter,Self Made,Sergeant Slaughter,true,false,false,true,97,39,"[""Bronx Drifter"",""Sometime Somewhere"",""Pipewrench Charlie""]"
 Woodbine Mohawk,2026-01-02,5,,,Kellina Diamond,Job Hunter,Im Betonsix,POWDER PLAY,JOB HUNTER,KELLINA DIAMOND,false,true,false,true,67,62,"[""Kellina Diamond"",""Job Hunter"",""Im Betonsix""]"
 Woodbine Mohawk,2026-01-03,11,,,Blue Bar,Ernwood Big Mack,Summer Dancer,Dusty Lane Levi,Blue Bar,Erinwood Big Mack,false,false,false,true,82,54,"[""So Much More"",""Angostura Hanover"",""Century Jamila""]"
-Woodbine Racetrack,2025-12-04,1,,,Nicki Is a Breeze,Lady Izzy,Majestic Appeal,,,,false,false,false,false,,,
-Woodbine Racetrack,2025-12-07,2,,,Logan Park,Hasty Bid,What About Elmo,Logan Park,Hasty Bid,Sid the Kid,true,true,false,true,,,
+Woodbine,2025-12-04,1,,,Nicki Is a Breeze,Lady Izzy,Majestic Appeal,,,,false,false,false,false,,,
+Woodbine,2025-12-07,2,,,Logan Park,Hasty Bid,What About Elmo,Logan Park,Hasty Bid,Sid the Kid,true,true,false,true,,,
 yonkers,2025-12-08,10,,,Italian Lad N,Western Era,Walkinshaw N,Speaker of Peace,Italian Lad N,Music Hall,false,false,false,true,,,
 yonkers,2025-12-08,6,,,Just Enuff Stuff,Hammering Hank,Perfect Promises,Hammering Hank,Perfect Promises,Why Tomorrow Ray,false,false,false,true,,,
 yonkers,2025-12-09,1,,,Disaronno Hill,Bout Damn Time A,Nuttinbuthebest,Bout Damn Time A,Disaronno Hill,Bluebird Crush,false,false,false,true,,,
@@ -3843,7 +3869,8 @@ Aqueduct,2026-01-09,5,,,Probability,Antietam,Kaz Oil Changer,Sequential,Probabil
 Aqueduct,2026-01-09,6,,,That's Funny,Blenheim Baby,Spirit of Esther,That's Funny,Blenheim Baby,Spirit of Esther,true,true,true,true,84,54,"[""That's Funny"",""Blenheim Baby"",""Spirit of Esther""]"
 Aqueduct,2026-01-09,7,,,Vettriano,Mr Skylight,Big Hat Willie,One Nine Hundred,Toxic Gray,Mr Skylight,false,false,false,true,84,54,"[""Vettriano"",""Mr Skylight"",""Big Hat Willie""]"
 Aqueduct,2026-01-09,8,,,Mo Spice,Bellamy,Tinseltown,Mo Spice,Bellamy,Tinseltown,true,true,true,true,97,39,"[""Spidey Man"",""Skillian"",""Biker Baley""]"
-Aqueduct Racetrack,2026-01-04,7,,,Metfardeh,Purloin,Noticeable,Purloin,I'm Buzzy,Texas QuMedfardeheen,false,false,false,true,92,48,"[""Metfardeh"",""Purloin"",""Noticeable""]"
+Aqueduct,2026-01-18,1,,,Fort Nelson,Rule Sixty Two,New York Scrappy,New York Scrappy,Fort Nelson,Middle Market,false,false,false,true,,,
+Aqueduct,2026-01-04,7,,,Metfardeh,Purloin,Noticeable,Purloin,I'm Buzzy,Texas QuMedfardeheen,false,false,false,true,92,48,"[""Metfardeh"",""Purloin"",""Noticeable""]"
 AUS Lismore,2026-01-03,4,,,Artie Lady,Do It For You,Ourlegs Eleven,Do It For You,Per Capita,Alabama Girl,false,false,false,true,97,39,"[""Artie Lady"",""Do It For You"",""Ourlegs Eleven""]"
 AUS Nowra,2025-12-13,3,,,Breakaway Week,Tillman,Ken'ker,Breakaway Week,Tillman,Fire And Gemstone,true,true,false,true,,,
 AUS Randwick Kensington,2026-01-13,3,,,Indigo Star,Lady Of The Castle,Let's Go Barbie,Gorgeous,Let's Go Barbie,Double Vision,false,false,false,true,97,43,"[""Indigo Star"",""Lady Of The Castle"",""Let's Go Barbie""]"
@@ -3864,8 +3891,8 @@ Charles Town,2026-01-02,4,,,No Mo Muffins,Georgia Rain,Rhenski,No Mo Muffins,Pea
 Charles Town,2026-01-03,2,,,Fifth of June,Citified,Collegeville Queen,Collegeville Queen,Miss Shack Attack,Cajun Prime,false,false,false,true,92,48,"[""Fifth of June"",""Citified"",""Collegeville Queen""]"
 Charles Town,2026-01-03,3,,,Hopping Henry,Auburn Mill,Colt Rock,Rocket Appeal,Auburn Mill,Hopping Henry,false,true,false,true,97,43,"[""Hopping Henry"",""Auburn Mill"",""Colt Rock""]"
 Charles Town,2026-01-03,8,,,Brother Conway,Social Chic,Kaladin,No Direction,Sweet Lime,I'd Rather Not,false,false,false,false,92,48,"[""Brother Conway"",""Social Chic"",""Kaladin""]"
-Charles Town Races,2025-12-09,6,,,Camco Laraido,Labero,Ma Barker,Labero,Fire the Rocket,Camco Laraido,false,false,false,true,,,
-Charles Town Races,2026-01-16,8,,,Omar Comin,Late in the Game,Strava,Omar Comin,Strava,Rick'swarmheart,true,false,false,true,67,62,"[""Omar Comin"",""Late in the Game"",""Strava""]"
+Charles Town,2025-12-09,6,,,Camco Laraido,Labero,Ma Barker,Labero,Fire the Rocket,Camco Laraido,false,false,false,true,,,
+Charles Town,2026-01-16,8,,,Omar Comin,Late in the Game,Strava,Omar Comin,Strava,Rick'swarmheart,true,false,false,true,67,62,"[""Omar Comin"",""Late in the Game"",""Strava""]"
 Dayton,2025-12-09,11,,,Banderas,Tie the Knot,Believe in Tom,Banderas,Tie the Knot,Chanceyfascination,true,true,false,true,,,
 Dayton,2025-12-10,9,,,Divine Thing,Sayinwhatimthinkin,Triathlon As,Famous Father,Triathlon As,Sayinwhatimthinkin,false,false,false,true,,,
 Delta Downs,2025-12-05,1,,,Killer Guitar,Drewrelius,Respecttheconnect,Killer Guitar,Drewrelius,Ninth Ward Bobby O,true,true,false,true,,,
@@ -3912,6 +3939,7 @@ Fair Grounds,2026-01-09,2,,,Leah's First,Honor Azteca,Cloudy Lass,Amazing Lady,S
 Fair Grounds,2026-01-09,3,,,Daredevil Doug,Mister O,Spielman,Lost in the Sauce,Miracle On Central,Spielman,false,false,true,true,92,48,"[""Daredevil Doug"",""Mister O"",""Spielman""]"
 Fair Grounds,2026-01-09,5,,,Sippin On Gin,Highland Creek,Cosmic Train,Sippin On Gin,Mangum,Cosmic Train,true,false,true,true,92,48,"[""Sippin On Gin"",""Highland Creek"",""Cosmic Train""]"
 Fair Grounds,2026-01-16,12,,,Just a Touch,Moonlight,Sir Greylind,Accelerize,Just a Touch,Cadet Corps,false,false,false,true,91,48,"[""Just a Touch"",""Moonlight"",""Sir Greylind""]"
+Fair Grounds,2026-01-19,1,,,Precious Money,The Pretty Sister,Honor His Half,Precious Money,The Pretty Sister,About to Set Sail,true,true,false,true,,,
 Flamboro Downs,2025-12-10,2,,,Tellit Russ Tellit,Onyx Bovino,Ambitious Mind,Ara You Crazy,Onyx Bovino,Ambitious Mind,false,true,true,true,,,
 FRA Lyon La Soie,2025-12-07,1,,,Rejaitt,Dream in Brooke,Valentine Day,,,,false,false,false,false,,,
 FRA Marseille Vivaux,2025-12-21,8,,,Dubalaa,Aventino,Noce De Rubis,Dubalaa,Lover Song,Westminster Love,true,false,false,true,,,
@@ -3983,11 +4011,11 @@ Mahoning Valley,2026-01-06,5,,,Lionistic,Az We Speak,Kichi Kitsu,Sweet Unique,Ki
 Mahoning Valley,2026-01-06,6,,,Washington's Union (86),Grey Streak (105),Supply Chain (87),Collectorate,Washington's Union,Supply Chain,false,false,true,true,100,48,"[""Washington's Union (86)"",""Grey Streak (105)"",""Supply Chain (87)""]"
 Mahoning Valley,2026-01-13,3,,,Relish the Ride,Dark Vader,Wetzel,Dark Vader,Raven Moon,Gone in a Flash,false,false,false,true,82,82,"[""Relish the Ride"",""Dark Vader"",""Wetzel""]"
 Mahoning Valley,2026-01-13,7,,,Mission Control,Who Da Boss,Casual Attire,Sunset Town,Mission Control,Casual Attire,false,false,true,true,82,82,"[""Mission Control"",""Who Da Boss"",""Casual Attire""]"
-Mahoning Valley Race Course,2025-12-16,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
-Mahoning Valley Race Course,2025-12-17,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
-Mahoning Valley Race Course,2025-12-20,1,,,Lookin Like Lucky,Santorino,Briarcliff,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-16,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-17,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-20,1,,,Lookin Like Lucky,Santorino,Briarcliff,,,,false,false,false,false,,,
 Meadowlands,2026-01-02,6,,,Nila Maree N,Ithatobeeyou,Youllfindout,Nila Maree N,Youllfindout,Arsenal's Ladybug,true,false,false,true,97,43,"[""Nila Maree N"",""Ithatobeeyou"",""Youllfindout""]"
-Meadowlands Racetrack,2026-01-16,11,,,Swedish Starlet N,Avf Claire,Fearless Bettor,Avf Claire,Fearless Bettor,Cruise Alert,false,false,false,true,97,43,"[""Swedish Starlet N"",""Avf Claire"",""Fearless Bettor""]"
+Meadowlands,2026-01-16,11,,,Swedish Starlet N,Avf Claire,Fearless Bettor,Avf Claire,Fearless Bettor,Cruise Alert,false,false,false,true,97,43,"[""Swedish Starlet N"",""Avf Claire"",""Fearless Bettor""]"
 Monticello Raceway,2025-12-24,1,,,Ziggy Sky,Fox Valley Inferno,Prairie Fenway,Ziggy Sky,Fox Valley Inferno,Aintnobettor A,true,true,false,true,,,
 Mountaineer Park,2025-12-07,2,,,Dreaming of Hope,Popstyle,Kozem,Maci's World,Dreaming of Hope,Popstyle,false,false,false,true,,,
 Mountaineer Park,2025-12-07,3,,,Spuns Kitten,Shotgun Margaret,Holly Roller,Shotgun Margaret,Spuns Kitten,Pour Me a Drink,false,false,false,true,,,
@@ -4046,7 +4074,7 @@ Remington Park,2025-12-20,3,,,Vestes,Tigers 'n Bears,Quarterly Report,Vestes,Spe
 Sam Houston,2026-01-03,5,,,Dutch Mills,Chivalrous,Bling Mountain,Shogun Be Fast,Team Leader,Cinco Richie,false,false,false,false,97,43,"[""Malibu S S"",""Team Leader"",""Shogun Be Fast""]"
 Sam Houston,2026-01-03,6,,,Dutch Mills,Chivalrous,Bling Mountain,Bling Mountain,Copper Storm,Noble Eagle,false,false,false,true,92,48,"[""Dutch Mills"",""Chivalrous"",""Bling Mountain""]"
 Sam Houston Race Park,2026-01-03,5,,,Malibu S S,Team Leader,Shogun Be Fast,,,,false,false,false,false,97,43,"[""Malibu S S"",""Team Leader"",""Shogun Be Fast""]"
-Saratoga Race Course,2025-12-07,9,,,Manhattan Artist,Hangman Mcgee,Morrone Dolce,Manhattan Artist,Hangman Mcgee,Dark Hour,true,true,false,true,,,
+Saratoga,2025-12-07,9,,,Manhattan Artist,Hangman Mcgee,Morrone Dolce,Manhattan Artist,Hangman Mcgee,Dark Hour,true,true,false,true,,,
 Sunland Park,2026-01-03,1,,,Wedding Groom,Broadway Dish,Shell Game,Wedding Groom,Shell Game,Billy de Kid,true,false,false,true,97,39,"[""Wedding Groom"",""Broadway Dish"",""Shell Game""]"
 Sunland Park,2026-01-05,5,,,Stand Up Guy,Exit Strategy,He's a Genius,Trafficstorm,Holy Bullet,American Storm,false,false,false,false,84,54,"[""Stand Up Guy"",""Exit Strategy"",""He's a Genius""]"
 SWE Bjerke,2025-12-21,5,,,Resilient Reddington,Explosive Axe,Icarus B.R.,Resilient Reddington,Caramel Volo,Explosive Axe,true,false,false,true,,,
@@ -4106,8 +4134,8 @@ Woodbine Mohawk (,2025-12-27,8,,,Bruno No No,Cold Creek Queso,Dublin Dasher,Brun
 Woodbine Mohawk,2025-12-27,9,,,Bronx Drifter,Sometime Somewhere,Pipewrench Charlie,Bronx Drifter,Self Made,Sergeant Slaughter,true,false,false,true,97,39,"[""Bronx Drifter"",""Sometime Somewhere"",""Pipewrench Charlie""]"
 Woodbine Mohawk,2026-01-02,5,,,Kellina Diamond,Job Hunter,Im Betonsix,POWDER PLAY,JOB HUNTER,KELLINA DIAMOND,false,true,false,true,67,62,"[""Kellina Diamond"",""Job Hunter"",""Im Betonsix""]"
 Woodbine Mohawk,2026-01-03,11,,,Blue Bar,Ernwood Big Mack,Summer Dancer,Dusty Lane Levi,Blue Bar,Erinwood Big Mack,false,false,false,true,82,54,"[""So Much More"",""Angostura Hanover"",""Century Jamila""]"
-Woodbine Racetrack,2025-12-04,1,,,Nicki Is a Breeze,Lady Izzy,Majestic Appeal,,,,false,false,false,false,,,
-Woodbine Racetrack,2025-12-07,2,,,Logan Park,Hasty Bid,What About Elmo,Logan Park,Hasty Bid,Sid the Kid,true,true,false,true,,,
+Woodbine,2025-12-04,1,,,Nicki Is a Breeze,Lady Izzy,Majestic Appeal,,,,false,false,false,false,,,
+Woodbine,2025-12-07,2,,,Logan Park,Hasty Bid,What About Elmo,Logan Park,Hasty Bid,Sid the Kid,true,true,false,true,,,
 yonkers,2025-12-08,10,,,Italian Lad N,Western Era,Walkinshaw N,Speaker of Peace,Italian Lad N,Music Hall,false,false,false,true,,,
 yonkers,2025-12-08,6,,,Just Enuff Stuff,Hammering Hank,Perfect Promises,Hammering Hank,Perfect Promises,Why Tomorrow Ray,false,false,false,true,,,
 yonkers,2025-12-09,1,,,Disaronno Hill,Bout Damn Time A,Nuttinbuthebest,Bout Damn Time A,Disaronno Hill,Bluebird Crush,false,false,false,true,,,
@@ -4137,7 +4165,8 @@ Aqueduct,2026-01-09,5,,,Probability,Antietam,Kaz Oil Changer,Sequential,Probabil
 Aqueduct,2026-01-09,6,,,That's Funny,Blenheim Baby,Spirit of Esther,That's Funny,Blenheim Baby,Spirit of Esther,true,true,true,true,84,54,"[""That's Funny"",""Blenheim Baby"",""Spirit of Esther""]"
 Aqueduct,2026-01-09,7,,,Vettriano,Mr Skylight,Big Hat Willie,One Nine Hundred,Toxic Gray,Mr Skylight,false,false,false,true,84,54,"[""Vettriano"",""Mr Skylight"",""Big Hat Willie""]"
 Aqueduct,2026-01-09,8,,,Mo Spice,Bellamy,Tinseltown,Mo Spice,Bellamy,Tinseltown,true,true,true,true,97,39,"[""Spidey Man"",""Skillian"",""Biker Baley""]"
-Aqueduct Racetrack,2026-01-04,7,,,Metfardeh,Purloin,Noticeable,Purloin,I'm Buzzy,Texas QuMedfardeheen,false,false,false,true,92,48,"[""Metfardeh"",""Purloin"",""Noticeable""]"
+Aqueduct,2026-01-18,1,,,Fort Nelson,Rule Sixty Two,New York Scrappy,New York Scrappy,Fort Nelson,Middle Market,false,false,false,true,,,
+Aqueduct,2026-01-04,7,,,Metfardeh,Purloin,Noticeable,Purloin,I'm Buzzy,Texas QuMedfardeheen,false,false,false,true,92,48,"[""Metfardeh"",""Purloin"",""Noticeable""]"
 AUS Lismore,2026-01-03,4,,,Artie Lady,Do It For You,Ourlegs Eleven,Do It For You,Per Capita,Alabama Girl,false,false,false,true,97,39,"[""Artie Lady"",""Do It For You"",""Ourlegs Eleven""]"
 AUS Nowra,2025-12-13,3,,,Breakaway Week,Tillman,Ken'ker,Breakaway Week,Tillman,Fire And Gemstone,true,true,false,true,,,
 AUS Randwick Kensington,2026-01-13,3,,,Indigo Star,Lady Of The Castle,Let's Go Barbie,Gorgeous,Let's Go Barbie,Double Vision,false,false,false,true,97,43,"[""Indigo Star"",""Lady Of The Castle"",""Let's Go Barbie""]"
@@ -4158,8 +4187,8 @@ Charles Town,2026-01-02,4,,,No Mo Muffins,Georgia Rain,Rhenski,No Mo Muffins,Pea
 Charles Town,2026-01-03,2,,,Fifth of June,Citified,Collegeville Queen,Collegeville Queen,Miss Shack Attack,Cajun Prime,false,false,false,true,92,48,"[""Fifth of June"",""Citified"",""Collegeville Queen""]"
 Charles Town,2026-01-03,3,,,Hopping Henry,Auburn Mill,Colt Rock,Rocket Appeal,Auburn Mill,Hopping Henry,false,true,false,true,97,43,"[""Hopping Henry"",""Auburn Mill"",""Colt Rock""]"
 Charles Town,2026-01-03,8,,,Brother Conway,Social Chic,Kaladin,No Direction,Sweet Lime,I'd Rather Not,false,false,false,false,92,48,"[""Brother Conway"",""Social Chic"",""Kaladin""]"
-Charles Town Races,2025-12-09,6,,,Camco Laraido,Labero,Ma Barker,Labero,Fire the Rocket,Camco Laraido,false,false,false,true,,,
-Charles Town Races,2026-01-16,8,,,Omar Comin,Late in the Game,Strava,Omar Comin,Strava,Rick'swarmheart,true,false,false,true,67,62,"[""Omar Comin"",""Late in the Game"",""Strava""]"
+Charles Town,2025-12-09,6,,,Camco Laraido,Labero,Ma Barker,Labero,Fire the Rocket,Camco Laraido,false,false,false,true,,,
+Charles Town,2026-01-16,8,,,Omar Comin,Late in the Game,Strava,Omar Comin,Strava,Rick'swarmheart,true,false,false,true,67,62,"[""Omar Comin"",""Late in the Game"",""Strava""]"
 Dayton,2025-12-09,11,,,Banderas,Tie the Knot,Believe in Tom,Banderas,Tie the Knot,Chanceyfascination,true,true,false,true,,,
 Dayton,2025-12-10,9,,,Divine Thing,Sayinwhatimthinkin,Triathlon As,Famous Father,Triathlon As,Sayinwhatimthinkin,false,false,false,true,,,
 Delta Downs,2025-12-05,1,,,Killer Guitar,Drewrelius,Respecttheconnect,Killer Guitar,Drewrelius,Ninth Ward Bobby O,true,true,false,true,,,
@@ -4206,6 +4235,7 @@ Fair Grounds,2026-01-09,2,,,Leah's First,Honor Azteca,Cloudy Lass,Amazing Lady,S
 Fair Grounds,2026-01-09,3,,,Daredevil Doug,Mister O,Spielman,Lost in the Sauce,Miracle On Central,Spielman,false,false,true,true,92,48,"[""Daredevil Doug"",""Mister O"",""Spielman""]"
 Fair Grounds,2026-01-09,5,,,Sippin On Gin,Highland Creek,Cosmic Train,Sippin On Gin,Mangum,Cosmic Train,true,false,true,true,92,48,"[""Sippin On Gin"",""Highland Creek"",""Cosmic Train""]"
 Fair Grounds,2026-01-16,12,,,Just a Touch,Moonlight,Sir Greylind,Accelerize,Just a Touch,Cadet Corps,false,false,false,true,91,48,"[""Just a Touch"",""Moonlight"",""Sir Greylind""]"
+Fair Grounds,2026-01-19,1,,,Precious Money,The Pretty Sister,Honor His Half,Precious Money,The Pretty Sister,About to Set Sail,true,true,false,true,,,
 Flamboro Downs,2025-12-10,2,,,Tellit Russ Tellit,Onyx Bovino,Ambitious Mind,Ara You Crazy,Onyx Bovino,Ambitious Mind,false,true,true,true,,,
 FRA Lyon La Soie,2025-12-07,1,,,Rejaitt,Dream in Brooke,Valentine Day,,,,false,false,false,false,,,
 FRA Marseille Vivaux,2025-12-21,8,,,Dubalaa,Aventino,Noce De Rubis,Dubalaa,Lover Song,Westminster Love,true,false,false,true,,,
@@ -4277,11 +4307,11 @@ Mahoning Valley,2026-01-06,5,,,Lionistic,Az We Speak,Kichi Kitsu,Sweet Unique,Ki
 Mahoning Valley,2026-01-06,6,,,Washington's Union (86),Grey Streak (105),Supply Chain (87),Collectorate,Washington's Union,Supply Chain,false,false,true,true,100,48,"[""Washington's Union (86)"",""Grey Streak (105)"",""Supply Chain (87)""]"
 Mahoning Valley,2026-01-13,3,,,Relish the Ride,Dark Vader,Wetzel,Dark Vader,Raven Moon,Gone in a Flash,false,false,false,true,82,82,"[""Relish the Ride"",""Dark Vader"",""Wetzel""]"
 Mahoning Valley,2026-01-13,7,,,Mission Control,Who Da Boss,Casual Attire,Sunset Town,Mission Control,Casual Attire,false,false,true,true,82,82,"[""Mission Control"",""Who Da Boss"",""Casual Attire""]"
-Mahoning Valley Race Course,2025-12-16,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
-Mahoning Valley Race Course,2025-12-17,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
-Mahoning Valley Race Course,2025-12-20,1,,,Lookin Like Lucky,Santorino,Briarcliff,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-16,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-17,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-20,1,,,Lookin Like Lucky,Santorino,Briarcliff,,,,false,false,false,false,,,
 Meadowlands,2026-01-02,6,,,Nila Maree N,Ithatobeeyou,Youllfindout,Nila Maree N,Youllfindout,Arsenal's Ladybug,true,false,false,true,97,43,"[""Nila Maree N"",""Ithatobeeyou"",""Youllfindout""]"
-Meadowlands Racetrack,2026-01-16,11,,,Swedish Starlet N,Avf Claire,Fearless Bettor,Avf Claire,Fearless Bettor,Cruise Alert,false,false,false,true,97,43,"[""Swedish Starlet N"",""Avf Claire"",""Fearless Bettor""]"
+Meadowlands,2026-01-16,11,,,Swedish Starlet N,Avf Claire,Fearless Bettor,Avf Claire,Fearless Bettor,Cruise Alert,false,false,false,true,97,43,"[""Swedish Starlet N"",""Avf Claire"",""Fearless Bettor""]"
 Monticello Raceway,2025-12-24,1,,,Ziggy Sky,Fox Valley Inferno,Prairie Fenway,Ziggy Sky,Fox Valley Inferno,Aintnobettor A,true,true,false,true,,,
 Mountaineer Park,2025-12-07,2,,,Dreaming of Hope,Popstyle,Kozem,Maci's World,Dreaming of Hope,Popstyle,false,false,false,true,,,
 Mountaineer Park,2025-12-07,3,,,Spuns Kitten,Shotgun Margaret,Holly Roller,Shotgun Margaret,Spuns Kitten,Pour Me a Drink,false,false,false,true,,,
@@ -4340,7 +4370,7 @@ Remington Park,2025-12-20,3,,,Vestes,Tigers 'n Bears,Quarterly Report,Vestes,Spe
 Sam Houston,2026-01-03,5,,,Dutch Mills,Chivalrous,Bling Mountain,Shogun Be Fast,Team Leader,Cinco Richie,false,false,false,false,97,43,"[""Malibu S S"",""Team Leader"",""Shogun Be Fast""]"
 Sam Houston,2026-01-03,6,,,Dutch Mills,Chivalrous,Bling Mountain,Bling Mountain,Copper Storm,Noble Eagle,false,false,false,true,92,48,"[""Dutch Mills"",""Chivalrous"",""Bling Mountain""]"
 Sam Houston Race Park,2026-01-03,5,,,Malibu S S,Team Leader,Shogun Be Fast,,,,false,false,false,false,97,43,"[""Malibu S S"",""Team Leader"",""Shogun Be Fast""]"
-Saratoga Race Course,2025-12-07,9,,,Manhattan Artist,Hangman Mcgee,Morrone Dolce,Manhattan Artist,Hangman Mcgee,Dark Hour,true,true,false,true,,,
+Saratoga,2025-12-07,9,,,Manhattan Artist,Hangman Mcgee,Morrone Dolce,Manhattan Artist,Hangman Mcgee,Dark Hour,true,true,false,true,,,
 Sunland Park,2026-01-03,1,,,Wedding Groom,Broadway Dish,Shell Game,Wedding Groom,Shell Game,Billy de Kid,true,false,false,true,97,39,"[""Wedding Groom"",""Broadway Dish"",""Shell Game""]"
 Sunland Park,2026-01-05,5,,,Stand Up Guy,Exit Strategy,He's a Genius,Trafficstorm,Holy Bullet,American Storm,false,false,false,false,84,54,"[""Stand Up Guy"",""Exit Strategy"",""He's a Genius""]"
 SWE Bjerke,2025-12-21,5,,,Resilient Reddington,Explosive Axe,Icarus B.R.,Resilient Reddington,Caramel Volo,Explosive Axe,true,false,false,true,,,
@@ -4400,8 +4430,8 @@ Woodbine Mohawk (,2025-12-27,8,,,Bruno No No,Cold Creek Queso,Dublin Dasher,Brun
 Woodbine Mohawk,2025-12-27,9,,,Bronx Drifter,Sometime Somewhere,Pipewrench Charlie,Bronx Drifter,Self Made,Sergeant Slaughter,true,false,false,true,97,39,"[""Bronx Drifter"",""Sometime Somewhere"",""Pipewrench Charlie""]"
 Woodbine Mohawk,2026-01-02,5,,,Kellina Diamond,Job Hunter,Im Betonsix,POWDER PLAY,JOB HUNTER,KELLINA DIAMOND,false,true,false,true,67,62,"[""Kellina Diamond"",""Job Hunter"",""Im Betonsix""]"
 Woodbine Mohawk,2026-01-03,11,,,Blue Bar,Ernwood Big Mack,Summer Dancer,Dusty Lane Levi,Blue Bar,Erinwood Big Mack,false,false,false,true,82,54,"[""So Much More"",""Angostura Hanover"",""Century Jamila""]"
-Woodbine Racetrack,2025-12-04,1,,,Nicki Is a Breeze,Lady Izzy,Majestic Appeal,,,,false,false,false,false,,,
-Woodbine Racetrack,2025-12-07,2,,,Logan Park,Hasty Bid,What About Elmo,Logan Park,Hasty Bid,Sid the Kid,true,true,false,true,,,
+Woodbine,2025-12-04,1,,,Nicki Is a Breeze,Lady Izzy,Majestic Appeal,,,,false,false,false,false,,,
+Woodbine,2025-12-07,2,,,Logan Park,Hasty Bid,What About Elmo,Logan Park,Hasty Bid,Sid the Kid,true,true,false,true,,,
 yonkers,2025-12-08,10,,,Italian Lad N,Western Era,Walkinshaw N,Speaker of Peace,Italian Lad N,Music Hall,false,false,false,true,,,
 yonkers,2025-12-08,6,,,Just Enuff Stuff,Hammering Hank,Perfect Promises,Hammering Hank,Perfect Promises,Why Tomorrow Ray,false,false,false,true,,,
 yonkers,2025-12-09,1,,,Disaronno Hill,Bout Damn Time A,Nuttinbuthebest,Bout Damn Time A,Disaronno Hill,Bluebird Crush,false,false,false,true,,,
@@ -4431,7 +4461,8 @@ Aqueduct,2026-01-09,5,,,Probability,Antietam,Kaz Oil Changer,Sequential,Probabil
 Aqueduct,2026-01-09,6,,,That's Funny,Blenheim Baby,Spirit of Esther,That's Funny,Blenheim Baby,Spirit of Esther,true,true,true,true,84,54,"[""That's Funny"",""Blenheim Baby"",""Spirit of Esther""]"
 Aqueduct,2026-01-09,7,,,Vettriano,Mr Skylight,Big Hat Willie,One Nine Hundred,Toxic Gray,Mr Skylight,false,false,false,true,84,54,"[""Vettriano"",""Mr Skylight"",""Big Hat Willie""]"
 Aqueduct,2026-01-09,8,,,Mo Spice,Bellamy,Tinseltown,Mo Spice,Bellamy,Tinseltown,true,true,true,true,97,39,"[""Spidey Man"",""Skillian"",""Biker Baley""]"
-Aqueduct Racetrack,2026-01-04,7,,,Metfardeh,Purloin,Noticeable,Purloin,I'm Buzzy,Texas QuMedfardeheen,false,false,false,true,92,48,"[""Metfardeh"",""Purloin"",""Noticeable""]"
+Aqueduct,2026-01-18,1,,,Fort Nelson,Rule Sixty Two,New York Scrappy,New York Scrappy,Fort Nelson,Middle Market,false,false,false,true,,,
+Aqueduct,2026-01-04,7,,,Metfardeh,Purloin,Noticeable,Purloin,I'm Buzzy,Texas QuMedfardeheen,false,false,false,true,92,48,"[""Metfardeh"",""Purloin"",""Noticeable""]"
 AUS Lismore,2026-01-03,4,,,Artie Lady,Do It For You,Ourlegs Eleven,Do It For You,Per Capita,Alabama Girl,false,false,false,true,97,39,"[""Artie Lady"",""Do It For You"",""Ourlegs Eleven""]"
 AUS Nowra,2025-12-13,3,,,Breakaway Week,Tillman,Ken'ker,Breakaway Week,Tillman,Fire And Gemstone,true,true,false,true,,,
 AUS Randwick Kensington,2026-01-13,3,,,Indigo Star,Lady Of The Castle,Let's Go Barbie,Gorgeous,Let's Go Barbie,Double Vision,false,false,false,true,97,43,"[""Indigo Star"",""Lady Of The Castle"",""Let's Go Barbie""]"
@@ -4452,8 +4483,8 @@ Charles Town,2026-01-02,4,,,No Mo Muffins,Georgia Rain,Rhenski,No Mo Muffins,Pea
 Charles Town,2026-01-03,2,,,Fifth of June,Citified,Collegeville Queen,Collegeville Queen,Miss Shack Attack,Cajun Prime,false,false,false,true,92,48,"[""Fifth of June"",""Citified"",""Collegeville Queen""]"
 Charles Town,2026-01-03,3,,,Hopping Henry,Auburn Mill,Colt Rock,Rocket Appeal,Auburn Mill,Hopping Henry,false,true,false,true,97,43,"[""Hopping Henry"",""Auburn Mill"",""Colt Rock""]"
 Charles Town,2026-01-03,8,,,Brother Conway,Social Chic,Kaladin,No Direction,Sweet Lime,I'd Rather Not,false,false,false,false,92,48,"[""Brother Conway"",""Social Chic"",""Kaladin""]"
-Charles Town Races,2025-12-09,6,,,Camco Laraido,Labero,Ma Barker,Labero,Fire the Rocket,Camco Laraido,false,false,false,true,,,
-Charles Town Races,2026-01-16,8,,,Omar Comin,Late in the Game,Strava,Omar Comin,Strava,Rick'swarmheart,true,false,false,true,67,62,"[""Omar Comin"",""Late in the Game"",""Strava""]"
+Charles Town,2025-12-09,6,,,Camco Laraido,Labero,Ma Barker,Labero,Fire the Rocket,Camco Laraido,false,false,false,true,,,
+Charles Town,2026-01-16,8,,,Omar Comin,Late in the Game,Strava,Omar Comin,Strava,Rick'swarmheart,true,false,false,true,67,62,"[""Omar Comin"",""Late in the Game"",""Strava""]"
 Dayton,2025-12-09,11,,,Banderas,Tie the Knot,Believe in Tom,Banderas,Tie the Knot,Chanceyfascination,true,true,false,true,,,
 Dayton,2025-12-10,9,,,Divine Thing,Sayinwhatimthinkin,Triathlon As,Famous Father,Triathlon As,Sayinwhatimthinkin,false,false,false,true,,,
 Delta Downs,2025-12-05,1,,,Killer Guitar,Drewrelius,Respecttheconnect,Killer Guitar,Drewrelius,Ninth Ward Bobby O,true,true,false,true,,,
@@ -4500,6 +4531,7 @@ Fair Grounds,2026-01-09,2,,,Leah's First,Honor Azteca,Cloudy Lass,Amazing Lady,S
 Fair Grounds,2026-01-09,3,,,Daredevil Doug,Mister O,Spielman,Lost in the Sauce,Miracle On Central,Spielman,false,false,true,true,92,48,"[""Daredevil Doug"",""Mister O"",""Spielman""]"
 Fair Grounds,2026-01-09,5,,,Sippin On Gin,Highland Creek,Cosmic Train,Sippin On Gin,Mangum,Cosmic Train,true,false,true,true,92,48,"[""Sippin On Gin"",""Highland Creek"",""Cosmic Train""]"
 Fair Grounds,2026-01-16,12,,,Just a Touch,Moonlight,Sir Greylind,Accelerize,Just a Touch,Cadet Corps,false,false,false,true,91,48,"[""Just a Touch"",""Moonlight"",""Sir Greylind""]"
+Fair Grounds,2026-01-19,1,,,Precious Money,The Pretty Sister,Honor His Half,Precious Money,The Pretty Sister,About to Set Sail,true,true,false,true,,,
 Flamboro Downs,2025-12-10,2,,,Tellit Russ Tellit,Onyx Bovino,Ambitious Mind,Ara You Crazy,Onyx Bovino,Ambitious Mind,false,true,true,true,,,
 FRA Lyon La Soie,2025-12-07,1,,,Rejaitt,Dream in Brooke,Valentine Day,,,,false,false,false,false,,,
 FRA Marseille Vivaux,2025-12-21,8,,,Dubalaa,Aventino,Noce De Rubis,Dubalaa,Lover Song,Westminster Love,true,false,false,true,,,
@@ -4571,11 +4603,11 @@ Mahoning Valley,2026-01-06,5,,,Lionistic,Az We Speak,Kichi Kitsu,Sweet Unique,Ki
 Mahoning Valley,2026-01-06,6,,,Washington's Union (86),Grey Streak (105),Supply Chain (87),Collectorate,Washington's Union,Supply Chain,false,false,true,true,100,48,"[""Washington's Union (86)"",""Grey Streak (105)"",""Supply Chain (87)""]"
 Mahoning Valley,2026-01-13,3,,,Relish the Ride,Dark Vader,Wetzel,Dark Vader,Raven Moon,Gone in a Flash,false,false,false,true,82,82,"[""Relish the Ride"",""Dark Vader"",""Wetzel""]"
 Mahoning Valley,2026-01-13,7,,,Mission Control,Who Da Boss,Casual Attire,Sunset Town,Mission Control,Casual Attire,false,false,true,true,82,82,"[""Mission Control"",""Who Da Boss"",""Casual Attire""]"
-Mahoning Valley Race Course,2025-12-16,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
-Mahoning Valley Race Course,2025-12-17,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
-Mahoning Valley Race Course,2025-12-20,1,,,Lookin Like Lucky,Santorino,Briarcliff,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-16,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-17,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-20,1,,,Lookin Like Lucky,Santorino,Briarcliff,,,,false,false,false,false,,,
 Meadowlands,2026-01-02,6,,,Nila Maree N,Ithatobeeyou,Youllfindout,Nila Maree N,Youllfindout,Arsenal's Ladybug,true,false,false,true,97,43,"[""Nila Maree N"",""Ithatobeeyou"",""Youllfindout""]"
-Meadowlands Racetrack,2026-01-16,11,,,Swedish Starlet N,Avf Claire,Fearless Bettor,Avf Claire,Fearless Bettor,Cruise Alert,false,false,false,true,97,43,"[""Swedish Starlet N"",""Avf Claire"",""Fearless Bettor""]"
+Meadowlands,2026-01-16,11,,,Swedish Starlet N,Avf Claire,Fearless Bettor,Avf Claire,Fearless Bettor,Cruise Alert,false,false,false,true,97,43,"[""Swedish Starlet N"",""Avf Claire"",""Fearless Bettor""]"
 Monticello Raceway,2025-12-24,1,,,Ziggy Sky,Fox Valley Inferno,Prairie Fenway,Ziggy Sky,Fox Valley Inferno,Aintnobettor A,true,true,false,true,,,
 Mountaineer Park,2025-12-07,2,,,Dreaming of Hope,Popstyle,Kozem,Maci's World,Dreaming of Hope,Popstyle,false,false,false,true,,,
 Mountaineer Park,2025-12-07,3,,,Spuns Kitten,Shotgun Margaret,Holly Roller,Shotgun Margaret,Spuns Kitten,Pour Me a Drink,false,false,false,true,,,
@@ -4634,7 +4666,7 @@ Remington Park,2025-12-20,3,,,Vestes,Tigers 'n Bears,Quarterly Report,Vestes,Spe
 Sam Houston,2026-01-03,5,,,Dutch Mills,Chivalrous,Bling Mountain,Shogun Be Fast,Team Leader,Cinco Richie,false,false,false,false,97,43,"[""Malibu S S"",""Team Leader"",""Shogun Be Fast""]"
 Sam Houston,2026-01-03,6,,,Dutch Mills,Chivalrous,Bling Mountain,Bling Mountain,Copper Storm,Noble Eagle,false,false,false,true,92,48,"[""Dutch Mills"",""Chivalrous"",""Bling Mountain""]"
 Sam Houston Race Park,2026-01-03,5,,,Malibu S S,Team Leader,Shogun Be Fast,,,,false,false,false,false,97,43,"[""Malibu S S"",""Team Leader"",""Shogun Be Fast""]"
-Saratoga Race Course,2025-12-07,9,,,Manhattan Artist,Hangman Mcgee,Morrone Dolce,Manhattan Artist,Hangman Mcgee,Dark Hour,true,true,false,true,,,
+Saratoga,2025-12-07,9,,,Manhattan Artist,Hangman Mcgee,Morrone Dolce,Manhattan Artist,Hangman Mcgee,Dark Hour,true,true,false,true,,,
 Sunland Park,2026-01-03,1,,,Wedding Groom,Broadway Dish,Shell Game,Wedding Groom,Shell Game,Billy de Kid,true,false,false,true,97,39,"[""Wedding Groom"",""Broadway Dish"",""Shell Game""]"
 Sunland Park,2026-01-05,5,,,Stand Up Guy,Exit Strategy,He's a Genius,Trafficstorm,Holy Bullet,American Storm,false,false,false,false,84,54,"[""Stand Up Guy"",""Exit Strategy"",""He's a Genius""]"
 SWE Bjerke,2025-12-21,5,,,Resilient Reddington,Explosive Axe,Icarus B.R.,Resilient Reddington,Caramel Volo,Explosive Axe,true,false,false,true,,,
@@ -4694,8 +4726,8 @@ Woodbine Mohawk (,2025-12-27,8,,,Bruno No No,Cold Creek Queso,Dublin Dasher,Brun
 Woodbine Mohawk,2025-12-27,9,,,Bronx Drifter,Sometime Somewhere,Pipewrench Charlie,Bronx Drifter,Self Made,Sergeant Slaughter,true,false,false,true,97,39,"[""Bronx Drifter"",""Sometime Somewhere"",""Pipewrench Charlie""]"
 Woodbine Mohawk,2026-01-02,5,,,Kellina Diamond,Job Hunter,Im Betonsix,POWDER PLAY,JOB HUNTER,KELLINA DIAMOND,false,true,false,true,67,62,"[""Kellina Diamond"",""Job Hunter"",""Im Betonsix""]"
 Woodbine Mohawk,2026-01-03,11,,,Blue Bar,Ernwood Big Mack,Summer Dancer,Dusty Lane Levi,Blue Bar,Erinwood Big Mack,false,false,false,true,82,54,"[""So Much More"",""Angostura Hanover"",""Century Jamila""]"
-Woodbine Racetrack,2025-12-04,1,,,Nicki Is a Breeze,Lady Izzy,Majestic Appeal,,,,false,false,false,false,,,
-Woodbine Racetrack,2025-12-07,2,,,Logan Park,Hasty Bid,What About Elmo,Logan Park,Hasty Bid,Sid the Kid,true,true,false,true,,,
+Woodbine,2025-12-04,1,,,Nicki Is a Breeze,Lady Izzy,Majestic Appeal,,,,false,false,false,false,,,
+Woodbine,2025-12-07,2,,,Logan Park,Hasty Bid,What About Elmo,Logan Park,Hasty Bid,Sid the Kid,true,true,false,true,,,
 yonkers,2025-12-08,10,,,Italian Lad N,Western Era,Walkinshaw N,Speaker of Peace,Italian Lad N,Music Hall,false,false,false,true,,,
 yonkers,2025-12-08,6,,,Just Enuff Stuff,Hammering Hank,Perfect Promises,Hammering Hank,Perfect Promises,Why Tomorrow Ray,false,false,false,true,,,
 yonkers,2025-12-09,1,,,Disaronno Hill,Bout Damn Time A,Nuttinbuthebest,Bout Damn Time A,Disaronno Hill,Bluebird Crush,false,false,false,true,,,
@@ -4725,7 +4757,8 @@ Aqueduct,2026-01-09,5,,,Probability,Antietam,Kaz Oil Changer,Sequential,Probabil
 Aqueduct,2026-01-09,6,,,That's Funny,Blenheim Baby,Spirit of Esther,That's Funny,Blenheim Baby,Spirit of Esther,true,true,true,true,84,54,"[""That's Funny"",""Blenheim Baby"",""Spirit of Esther""]"
 Aqueduct,2026-01-09,7,,,Vettriano,Mr Skylight,Big Hat Willie,One Nine Hundred,Toxic Gray,Mr Skylight,false,false,false,true,84,54,"[""Vettriano"",""Mr Skylight"",""Big Hat Willie""]"
 Aqueduct,2026-01-09,8,,,Mo Spice,Bellamy,Tinseltown,Mo Spice,Bellamy,Tinseltown,true,true,true,true,97,39,"[""Spidey Man"",""Skillian"",""Biker Baley""]"
-Aqueduct Racetrack,2026-01-04,7,,,Metfardeh,Purloin,Noticeable,Purloin,I'm Buzzy,Texas QuMedfardeheen,false,false,false,true,92,48,"[""Metfardeh"",""Purloin"",""Noticeable""]"
+Aqueduct,2026-01-18,1,,,Fort Nelson,Rule Sixty Two,New York Scrappy,New York Scrappy,Fort Nelson,Middle Market,false,false,false,true,,,
+Aqueduct,2026-01-04,7,,,Metfardeh,Purloin,Noticeable,Purloin,I'm Buzzy,Texas QuMedfardeheen,false,false,false,true,92,48,"[""Metfardeh"",""Purloin"",""Noticeable""]"
 AUS Lismore,2026-01-03,4,,,Artie Lady,Do It For You,Ourlegs Eleven,Do It For You,Per Capita,Alabama Girl,false,false,false,true,97,39,"[""Artie Lady"",""Do It For You"",""Ourlegs Eleven""]"
 AUS Nowra,2025-12-13,3,,,Breakaway Week,Tillman,Ken'ker,Breakaway Week,Tillman,Fire And Gemstone,true,true,false,true,,,
 AUS Randwick Kensington,2026-01-13,3,,,Indigo Star,Lady Of The Castle,Let's Go Barbie,Gorgeous,Let's Go Barbie,Double Vision,false,false,false,true,97,43,"[""Indigo Star"",""Lady Of The Castle"",""Let's Go Barbie""]"
@@ -4746,8 +4779,8 @@ Charles Town,2026-01-02,4,,,No Mo Muffins,Georgia Rain,Rhenski,No Mo Muffins,Pea
 Charles Town,2026-01-03,2,,,Fifth of June,Citified,Collegeville Queen,Collegeville Queen,Miss Shack Attack,Cajun Prime,false,false,false,true,92,48,"[""Fifth of June"",""Citified"",""Collegeville Queen""]"
 Charles Town,2026-01-03,3,,,Hopping Henry,Auburn Mill,Colt Rock,Rocket Appeal,Auburn Mill,Hopping Henry,false,true,false,true,97,43,"[""Hopping Henry"",""Auburn Mill"",""Colt Rock""]"
 Charles Town,2026-01-03,8,,,Brother Conway,Social Chic,Kaladin,No Direction,Sweet Lime,I'd Rather Not,false,false,false,false,92,48,"[""Brother Conway"",""Social Chic"",""Kaladin""]"
-Charles Town Races,2025-12-09,6,,,Camco Laraido,Labero,Ma Barker,Labero,Fire the Rocket,Camco Laraido,false,false,false,true,,,
-Charles Town Races,2026-01-16,8,,,Omar Comin,Late in the Game,Strava,Omar Comin,Strava,Rick'swarmheart,true,false,false,true,67,62,"[""Omar Comin"",""Late in the Game"",""Strava""]"
+Charles Town,2025-12-09,6,,,Camco Laraido,Labero,Ma Barker,Labero,Fire the Rocket,Camco Laraido,false,false,false,true,,,
+Charles Town,2026-01-16,8,,,Omar Comin,Late in the Game,Strava,Omar Comin,Strava,Rick'swarmheart,true,false,false,true,67,62,"[""Omar Comin"",""Late in the Game"",""Strava""]"
 Dayton,2025-12-09,11,,,Banderas,Tie the Knot,Believe in Tom,Banderas,Tie the Knot,Chanceyfascination,true,true,false,true,,,
 Dayton,2025-12-10,9,,,Divine Thing,Sayinwhatimthinkin,Triathlon As,Famous Father,Triathlon As,Sayinwhatimthinkin,false,false,false,true,,,
 Delta Downs,2025-12-05,1,,,Killer Guitar,Drewrelius,Respecttheconnect,Killer Guitar,Drewrelius,Ninth Ward Bobby O,true,true,false,true,,,
@@ -4794,6 +4827,7 @@ Fair Grounds,2026-01-09,2,,,Leah's First,Honor Azteca,Cloudy Lass,Amazing Lady,S
 Fair Grounds,2026-01-09,3,,,Daredevil Doug,Mister O,Spielman,Lost in the Sauce,Miracle On Central,Spielman,false,false,true,true,92,48,"[""Daredevil Doug"",""Mister O"",""Spielman""]"
 Fair Grounds,2026-01-09,5,,,Sippin On Gin,Highland Creek,Cosmic Train,Sippin On Gin,Mangum,Cosmic Train,true,false,true,true,92,48,"[""Sippin On Gin"",""Highland Creek"",""Cosmic Train""]"
 Fair Grounds,2026-01-16,12,,,Just a Touch,Moonlight,Sir Greylind,Accelerize,Just a Touch,Cadet Corps,false,false,false,true,91,48,"[""Just a Touch"",""Moonlight"",""Sir Greylind""]"
+Fair Grounds,2026-01-19,1,,,Precious Money,The Pretty Sister,Honor His Half,Precious Money,The Pretty Sister,About to Set Sail,true,true,false,true,,,
 Flamboro Downs,2025-12-10,2,,,Tellit Russ Tellit,Onyx Bovino,Ambitious Mind,Ara You Crazy,Onyx Bovino,Ambitious Mind,false,true,true,true,,,
 FRA Lyon La Soie,2025-12-07,1,,,Rejaitt,Dream in Brooke,Valentine Day,,,,false,false,false,false,,,
 FRA Marseille Vivaux,2025-12-21,8,,,Dubalaa,Aventino,Noce De Rubis,Dubalaa,Lover Song,Westminster Love,true,false,false,true,,,
@@ -4865,11 +4899,11 @@ Mahoning Valley,2026-01-06,5,,,Lionistic,Az We Speak,Kichi Kitsu,Sweet Unique,Ki
 Mahoning Valley,2026-01-06,6,,,Washington's Union (86),Grey Streak (105),Supply Chain (87),Collectorate,Washington's Union,Supply Chain,false,false,true,true,100,48,"[""Washington's Union (86)"",""Grey Streak (105)"",""Supply Chain (87)""]"
 Mahoning Valley,2026-01-13,3,,,Relish the Ride,Dark Vader,Wetzel,Dark Vader,Raven Moon,Gone in a Flash,false,false,false,true,82,82,"[""Relish the Ride"",""Dark Vader"",""Wetzel""]"
 Mahoning Valley,2026-01-13,7,,,Mission Control,Who Da Boss,Casual Attire,Sunset Town,Mission Control,Casual Attire,false,false,true,true,82,82,"[""Mission Control"",""Who Da Boss"",""Casual Attire""]"
-Mahoning Valley Race Course,2025-12-16,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
-Mahoning Valley Race Course,2025-12-17,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
-Mahoning Valley Race Course,2025-12-20,1,,,Lookin Like Lucky,Santorino,Briarcliff,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-16,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-17,1,,,Making Daisys,Betsy,Pam's Friend,,,,false,false,false,false,,,
+Mahoning Valley,2025-12-20,1,,,Lookin Like Lucky,Santorino,Briarcliff,,,,false,false,false,false,,,
 Meadowlands,2026-01-02,6,,,Nila Maree N,Ithatobeeyou,Youllfindout,Nila Maree N,Youllfindout,Arsenal's Ladybug,true,false,false,true,97,43,"[""Nila Maree N"",""Ithatobeeyou"",""Youllfindout""]"
-Meadowlands Racetrack,2026-01-16,11,,,Swedish Starlet N,Avf Claire,Fearless Bettor,Avf Claire,Fearless Bettor,Cruise Alert,false,false,false,true,97,43,"[""Swedish Starlet N"",""Avf Claire"",""Fearless Bettor""]"
+Meadowlands,2026-01-16,11,,,Swedish Starlet N,Avf Claire,Fearless Bettor,Avf Claire,Fearless Bettor,Cruise Alert,false,false,false,true,97,43,"[""Swedish Starlet N"",""Avf Claire"",""Fearless Bettor""]"
 Monticello Raceway,2025-12-24,1,,,Ziggy Sky,Fox Valley Inferno,Prairie Fenway,Ziggy Sky,Fox Valley Inferno,Aintnobettor A,true,true,false,true,,,
 Mountaineer Park,2025-12-07,2,,,Dreaming of Hope,Popstyle,Kozem,Maci's World,Dreaming of Hope,Popstyle,false,false,false,true,,,
 Mountaineer Park,2025-12-07,3,,,Spuns Kitten,Shotgun Margaret,Holly Roller,Shotgun Margaret,Spuns Kitten,Pour Me a Drink,false,false,false,true,,,
@@ -4928,7 +4962,7 @@ Remington Park,2025-12-20,3,,,Vestes,Tigers 'n Bears,Quarterly Report,Vestes,Spe
 Sam Houston,2026-01-03,5,,,Dutch Mills,Chivalrous,Bling Mountain,Shogun Be Fast,Team Leader,Cinco Richie,false,false,false,false,97,43,"[""Malibu S S"",""Team Leader"",""Shogun Be Fast""]"
 Sam Houston,2026-01-03,6,,,Dutch Mills,Chivalrous,Bling Mountain,Bling Mountain,Copper Storm,Noble Eagle,false,false,false,true,92,48,"[""Dutch Mills"",""Chivalrous"",""Bling Mountain""]"
 Sam Houston Race Park,2026-01-03,5,,,Malibu S S,Team Leader,Shogun Be Fast,,,,false,false,false,false,97,43,"[""Malibu S S"",""Team Leader"",""Shogun Be Fast""]"
-Saratoga Race Course,2025-12-07,9,,,Manhattan Artist,Hangman Mcgee,Morrone Dolce,Manhattan Artist,Hangman Mcgee,Dark Hour,true,true,false,true,,,
+Saratoga,2025-12-07,9,,,Manhattan Artist,Hangman Mcgee,Morrone Dolce,Manhattan Artist,Hangman Mcgee,Dark Hour,true,true,false,true,,,
 Sunland Park,2026-01-03,1,,,Wedding Groom,Broadway Dish,Shell Game,Wedding Groom,Shell Game,Billy de Kid,true,false,false,true,97,39,"[""Wedding Groom"",""Broadway Dish"",""Shell Game""]"
 Sunland Park,2026-01-05,5,,,Stand Up Guy,Exit Strategy,He's a Genius,Trafficstorm,Holy Bullet,American Storm,false,false,false,false,84,54,"[""Stand Up Guy"",""Exit Strategy"",""He's a Genius""]"
 SWE Bjerke,2025-12-21,5,,,Resilient Reddington,Explosive Axe,Icarus B.R.,Resilient Reddington,Caramel Volo,Explosive Axe,true,false,false,true,,,
@@ -4965,37 +4999,3 @@ Turf Paradise,2025-12-22,5,,,Colonel Horton,Street Gun,River's Benchmark,Bear En
 Turf Paradise,2025-12-26,1,,,Jess Icon,Block N Tell,Imm Goin Goin Gone,Hw Tellum Sweetly,Stellaaa,Block N Tell,false,false,false,true,97,43,"[""Jess Icon"",""Block N Tell"",""Imm Goin Goin Gone""]"
 Turf Paradise,2025-12-26,2,,,Heart On A Run,Alittlelesstalk,Zm Jess,Alitlelesstalk,Heart On a Run,Zm Jess,false,false,true,true,97,39,"[""Heart On A Run"",""Alittlelesstalk"",""Zm Jess""]"
 Turf Paradise,2025-12-26,3,,,Moonlight Road,Code Breaker,Five Twenty Sunset,Code Breaker,Dekudylan,Moonlight Road,false,false,false,true,67,62,"[""Moonlight Road"",""Code Breaker"",""Five Twenty Sunset""]"
-Turf Paradise,2025-12-26,4,,,Honor the Cat,King of the Disco,West Is West,Honor the Cat,Hunting for Gold,King of the Disco,true,false,false,true,82,54,"[""Honor the Cat"",""King of the Disco"",""West Is West""]"
-Turf Paradise,2025-12-26,6,,,Halo Uncle,Classic Cinema,Drill's Li'l Man,Classic Cinema,Hey Now,A View From Above,false,false,false,true,92,48,"[""Halo Uncle"",""Classic Cinema"",""Drill's Li'l Man""]"
-Turf Paradise,2025-12-27,1,,,Jess Icon,Block N Tell,Imm Goin Goin Gone,Av Tornadoe Warning,Cuz Its Hot,Fancey Like,false,false,false,false,97,43,"[""Jess Icon"",""Block N Tell"",""Imm Goin Goin Gone""]"
-Turf Paradise,2026-01-05,5,,,Honeymoon Suite,Daddy's Quest,Doris Avenue,Shudder,Good Focus,The Scent,false,false,false,false,97,39,"[""Honeymoon Suite"",""Daddy's Quest"",""Doris Avenue""]"
-Turf Paradise,2026-01-06,2,,,Need the Purse,Forza Road,Honor the Blue,Need the Purse,Forza Road,Manx Missile,true,true,false,true,50,72,"[""Need the Purse"",""Forza Road"",""Honor the Blue""]"
-Turfway Park,2025-12-04,2,,,War Code,Solar Glare,Awesome Harry,Elusive Target,J P Hellish,Del Mo,false,false,false,false,,,
-Turfway Park,2025-12-17,4,,,Arbiter,Reb Five,Uncle Bucky,Arbiter,Reb Five,Vaporizer,true,true,false,true,,,
-Turfway Park,2025-12-26,2,,,One Timer,Zoombie,Pretty Fast,Zoombie,Neoking,Shotshell,false,false,false,true,97,29,"[""One Timer"",""Zoombie"",""Pretty Fast""]"
-Turfway Park,2025-12-26,3,,,Slip Mahoney,Sbagliato,King Curlin,Mackadoo,Quokka,King of Kentucky,false,false,false,false,97,39,"[""Slip Mahoney"",""Sbagliato"",""King Curlin""]"
-Turfway Park,2025-12-26,5,,,Mendels Mate,Abacus,Fort Griffin,Envision,Winter Holiday,Muir Woods,false,false,false,false,97,29,"[""Mendels Mate"",""Abacus"",""Fort Griffin""]"
-Turfway Park,2025-12-26,7,,,Atlantic Passage (78),Ariri (GB),Mindy's Union (90),Fancy Fascinator,Couldyoubeloved,Mombayla,false,false,false,false,100,32,"[""Atlantic Passage (78)"",""Ariri (GB)"",""Mindy's Union (90)""]"
-Turfway Park,2025-12-26,9,,,Spoils of War,Enticing Sunset,Morning Miracle,Enticing Sunset,Morning Miracle,Spoils of War,false,false,false,true,97,33,"[""Spoils of War"",""Enticing Sunset"",""Morning Miracle""]"
-Turfway Park,2025-12-27,3,,,Bijou Baby,Minnesota Munny,Polka Polenta,Minnesota Munny,Razzle Red,Hidden Presence,false,false,false,true,95,43,"[""Bijou Baby"",""Minnesota Munny"",""Polka Polenta""]"
-Turfway Park,2026-01-03,1,,,Don't Cross Alexis,Maclean's Lullaby,Auntie,Don't Cross Alexis,Taqdeer,Maclean's Lullaby,true,false,false,true,97,36,"[""Don't Cross Alexis"",""Maclean's Lullaby"",""Auntie""]"
-Turfway Park,2026-01-03,6,,,Hometown Bound,Shipmate,Trendsetter,Hometown Bound,Trendsetter,Blessed Warrior,true,false,false,true,84,54,"[""Hometown Bound"",""Shipmate"",""Trendsetter""]"
-UK Huntingdon,2025-12-07,3,,,Haas Boy,Clap of Thunder,Don't Mind If I Do,,,,false,false,false,false,,,
-uk kelso,2025-12-07,2,,,Gaillimh A Stor,Authorized Mission,Malicash,,,,false,false,false,false,,,
-URU Maronas,2025-12-21,4,,,Tim Tones,Our Secret,Melchor,The Times,Tim Tones,Our Secret,false,false,false,true,,,
-Western Fair,2025-12-08,11,,,Some Might Say,Texasdrifter,Limbo Dancer,Limbo Dancer,Tea Toddler Dot,Toretto,false,false,false,true,,,
-Woodbine Mohawk (,2025-12-27,8,,,Bruno No No,Cold Creek Queso,Dublin Dasher,Bruno No No No,Dublin Dasher,Cold Creek Queso,false,false,false,true,,,
-Woodbine Mohawk,2025-12-27,9,,,Bronx Drifter,Sometime Somewhere,Pipewrench Charlie,Bronx Drifter,Self Made,Sergeant Slaughter,true,false,false,true,97,39,"[""Bronx Drifter"",""Sometime Somewhere"",""Pipewrench Charlie""]"
-Woodbine Mohawk,2026-01-02,5,,,Kellina Diamond,Job Hunter,Im Betonsix,POWDER PLAY,JOB HUNTER,KELLINA DIAMOND,false,true,false,true,67,62,"[""Kellina Diamond"",""Job Hunter"",""Im Betonsix""]"
-Woodbine Mohawk,2026-01-03,11,,,Blue Bar,Ernwood Big Mack,Summer Dancer,Dusty Lane Levi,Blue Bar,Erinwood Big Mack,false,false,false,true,82,54,"[""So Much More"",""Angostura Hanover"",""Century Jamila""]"
-Woodbine Racetrack,2025-12-04,1,,,Nicki Is a Breeze,Lady Izzy,Majestic Appeal,,,,false,false,false,false,,,
-Woodbine Racetrack,2025-12-07,2,,,Logan Park,Hasty Bid,What About Elmo,Logan Park,Hasty Bid,Sid the Kid,true,true,false,true,,,
-yonkers,2025-12-08,10,,,Italian Lad N,Western Era,Walkinshaw N,Speaker of Peace,Italian Lad N,Music Hall,false,false,false,true,,,
-yonkers,2025-12-08,6,,,Just Enuff Stuff,Hammering Hank,Perfect Promises,Hammering Hank,Perfect Promises,Why Tomorrow Ray,false,false,false,true,,,
-yonkers,2025-12-09,1,,,Disaronno Hill,Bout Damn Time A,Nuttinbuthebest,Bout Damn Time A,Disaronno Hill,Bluebird Crush,false,false,false,true,,,
-Zia Park,2025-12-06,1,,,Its a New Generation,Running Bear,How Eye Roll,Its a New Generation,Yanel,Our Secret Candy,true,false,false,true,,,
-Zia Park,2025-12-07,3,,,Kj Wiskey River,Blood Sweat N Tear,Friday Nite Fancy,Blood Sweat N Tear,My Favorite Spirit,Friday Nite Fancy,false,false,true,true,,,
-Zia Park,2025-12-14,9,,,Toastin Heros,Dr Pepper 123,Js Freighttrain,Js Freightrain,Pavel,Eagle Aye,false,false,false,false,,,
-Zia Park,2025-12-16,1,,,Let Him Be,Leave Them Behind,Marking Canyon,Caprock Cutie,American Prada,Country Club Crush,false,false,false,false,,,
-Aqueduct,2025-12-04,8,,,Pulstar,Bibi Dahl,Humor Me Baby,Frizzante,Register,Complex Music,false,false,false,false,,,
-Aqueduct,2025-12-06,2,,,Mr. Miracle,Schoolyardsuperman,Double Act,,,,false,false,false,false,,,

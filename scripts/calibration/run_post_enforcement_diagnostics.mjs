@@ -313,17 +313,34 @@ function checkRegressionGuardrails(newMetrics, prevMetrics, trendData) {
     }
   }
 
-  // Check Brier score degradation
-  const newBrier = newMetrics.predmeta?.brierScore?.brierScore;
-  const prevBrier = prevMetrics?.predmeta?.brierScore?.brierScore;
-  if (newBrier != null && prevBrier != null && Number.isFinite(newBrier) && Number.isFinite(prevBrier)) {
-    const brierDelta = newBrier - prevBrier;
+  // Check Brier score degradation (raw)
+  const newBrierRaw = newMetrics.predmeta?.brierScore?.brierScoreRaw;
+  const prevBrierRaw = prevMetrics?.predmeta?.brierScore?.brierScoreRaw;
+  if (newBrierRaw != null && prevBrierRaw != null && Number.isFinite(newBrierRaw) && Number.isFinite(prevBrierRaw)) {
+    const brierDelta = newBrierRaw - prevBrierRaw;
     if (brierDelta >= REGRESSION_THRESHOLDS.BRIER_SCORE_WORSEN) {
       watches.push({
         type: "WATCH",
-        metric: "Brier Score",
-        current: newBrier.toFixed(4),
-        previous: prevBrier.toFixed(4),
+        metric: "Brier Score (Raw)",
+        current: newBrierRaw.toFixed(4),
+        previous: prevBrierRaw.toFixed(4),
+        delta: `+${brierDelta.toFixed(4)}`,
+        threshold: "+0.01 increase",
+      });
+    }
+  }
+  
+  // Check calibrated Brier score degradation
+  const newBrierCalibrated = newMetrics.predmeta?.brierScore?.brierScoreCalibrated;
+  const prevBrierCalibrated = prevMetrics?.predmeta?.brierScore?.brierScoreCalibrated;
+  if (newBrierCalibrated != null && prevBrierCalibrated != null && Number.isFinite(newBrierCalibrated) && Number.isFinite(prevBrierCalibrated)) {
+    const brierDelta = newBrierCalibrated - prevBrierCalibrated;
+    if (brierDelta >= REGRESSION_THRESHOLDS.BRIER_SCORE_WORSEN) {
+      watches.push({
+        type: "WATCH",
+        metric: "Brier Score (Calibrated)",
+        current: newBrierCalibrated.toFixed(4),
+        previous: prevBrierCalibrated.toFixed(4),
         delta: `+${brierDelta.toFixed(4)}`,
         threshold: "+0.01 increase",
       });
@@ -506,42 +523,96 @@ async function generateReport(newMetrics, prevMetrics, trendData, warnings, watc
   }
 
   // New Metrics Section
-  if (newMetrics.predmeta?.brierScore?.brierScore != null) {
+  if (newMetrics.predmeta?.brierScore) {
     lines.push("## Calibration Metrics");
     lines.push("");
     lines.push("### Brier Score");
     lines.push("");
-    lines.push(`| Metric | Value |`);
-    lines.push(`|--------|-------|`);
-    lines.push(`| Brier Score | ${newMetrics.predmeta.brierScore.brierScore.toFixed(4)} |`);
-    lines.push(`| Rows with Probability | ${newMetrics.predmeta.brierScore.rowsWithProbability.toLocaleString()} |`);
-    lines.push("");
+    lines.push(`| Metric | Current | Previous | Delta |`);
+    lines.push(`|--------|---------|----------|-------|`);
     
-    if (prevMetrics?.predmeta?.brierScore?.brierScore != null) {
-      const prevBrier = prevMetrics.predmeta.brierScore.brierScore;
-      const currBrier = newMetrics.predmeta.brierScore.brierScore;
-      const delta = currBrier - prevBrier;
-      const sign = delta >= 0 ? "+" : "";
-      lines.push(`**Delta vs Previous:** ${sign}${delta.toFixed(4)}`);
-      lines.push("");
+    const newBrierRaw = newMetrics.predmeta.brierScore.brierScoreRaw;
+    const prevBrierRaw = prevMetrics?.predmeta?.brierScore?.brierScoreRaw;
+    if (newBrierRaw != null) {
+      const deltaRaw = prevBrierRaw != null ? newBrierRaw - prevBrierRaw : null;
+      const deltaStr = deltaRaw != null ? (deltaRaw >= 0 ? "+" : "") + deltaRaw.toFixed(4) : "N/A";
+      const prevStr = prevBrierRaw != null ? prevBrierRaw.toFixed(4) : "N/A";
+      lines.push(`| Brier Score (Raw) | ${newBrierRaw.toFixed(4)} | ${prevStr} | ${deltaStr} |`);
     }
+    
+    const newBrierCalibrated = newMetrics.predmeta.brierScore.brierScoreCalibrated;
+    const prevBrierCalibrated = prevMetrics?.predmeta?.brierScore?.brierScoreCalibrated;
+    if (newBrierCalibrated != null) {
+      const deltaCal = prevBrierCalibrated != null ? newBrierCalibrated - prevBrierCalibrated : null;
+      const deltaStr = deltaCal != null ? (deltaCal >= 0 ? "+" : "") + deltaCal.toFixed(4) : "N/A";
+      const prevStr = prevBrierCalibrated != null ? prevBrierCalibrated.toFixed(4) : "N/A";
+      lines.push(`| Brier Score (Calibrated) | ${newBrierCalibrated.toFixed(4)} | ${prevStr} | ${deltaStr} |`);
+      
+      // Show improvement if both raw and calibrated are available
+      if (newBrierRaw != null && newBrierCalibrated != null) {
+        const improvement = newBrierRaw - newBrierCalibrated;
+        lines.push(`| Improvement (Raw → Calibrated) | ${improvement.toFixed(4)} | - | - |`);
+      }
+    }
+    
+    lines.push(`| Rows with Probability | ${newMetrics.predmeta.brierScore.rowsWithProbability.toLocaleString()} | - | - |`);
+    lines.push("");
+    lines.push("*Lower is better (0 = perfect calibration, 1 = worst)*");
+    lines.push("");
   }
   
-  if (newMetrics.predmeta?.confidenceCalibration && Object.keys(newMetrics.predmeta.confidenceCalibration).length > 0) {
-    lines.push("### Confidence Bucket Calibration");
-    lines.push("");
-    lines.push("| Confidence | Races | Expected | Observed | Error |");
-    lines.push("|------------|-------|----------|----------|-------|");
-    const calEntries = Object.entries(newMetrics.predmeta.confidenceCalibration).sort((a, b) => {
-      const aMin = parseInt(a[0].split('-')[0] || a[0].replace('+', ''));
-      const bMin = parseInt(b[0].split('-')[0] || b[0].replace('+', ''));
-      return aMin - bMin;
-    });
-    for (const [bucket, stats] of calEntries) {
-      const errorSign = stats.calibrationError >= 0 ? "+" : "";
-      lines.push(`| ${bucket}% | ${stats.races.toLocaleString()} | ${formatPercent(stats.expectedWinRate)} | ${formatPercent(stats.observedWinRate)} | ${errorSign}${formatPercent(stats.calibrationError)} |`);
+  const confCalibration = newMetrics.predmeta?.confidenceCalibration;
+  if (confCalibration) {
+    // Raw calibration table
+    if (confCalibration.raw && Object.keys(confCalibration.raw).length > 0) {
+      lines.push("### Confidence Bucket Calibration (Raw)");
+      lines.push("");
+      lines.push("| Confidence | Races | Expected | Observed | Error |");
+      lines.push("|------------|-------|----------|----------|-------|");
+      const calEntries = Object.entries(confCalibration.raw).sort((a, b) => {
+        const aMin = parseInt(a[0].split('-')[0] || a[0].replace('+', ''));
+        const bMin = parseInt(b[0].split('-')[0] || b[0].replace('+', ''));
+        return aMin - bMin;
+      });
+      for (const [bucket, stats] of calEntries) {
+        const errorSign = stats.calibrationError >= 0 ? "+" : "";
+        lines.push(`| ${bucket}% | ${stats.races.toLocaleString()} | ${formatPercent(stats.expectedWinRate)} | ${formatPercent(stats.observedWinRate)} | ${errorSign}${formatPercent(stats.calibrationError)} |`);
+      }
+      lines.push("");
     }
-    lines.push("");
+    
+    // Calibrated calibration table
+    if (confCalibration.calibrated && Object.keys(confCalibration.calibrated).length > 0) {
+      lines.push("### Confidence Bucket Calibration (Calibrated)");
+      lines.push("");
+      lines.push("| Confidence | Races | Expected | Observed | Error |");
+      lines.push("|------------|-------|----------|----------|-------|");
+      const calEntries = Object.entries(confCalibration.calibrated).sort((a, b) => {
+        const aMin = parseInt(a[0].split('-')[0] || a[0].replace('+', ''));
+        const bMin = parseInt(b[0].split('-')[0] || b[0].replace('+', ''));
+        return aMin - bMin;
+      });
+      for (const [bucket, stats] of calEntries) {
+        const errorSign = stats.calibrationError >= 0 ? "+" : "";
+        lines.push(`| ${bucket}% | ${stats.races.toLocaleString()} | ${formatPercent(stats.expectedWinRate)} | ${formatPercent(stats.observedWinRate)} | ${errorSign}${formatPercent(stats.calibrationError)} |`);
+      }
+      lines.push("");
+    }
+    
+    // Recalibration info
+    if (newMetrics.predmeta?.recalibration) {
+      lines.push("### Confidence Recalibration Status");
+      lines.push("");
+      const rec = newMetrics.predmeta.recalibration;
+      lines.push(`- **Sample Size:** ${rec.sampleSize.toLocaleString()} (minimum: ${rec.minSampleSize.toLocaleString()})`);
+      lines.push(`- **Bucket Count:** ${rec.bucketCount}`);
+      if (rec.fallback) {
+        lines.push(`- **Status:** ⚠️ Fallback (Identity Mapping - insufficient data)`);
+      } else {
+        lines.push(`- **Status:** ✅ Active (Isotonic Regression)`);
+      }
+      lines.push("");
+    }
   }
 
   // Regression Guardrails
@@ -550,7 +621,8 @@ async function generateReport(newMetrics, prevMetrics, trendData, warnings, watc
   lines.push("**Active Thresholds:**");
   lines.push(`- Top 3 Hit Rate drop ≥ ${(REGRESSION_THRESHOLDS.TOP3_HIT_DROP * 100).toFixed(1)}pp → REGRESSION WARNING`);
   lines.push(`- Win Hit Rate drop ≥ ${(REGRESSION_THRESHOLDS.WIN_HIT_DROP * 100).toFixed(1)}pp for 2 consecutive runs → WATCH`);
-  lines.push(`- Brier Score increase ≥ ${REGRESSION_THRESHOLDS.BRIER_SCORE_WORSEN.toFixed(2)} → WATCH`);
+  lines.push(`- Brier Score (Raw) increase ≥ ${REGRESSION_THRESHOLDS.BRIER_SCORE_WORSEN.toFixed(2)} → WATCH`);
+  lines.push(`- Brier Score (Calibrated) increase ≥ ${REGRESSION_THRESHOLDS.BRIER_SCORE_WORSEN.toFixed(2)} → WATCH`);
   lines.push("");
 
   return lines.join("\n");
@@ -616,6 +688,8 @@ async function main() {
       anyHitRate: newMetrics.global?.anyHitRate || 0,
       trifectaRate: newMetrics.global?.exactTrifectaRate || 0,
       predmetaCoverage: newMetrics.predmeta?.coverage?.coverageRate || 0,
+      brierScoreRaw: newMetrics.predmeta?.brierScore?.brierScoreRaw ?? null,
+      brierScoreCalibrated: newMetrics.predmeta?.brierScore?.brierScoreCalibrated ?? null,
     };
 
     // Check for duplicate before adding

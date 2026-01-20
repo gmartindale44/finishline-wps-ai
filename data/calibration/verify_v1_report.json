@@ -1,30 +1,25 @@
 {
   "meta": {
     "source": "finishline_tests_calibration_v1.csv",
-    "generatedAt": "2026-01-18T10:23:25.439Z",
+    "generatedAt": "2026-01-20T22:01:21.605Z",
     "totalRows": 5000,
     "filteredRows": 5000
   },
   "global": {
     "races": 5000,
-    "winHitRate": 0.2414,
-    "placeHitRate": 0.1496,
-    "showHitRate": 0.1326,
-    "top3HitRate": 0.8364,
-    "anyHitRate": 0.4012,
+    "winHitRate": 0.2432,
+    "placeHitRate": 0.1522,
+    "showHitRate": 0.1324,
+    "top3HitRate": 0.839,
+    "anyHitRate": 0.4026,
     "exactTrifectaRate": 0.0136,
-    "partialOrderTop3Rate": 0.8364
+    "partialOrderTop3Rate": 0.839
   },
   "byTrack": {
     "Aqueduct": {
-      "races": 376,
-      "winHitRate": 0.22606382978723405,
-      "top3HitRate": 0.8590425531914894
-    },
-    "Aqueduct Racetrack": {
-      "races": 17,
-      "winHitRate": 0,
-      "top3HitRate": 1
+      "races": 408,
+      "winHitRate": 0.20833333333333334,
+      "top3HitRate": 0.875
     },
     "AUS Lismore": {
       "races": 17,
@@ -72,14 +67,9 @@
       "top3HitRate": 1
     },
     "Charles Town": {
-      "races": 170,
-      "winHitRate": 0.2,
-      "top3HitRate": 0.9
-    },
-    "Charles Town Races": {
-      "races": 34,
-      "winHitRate": 0.5,
-      "top3HitRate": 1
+      "races": 204,
+      "winHitRate": 0.25,
+      "top3HitRate": 0.9166666666666666
     },
     "Dayton": {
       "races": 34,
@@ -102,9 +92,9 @@
       "top3HitRate": 1
     },
     "Fair Grounds": {
-      "races": 425,
-      "winHitRate": 0.28,
-      "top3HitRate": 0.88
+      "races": 442,
+      "winHitRate": 0.3076923076923077,
+      "top3HitRate": 0.8846153846153846
     },
     "Flamboro Downs": {
       "races": 17,
@@ -147,23 +137,13 @@
       "top3HitRate": 0.9444444444444444
     },
     "Mahoning Valley": {
-      "races": 374,
-      "winHitRate": 0.18181818181818182,
-      "top3HitRate": 0.9090909090909091
-    },
-    "Mahoning Valley Race Course": {
-      "races": 51,
-      "winHitRate": 0,
-      "top3HitRate": 0
+      "races": 425,
+      "winHitRate": 0.16,
+      "top3HitRate": 0.8
     },
     "Meadowlands": {
-      "races": 17,
-      "winHitRate": 1,
-      "top3HitRate": 1
-    },
-    "Meadowlands Racetrack": {
-      "races": 17,
-      "winHitRate": 0,
+      "races": 34,
+      "winHitRate": 0.5,
       "top3HitRate": 1
     },
     "Monticello Raceway": {
@@ -221,7 +201,7 @@
       "winHitRate": 0,
       "top3HitRate": 0
     },
-    "Saratoga Race Course": {
+    "Saratoga": {
       "races": 17,
       "winHitRate": 1,
       "top3HitRate": 1
@@ -262,115 +242,115 @@
       "top3HitRate": 0.8666666666666667
     },
     "Turf Paradise": {
-      "races": 255,
-      "winHitRate": 0.26666666666666666,
-      "top3HitRate": 0.8666666666666667
+      "races": 250,
+      "winHitRate": 0.264,
+      "top3HitRate": 0.872
     },
     "Turfway Park": {
-      "races": 170,
+      "races": 160,
       "winHitRate": 0.3,
       "top3HitRate": 0.6
     },
     "UK Huntingdon": {
-      "races": 17,
+      "races": 16,
       "winHitRate": 0,
       "top3HitRate": 0
     },
     "uk kelso": {
-      "races": 17,
+      "races": 16,
       "winHitRate": 0,
       "top3HitRate": 0
     },
     "URU Maronas": {
-      "races": 17,
+      "races": 16,
       "winHitRate": 0,
       "top3HitRate": 1
     },
     "Western Fair": {
-      "races": 17,
+      "races": 16,
       "winHitRate": 0,
       "top3HitRate": 1
     },
     "Woodbine Mohawk (": {
-      "races": 17,
+      "races": 16,
       "winHitRate": 0,
       "top3HitRate": 1
     },
     "Woodbine Mohawk": {
-      "races": 51,
+      "races": 48,
       "winHitRate": 0.3333333333333333,
       "top3HitRate": 1
     },
-    "Woodbine Racetrack": {
-      "races": 34,
+    "Woodbine": {
+      "races": 32,
       "winHitRate": 0.5,
       "top3HitRate": 0.5
     },
     "yonkers": {
-      "races": 51,
+      "races": 48,
       "winHitRate": 0,
       "top3HitRate": 1
     },
     "Zia Park": {
-      "races": 68,
+      "races": 64,
       "winHitRate": 0.25,
       "top3HitRate": 0.5
     }
   },
   "byRaceNo": {
     "1": {
-      "races": 1054,
-      "winHitRate": 0.22580645161290322,
-      "top3HitRate": 0.7580645161290323
+      "races": 1082,
+      "winHitRate": 0.23382624768946395,
+      "top3HitRate": 0.767097966728281
     },
     "2": {
-      "races": 851,
-      "winHitRate": 0.21974148061104584,
-      "top3HitRate": 0.8989424206815512
+      "races": 845,
+      "winHitRate": 0.21893491124260356,
+      "top3HitRate": 0.901775147928994
     },
     "3": {
-      "races": 731,
-      "winHitRate": 0.16279069767441862,
-      "top3HitRate": 0.8837209302325582
+      "races": 727,
+      "winHitRate": 0.16368638239339753,
+      "top3HitRate": 0.8858321870701513
     },
     "4": {
-      "races": 493,
-      "winHitRate": 0.1724137931034483,
+      "races": 490,
+      "winHitRate": 0.16938775510204082,
       "top3HitRate": 1
     },
     "5": {
-      "races": 527,
-      "winHitRate": 0.1935483870967742,
-      "top3HitRate": 0.7096774193548387
+      "races": 524,
+      "winHitRate": 0.1946564885496183,
+      "top3HitRate": 0.7118320610687023
     },
     "6": {
-      "races": 272,
-      "winHitRate": 0.5,
+      "races": 269,
+      "winHitRate": 0.5018587360594795,
       "top3HitRate": 1
     },
     "7": {
-      "races": 204,
-      "winHitRate": 0.16666666666666666,
-      "top3HitRate": 0.75
+      "races": 203,
+      "winHitRate": 0.16748768472906403,
+      "top3HitRate": 0.7536945812807881
     },
     "8": {
-      "races": 239,
-      "winHitRate": 0.5690376569037657,
-      "top3HitRate": 0.7112970711297071
+      "races": 237,
+      "winHitRate": 0.5738396624472574,
+      "top3HitRate": 0.7130801687763713
     },
     "9": {
-      "races": 306,
-      "winHitRate": 0.2777777777777778,
-      "top3HitRate": 0.7777777777777778
+      "races": 303,
+      "winHitRate": 0.27722772277227725,
+      "top3HitRate": 0.7788778877887789
     },
     "10": {
-      "races": 136,
-      "winHitRate": 0.375,
-      "top3HitRate": 0.75
+      "races": 135,
+      "winHitRate": 0.37777777777777777,
+      "top3HitRate": 0.7481481481481481
     },
     "11": {
-      "races": 119,
-      "winHitRate": 0.2857142857142857,
+      "races": 117,
+      "winHitRate": 0.2905982905982906,
       "top3HitRate": 1
     },
     "12": {
@@ -392,27 +372,27 @@
   "byStrategy": {
     "default@v1": {
       "races": 5000,
-      "winHitRate": 0.2414,
-      "top3HitRate": 0.8364
+      "winHitRate": 0.2432,
+      "top3HitRate": 0.839
     }
   },
   "predmeta": {
     "coverage": {
       "totalRows": 5000,
-      "rowsWithConfidence": 2567,
-      "rowsWithT3m": 2567,
-      "rowsWithBoth": 2567,
-      "coverageRate": 0.5134
+      "rowsWithConfidence": 2551,
+      "rowsWithT3m": 2551,
+      "rowsWithBoth": 2551,
+      "coverageRate": 0.5102
     },
     "accuracyByConfidenceBucket": {
       "50-60": {
-        "races": 34,
-        "winHitRate": 0.5,
+        "races": 33,
+        "winHitRate": 0.48484848484848486,
         "top3HitRate": 1
       },
       "60-70": {
-        "races": 102,
-        "winHitRate": 0.3333333333333333,
+        "races": 101,
+        "winHitRate": 0.33663366336633666,
         "top3HitRate": 1
       },
       "70-80": {
@@ -421,31 +401,344 @@
         "top3HitRate": 1
       },
       "80+": {
-        "races": 2210,
-        "winHitRate": 0.23076923076923078,
-        "top3HitRate": 0.8692307692307693
+        "races": 2196,
+        "winHitRate": 0.23041894353369763,
+        "top3HitRate": 0.8706739526411658
       }
     },
     "accuracyByT3mBucket": {
       "30-40": {
-        "races": 578,
-        "winHitRate": 0.3235294117647059,
-        "top3HitRate": 0.7941176470588235
+        "races": 572,
+        "winHitRate": 0.32342657342657344,
+        "top3HitRate": 0.7972027972027972
       },
       "40-50": {
-        "races": 1020,
-        "winHitRate": 0.16666666666666666,
-        "top3HitRate": 0.9
+        "races": 1017,
+        "winHitRate": 0.1671583087512291,
+        "top3HitRate": 0.9006882989183874
       },
       "50-60": {
-        "races": 527,
-        "winHitRate": 0.3225806451612903,
-        "top3HitRate": 0.9032258064516129
+        "races": 524,
+        "winHitRate": 0.32061068702290074,
+        "top3HitRate": 0.9026717557251909
       },
       "60+": {
-        "races": 391,
-        "winHitRate": 0.21739130434782608,
+        "races": 389,
+        "winHitRate": 0.2159383033419023,
         "top3HitRate": 1
+      }
+    },
+    "trackReliability": {
+      "Aqueduct": {
+        "top3HitRate": 0.875,
+        "winHitRate": 0.20833333333333334,
+        "races": 408
+      },
+      "AUS Lismore": {
+        "top3HitRate": 1,
+        "winHitRate": 0,
+        "races": 17
+      },
+      "AUS Nowra": {
+        "top3HitRate": 1,
+        "winHitRate": 1,
+        "races": 17
+      },
+      "AUS Randwick Kensington": {
+        "top3HitRate": 1,
+        "winHitRate": 0,
+        "races": 17
+      },
+      "AUS ROSEHILL": {
+        "top3HitRate": 1,
+        "winHitRate": 0,
+        "races": 17
+      },
+      "AUS Sunshine Coast": {
+        "top3HitRate": 1,
+        "winHitRate": 0,
+        "races": 17
+      },
+      "austAustralia Harness": {
+        "top3HitRate": 1,
+        "winHitRate": 0,
+        "races": 17
+      },
+      "Batavia Downs": {
+        "top3HitRate": 1,
+        "winHitRate": 0,
+        "races": 17
+      },
+      "Century Mile Harness": {
+        "top3HitRate": 1,
+        "winHitRate": 0.5,
+        "races": 34
+      },
+      "CENTURY MILE HARNESS": {
+        "top3HitRate": 1,
+        "winHitRate": 0,
+        "races": 17
+      },
+      "Charles Town": {
+        "top3HitRate": 0.9166666666666666,
+        "winHitRate": 0.25,
+        "races": 204
+      },
+      "Dayton": {
+        "top3HitRate": 1,
+        "winHitRate": 0.5,
+        "races": 34
+      },
+      "Delta Downs": {
+        "top3HitRate": 0.75,
+        "winHitRate": 0.1875,
+        "races": 272
+      },
+      "dover downs": {
+        "top3HitRate": 0.5,
+        "winHitRate": 0,
+        "races": 34
+      },
+      "Evangeline Downs": {
+        "top3HitRate": 1,
+        "winHitRate": 1,
+        "races": 17
+      },
+      "Fair Grounds": {
+        "top3HitRate": 0.8846153846153846,
+        "winHitRate": 0.3076923076923077,
+        "races": 442
+      },
+      "Flamboro Downs": {
+        "top3HitRate": 1,
+        "winHitRate": 0,
+        "races": 17
+      },
+      "FRA Lyon La Soie": {
+        "top3HitRate": 0,
+        "winHitRate": 0,
+        "races": 17
+      },
+      "FRA Marseille Vivaux": {
+        "top3HitRate": 1,
+        "winHitRate": 1,
+        "races": 17
+      },
+      "FRA Vincennes": {
+        "top3HitRate": 0,
+        "winHitRate": 0,
+        "races": 17
+      },
+      "Gulfstream Park": {
+        "top3HitRate": 0.92,
+        "winHitRate": 0.24,
+        "races": 425
+      },
+      "Hawthorne Harness": {
+        "top3HitRate": 1,
+        "winHitRate": 0,
+        "races": 17
+      },
+      "HK Sha Tin": {
+        "top3HitRate": 1,
+        "winHitRate": 0,
+        "races": 17
+      },
+      "Laurel Park": {
+        "top3HitRate": 0.9444444444444444,
+        "winHitRate": 0.2222222222222222,
+        "races": 306
+      },
+      "Mahoning Valley": {
+        "top3HitRate": 0.8,
+        "winHitRate": 0.16,
+        "races": 425
+      },
+      "Meadowlands": {
+        "top3HitRate": 1,
+        "winHitRate": 0.5,
+        "races": 34
+      },
+      "Monticello Raceway": {
+        "top3HitRate": 1,
+        "winHitRate": 1,
+        "races": 17
+      },
+      "Mountaineer Park": {
+        "top3HitRate": 0.8333333333333334,
+        "winHitRate": 0.3333333333333333,
+        "races": 102
+      },
+      "Northfield Park": {
+        "top3HitRate": 0.8,
+        "winHitRate": 0.2,
+        "races": 85
+      },
+      "NZ ELLERSLIE": {
+        "top3HitRate": 1,
+        "winHitRate": 0,
+        "races": 17
+      },
+      "NZ OTAKI": {
+        "top3HitRate": 1,
+        "winHitRate": 0,
+        "races": 17
+      },
+      "NZ Trentham": {
+        "top3HitRate": 1,
+        "winHitRate": 0,
+        "races": 17
+      },
+      "Oaklawn Park": {
+        "top3HitRate": 0.8666666666666667,
+        "winHitRate": 0.2,
+        "races": 255
+      },
+      "Parx Racing": {
+        "top3HitRate": 0.9523809523809523,
+        "winHitRate": 0.2857142857142857,
+        "races": 357
+      },
+      "Remington Park": {
+        "top3HitRate": 0.75,
+        "winHitRate": 0.5,
+        "races": 68
+      },
+      "Sam Houston": {
+        "top3HitRate": 0.5,
+        "winHitRate": 0,
+        "races": 34
+      },
+      "Sam Houston Race Park": {
+        "top3HitRate": 0,
+        "winHitRate": 0,
+        "races": 17
+      },
+      "Saratoga": {
+        "top3HitRate": 1,
+        "winHitRate": 1,
+        "races": 17
+      },
+      "Sunland Park": {
+        "top3HitRate": 0.5,
+        "winHitRate": 0.5,
+        "races": 34
+      },
+      "SWE Bjerke": {
+        "top3HitRate": 1,
+        "winHitRate": 1,
+        "races": 17
+      },
+      "SWE FORUS": {
+        "top3HitRate": 0,
+        "winHitRate": 0,
+        "races": 34
+      },
+      "SWE FORUS1": {
+        "top3HitRate": 0,
+        "winHitRate": 0,
+        "races": 17
+      },
+      "SWE Orkla Arena (H)": {
+        "top3HitRate": 0,
+        "winHitRate": 0,
+        "races": 17
+      },
+      "SWE UMAKER": {
+        "top3HitRate": 1,
+        "winHitRate": 0.5,
+        "races": 68
+      },
+      "Tampa Bay Downs": {
+        "top3HitRate": 0.8666666666666667,
+        "winHitRate": 0.2,
+        "races": 255
+      },
+      "Turf Paradise": {
+        "top3HitRate": 0.872,
+        "winHitRate": 0.264,
+        "races": 250
+      },
+      "Turfway Park": {
+        "top3HitRate": 0.6,
+        "winHitRate": 0.3,
+        "races": 160
+      },
+      "UK Huntingdon": {
+        "top3HitRate": 0,
+        "winHitRate": 0,
+        "races": 16
+      },
+      "uk kelso": {
+        "top3HitRate": 0,
+        "winHitRate": 0,
+        "races": 16
+      },
+      "URU Maronas": {
+        "top3HitRate": 1,
+        "winHitRate": 0,
+        "races": 16
+      },
+      "Western Fair": {
+        "top3HitRate": 1,
+        "winHitRate": 0,
+        "races": 16
+      },
+      "Woodbine Mohawk (": {
+        "top3HitRate": 1,
+        "winHitRate": 0,
+        "races": 16
+      },
+      "Woodbine Mohawk": {
+        "top3HitRate": 1,
+        "winHitRate": 0.3333333333333333,
+        "races": 48
+      },
+      "Woodbine": {
+        "top3HitRate": 0.5,
+        "winHitRate": 0.5,
+        "races": 32
+      },
+      "yonkers": {
+        "top3HitRate": 1,
+        "winHitRate": 0,
+        "races": 48
+      },
+      "Zia Park": {
+        "top3HitRate": 0.5,
+        "winHitRate": 0.25,
+        "races": 64
+      }
+    },
+    "brierScore": {
+      "brierScore": 0.6198158369267032,
+      "rowsWithProbability": 2551,
+      "totalRows": 5000
+    },
+    "confidenceCalibration": {
+      "50-60": {
+        "races": 33,
+        "expectedWinRate": 0.55,
+        "observedWinRate": 0.48484848484848486,
+        "calibrationError": -0.06515151515151518
+      },
+      "60-70": {
+        "races": 101,
+        "expectedWinRate": 0.65,
+        "observedWinRate": 0.33663366336633666,
+        "calibrationError": -0.31336633663366337
+      },
+      "70-80": {
+        "races": 221,
+        "expectedWinRate": 0.75,
+        "observedWinRate": 0.23076923076923078,
+        "calibrationError": -0.5192307692307692
+      },
+      "80+": {
+        "races": 2196,
+        "expectedWinRate": 0.85,
+        "observedWinRate": 0.23041894353369763,
+        "calibrationError": -0.6195810564663023
       }
     }
   }
