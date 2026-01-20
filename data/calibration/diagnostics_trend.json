@@ -11,7 +11,31 @@
       "anyHitRate": 0.4066,
       "trifectaRate": 0.014,
       "predmetaCoverage": 0.4948
+    },
+    {
+      "timestamp": "2026-01-19T00:19:17.822Z",
+      "commitSha": "cccb40ee86376fb39856174c430fe791e3f6f91d",
+      "sampleSize": 5000,
+      "top3HitRate": 0.8364,
+      "winHitRate": 0.2414,
+      "placeHitRate": 0.1496,
+      "showHitRate": 0.1326,
+      "anyHitRate": 0.4012,
+      "trifectaRate": 0.0136,
+      "predmetaCoverage": 0.5134
+    },
+    {
+      "timestamp": "2026-01-19T02:10:11.839Z",
+      "commitSha": "0f2b038ca44a452777ee035640ec5be85a60ec46",
+      "sampleSize": 5000,
+      "top3HitRate": 0.8364,
+      "winHitRate": 0.2414,
+      "placeHitRate": 0.1496,
+      "showHitRate": 0.1326,
+      "anyHitRate": 0.4012,
+      "trifectaRate": 0.0136,
+      "predmetaCoverage": 0.5134
     }
   ],
-  "lastUpdated": "2026-01-14T17:19:01.260Z"
+  "lastUpdated": "2026-01-19T02:52:52.335Z"
 }

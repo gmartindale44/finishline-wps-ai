@@ -172,46 +172,90 @@ function dedupeTrendData(trendData) {
 }
 
 /**
- * Load previous calibration report (from git or file)
+ * Load previous calibration report from trend data (preferred) or fallback to markdown reports
  */
-async function loadPreviousReport() {
+async function loadPreviousReport(currentCommitSha) {
   try {
-    // Try to get previous commit that had a calibration report
-    let prevCommit = null;
-    try {
-      const log = execSync(
-        'git log --oneline --all -n 20 --format="%H" -- data/calibration/verify_v1_report.json',
-        { encoding: "utf8" }
-      ).trim();
-      const commits = log.split("\n").filter(Boolean);
-      if (commits.length > 1) {
-        prevCommit = commits[1]; // Second most recent
-      }
-    } catch {}
-
-    if (prevCommit) {
-      try {
-        const content = execSync(`git show ${prevCommit}:data/calibration/verify_v1_report.json`, {
-          encoding: "utf8",
-        });
-        return JSON.parse(content);
-      } catch {}
-    }
-
-    // Fallback: try to load from trend data (last run)
+    // Primary: Use trend data to get the previous run (second-to-last entry)
     const trendData = await loadTrendData();
-    if (trendData.runs.length > 0) {
-      const lastRun = trendData.runs[trendData.runs.length - 1];
-      // Try to load from git using the commit SHA
-      if (lastRun.commitSha && lastRun.commitSha !== "unknown") {
+    
+    // If we have at least 2 runs, use the second-to-last as baseline
+    if (trendData.runs.length >= 2) {
+      const prevRun = trendData.runs[trendData.runs.length - 2]; // Second-to-last entry
+      
+      // Try to load the actual report from git using the previous run's commit SHA
+      if (prevRun.commitSha && prevRun.commitSha !== "unknown" && prevRun.commitSha !== currentCommitSha) {
         try {
           const content = execSync(
-            `git show ${lastRun.commitSha}:data/calibration/verify_v1_report.json`,
+            `git show ${prevRun.commitSha}:data/calibration/verify_v1_report.json`,
             { encoding: "utf8" }
           );
-          return JSON.parse(content);
+          const report = JSON.parse(content);
+          // Store the baseline commit SHA for debugging
+          report._baselineCommitSha = prevRun.commitSha;
+          report._baselineSource = "trend_data";
+          return report;
         } catch {}
       }
+      
+      // If git load fails, reconstruct metrics from trend data (less ideal but works)
+      return {
+        meta: {
+          generatedAt: prevRun.timestamp,
+          totalRows: prevRun.sampleSize,
+        },
+        global: {
+          top3HitRate: prevRun.top3HitRate,
+          winHitRate: prevRun.winHitRate,
+          placeHitRate: prevRun.placeHitRate,
+          showHitRate: prevRun.showHitRate,
+          anyHitRate: prevRun.anyHitRate,
+          exactTrifectaRate: prevRun.trifectaRate,
+        },
+        predmeta: {
+          coverage: {
+            coverageRate: prevRun.predmetaCoverage,
+          },
+        },
+        _baselineCommitSha: prevRun.commitSha,
+        _baselineSource: "trend_data",
+      };
+    }
+    
+    // Fallback: Load from previous markdown report in docs/diagnostics/
+    if (trendData.runs.length < 2) {
+      try {
+        const reportFiles = await fs.readdir(REPORT_DIR);
+        const mdFiles = reportFiles
+          .filter((f) => f.startsWith("CAL_DIAG_") && f.endsWith(".md"))
+          .sort()
+          .reverse(); // Most recent first
+        
+        // Skip the most recent one (might be the current one being generated)
+        // Try to find one with a different commit SHA or different date
+        for (let i = 0; i < mdFiles.length; i++) {
+          const mdFile = mdFiles[i];
+          const mdPath = path.join(REPORT_DIR, mdFile);
+          const content = await fs.readFile(mdPath, "utf8");
+          
+          // Extract commit SHA from the report
+          const commitMatch = content.match(/Commit.*?`([a-f0-9]{40})`/);
+          if (commitMatch && commitMatch[1] !== currentCommitSha) {
+            // Try to load the corresponding JSON report from git
+            const reportCommit = commitMatch[1];
+            try {
+              const jsonContent = execSync(
+                `git show ${reportCommit}:data/calibration/verify_v1_report.json`,
+                { encoding: "utf8" }
+              );
+              const report = JSON.parse(jsonContent);
+              report._baselineCommitSha = reportCommit;
+              report._baselineSource = "markdown_report";
+              return report;
+            } catch {}
+          }
+        }
+      } catch {}
     }
 
     return null;
@@ -433,10 +477,13 @@ async function generateReport(newMetrics, prevMetrics, trendData, warnings, watc
   lines.push("");
   
   if (prevMetrics) {
-    lines.push("### Previous Run");
+    const baselineSha = prevMetrics._baselineCommitSha || "unknown";
+    const baselineSource = prevMetrics._baselineSource || "unknown";
+    lines.push("### Previous Run (Baseline)");
     lines.push("");
     lines.push(`- **Generated At:** ${prevMetrics.meta?.generatedAt || "N/A"}`);
     lines.push(`- **Sample Size:** ${prevMetrics.meta?.totalRows || 0} rows`);
+    lines.push(`- **Baseline commit used:** \`${baselineSha}\` (source: ${baselineSource})`);
     lines.push("");
   }
 
@@ -487,10 +534,10 @@ async function main() {
     // Step 2: Load reports
     console.log("\nStep 4: Loading calibration reports...");
     const newMetrics = JSON.parse(await fs.readFile(CAL_REPORT_JSON, "utf8"));
-    const prevMetrics = await loadPreviousReport();
-
-    // Step 3: Get commit info
     const commitSha = getCurrentCommitShaFull();
+    const prevMetrics = await loadPreviousReport(commitSha);
+
+    // Step 3: Get commit info (already have commitSha from Step 4)
     const shortSha = getCurrentCommitSha();
 
     // Step 4: Load and update trend data
