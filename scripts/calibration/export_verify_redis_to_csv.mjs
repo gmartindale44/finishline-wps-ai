@@ -100,13 +100,19 @@ function normalizeToCalibrationRow(verifyLog) {
 
   // Extract predmeta fields (if present, added by verify_race.js)
   const confidencePct = verifyLog.confidence_pct;
-  const rawConfidencePct = verifyLog.raw_confidence_pct; // Raw confidence before recalibration (optional)
+  const rawConfidence = verifyLog.raw_confidence; // ADDITIVE: Raw confidence (0-100, 1 decimal) - preferred
+  const rawConfidencePct = verifyLog.raw_confidence_pct; // Legacy: Raw confidence before recalibration (optional)
   const t3mPct = verifyLog.t3m_pct;
   const top3List = verifyLog.top3_list;
 
   // Format predmeta fields (backward compatible - empty if missing)
   const confidencePctStr = typeof confidencePct === 'number' && Number.isFinite(confidencePct)
     ? csvEscape(String(Math.round(confidencePct)))
+    : "";
+  
+  // ADDITIVE: Format raw_confidence (0-100, 1 decimal) if available
+  const rawConfidenceStr = typeof rawConfidence === 'number' && Number.isFinite(rawConfidence)
+    ? csvEscape(String(Math.round(rawConfidence * 10) / 10)) // 1 decimal precision
     : "";
   
   const rawConfidencePctStr = typeof rawConfidencePct === 'number' && Number.isFinite(rawConfidencePct)
@@ -139,7 +145,8 @@ function normalizeToCalibrationRow(verifyLog) {
     showHit,
     top3Hit,
     confidence_pct: confidencePctStr,
-    raw_confidence_pct: rawConfidencePctStr, // Raw confidence (optional, backward compatible)
+    raw_confidence: rawConfidenceStr, // ADDITIVE: Raw confidence (0-100, 1 decimal) - preferred
+    raw_confidence_pct: rawConfidencePctStr, // Legacy: Raw confidence (optional, backward compatible)
     t3m_pct: t3mPctStr,
     top3_list: top3ListStr,
   };
@@ -167,7 +174,8 @@ async function writeCsv(rows, outputPath) {
     "showHit",
     "top3Hit",
     "confidence_pct",
-    "raw_confidence_pct", // Raw confidence before recalibration (optional)
+    "raw_confidence", // ADDITIVE: Raw confidence (0-100, 1 decimal) - preferred
+    "raw_confidence_pct", // Legacy: Raw confidence before recalibration (optional)
     "t3m_pct",
     "top3_list",
   ].join(",");
@@ -192,7 +200,8 @@ async function writeCsv(rows, outputPath) {
       row.showHit,
       row.top3Hit,
       row.confidence_pct || "",
-      row.raw_confidence_pct || "", // Raw confidence (optional, backward compatible)
+      row.raw_confidence || "", // ADDITIVE: Raw confidence (0-100, 1 decimal) - preferred
+      row.raw_confidence_pct || "", // Legacy: Raw confidence (optional, backward compatible)
       row.t3m_pct || "",
       row.top3_list || "",
     ].join(",");

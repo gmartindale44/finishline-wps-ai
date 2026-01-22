@@ -162,6 +162,10 @@ async function logVerifyResult(result) {
                 confidence_pct: typeof snapshot.confidence === 'number' 
                   ? (snapshot.confidence <= 1 ? Math.round(snapshot.confidence * 100) : Math.round(snapshot.confidence))
                   : null,
+                // ADDITIVE: Store raw_confidence (0-100, 1 decimal) if available in snapshot
+                raw_confidence: typeof snapshot.rawConfidence === 'number' && Number.isFinite(snapshot.rawConfidence)
+                  ? Math.round(snapshot.rawConfidence * 10) / 10 // Ensure 1 decimal precision
+                  : null,
                 t3m_pct: typeof snapshot.top3_mass === 'number'
                   ? (snapshot.top3_mass <= 1 ? Math.round(snapshot.top3_mass * 100) : Math.round(snapshot.top3_mass))
                   : null,
@@ -466,6 +470,10 @@ async function logVerifyResult(result) {
     if (predmeta) {
       if (typeof predmeta.confidence_pct === 'number') {
         logPayload.confidence_pct = predmeta.confidence_pct;
+      }
+      // ADDITIVE: Store raw_confidence if available (0-100, 1 decimal)
+      if (typeof predmeta.raw_confidence === 'number' && Number.isFinite(predmeta.raw_confidence)) {
+        logPayload.raw_confidence = Math.round(predmeta.raw_confidence * 10) / 10; // Ensure 1 decimal
       }
       // Accept both t3m_pct and top3_mass_pct (for backward compatibility)
       if (typeof predmeta.t3m_pct === 'number') {

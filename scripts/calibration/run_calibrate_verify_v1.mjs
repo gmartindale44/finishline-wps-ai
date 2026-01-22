@@ -77,7 +77,8 @@ async function loadCalibrationCsv(filePath) {
     top3Hit: header.indexOf("top3Hit"),
     // Optional predmeta fields (indexOf returns -1 if not found, safe to use)
     confidence_pct: header.indexOf("confidence_pct"),
-    raw_confidence_pct: header.indexOf("raw_confidence_pct"), // Raw confidence before recalibration
+    raw_confidence: header.indexOf("raw_confidence"), // ADDITIVE: Raw confidence (0-100, 1 decimal) - preferred
+    raw_confidence_pct: header.indexOf("raw_confidence_pct"), // Legacy: Raw confidence before recalibration
     t3m_pct: header.indexOf("t3m_pct"),
     top3_list: header.indexOf("top3_list"),
   };
@@ -141,7 +142,8 @@ async function loadCalibrationCsv(filePath) {
       top3Hit: columns[fieldMap.top3Hit] || "false",
       // Optional predmeta fields (null if column missing or invalid)
       confidence_pct: parseOptionalNumber(fieldMap.confidence_pct),
-      raw_confidence_pct: parseOptionalNumber(fieldMap.raw_confidence_pct), // Raw confidence (optional, backward compatible)
+      raw_confidence: parseOptionalNumber(fieldMap.raw_confidence), // ADDITIVE: Raw confidence (0-100, 1 decimal) - preferred
+      raw_confidence_pct: parseOptionalNumber(fieldMap.raw_confidence_pct), // Legacy: Raw confidence (optional, backward compatible)
       t3m_pct: parseOptionalNumber(fieldMap.t3m_pct),
       top3_list: parseOptionalArray(fieldMap.top3_list),
     });

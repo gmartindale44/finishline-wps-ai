@@ -439,6 +439,8 @@ export default async function handler(req, res) {
     // Confidence: mean composite ** 0.9, clamped 8%–85%
     const meanComp = ord.reduce((a, b) => a + b.v, 0) / (ord.length || 1);
     const confidence = Math.max(0.08, Math.min(0.85, Math.pow(meanComp, 0.9)));
+    // ADDITIVE: Store raw confidence (0-1 range) before calibration
+    const rawConfidence = confidence;
 
     // ─────────────────────────────────────────────
     // Strategy suggestion (FinishLine AI Betting Strategy)
@@ -644,6 +646,8 @@ export default async function handler(req, res) {
         ...calibratedResponse,
         picks: __top3,
         confidence: __perc,
+        // ADDITIVE: Include raw confidence (0-100 range, 1 decimal) for recalibration
+        rawConfidence: Math.round(rawConfidence * 1000) / 10, // 0-100, 1 decimal
         top3_mass: Math.round(__top3_mass),
         ...(enableTop3MassClarity ? {
           top3_mass_raw: Math.round((P1 + P2 + P3) * 100),
@@ -897,9 +901,15 @@ export default async function handler(req, res) {
         const normDate = date ? normalizeDate(date) : null;
         const normRaceNo = raceNo ? String(raceNo).trim() : null;
         
+        // ADDITIVE: Extract raw_confidence from response (0-100, 1 decimal)
+        const rawConfidencePct = calibratedResponse.rawConfidence != null && Number.isFinite(calibratedResponse.rawConfidence)
+          ? Math.round(calibratedResponse.rawConfidence * 10) / 10 // Ensure 1 decimal
+          : null;
+        
         const predmetaPayload = {
           track: normTrack,
           confidence_pct: confidencePct,
+          raw_confidence: rawConfidencePct, // ADDITIVE: Raw confidence (0-100, 1 decimal)
           t3m_pct: t3mPct,
           predicted_win: predictedWin,
           predicted_place: predictedPlace,
